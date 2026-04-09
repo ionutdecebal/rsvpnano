@@ -64,34 +64,47 @@ TouchEvent BoardSupport::readTouch() {
 }
 
 void BoardSupport::setBacklight(uint8_t level) {
-  if (!pwmReady_) {
-    ledcSetup(pwmChannel_, 20000, 8);
-    ledcAttachPin(BoardConfig::PIN_TFT_BL, pwmChannel_);
-    pwmReady_ = true;
-  }
-  ledcWrite(pwmChannel_, level);
+  ledcAttach(BoardConfig::PIN_TFT_BL, 20000, 8);
+  ledcWrite(BoardConfig::PIN_TFT_BL, level);
 }
 
 void BoardSupport::powerDownDisplay() {
   setBacklight(0);
-  if (tft_) {
-    tft_->fillScreen(ST77XX_BLACK);
+  if (gfx_) {
+    gfx_->fillScreen(BLACK);
   }
 }
 
 bool BoardSupport::initDisplay() {
-  spi_.begin(BoardConfig::PIN_TFT_SCLK, BoardConfig::PIN_TFT_MISO, BoardConfig::PIN_TFT_MOSI, BoardConfig::PIN_TFT_CS);
+  bus_ = new Arduino_ESP32SPI(
+      BoardConfig::PIN_TFT_DC,
+      BoardConfig::PIN_TFT_CS,
+      BoardConfig::PIN_TFT_SCLK,
+      BoardConfig::PIN_TFT_MOSI,
+      BoardConfig::PIN_TFT_MISO,
+      HSPI,
+      true);
 
-  tft_ = new Adafruit_ST7789(&spi_, BoardConfig::PIN_TFT_CS, BoardConfig::PIN_TFT_DC, BoardConfig::PIN_TFT_RST);
-  if (!tft_) {
+  // Generic ST7789 fallback config for compile-time portability.
+  // On actual Waveshare AMOLED, replace this class with board-specific panel from examples.
+  gfx_ = new Arduino_ST7789(
+      bus_,
+      BoardConfig::PIN_TFT_RST,
+      0,
+      true,
+      BoardConfig::SCREEN_W,
+      BoardConfig::SCREEN_H,
+      0,
+      0,
+      0,
+      0);
+
+  if (!gfx_->begin()) {
     return false;
   }
 
-  tft_->init(BoardConfig::SCREEN_W, BoardConfig::SCREEN_H);
-  tft_->setRotation(1);
-  tft_->fillScreen(ST77XX_BLACK);
-
   setBacklight(220);
+  gfx_->fillScreen(BLACK);
   return true;
 }
 

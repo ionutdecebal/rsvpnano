@@ -1,13 +1,13 @@
 #pragma once
 
 #include <Arduino.h>
-#include <Adafruit_GFX.h>
+#include <Arduino_GFX_Library.h>
 #include <vector>
 #include "Types.h"
 
 class DisplayRenderer {
  public:
-  void begin(Adafruit_GFX* gfx);
+  void begin(Arduino_GFX* gfx);
 
   void drawLoading(const String& msg);
   void drawWord(const String& word, AppState state, float pauseAnimProgress);
@@ -17,6 +17,6 @@ class DisplayRenderer {
   void drawChapterList(const std::vector<ChapterAnchor>& chapters, int selected);
 
  private:
-  Adafruit_GFX* gfx_ = nullptr;
+  Arduino_GFX* gfx_ = nullptr;
   uint32_t overlayUntilMs_ = 0;
 };

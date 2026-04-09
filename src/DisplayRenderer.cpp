@@ -1,22 +1,15 @@
 #include "DisplayRenderer.h"
 
 #include "BoardConfig.h"
-#include <Adafruit_ST77xx.h>
 
-namespace {
-uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
-  return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
-}
-}
-
-void DisplayRenderer::begin(Adafruit_GFX* gfx) {
+void DisplayRenderer::begin(Arduino_GFX* gfx) {
   gfx_ = gfx;
 }
 
 void DisplayRenderer::drawLoading(const String& msg) {
   if (!gfx_) return;
-  gfx_->fillScreen(ST77XX_BLACK);
-  gfx_->setTextColor(ST77XX_WHITE);
+  gfx_->fillScreen(BLACK);
+  gfx_->setTextColor(WHITE);
   gfx_->setTextSize(2);
   gfx_->setCursor(20, BoardConfig::SCREEN_H / 2 - 16);
   gfx_->println(msg);
@@ -25,10 +18,10 @@ void DisplayRenderer::drawLoading(const String& msg) {
 void DisplayRenderer::drawWord(const String& word, AppState state, float pauseAnimProgress) {
   if (!gfx_) return;
 
-  uint16_t bg = ST77XX_BLACK;
+  uint16_t bg = BLACK;
   if (state == AppState::PAUSED) {
     uint8_t dim = (uint8_t)(15 * pauseAnimProgress);
-    bg = rgb565(dim, dim, dim);
+    bg = gfx_->color565(dim, dim, dim);
   }
 
   gfx_->fillScreen(bg);
@@ -37,7 +30,7 @@ void DisplayRenderer::drawWord(const String& word, AppState state, float pauseAn
   if (word.length() > 10) textSize = 4;
   if (word.length() > 14) textSize = 3;
   gfx_->setTextSize(textSize);
-  gfx_->setTextColor(ST77XX_WHITE);
+  gfx_->setTextColor(WHITE);
 
   int16_t x1, y1;
   uint16_t w, h;
@@ -58,9 +51,9 @@ void DisplayRenderer::drawOverlayWpm(int wpm) {
   const int x = BoardConfig::SCREEN_W - boxW - 12;
   const int y = 12;
 
-  gfx_->fillRoundRect(x, y, boxW, boxH, 8, rgb565(20, 20, 20));
-  gfx_->drawRoundRect(x, y, boxW, boxH, 8, rgb565(120, 120, 120));
-  gfx_->setTextColor(ST77XX_WHITE);
+  gfx_->fillRoundRect(x, y, boxW, boxH, 8, gfx_->color565(20, 20, 20));
+  gfx_->drawRoundRect(x, y, boxW, boxH, 8, gfx_->color565(120, 120, 120));
+  gfx_->setTextColor(WHITE);
   gfx_->setTextSize(2);
   gfx_->setCursor(x + 14, y + 14);
   gfx_->printf("%d WPM", wpm);
@@ -69,7 +62,7 @@ void DisplayRenderer::drawOverlayWpm(int wpm) {
 void DisplayRenderer::drawStatus(const String& bookTitle, int wpm, size_t idx, size_t total) {
   if (!gfx_) return;
   gfx_->setTextSize(1);
-  gfx_->setTextColor(rgb565(140, 140, 140));
+  gfx_->setTextColor(gfx_->color565(140, 140, 140));
   gfx_->setCursor(6, 6);
   gfx_->print(bookTitle);
 
@@ -82,15 +75,15 @@ void DisplayRenderer::drawStatus(const String& bookTitle, int wpm, size_t idx, s
 
 void DisplayRenderer::drawMenu(const std::vector<String>& items, int selected) {
   if (!gfx_) return;
-  gfx_->fillScreen(rgb565(10, 10, 10));
-  gfx_->setTextColor(ST77XX_WHITE);
+  gfx_->fillScreen(gfx_->color565(10, 10, 10));
+  gfx_->setTextColor(WHITE);
   gfx_->setTextSize(2);
   gfx_->setCursor(20, 16);
   gfx_->print("Menu");
 
   for (size_t i = 0; i < items.size(); ++i) {
     int y = 54 + i * 30;
-    uint16_t c = (i == (size_t)selected) ? rgb565(120, 220, 255) : ST77XX_WHITE;
+    uint16_t c = (i == (size_t)selected) ? gfx_->color565(120, 220, 255) : WHITE;
     gfx_->setTextColor(c);
     gfx_->setCursor(28, y);
     gfx_->print(items[i]);
@@ -99,8 +92,8 @@ void DisplayRenderer::drawMenu(const std::vector<String>& items, int selected) {
 
 void DisplayRenderer::drawChapterList(const std::vector<ChapterAnchor>& chapters, int selected) {
   if (!gfx_) return;
-  gfx_->fillScreen(rgb565(10, 10, 10));
-  gfx_->setTextColor(ST77XX_WHITE);
+  gfx_->fillScreen(gfx_->color565(10, 10, 10));
+  gfx_->setTextColor(WHITE);
   gfx_->setTextSize(2);
   gfx_->setCursor(20, 16);
   gfx_->print("Chapters");
@@ -111,7 +104,7 @@ void DisplayRenderer::drawChapterList(const std::vector<ChapterAnchor>& chapters
     if (idx >= (int)chapters.size()) break;
 
     int y = 54 + i * 22;
-    uint16_t c = (idx == selected) ? rgb565(120, 220, 255) : ST77XX_WHITE;
+    uint16_t c = (idx == selected) ? gfx_->color565(120, 220, 255) : WHITE;
     gfx_->setTextColor(c);
     gfx_->setTextSize(1);
     gfx_->setCursor(20, y);

@@ -31,10 +31,7 @@ BookData BookParser::parse(const String& id, const String& title, const String& 
   }
 
   if (out.chapters.empty()) {
-    ChapterAnchor startChapter;
-    startChapter.title = "Start";
-    startChapter.wordIndex = 0;
-    out.chapters.push_back(startChapter);
+    out.chapters.push_back({"Start", 0});
   }
   return out;
 }
