@@ -9,7 +9,11 @@ This repository started empty (only `.gitkeep`), so the MVP includes a full firs
 - **Build system**: PlatformIO (`platformio.ini`)
 - **Framework**: Arduino for ESP32-S3
 - **Board support code**: Added in `BoardSupport` and `BoardConfig`
+<<<<<<< codex/build-mvp-firmware-for-waveshare-esp32-s3-7afq49
+- **Display/touch/storage integration**: Added modular integrations for display (Adafruit_GFX + ST7789), touch (I2C CST816-style polling), and storage (SD_MMC)
+=======
 - **Display/touch/storage integration**: Added modular integrations for display (Arduino_GFX), touch (I2C CST816-style polling), and storage (SD_MMC)
+>>>>>>> main
 - **Entry points**: `src/main.cpp` and `App` state machine (`src/App.cpp`)
 
 ## Features implemented (MVP scope)
@@ -84,7 +88,11 @@ Books are plain UTF-8-ish text (ASCII-safe expected for MVP).
 Because the original repo had no existing board package/examples, this MVP uses practical assumptions in `include/BoardConfig.h`:
 
 - BOOT button on GPIO0
+<<<<<<< codex/build-mvp-firmware-for-waveshare-esp32-s3-7afq49
+- AMOLED uses an SPI-style fallback configuration through Adafruit ST7789
+=======
 - AMOLED uses an SPI-style fallback configuration through Arduino_GFX
+>>>>>>> main
 - Touch uses I2C CST816-style register polling (address `0x15`)
 - Screen logical size: `536x240`
 
@@ -99,6 +107,10 @@ Because the original repo had no existing board package/examples, this MVP uses 
 ## Limitations / notes
 
 - Since no existing board demo code was present in the repository, hardware mappings are best-effort assumptions.
+<<<<<<< codex/build-mvp-firmware-for-waveshare-esp32-s3-7afq49
+- Display driver currently uses a generic ST7789 fallback init to keep the project modular/compilable; swap to the exact Waveshare panel init if your board uses a different controller.
+=======
 - Display driver class currently uses a generic fallback panel config to keep the project modular and compilable; swap to Waveshare-specific panel class if your board requires it.
+>>>>>>> main
 - Touch parser is CST816-like; if your board uses GT911/CST226/etc., replace only the touch-read internals while preserving `TouchEvent` contract.
 
