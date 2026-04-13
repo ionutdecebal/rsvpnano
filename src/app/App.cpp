@@ -12,6 +12,10 @@
 #define RSVP_USB_TRANSFER_ENABLED 0
 #endif
 
+#ifndef RSVP_USB_TRANSFER_AUTO_START
+#define RSVP_USB_TRANSFER_AUTO_START 0
+#endif
+
 static const char *kAppTag = "app";
 constexpr uint32_t kBootSplashMs = 750;
 constexpr uint32_t kReleaseBufferMs = 200;
@@ -113,6 +117,14 @@ void App::begin() {
   }
 
   touchInitialized_ = touch_.begin();
+
+#if RSVP_USB_TRANSFER_ENABLED && RSVP_USB_TRANSFER_AUTO_START
+  state_ = AppState::Booting;
+  Serial.println("[app] USB transfer auto-start active");
+  enterUsbTransfer(millis());
+  return;
+#endif
+
   const bool storageReady = storage_.begin();
   storage_.listBooks();
   const uint16_t savedWpm = preferences_.getUShort(kPrefWpm, reader_.wpm());

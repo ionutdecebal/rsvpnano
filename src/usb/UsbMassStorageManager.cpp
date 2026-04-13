@@ -7,6 +7,7 @@
 #include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <sdmmc_cmd.h>
+#include <tusb.h>
 #include <driver/sdmmc_host.h>
 
 #include "board/BoardConfig.h"
@@ -27,6 +28,18 @@ void deinitHostIfNeeded() {
   if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
     ESP_LOGW(kUsbMscTag, "SDMMC host deinit returned 0x%x", err);
   }
+}
+
+void pulseUsbReconnect() {
+#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
+  if (!tud_inited()) {
+    return;
+  }
+
+  tud_disconnect();
+  delay(120);
+  tud_connect();
+#endif
 }
 
 }  // namespace
@@ -63,6 +76,7 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
   active_ = true;
   statusMessage_ = writeEnabled_ ? "Mounted read/write" : "Mounted read-only";
   msc_.mediaPresent(true);
+  pulseUsbReconnect();
   Serial.printf("[usb-msc] active blocks=%lu blockSize=%u write=%u\n",
                 static_cast<unsigned long>(blockCount_), blockSize_, writeEnabled_ ? 1 : 0);
   return true;
