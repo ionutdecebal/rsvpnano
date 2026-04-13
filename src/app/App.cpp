@@ -21,6 +21,7 @@ constexpr uint8_t kScrubFineTicks = 4;
 constexpr uint8_t kScrubFastMultiplier = 3;
 constexpr int kMaxScrubStepsPerGesture = 40;
 constexpr uint32_t kProgressSaveIntervalMs = 15000;
+constexpr uint32_t kUsbTransferExitHoldMs = 1200;
 
 namespace {
 
@@ -721,7 +722,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
   const uint64_t sizeMb = usbTransfer_.cardSizeBytes() / (1024ULL * 1024ULL);
   Serial.printf("[app] USB transfer active (%llu MB). Eject from computer when finished.\n",
                 sizeMb);
-  display_.renderStatus("USB", "Copy books now", "Eject when done");
+  display_.renderStatus("USB", "Copy books now", "Eject then hold BOOT");
 }
 
 void App::updateUsbTransfer(uint32_t nowMs) {
@@ -729,8 +730,14 @@ void App::updateUsbTransfer(uint32_t nowMs) {
     return;
   }
 
-  if (!usbTransfer_.ejected()) {
+  const bool bootExitRequested =
+      button_.isHeld() && nowMs - button_.lastEdgeMs() >= kUsbTransferExitHoldMs;
+  if (!usbTransfer_.ejected() && !bootExitRequested) {
     return;
+  }
+
+  if (bootExitRequested && !usbTransfer_.ejected()) {
+    Serial.println("[app] leaving USB transfer by BOOT hold; make sure host was ejected first");
   }
 
   exitUsbTransfer(nowMs);
