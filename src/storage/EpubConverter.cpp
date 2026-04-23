@@ -25,6 +25,8 @@ constexpr size_t kReadChunkBytes = 4096;
 constexpr size_t kInflateInputChunkBytes = 4096;
 constexpr size_t kMaxTagChars = 512;
 constexpr size_t kMaxEntityChars = 16;
+constexpr size_t kOutputWrapWidth = 96;
+constexpr size_t kBufferedTextFlushThreshold = 220;
 constexpr const char *kConverterFailureVersion = "stream-v5";
 
 enum class ContentExtractStatus {
@@ -446,6 +448,39 @@ bool hasReadableText(const String &token) {
   return false;
 }
 
+bool writeBodyLine(File &output, const String &line, size_t &wordCount, size_t maxWords);
+
+bool flushWordAlignedPrefix(File &output, String &line, size_t &wordCount, size_t maxWords) {
+  line.trim();
+  if (line.isEmpty()) {
+    line = "";
+    return true;
+  }
+
+  int split = static_cast<int>(line.length()) - 1;
+  while (split >= 0 && !isWhitespace(line[split])) {
+    --split;
+  }
+
+  if (split < 0) {
+    return true;
+  }
+
+  String prefix = line.substring(0, split);
+  String remainder = line.substring(split + 1);
+  prefix.trim();
+  remainder.trim();
+
+  if (prefix.isEmpty()) {
+    line = remainder;
+    return true;
+  }
+
+  const bool keepGoing = writeBodyLine(output, prefix, wordCount, maxWords);
+  line = remainder;
+  return keepGoing;
+}
+
 bool writeBodyLine(File &output, const String &line, size_t &wordCount, size_t maxWords) {
   String token;
   String outputLine;
@@ -479,7 +514,7 @@ bool writeBodyLine(File &output, const String &line, size_t &wordCount, size_t m
         return false;
       }
 
-      if (outputLine.length() + token.length() + 1 > 96) {
+      if (outputLine.length() + token.length() + 1 > kOutputWrapWidth) {
         flushOutputLine();
       }
 
@@ -696,8 +731,8 @@ bool writeXhtmlAsRsvp(const String &html, File &output, size_t &wordCount, size_
     }
 
     appendNormalizedChar(line, decoded);
-    if (line.length() > 220) {
-      if (!flushLine()) {
+    if (line.length() > kBufferedTextFlushThreshold) {
+      if (!flushWordAlignedPrefix(output, line, wordCount, maxWords)) {
         return false;
       }
     }
@@ -777,8 +812,8 @@ class XhtmlRsvpStreamWriter {
     }
 
     appendToActiveText(c);
-    if (!inHeading_ && line_.length() > 220) {
-      return flushLine();
+    if (!inHeading_ && line_.length() > kBufferedTextFlushThreshold) {
+      return flushWordAlignedPrefix(output_, line_, wordCount_, maxWords_);
     }
 
     return true;
