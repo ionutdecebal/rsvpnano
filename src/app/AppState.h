@@ -5,5 +5,6 @@ enum class AppState {
   Paused,
   Playing,
   Menu,
+  UsbTransfer,
   Sleeping,
 };

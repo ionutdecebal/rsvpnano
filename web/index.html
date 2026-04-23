@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RSVP Nano v2 Web Flasher</title>
+    <script
+      type="module"
+      src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+    ></script>
+    <style>
+      :root {
+        --ink: #1d1711;
+        --muted: #75695c;
+        --paper: #f7efe2;
+        --panel: #fffaf1;
+        --accent: #d3542f;
+        --accent-deep: #842f20;
+        --line: #decdb7;
+        --shadow: rgba(73, 45, 24, 0.16);
+        --esp-tools-button-color: var(--accent);
+        --esp-tools-button-text-color: #fffaf1;
+        --esp-tools-button-border-radius: 999px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at 14% 16%, rgba(211, 84, 47, 0.18), transparent 30rem),
+          radial-gradient(circle at 88% 10%, rgba(132, 47, 32, 0.12), transparent 24rem),
+          linear-gradient(145deg, #fff8ed 0%, var(--paper) 46%, #eadac5 100%);
+      }
+
+      main {
+        width: min(1040px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 52px 0 44px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.86);
+        box-shadow: 0 24px 60px var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .intro {
+        padding: clamp(28px, 6vw, 58px);
+      }
+
+      .eyebrow {
+        margin: 0 0 16px;
+        color: var(--accent-deep);
+        font: 700 0.76rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 11ch;
+        margin: 0;
+        font-size: clamp(3.3rem, 10vw, 7.5rem);
+        line-height: 0.86;
+        letter-spacing: -0.075em;
+      }
+
+      .lead {
+        max-width: 56ch;
+        margin: 28px 0 0;
+        color: var(--muted);
+        font-size: clamp(1.05rem, 2vw, 1.32rem);
+        line-height: 1.55;
+      }
+
+      .install {
+        padding: 28px;
+      }
+
+      .install h2,
+      .steps h2 {
+        margin: 0 0 10px;
+        font-size: 1.2rem;
+      }
+
+      .install p,
+      .steps p,
+      li {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .install-option {
+        display: grid;
+        gap: 12px;
+        margin-top: 22px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.38);
+      }
+
+      .install-option strong {
+        font-size: 1.04rem;
+      }
+
+      esp-web-install-button {
+        margin-top: 4px;
+      }
+
+      button[slot="activate"] {
+        width: 100%;
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 18px;
+        color: #fffaf1;
+        background: var(--accent);
+        font: 800 0.95rem/1 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      button[slot="activate"]:hover {
+        background: var(--accent-deep);
+      }
+
+      .warning {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 14px;
+        background: rgba(211, 84, 47, 0.08);
+        color: var(--accent-deep);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.9rem;
+      }
+
+      .steps {
+        margin-top: 28px;
+        padding: 28px;
+      }
+
+      ol {
+        padding-left: 1.35rem;
+      }
+
+      code {
+        padding: 0.12em 0.35em;
+        border-radius: 0.4em;
+        background: rgba(132, 47, 32, 0.1);
+        color: var(--accent-deep);
+      }
+
+      footer {
+        margin-top: 24px;
+        color: var(--muted);
+        text-align: center;
+        font: 0.9rem/1.4 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100% - 20px, 560px);
+          padding-top: 18px;
+        }
+
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .intro,
+        .install,
+        .steps {
+          padding: 22px;
+          border-radius: 22px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="card intro">
+          <p class="eyebrow">Browser firmware installer</p>
+          <h1>RSVP Nano v2</h1>
+          <p class="lead">
+            Flash the reader from Chrome or Edge without installing VS Code, PlatformIO,
+            or command-line tools. Connect the device by USB, choose the firmware below,
+            and let the browser write it directly to the ESP32-S3.
+          </p>
+        </div>
+
+        <div class="card install">
+          <h2>Install Firmware</h2>
+          <p>Use the normal reader firmware unless you specifically need USB SD-card transfer mode.</p>
+
+          <div class="install-option">
+            <strong>Reader firmware</strong>
+            <span>Main RSVP reader with SD books and on-device EPUB conversion.</span>
+            <esp-web-install-button manifest="firmware/manifest.json">
+              <button slot="activate">Install Reader Firmware</button>
+              <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
+              <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
+            </esp-web-install-button>
+          </div>
+
+          <div class="install-option">
+            <strong>USB transfer firmware</strong>
+            <span>Optional build for copying books to the SD card over USB.</span>
+            <esp-web-install-button manifest="firmware/manifest-usb-msc.json">
+              <button slot="activate">Install USB Transfer Firmware</button>
+              <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
+              <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
+            </esp-web-install-button>
+          </div>
+
+          <div class="warning">
+            Flashing replaces the firmware on the connected ESP32-S3. Keep the device plugged in
+            until the installer says it is finished.
+          </div>
+        </div>
+      </section>
+
+      <section class="card steps">
+        <h2>Before You Click Install</h2>
+        <ol>
+          <li>Use Chrome or Edge on macOS, Windows, Linux, or ChromeOS.</li>
+          <li>Connect the device with a USB data cable.</li>
+          <li>If the installer cannot connect, hold <code>BOOT</code>, tap reset or power-cycle, then try again.</li>
+          <li>After flashing, place books on the SD card under <code>/books</code>.</li>
+        </ol>
+        <p>
+          The browser flasher is powered by ESP Web Tools and Web Serial. iOS Safari and Firefox
+          do not currently support the required browser serial API.
+        </p>
+      </section>
+
+      <footer>
+        RSVP Nano v2 is open source. Build it, modify it, improve it, and share what you make.
+      </footer>
+    </main>
+  </body>
+</html>

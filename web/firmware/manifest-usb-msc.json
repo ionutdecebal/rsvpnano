@@ -1,0 +1,18 @@
+{
+  "name": "RSVP Nano v2 USB Transfer",
+  "version": "dev",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": false,
+      "parts": [
+        {
+          "path": "rsvp-nano-v2-usb-msc.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
