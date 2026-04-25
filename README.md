@@ -81,6 +81,16 @@ The current firmware configuration targets the [Waveshare ESP32-S3-Touch-LCD-3.4
 
 If you are adapting the project to different hardware, start with `src/board/BoardConfig.h`, then review the display, touch, power, and SD wiring code.
 
+## Running Tests
+
+The pacing algorithm has a host-side unit test suite that runs without hardware using PlatformIO's native environment.
+
+```sh
+pio test -e native_test
+```
+
+Tests live in `test/test_pacing/` and cover word duration calculation (length tiers, syllable complexity, punctuation pauses, abbreviation detection, pacing scale), WPM clamping, and seek/scrub behaviour. A minimal `Arduino.h` shim in `test/support/` lets `ReadingLoop.cpp` compile on the host without the ESP32 SDK.
+
 ## Desktop Book Conversion
 
 If you prefer to pre-convert books on a computer, copy the helper files from `tools/sd_card_converter` to the SD card root and run the launcher for your platform:
