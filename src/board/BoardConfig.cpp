@@ -2,12 +2,104 @@
 
 #include <Wire.h>
 #include <algorithm>
+#include <cmath>
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 
 namespace BoardConfig {
 
 namespace {
+
+uint8_t batteryPercentForVoltage(float voltage) {
+  struct Point {
+    float voltage;
+    uint8_t percent;
+  };
+
+  constexpr Point kCurve[] = {
+      {3.30f, 0},  {3.50f, 5},  {3.60f, 10}, {3.70f, 20},
+      {3.75f, 30}, {3.80f, 40}, {3.85f, 50}, {3.90f, 60},
+      {3.95f, 70}, {4.00f, 80}, {4.10f, 90}, {4.20f, 100},
+  };
+
+  if (voltage <= kCurve[0].voltage) {
+    return kCurve[0].percent;
+  }
+  constexpr size_t curveSize = sizeof(kCurve) / sizeof(kCurve[0]);
+  if (voltage >= kCurve[curveSize - 1].voltage) {
+    return kCurve[curveSize - 1].percent;
+  }
+
+  for (size_t i = 1; i < curveSize; ++i) {
+    const Point &upper = kCurve[i];
+    const Point &lower = kCurve[i - 1];
+    if (voltage > upper.voltage) {
+      continue;
+    }
+
+    const float span = upper.voltage - lower.voltage;
+    const float ratio = span <= 0.0f ? 0.0f : (voltage - lower.voltage) / span;
+    const int percent =
+        static_cast<int>(lower.percent + (upper.percent - lower.percent) * ratio + 0.5f);
+    return static_cast<uint8_t>(std::max(0, std::min(100, percent)));
+  }
+
+  return 0;
+}
+
+bool readThermistorCelsius(float &celsiusOut) {
+  if (PIN_THERMISTOR_ADC < 0) {
+    return false;
+  }
+
+  uint32_t mvTotal = 0;
+  uint8_t samples = 0;
+  for (uint8_t i = 0; i < 8; ++i) {
+    const uint32_t mv = analogReadMilliVolts(PIN_THERMISTOR_ADC);
+    if (mv > 0) {
+      mvTotal += mv;
+      ++samples;
+    }
+    delayMicroseconds(250);
+  }
+  if (samples == 0) {
+    return false;
+  }
+
+  const float vAdc = static_cast<float>(mvTotal) / samples / 1000.0f;
+  constexpr float vRef = 3.3f;
+  if (vAdc <= 0.01f || vAdc >= vRef - 0.01f) {
+    // Open / shorted thermistor lead.
+    return false;
+  }
+
+  // Resistance of the NTC from the divider.
+  float rNtc;
+  if (THERMISTOR_NTC_TO_GND) {
+    // 3V3 -- Rseries -- ADC -- Rntc -- GND
+    rNtc = THERMISTOR_SERIES_OHMS * vAdc / (vRef - vAdc);
+  } else {
+    // 3V3 -- Rntc -- ADC -- Rseries -- GND
+    rNtc = THERMISTOR_SERIES_OHMS * (vRef - vAdc) / vAdc;
+  }
+  if (!std::isfinite(rNtc) || rNtc <= 0.0f) {
+    return false;
+  }
+
+  // Beta (B-parameter) equation:
+  //   1/T = 1/T0 + (1/B) * ln(R/R0)
+  const float t0Kelvin = THERMISTOR_NOMINAL_C + 273.15f;
+  const float invT = 1.0f / t0Kelvin +
+                     std::log(rNtc / THERMISTOR_NOMINAL_OHMS) / THERMISTOR_BETA;
+  if (!std::isfinite(invT) || invT <= 0.0f) {
+    return false;
+  }
+
+  celsiusOut = (1.0f / invT) - 273.15f;
+  return std::isfinite(celsiusOut) && celsiusOut > -55.0f && celsiusOut < 150.0f;
+}
+
+#if !CONFIG_IDF_TARGET_ESP32C6
 
 constexpr uint8_t kTca9554OutputReg = 0x01;
 constexpr uint8_t kTca9554ConfigReg = 0x03;
@@ -101,55 +193,29 @@ void disableBatteryAdcPathIfAvailable() {
   gBatteryAdcPathEnabled = false;
 }
 
-uint8_t batteryPercentForVoltage(float voltage) {
-  struct Point {
-    float voltage;
-    uint8_t percent;
-  };
-
-  constexpr Point kCurve[] = {
-      {3.30f, 0},  {3.50f, 5},  {3.60f, 10}, {3.70f, 20},
-      {3.75f, 30}, {3.80f, 40}, {3.85f, 50}, {3.90f, 60},
-      {3.95f, 70}, {4.00f, 80}, {4.10f, 90}, {4.20f, 100},
-  };
-
-  if (voltage <= kCurve[0].voltage) {
-    return kCurve[0].percent;
-  }
-  constexpr size_t curveSize = sizeof(kCurve) / sizeof(kCurve[0]);
-  if (voltage >= kCurve[curveSize - 1].voltage) {
-    return kCurve[curveSize - 1].percent;
-  }
-
-  for (size_t i = 1; i < curveSize; ++i) {
-    const Point &upper = kCurve[i];
-    const Point &lower = kCurve[i - 1];
-    if (voltage > upper.voltage) {
-      continue;
-    }
-
-    const float span = upper.voltage - lower.voltage;
-    const float ratio = span <= 0.0f ? 0.0f : (voltage - lower.voltage) / span;
-    const int percent =
-        static_cast<int>(lower.percent + (upper.percent - lower.percent) * ratio + 0.5f);
-    return static_cast<uint8_t>(std::max(0, std::min(100, percent)));
-  }
-
-  return 0;
-}
+#endif  // !CONFIG_IDF_TARGET_ESP32C6
 
 }  // namespace
 
 void begin() {
   pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP);
-  pinMode(PIN_PWR_BUTTON, INPUT_PULLUP);
+  if (PIN_PWR_BUTTON >= 0) {
+    pinMode(PIN_PWR_BUTTON, INPUT_PULLUP);
+  }
   pinMode(PIN_LCD_BACKLIGHT, OUTPUT);
-  digitalWrite(PIN_LCD_BACKLIGHT, LOW);
+  digitalWrite(PIN_LCD_BACKLIGHT, LCD_BACKLIGHT_ACTIVE_LOW ? HIGH : LOW);
 
   Wire.begin(PIN_TOUCH_SDA, PIN_TOUCH_SCL);
+#if CONFIG_IDF_TARGET_ESP32C6
+  // AXS5106L is happiest at the default 100 kHz; 300 kHz gives intermittent
+  // i2cWriteReadNonStop -1 errors on the C6 board.
+  Wire.setClock(100000);
+#else
   Wire.setClock(300000);
+#endif
   Wire.setTimeOut(10);
 
+#if !CONFIG_IDF_TARGET_ESP32C6
   Wire1.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire1.setClock(300000);
   Wire1.setTimeOut(10);
@@ -159,6 +225,19 @@ void begin() {
   pinMode(PIN_BATTERY_ADC, INPUT);
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_BATTERY_ADC, ADC_11db);
+#else
+  // Waveshare ESP32-C6-Touch-LCD-1.47: GPIO0 sees Vbat through an on-board /3 divider,
+  // and we add an external 10k pull-up on GPIO6 for the LP803448 NTC (Yellow wire).
+  analogReadResolution(12);
+  if (PIN_BATTERY_ADC >= 0) {
+    pinMode(PIN_BATTERY_ADC, INPUT);
+    analogSetPinAttenuation(PIN_BATTERY_ADC, ADC_11db);
+  }
+  if (PIN_THERMISTOR_ADC >= 0) {
+    pinMode(PIN_THERMISTOR_ADC, INPUT);
+    analogSetPinAttenuation(PIN_THERMISTOR_ADC, ADC_11db);
+  }
+#endif
 }
 
 void lightSleepUntilBootButton() {
@@ -173,6 +252,44 @@ void lightSleepUntilBootButton() {
 
 bool readBatteryStatus(BatteryStatus &status) {
   status = BatteryStatus{};
+#if CONFIG_IDF_TARGET_ESP32C6
+  if (PIN_BATTERY_ADC < 0) {
+    return false;
+  }
+
+  uint32_t mvTotal = 0;
+  uint8_t samples = 0;
+  for (uint8_t i = 0; i < 8; ++i) {
+    const uint32_t mv = analogReadMilliVolts(PIN_BATTERY_ADC);
+    if (mv > 0) {
+      mvTotal += mv;
+      ++samples;
+    }
+    delayMicroseconds(250);
+  }
+  if (samples == 0) {
+    return false;
+  }
+
+  const float pinVolts = (static_cast<float>(mvTotal) / samples) / 1000.0f;
+  status.voltage = pinVolts * BATTERY_DIVIDER_RATIO;
+  status.present = status.voltage >= 2.5f && status.voltage <= 4.6f;
+
+  float tempC = 0.0f;
+  if (readThermistorCelsius(tempC)) {
+    status.temperatureValid = true;
+    status.temperatureC = tempC;
+  }
+
+  if (!status.present) {
+    status.percent = 0;
+    // Still useful to report temperature alone (e.g. on USB power without battery).
+    return status.temperatureValid;
+  }
+
+  status.percent = batteryPercentForVoltage(status.voltage);
+  return true;
+#else
   enableBatteryAdcPathIfAvailable();
   delay(3);
 
@@ -208,10 +325,19 @@ bool readBatteryStatus(BatteryStatus &status) {
   }
 
   status.percent = batteryPercentForVoltage(status.voltage);
+  float tempC = 0.0f;
+  if (readThermistorCelsius(tempC)) {
+    status.temperatureValid = true;
+    status.temperatureC = tempC;
+  }
   return true;
+#endif
 }
 
 bool releaseBatteryPowerHold() {
+#if CONFIG_IDF_TARGET_ESP32C6
+  return false;
+#else
   if (!configureTca9554OutputPin(TCA9554_PIN_SYS_EN, false)) {
     Serial.println("[board] Battery power hold release failed");
     return false;
@@ -220,6 +346,7 @@ bool releaseBatteryPowerHold() {
   gBatteryPowerHoldEnabled = false;
   Serial.println("[board] Battery power hold released");
   return true;
+#endif
 }
 
 }  // namespace BoardConfig

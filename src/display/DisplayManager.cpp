@@ -10,7 +10,7 @@
 #include "board/BoardConfig.h"
 #include "display/EmbeddedSerifFont.h"
 #include "display/EmbeddedSerifFont70.h"
-#include "display/axs15231b.h"
+#include "display/Panel.h"
 
 namespace {
 constexpr int kDisplayWidth = BoardConfig::DISPLAY_WIDTH;
@@ -54,6 +54,18 @@ constexpr int kLibraryTitleYOffset = 4;
 constexpr int kLibrarySubtitleYOffset = 20;
 constexpr int kLibraryScreenPaddingY = 28;
 constexpr uint8_t kLibrarySubtitleAlpha = 120;
+#if CONFIG_IDF_TARGET_ESP32C6
+// 320x172 panel: enlarge the quick-scroll context font (smaller divisor =
+// bigger glyphs) and adjust line metrics to match.
+constexpr int kContextMarginX = 14;
+constexpr int kContextTop = 6;
+constexpr int kContextLineHeight = 33;
+constexpr int kContextParagraphGap = 8;
+constexpr int kContextParagraphIndent = 28;
+constexpr int kContextSpaceWidth = 10;
+constexpr int kContextSerifDivisor = 2;
+constexpr size_t kContextTargetLines = 4;
+#else
 constexpr int kContextMarginX = 18;
 constexpr int kContextTop = 8;
 constexpr int kContextLineHeight = 23;
@@ -62,6 +74,7 @@ constexpr int kContextParagraphIndent = 22;
 constexpr int kContextSpaceWidth = 8;
 constexpr int kContextSerifDivisor = 3;
 constexpr size_t kContextTargetLines = 6;
+#endif
 constexpr int kPhantomCurrentGapLarge = 30;
 constexpr int kPhantomCurrentGapMedium = 24;
 constexpr int kPhantomCurrentGapSmall = 20;
@@ -706,7 +719,7 @@ void DisplayManager::prepareForSleep() {
   }
 
   fillScreen(kTrueBlack);
-  axs15231bSleep();
+  Panel::sleep();
   initialized_ = false;
   lastRenderKey_ = "";
 }
@@ -717,7 +730,7 @@ bool DisplayManager::wakeFromSleep() {
     return false;
   }
 
-  axs15231bWake();
+  Panel::wake();
   initialized_ = true;
   lastRenderKey_ = "";
   applyBrightness();
@@ -746,7 +759,7 @@ bool DisplayManager::allocateBuffers() {
 }
 
 bool DisplayManager::initPanel() {
-  axs15231bInit();
+  Panel::init();
   ESP_LOGI(kDisplayTag, "Panel init sequence complete");
   return true;
 }
@@ -756,10 +769,10 @@ bool DisplayManager::drawBitmap(int xStart, int yStart, int xEnd, int yEnd, cons
     return false;
   }
 
-  axs15231bPushColors(static_cast<uint16_t>(xStart), static_cast<uint16_t>(yStart),
-                      static_cast<uint16_t>(xEnd - xStart),
-                      static_cast<uint16_t>(yEnd - yStart),
-                      static_cast<const uint16_t *>(colorData));
+  Panel::pushColors(static_cast<uint16_t>(xStart), static_cast<uint16_t>(yStart),
+                    static_cast<uint16_t>(xEnd - xStart),
+                    static_cast<uint16_t>(yEnd - yStart),
+                    static_cast<const uint16_t *>(colorData));
   return true;
 }
 
@@ -1318,8 +1331,8 @@ void DisplayManager::drawMenuItem(const String &item, int y, bool selected) {
 }
 
 void DisplayManager::applyBrightness() {
-  axs15231bSetBrightnessPercent(brightnessPercent_);
-  axs15231bSetBacklight(true);
+  Panel::setBrightnessPercent(brightnessPercent_);
+  Panel::setBacklight(true);
 }
 
 void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHeight) {

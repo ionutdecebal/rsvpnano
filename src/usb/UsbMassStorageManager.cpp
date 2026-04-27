@@ -3,31 +3,40 @@
 #include <algorithm>
 #include <cstring>
 
+#include <sdkconfig.h>
 #include <esp_err.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
+#if !CONFIG_IDF_TARGET_ESP32C6
 #include <sdmmc_cmd.h>
-#include <tusb.h>
 #include <driver/sdmmc_host.h>
+#endif
+#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
+#include <tusb.h>
+#endif
 
 #include "board/BoardConfig.h"
 
 namespace {
 
 constexpr uint16_t kUsbBlockSize = 512;
+#if !CONFIG_IDF_TARGET_ESP32C6
 constexpr int kSdFrequenciesKhz[] = {
     SDMMC_FREQ_DEFAULT,
     10000,
     SDMMC_FREQ_PROBING,
 };
+#endif
 
 static const char *kUsbMscTag = "usb_msc";
 
 void deinitHostIfNeeded() {
+#if !CONFIG_IDF_TARGET_ESP32C6
   const esp_err_t err = sdmmc_host_deinit();
   if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
     ESP_LOGW(kUsbMscTag, "SDMMC host deinit returned 0x%x", err);
   }
+#endif
 }
 
 void pulseUsbReconnect() {
@@ -132,6 +141,10 @@ bool UsbMassStorageManager::beginSdCard() {
   blockSize_ = kUsbBlockSize;
   cardReady_ = false;
 
+#if CONFIG_IDF_TARGET_ESP32C6
+  // No native USB-OTG and no SDMMC peripheral on this target.
+  return false;
+#else
   if (sectorBuffer_ == nullptr) {
     sectorBuffer_ = static_cast<uint8_t *>(
         heap_caps_malloc(kUsbBlockSize, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
@@ -196,6 +209,7 @@ bool UsbMassStorageManager::beginSdCard() {
   }
 
   return false;
+#endif
 }
 
 void UsbMassStorageManager::endSdCard() {
@@ -236,6 +250,13 @@ bool UsbMassStorageManager::onStartStop(uint8_t powerCondition, bool start, bool
 
 int32_t UsbMassStorageManager::readSectors(uint32_t lba, uint32_t offset, void *buffer,
                                            uint32_t bufsize) {
+#if CONFIG_IDF_TARGET_ESP32C6
+  (void)lba;
+  (void)offset;
+  (void)buffer;
+  (void)bufsize;
+  return -1;
+#else
   if (!active_ || !cardReady_ || buffer == nullptr || sectorBuffer_ == nullptr ||
       offset >= blockSize_) {
     return -1;
@@ -263,10 +284,18 @@ int32_t UsbMassStorageManager::readSectors(uint32_t lba, uint32_t offset, void *
   }
 
   return static_cast<int32_t>(copied);
+#endif
 }
 
 int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8_t *buffer,
                                             uint32_t bufsize) {
+#if CONFIG_IDF_TARGET_ESP32C6
+  (void)lba;
+  (void)offset;
+  (void)buffer;
+  (void)bufsize;
+  return -1;
+#else
   if (!writeEnabled_) {
     return -1;
   }
@@ -306,6 +335,7 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
   }
 
   return static_cast<int32_t>(written);
+#endif
 }
 
 bool UsbMassStorageManager::handleStartStop(uint8_t powerCondition, bool start, bool loadEject) {

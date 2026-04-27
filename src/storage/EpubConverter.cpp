@@ -1,5 +1,11 @@
 #include "storage/EpubConverter.h"
 
+#ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
+#define RSVP_ON_DEVICE_EPUB_CONVERSION 0
+#endif
+
+#if RSVP_ON_DEVICE_EPUB_CONVERSION
+
 #include <SD_MMC.h>
 #include <algorithm>
 #include <cctype>
@@ -2090,3 +2096,14 @@ bool EpubConverter::convertIfNeeded(const String &epubPath, const String &rsvpPa
   SD_MMC.remove(failedPath);
   return true;
 }
+
+#else  // RSVP_ON_DEVICE_EPUB_CONVERSION
+
+bool EpubConverter::isCurrentCache(const String &) { return true; }
+
+bool EpubConverter::convertIfNeeded(const String &, const String &, const Options &) {
+  Serial.println("[epub] On-device conversion is disabled in this build");
+  return false;
+}
+
+#endif  // RSVP_ON_DEVICE_EPUB_CONVERSION
