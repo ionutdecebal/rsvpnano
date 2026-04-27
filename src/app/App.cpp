@@ -2,6 +2,7 @@
 
 #include <esp_sleep.h>
 #include <esp_log.h>
+#include <sdkconfig.h>
 #include <algorithm>
 #include <cstdio>
 #include <iterator>
@@ -26,14 +27,22 @@ constexpr uint32_t kPowerOffReleaseWaitMs = 4000;
 constexpr uint32_t kBatterySampleIntervalMs = 180000;
 constexpr uint32_t kTouchPlayHoldMs = 180;
 constexpr uint32_t kThemeToggleHoldMs = 900;
-constexpr uint16_t kSwipeThresholdPx = 40;
-constexpr uint16_t kAxisBiasPx = 12;
-constexpr uint16_t kTapSlopPx = 18;
+constexpr uint32_t kDoubleClickWindowMs = 320;
+constexpr uint16_t kSwipeThresholdPx = 24;
+constexpr uint16_t kVerticalSwipeThresholdPx = 14;
+constexpr uint16_t kAxisBiasPx = 6;
+constexpr uint16_t kTapSlopPx = 12;
 constexpr uint16_t kScrubStepPx = 22;
 constexpr int kMaxScrubStepsPerGesture = 96;
+#if CONFIG_IDF_TARGET_ESP32C6
+constexpr size_t kContextPreviewWindowWords = 200;
+constexpr size_t kContextPreviewAnchorLeadWords = 70;
+constexpr size_t kContextPreviewMaxParagraphSnapWords = 32;
+#else
 constexpr size_t kContextPreviewWindowWords = 288;
 constexpr size_t kContextPreviewAnchorLeadWords = 112;
 constexpr size_t kContextPreviewMaxParagraphSnapWords = 48;
+#endif
 constexpr uint32_t kProgressSaveIntervalMs = 15000;
 constexpr uint32_t kUsbTransferExitHoldMs = 1200;
 constexpr uint8_t kBrightnessLevels[] = {40, 55, 70, 85, 100};
@@ -547,6 +556,7 @@ void App::maybeSaveReadingPosition(uint32_t nowMs) {
 
 void App::handleBootButton(uint32_t nowMs) {
   if (state_ == AppState::UsbTransfer || state_ == AppState::Sleeping || powerOffStarted_) {
+    bootButtonPendingClick_ = false;
     return;
   }
 
@@ -557,10 +567,29 @@ void App::handleBootButton(uint32_t nowMs) {
     return;
   }
 
+  // Long-press: cycle theme as soon as the hold threshold is reached.
   if (button_.isHeld() && !bootButtonLongPressHandled_ &&
       button_.heldDurationMs(nowMs) >= kThemeToggleHoldMs) {
     bootButtonLongPressHandled_ = true;
+    bootButtonPendingClick_ = false;
     cycleThemeMode(nowMs);
+    return;
+  }
+
+  // Detect a second press arriving inside the double-click window.
+  if (bootButtonPendingClick_ && button_.wasPressedEvent()) {
+    bootButtonPendingClick_ = false;
+    cycleBrightness();
+    // Swallow the matching release so it isn't treated as another single click.
+    bootButtonLongPressHandled_ = true;
+    return;
+  }
+
+  // Fire the deferred single-click once the double-click window has elapsed.
+  if (bootButtonPendingClick_ && !button_.isHeld() &&
+      nowMs - bootButtonPendingClickMs_ >= kDoubleClickWindowMs) {
+    bootButtonPendingClick_ = false;
+    toggleMenuFromPowerButton(nowMs);
     return;
   }
 
@@ -574,7 +603,9 @@ void App::handleBootButton(uint32_t nowMs) {
   }
 
   if (button_.lastHoldDurationMs() < kThemeToggleHoldMs) {
-    cycleBrightness();
+    // Defer: this might be the first half of a double-click.
+    bootButtonPendingClick_ = true;
+    bootButtonPendingClickMs_ = nowMs;
   }
 }
 
@@ -782,8 +813,13 @@ bool App::updateBatteryStatus(uint32_t nowMs, bool force) {
   batteryLabel_ = nextLabel;
   display_.setBatteryLabel(batteryLabel_);
   if (!batteryLabel_.isEmpty()) {
-    Serial.printf("[power] battery %.2f V (%u%%)\n", status.voltage,
-                  static_cast<unsigned int>(status.percent));
+    if (status.temperatureValid) {
+      Serial.printf("[power] battery %.2f V (%u%%) temp %.1f C\n", status.voltage,
+                    static_cast<unsigned int>(status.percent), status.temperatureC);
+    } else {
+      Serial.printf("[power] battery %.2f V (%u%%)\n", status.voltage,
+                    static_cast<unsigned int>(status.percent));
+    }
   } else {
     Serial.println("[power] battery not detected");
   }
@@ -890,7 +926,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     if (absDeltaX >= static_cast<int>(kSwipeThresholdPx) &&
         absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx)) {
       pausedTouchIntent_ = TouchIntent::Scrub;
-    } else if (absDeltaY >= static_cast<int>(kSwipeThresholdPx) &&
+    } else if (absDeltaY >= static_cast<int>(kVerticalSwipeThresholdPx) &&
                absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
       pausedTouchIntent_ = TouchIntent::Wpm;
     }
@@ -994,7 +1030,7 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     return;
   }
 
-  if (absDeltaY >= static_cast<int>(kSwipeThresholdPx) &&
+  if (absDeltaY >= static_cast<int>(kVerticalSwipeThresholdPx) &&
       absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
     moveMenuSelection(deltaY < 0 ? -1 : 1);
     return;
@@ -1703,7 +1739,11 @@ void App::enterPowerOff(uint32_t nowMs) {
   }
 
   display_.prepareForSleep();
-  esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BoardConfig::PIN_PWR_BUTTON), 0);
+#if !CONFIG_IDF_TARGET_ESP32C6
+  if (BoardConfig::PIN_PWR_BUTTON >= 0) {
+    esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BoardConfig::PIN_PWR_BUTTON), 0);
+  }
+#endif
   esp_deep_sleep_start();
 }
 

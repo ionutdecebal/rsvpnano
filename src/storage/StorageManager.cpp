@@ -1,11 +1,18 @@
 #include "storage/StorageManager.h"
 
+#include <sdkconfig.h>
+#if CONFIG_IDF_TARGET_ESP32C6
+#include <SD.h>
+#include <SPI.h>
+#define SD_MMC SD
+#else
 #include <SD_MMC.h>
+#include <driver/sdmmc_types.h>
+#endif
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
-#include <driver/sdmmc_types.h>
 #include <esp_heap_caps.h>
 #include <utility>
 
@@ -26,11 +33,34 @@ constexpr const char *kMountPoint = "/sdcard";
 constexpr const char *kBooksPath = "/books";
 constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
 constexpr size_t kMaxChapterTitleChars = 64;
+#if CONFIG_IDF_TARGET_ESP32C6
+constexpr int kSdFrequenciesKhz[] = {25000, 10000, 1000, 400};
+
+struct SdSpiPinConfig {
+  int clk;
+  int miso;
+  int mosi;
+  int cs;
+  const char *label;
+};
+
+// Schematic-confirmed Waveshare ESP32-C6-Touch-LCD-1.47 SD wiring. CLK/MOSI are
+// shared with the LCD bus; the LCD driver brings up Arduino's SPI on these
+// pins so we don't tear it down here.
+constexpr SdSpiPinConfig kSharedSdPins = {
+    BoardConfig::PIN_SD_CLK,
+    BoardConfig::PIN_SD_D0,
+    BoardConfig::PIN_SD_CMD,
+    BoardConfig::PIN_SD_CS,
+    "shared-bus",
+};
+#else
 constexpr int kSdFrequenciesKhz[] = {
     SDMMC_FREQ_DEFAULT,
     10000,
     SDMMC_FREQ_PROBING,
 };
+#endif
 
 bool hasBookWordLimit() { return kMaxBookWords > 0; }
 
@@ -38,8 +68,15 @@ bool reachedBookWordLimit(size_t wordCount) {
   return hasBookWordLimit() && wordCount >= kMaxBookWords;
 }
 
-bool isWordBoundary(char c) { return c <= ' '; }
+#if CONFIG_IDF_TARGET_ESP32C6
+bool validGpio(int pin) { return pin >= 0; }
 
+bool validSdPins(const SdSpiPinConfig &pins) {
+  return validGpio(pins.clk) && validGpio(pins.miso) && validGpio(pins.mosi) && validGpio(pins.cs);
+}
+#endif
+
+bool isWordBoundary(char c) { return c <= ' '; }
 bool prefixHasBoundary(const String &lowered, const char *prefix) {
   const size_t prefixLength = std::strlen(prefix);
   if (!lowered.startsWith(prefix)) {
@@ -119,6 +156,23 @@ String displayNameForPath(const String &path) {
     return path;
   }
   return path.substring(separator + 1);
+}
+
+bool isHiddenOrSidecarPath(const String &path) {
+  const String name = displayNameForPath(path);
+  if (name.length() == 0) {
+    return true;
+  }
+  // Skip Unix hidden files (".foo") and macOS AppleDouble metadata sidecars
+  // ("._foo"). These are dropped onto FAT volumes by Finder when copying
+  // files, and parsing them as books either crashes or shows garbage entries.
+  if (name.startsWith(".")) {
+    return true;
+  }
+  if (name.equalsIgnoreCase("Thumbs.db") || name.equalsIgnoreCase("desktop.ini")) {
+    return true;
+  }
+  return false;
 }
 
 String displayNameWithoutExtension(const String &path) {
@@ -243,6 +297,11 @@ std::vector<String> collectBookPaths() {
   while (entry) {
     if (!entry.isDirectory()) {
       const String path = normalizeBookPath(String(entry.name()));
+      if (isHiddenOrSidecarPath(path)) {
+        entry.close();
+        entry = dir.openNextFile();
+        continue;
+      }
       const bool staleGeneratedRsvp =
           hasRsvpExtension(path) && fileExistsAndHasBytes(epubSiblingPathForRsvp(path)) &&
           !EpubConverter::isCurrentCache(path);
@@ -754,7 +813,7 @@ String normalizeDisplayText(const String &text) {
   return collapsed;
 }
 
-void pushCleanWord(String token, std::vector<String> &words) {
+void pushCleanWord(String token, WordBlob &words) {
   token.trim();
 
   if (token.length() >= 3 && static_cast<uint8_t>(token[0]) == 0xEF &&
@@ -860,7 +919,7 @@ String directiveValue(const String &line, const char *directive) {
   return normalizeDisplayText(value);
 }
 
-bool appendLineWords(const String &line, std::vector<String> &words) {
+bool appendLineWords(const String &line, WordBlob &words) {
   const String normalizedLine = normalizeDisplayText(line);
   String currentWord;
 
@@ -1031,6 +1090,42 @@ bool StorageManager::begin() {
   listedOnce_ = false;
   bookPaths_.clear();
 
+#if CONFIG_IDF_TARGET_ESP32C6
+  // SD-over-SPI on ESP32-C6. The LCD driver has already initialized Arduino's
+  // SPI on the shared bus (CLK/MOSI are pinned to LCD_SCLK/LCD_MOSI, MISO is
+  // routed to PIN_SD_D0). We only need to drive CS and call SD.begin; the SD
+  // and LCD peripherals serialize via Arduino SPI's transaction mutex.
+  const SdSpiPinConfig &pins = kSharedSdPins;
+  pinMode(pins.cs, OUTPUT);
+  digitalWrite(pins.cs, HIGH);
+
+  for (int frequencyKhz : kSdFrequenciesKhz) {
+    notifyStatus("SD", "Mounting card", "", 5);
+    Serial.printf("[storage] Trying SD (SPI) %s pins clk=%d miso=%d mosi=%d cs=%d at %d kHz\n",
+                  pins.label, pins.clk, pins.miso, pins.mosi, pins.cs, frequencyKhz);
+    SD_MMC.end();
+    mounted_ = SD_MMC.begin(static_cast<uint8_t>(pins.cs), SPI,
+                            static_cast<uint32_t>(frequencyKhz) * 1000U, kMountPoint, 5);
+    if (!mounted_) {
+      notifyStatus("SD", "Unsupported filesystem", "Auto-formatting FAT32", 6);
+      Serial.printf("[storage] Retrying with auto-format at %d kHz\n", frequencyKhz);
+      SD_MMC.end();
+      mounted_ = SD_MMC.begin(static_cast<uint8_t>(pins.cs), SPI,
+                              static_cast<uint32_t>(frequencyKhz) * 1000U, kMountPoint, 5,
+                              true);
+    }
+    if (!mounted_) {
+      continue;
+    }
+
+    const uint64_t sizeMb = SD_MMC.cardSize() / (1024ULL * 1024ULL);
+    Serial.printf("[storage] SD initialized (%llu MB) using %s pins at %d kHz\n", sizeMb,
+                  pins.label, frequencyKhz);
+    notifyStatus("SD", "Scanning books", "EPUB converts on open", 10);
+    refreshBookPaths();
+    return true;
+  }
+#else
   if (!SD_MMC.setPins(BoardConfig::PIN_SD_CLK, BoardConfig::PIN_SD_CMD, BoardConfig::PIN_SD_D0)) {
     Serial.println("[storage] SD_MMC pin setup failed");
     return false;
@@ -1049,6 +1144,7 @@ bool StorageManager::begin() {
       return true;
     }
   }
+#endif
 
   Serial.println("[storage] SD init failed after retries");
   return false;
@@ -1098,10 +1194,6 @@ void StorageManager::listBooks() {
 
 void StorageManager::refreshBooks() {
   refreshBookPaths();
-}
-
-bool StorageManager::loadFirstBookWords(std::vector<String> &words, String *loadedPath) {
-  return loadBookWords(0, words, loadedPath);
 }
 
 size_t StorageManager::bookCount() const { return bookPaths_.size(); }
@@ -1284,18 +1376,6 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
 
   Serial.println("[storage] No readable book files found under /books");
   return false;
-}
-
-bool StorageManager::loadBookWords(size_t index, std::vector<String> &words, String *loadedPath,
-                                   size_t *loadedIndex) {
-  BookContent book;
-  if (!loadBookContent(index, book, loadedPath, loadedIndex)) {
-    words.clear();
-    return false;
-  }
-
-  words = std::move(book.words);
-  return true;
 }
 
 void StorageManager::refreshBookPaths() {

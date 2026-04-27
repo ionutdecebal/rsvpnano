@@ -191,6 +191,8 @@ class App {
   bool touchPlayHeld_ = false;
   bool bootButtonReleasedSinceBoot_ = false;
   bool bootButtonLongPressHandled_ = false;
+  bool bootButtonPendingClick_ = false;
+  uint32_t bootButtonPendingClickMs_ = 0;
   bool powerButtonReleasedSinceBoot_ = false;
   bool powerButtonLongPressHandled_ = false;
   bool powerOffStarted_ = false;

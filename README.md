@@ -1,6 +1,6 @@
 # RSVP Nano
 
-RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at a time with RSVP (Rapid Serial Visual Presentation). The firmware is built around stable anchor-letter rendering, readable typography, tunable pacing, SD card storage, and local EPUB conversion.
+RSVP Nano is an open-source ESP32 reading device for showing text one word at a time with RSVP (Rapid Serial Visual Presentation). The firmware is built around stable anchor-letter rendering, readable typography, tunable pacing, SD card storage, and local EPUB conversion. Two hardware targets are supported: the original Waveshare ESP32-S3-Touch-LCD-3.49 and the smaller, cheaper Waveshare ESP32-C6-Touch-LCD-1.47.
 
 ## Highlights
 
@@ -76,6 +76,21 @@ pio device monitor
 
 The default environment is `waveshare_esp32s3_usb_msc`, which includes the reader and USB transfer mode.
 
+To target the Waveshare ESP32-C6-Touch-LCD-1.47 (JD9853 panel + AXS5106L touch, no PSRAM, no native USB-OTG, no on-device EPUB conversion), use:
+
+```sh
+pio run -e waveshare_esp32c6
+pio run -e waveshare_esp32c6 -t upload
+```
+
+The C6 environment ships with these build flags (already wired up in `platformio.ini`):
+
+| Flag | Value | Why |
+| --- | --- | --- |
+| `RSVP_USB_TRANSFER_ENABLED` | `0` | C6 has no native USB-OTG, so USB mass-storage mode is unavailable. |
+| `RSVP_ON_DEVICE_EPUB_CONVERSION` | `0` | No PSRAM; pre-convert EPUBs with the desktop helper instead. |
+| `RSVP_MAX_BOOK_WORDS` | `6000` | Caps loaded books to fit in the 512 KB on-chip SRAM. Each `String` word costs ~30–40 B, leaving headroom for SPI/SD buffers and UI state. |
+
 Serial monitor runs at `115200`.
 
 To export the merged binary used by the browser flasher:
@@ -99,7 +114,37 @@ The current firmware configuration targets the [Waveshare ESP32-S3-Touch-LCD-3.4
 - SD card connected through `SD_MMC`.
 - Touch, battery, and board power control pins defined in `src/board/BoardConfig.h`.
 
-If you are adapting the project to different hardware, start with `src/board/BoardConfig.h`, then review the display, touch, power, and SD wiring code.
+A second build target — the [Waveshare ESP32-C6-Touch-LCD-1.47](https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm) — is available as `waveshare_esp32c6`. Notes:
+
+- ESP32-C6 has no PSRAM, so on-device EPUB conversion is disabled in this build. Pre-convert books with the desktop helper instead.
+- The C6 has no native USB-OTG, so the USB mass-storage transfer mode is unavailable.
+- The display is a 172×320 JD9853 SPI panel driven in 320×172 landscape; the touch controller is an AXS5106L on I2C (address `0x63`, 100 kHz).
+- The microSD slot uses SPI on the C6 board and shares the SPI bus with the LCD (`CLK=GPIO1`, `MOSI=GPIO2`, `MISO=GPIO3`, `CS=GPIO4`).
+- The board has a single BOOT button (GPIO9). The firmware binds: short press = menu, double press = brightness, long press = theme.
+- Touch axis mapping and gesture decoding for the AXS5106L may need calibration for your unit; see [src/input/TouchHandler.cpp](src/input/TouchHandler.cpp).
+- Books larger than `RSVP_MAX_BOOK_WORDS` (default 6000) are truncated at load. Raise the cap if you have headroom or split long books into chapters.
+
+### Optional: battery + thermistor on the C6
+
+The C6 board exposes Vbat to GPIO0 through a built-in 1:2 (÷3) divider, so battery monitoring works with no extra parts. For pack temperature, the firmware can read an external NTC thermistor (e.g. the Yellow lead of an LP803448 LiPo). It is **off by default** on every target — opt in by adding a build flag:
+
+```ini
+[env:waveshare_esp32c6]
+build_flags =
+  ${env.build_flags}
+  -DRSVP_THERMISTOR_PIN=6   ; ADC1 channel; on the C6 GPIO5 or GPIO6 are free
+```
+
+Recommended wiring (NTC-to-GND, with a 10 kΩ pull-up to 3V3):
+
+```text
+3V3 ──[ 10 kΩ ]──┬── GPIO<RSVP_THERMISTOR_PIN>
+                 └── NTC (Yellow) ── BAT-/GND
+```
+
+Defaults assume an NTC with R0 = 10 kΩ at 25 °C and β = 3950 (typical for LP-series LiPos). Override per-env via `-DRSVP_THERMISTOR_BETA=...`, `-DRSVP_THERMISTOR_R0_OHMS=...`, `-DRSVP_THERMISTOR_SERIES_OHMS=...`, or `-DRSVP_THERMISTOR_NTC_TO_GND=0` for the inverted topology. With the flag unset (or `RSVP_THERMISTOR_PIN=-1`) the firmware reports voltage only. The same build flags work on the S3 target if you wire an NTC to a free ADC pin there.
+
+If you are adapting the project to different hardware, start with [src/board/BoardConfig.h](src/board/BoardConfig.h), then review the display, touch, power, and SD wiring code.
 
 ## Running Tests
 

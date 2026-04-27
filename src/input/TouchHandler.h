@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <sdkconfig.h>
 
 enum class TouchPhase {
   Start,
@@ -24,7 +25,11 @@ class TouchHandler {
   void cancel();
 
  private:
-  static constexpr uint8_t kAddress = 0x3B;  // AXS15231B touch endpoint on the 3.49" board.
+#if CONFIG_IDF_TARGET_ESP32C6
+  static constexpr uint8_t kAddress = 0x63;  // AXS5106L (Waveshare C6-Touch-LCD-1.47).
+#else
+  static constexpr uint8_t kAddress = 0x3B;  // AXS15231B (Waveshare S3-Touch-LCD-3.49).
+#endif
   bool initialized_ = false;
   uint32_t lastPollMs_ = 0;
   uint32_t backoffUntilMs_ = 0;

@@ -1,5 +1,9 @@
 #include "display/axs15231b.h"
 
+#include <sdkconfig.h>
+
+#if !CONFIG_IDF_TARGET_ESP32C6
+
 #include <driver/spi_master.h>
 #include <esp_log.h>
 
@@ -196,3 +200,5 @@ void axs15231bPushColors(uint16_t x, uint16_t y, uint16_t width, uint16_t height
     cursor += chunkPixels;
   }
 }
+
+#endif  // !CONFIG_IDF_TARGET_ESP32C6
