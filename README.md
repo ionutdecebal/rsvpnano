@@ -5,12 +5,12 @@ RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at
 ## Highlights
 
 - One-word RSVP reader with stable anchor alignment.
-- Adjustable typeface, typography, anchor guides, pacing, and phantom words.
+- Adjustable typeface, font size, typography, anchor guides, pacing, and phantom words.
 - Chapter and paragraph-aware navigation.
 - SD card library under `/books`.
 - Local on-device EPUB conversion to cached `.rsvp` files.
 - USB mass-storage mode for copying books to the SD card.
-- Browser-based firmware installation plus in-browser library conversion and SD-card sync.
+- Browser-based firmware installation plus in-browser library conversion, sidecar cleanup, and SD-card sync.
 
 ## Getting Started
 
@@ -23,12 +23,26 @@ The easiest way to install the firmware is the web flasher:
 Use Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts.
 
 The browser flasher uses ESP Web Tools and Web Serial, so it must be opened over HTTPS or localhost.
-It also includes a browser-side library workspace for converting supported books into `.rsvp`
-and syncing them back into the SD card's `/books` folder.
+It also includes a browser-side Library Workspace for importing supported books, converting them
+into `.rsvp`, downloading a `.zip` of the results, cleaning interrupted sidecar files, and syncing
+the converted outputs back into the SD card's `/books` folder.
+
+The browser workflow currently accepts:
+
+- `.epub`
+- `.txt`
+- `.md` / `.markdown`
+- `.html` / `.htm` / `.xhtml`
+
+The default export mode is `Device-safe ASCII`, which fits the current firmware best. A
+`Preserve Unicode` mode is also available for experimentation and future renderer work.
 
 ### Add Books
 
-Create a `books` folder at the root of the SD card:
+The easiest workflow is to use the Library Workspace on the browser flasher page, then sync the
+converted files directly into the SD card's `/books` folder.
+
+If you want to manage files manually, create a `books` folder at the root of the SD card:
 
 ```text
 /books
@@ -36,7 +50,11 @@ Create a `books` folder at the root of the SD card:
   another-book.rsvp
 ```
 
-The firmware prioritizes `.rsvp` files. If a matching `.rsvp` file does not exist yet, an EPUB appears in the library and is converted locally the first time it is opened. The converted `.rsvp` file is then reused on future launches.
+The device library scans `/books` for `.rsvp`, `.txt`, and `.epub` files.
+
+The firmware prioritizes `.rsvp` files. If a matching `.rsvp` file does not exist yet, an EPUB
+appears in the library and is converted locally the first time it is opened. The converted `.rsvp`
+file is then reused on future launches.
 
 If a conversion is interrupted, you may see sidecar files such as:
 
@@ -93,9 +111,14 @@ pio test -e native_test
 
 Tests live in `test/test_pacing/` and cover word duration calculation (length tiers, syllable complexity, punctuation pauses, abbreviation detection, pacing scale), WPM clamping, and seek/scrub behaviour. A minimal `Arduino.h` shim in `test/support/` lets `ReadingLoop.cpp` compile on the host without the ESP32 SDK.
 
-## Desktop Book Conversion
+## Optional Desktop Book Conversion
 
-If you prefer to pre-convert books on a computer, copy the helper files from `tools/sd_card_converter` to the SD card root and run the launcher for your platform:
+You do not need the desktop converter for the normal workflow anymore. The browser flasher page can
+already convert supported books locally and sync them into the SD card.
+
+The desktop helper is still available if you want an offline, script-driven, or batch-conversion
+path on a computer. To use it, copy the helper files from `tools/sd_card_converter` to the SD card
+root and run the launcher for your platform:
 
 - Windows: `Convert books.bat`
 - macOS: `Convert books.command`
