@@ -5,7 +5,15 @@
 
 class DisplayManager {
  public:
+  enum class ReaderTypeface : uint8_t {
+    Standard = 0,
+    OpenDyslexic = 1,
+    AtkinsonHyperlegible = 2,
+  };
+
   struct TypographyConfig {
+    ReaderTypeface typeface = ReaderTypeface::Standard;
+    bool focusHighlight = true;
     int8_t trackingPx = 0;
     uint8_t anchorPercent = 35;
     uint8_t guideHalfWidth = 20;

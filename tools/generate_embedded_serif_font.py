@@ -57,6 +57,12 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_SYMBOL_PREFIX,
         help=f"Prefix for generated struct/constants. Default: {DEFAULT_SYMBOL_PREFIX}",
     )
+    parser.add_argument(
+        "--font-search-path",
+        action="append",
+        default=[],
+        help="Additional directory to search for the source font. May be passed multiple times.",
+    )
     return parser.parse_args()
 
 
@@ -175,6 +181,7 @@ def alpha_at(raster: bytes, width: int, x: int, y: int) -> int:
 def main() -> None:
     args = parse_args()
     font_search_paths = list(DEFAULT_FONT_SEARCH_PATHS)
+    font_search_paths.extend(args.font_search_path)
     glyph_images: dict[str, tuple[int, int, bytes]] = {}
     global_top = CANVAS_HEIGHT
     global_bottom = -1

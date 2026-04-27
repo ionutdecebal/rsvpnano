@@ -8,6 +8,7 @@
       type="module"
       src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"
     ></script>
+    <script type="module" src="./library.js"></script>
     <style>
       :root {
         --ink: #1d1711;
@@ -154,6 +155,284 @@
         padding: 28px;
       }
 
+      .workspace {
+        margin-top: 28px;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .workspace-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 0.92fr) minmax(280px, 1.08fr);
+      }
+
+      .workspace-pane {
+        padding: 28px;
+      }
+
+      .workspace-pane + .workspace-pane {
+        border-left: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
+      }
+
+      .workspace h2,
+      .workspace h3 {
+        margin: 0;
+      }
+
+      .workspace h2 {
+        font-size: 1.38rem;
+      }
+
+      .workspace-copy {
+        margin: 12px 0 0;
+        color: var(--muted);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .tool-button,
+      .tool-select {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        color: var(--ink);
+        font: 700 0.93rem/1.15 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .tool-button {
+        padding: 12px 16px;
+        cursor: pointer;
+      }
+
+      .tool-button:hover:enabled {
+        border-color: rgba(132, 47, 32, 0.42);
+        background: rgba(255, 250, 241, 0.98);
+      }
+
+      .tool-button:disabled,
+      .tool-select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .tool-button-primary {
+        border-color: transparent;
+        color: #fffaf1;
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      .tool-button-primary:hover:enabled {
+        background: var(--accent-deep);
+      }
+
+      .tool-select {
+        min-width: 220px;
+        padding: 11px 16px;
+      }
+
+      .dropzone {
+        margin-top: 22px;
+        padding: 24px;
+        border: 1.5px dashed rgba(132, 47, 32, 0.34);
+        border-radius: 24px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
+          radial-gradient(circle at top right, rgba(211, 84, 47, 0.14), transparent 16rem);
+        transition:
+          border-color 150ms ease,
+          transform 150ms ease,
+          box-shadow 150ms ease;
+      }
+
+      .dropzone.is-active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(211, 84, 47, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .dropzone strong {
+        display: block;
+        font-size: 1.04rem;
+      }
+
+      .dropzone p {
+        margin: 10px 0 0;
+        color: var(--muted);
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .meta-card {
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      .meta-card span {
+        display: block;
+        color: var(--muted);
+        font: 700 0.73rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .meta-card strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 1.08rem;
+      }
+
+      .inline-note {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(117, 105, 92, 0.1);
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .workspace-status {
+        margin-top: 20px;
+        padding: 15px 16px;
+        border-left: 4px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.5);
+        color: var(--muted);
+        min-height: 66px;
+      }
+
+      .workspace-status[data-tone="busy"] {
+        border-left-color: var(--accent);
+        color: var(--accent-deep);
+        background: rgba(211, 84, 47, 0.08);
+      }
+
+      .workspace-status[data-tone="error"] {
+        border-left-color: #9c3024;
+        color: #8e241a;
+        background: rgba(156, 48, 36, 0.08);
+      }
+
+      .workspace-status[data-tone="success"] {
+        border-left-color: #4c7a4a;
+        color: #2f5d32;
+        background: rgba(76, 122, 74, 0.1);
+      }
+
+      .workspace-status strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--ink);
+        font-size: 0.96rem;
+      }
+
+      .library-list {
+        display: grid;
+        gap: 14px;
+        margin: 20px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .library-item {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .library-item-head,
+      .library-item-meta,
+      .library-item-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .library-item-head {
+        justify-content: space-between;
+      }
+
+      .library-item-title {
+        display: grid;
+        gap: 6px;
+      }
+
+      .library-item-title strong {
+        font-size: 1.02rem;
+      }
+
+      .library-item-title span,
+      .library-item-copy,
+      .library-empty {
+        color: var(--muted);
+      }
+
+      .library-item-meta {
+        margin-top: 14px;
+      }
+
+      .pill {
+        padding: 0.42rem 0.72rem;
+        border-radius: 999px;
+        background: rgba(132, 47, 32, 0.08);
+        color: var(--accent-deep);
+        font: 700 0.76rem/1 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.02em;
+      }
+
+      .pill[data-state="ready"] {
+        background: rgba(76, 122, 74, 0.12);
+        color: #2f5d32;
+      }
+
+      .pill[data-state="error"] {
+        background: rgba(156, 48, 36, 0.1);
+        color: #8e241a;
+      }
+
+      .pill[data-state="working"] {
+        background: rgba(211, 84, 47, 0.12);
+        color: var(--accent-deep);
+      }
+
+      .library-item-copy {
+        margin-top: 12px;
+        line-height: 1.5;
+      }
+
+      .library-item-actions {
+        margin-top: 16px;
+      }
+
+      .library-item-actions .tool-button {
+        padding: 10px 14px;
+        font-size: 0.86rem;
+      }
+
+      .library-empty {
+        margin-top: 20px;
+        padding: 26px 20px;
+        border: 1px dashed var(--line);
+        border-radius: 22px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.36);
+      }
+
       ol {
         padding-left: 1.35rem;
       }
@@ -182,9 +461,23 @@
           grid-template-columns: 1fr;
         }
 
+        .workspace-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .workspace-pane + .workspace-pane {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+
         .intro,
         .install,
-        .steps {
+        .steps,
+        .workspace-pane {
           padding: 22px;
           border-radius: 22px;
         }
@@ -237,6 +530,106 @@
           The browser flasher is powered by ESP Web Tools and Web Serial. iOS Safari and Firefox
           do not currently support the required browser serial API.
         </p>
+      </section>
+
+      <section class="card workspace">
+        <div class="workspace-shell">
+          <div class="workspace-pane">
+            <h2>Library Workspace</h2>
+            <p class="workspace-copy">
+              Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
+              results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
+            </p>
+
+            <div class="toolbar">
+              <button class="tool-button tool-button-primary" id="library-add-button" type="button">
+                Add Books
+              </button>
+              <button class="tool-button" id="library-folder-button" type="button">
+                Choose /books Folder
+              </button>
+              <button class="tool-button" id="library-folder-import-button" type="button">
+                Import From Folder
+              </button>
+              <button class="tool-button" id="library-folder-clean-button" type="button">
+                Clean Sidecars
+              </button>
+              <button class="tool-button" id="library-download-button" type="button">
+                Download .zip
+              </button>
+              <button class="tool-button" id="library-sync-button" type="button">
+                Sync To Folder
+              </button>
+              <button class="tool-button" id="library-clear-button" type="button">
+                Clear Library
+              </button>
+            </div>
+
+            <label class="dropzone" id="library-dropzone" for="library-file-input">
+              <strong>Drop supported books here</strong>
+              <p>
+                EPUB, TXT, Markdown, and HTML sources are converted locally in your browser. Nothing
+                is uploaded to a server.
+              </p>
+            </label>
+            <input
+              id="library-file-input"
+              type="file"
+              accept=".epub,.txt,.md,.markdown,.html,.htm,.xhtml"
+              multiple
+              hidden
+            />
+
+            <div class="meta-grid">
+              <div class="meta-card">
+                <span>Output Mode</span>
+                <strong>
+                  <select class="tool-select" id="library-output-mode">
+                    <option value="ascii">Device-safe ASCII (Recommended)</option>
+                    <option value="unicode">Preserve Unicode (Experimental)</option>
+                  </select>
+                </strong>
+              </div>
+              <div class="meta-card">
+                <span>Selected Folder</span>
+                <strong id="library-folder-label">No /books folder selected yet</strong>
+              </div>
+              <div class="meta-card">
+                <span>Library Summary</span>
+                <strong id="library-summary">0 converted books ready</strong>
+              </div>
+              <div class="meta-card">
+                <span>Folder Inventory</span>
+                <strong id="library-folder-summary">Choose the SD card&rsquo;s /books folder to scan it</strong>
+              </div>
+            </div>
+
+            <p class="inline-note">
+              The current firmware still reads ASCII best, so the default output mode folds accented
+              letters and punctuation into safer equivalents. The Unicode mode is useful for testing
+              future firmware work and preserving the original text in exported <code>.rsvp</code> files.
+            </p>
+
+            <div class="workspace-status" id="library-status" data-tone="info">
+              <strong>Ready to build a library</strong>
+              Add files from your computer or pick the SD card&rsquo;s <code>/books</code> folder to bring
+              supported source books into the workspace.
+            </div>
+          </div>
+
+          <div class="workspace-pane">
+            <h3>Converted Books</h3>
+            <p class="workspace-copy">
+              Each imported source is converted on-device format side by side so you can download it,
+              replace it, or push everything back to the selected folder in one sync.
+            </p>
+
+            <ul class="library-list" id="library-list"></ul>
+            <div class="library-empty" id="library-empty">
+              Add a few books and the converted library will appear here.
+            </div>
+          </div>
+        </div>
       </section>
 
       <footer>

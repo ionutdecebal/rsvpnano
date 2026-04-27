@@ -5,12 +5,12 @@ RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at
 ## Highlights
 
 - One-word RSVP reader with stable anchor alignment.
-- Adjustable typography, anchor guides, pacing, and phantom words.
+- Adjustable typeface, typography, anchor guides, pacing, and phantom words.
 - Chapter and paragraph-aware navigation.
 - SD card library under `/books`.
 - Local on-device EPUB conversion to cached `.rsvp` files.
 - USB mass-storage mode for copying books to the SD card.
-- Browser-based firmware installation with no IDE required.
+- Browser-based firmware installation plus in-browser library conversion and SD-card sync.
 
 ## Getting Started
 
@@ -23,6 +23,8 @@ The easiest way to install the firmware is the web flasher:
 Use Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts.
 
 The browser flasher uses ESP Web Tools and Web Serial, so it must be opened over HTTPS or localhost.
+It also includes a browser-side library workspace for converting supported books into `.rsvp`
+and syncing them back into the SD card's `/books` folder.
 
 ### Add Books
 
@@ -121,3 +123,8 @@ Issues, experiments, forks, and pull requests are welcome. If you change hardwar
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The embedded OpenDyslexic and Atkinson Hyperlegible typeface assets are derived from the upstream
+projects and are included under the SIL Open Font License. See
+[third_party/opendyslexic/OFL.txt](third_party/opendyslexic/OFL.txt) and
+[third_party/atkinson-hyperlegible/OFL.txt](third_party/atkinson-hyperlegible/OFL.txt).

@@ -41,8 +41,8 @@ constexpr uint8_t kClausePausePercent = 80;
 constexpr uint8_t kEllipsisPausePercent = 110;
 constexpr uint8_t kSentencePausePercent = 135;
 constexpr uint8_t kStrongSentencePausePercent = 150;
-constexpr uint16_t kMaxTotalBonusPercent = 280;
 constexpr uint8_t kMaxCatchUpWords = 4;
+constexpr uint16_t kMaxPacingDelayMs = 600;
 
 bool isWordCharacter(char c) {
   return std::isalnum(static_cast<unsigned char>(c)) != 0;
@@ -327,24 +327,17 @@ bool looksLikeAbbreviation(const String &word, bool nextWordStartsLowercase) {
   return false;
 }
 
-uint32_t percentOf(uint32_t value, uint16_t percent) {
-  return (value * percent) / 100;
+uint16_t clampPacingDelayMs(uint16_t delayMs) {
+  if (delayMs > kMaxPacingDelayMs) {
+    return kMaxPacingDelayMs;
+  }
+  return delayMs;
 }
 
-uint8_t clampScalePercent(uint8_t percent) {
-  if (percent < 25) {
-    return 25;
-  }
-  if (percent > 200) {
-    return 200;
-  }
-  return percent;
-}
-
-uint16_t scaledPercent(uint16_t basePercent, uint8_t scalePercent) {
-  return static_cast<uint16_t>((static_cast<uint32_t>(basePercent) *
-                                static_cast<uint32_t>(clampScalePercent(scalePercent))) /
-                               100UL);
+uint32_t scaledDelayMs(uint16_t bonusPercent, uint16_t delayMs) {
+  return (static_cast<uint32_t>(bonusPercent) *
+          static_cast<uint32_t>(clampPacingDelayMs(delayMs))) /
+         100UL;
 }
 
 uint16_t lengthBonusPercentForWord(const String &word) {
@@ -454,17 +447,13 @@ uint32_t durationForWord(const String &word, bool nextWordStartsLowercase, uint3
     return baseIntervalMs;
   }
 
-  uint16_t totalBonusPercent = 0;
-  totalBonusPercent +=
-      scaledPercent(lengthBonusPercentForWord(word), config.longWordScalePercent);
-  totalBonusPercent +=
-      scaledPercent(complexityBonusPercentForWord(word), config.complexWordScalePercent);
-  totalBonusPercent += scaledPercent(
-      punctuationPausePercentForWord(word, nextWordStartsLowercase),
-      config.punctuationScalePercent);
-  totalBonusPercent = std::min<uint16_t>(kMaxTotalBonusPercent, totalBonusPercent);
+  uint32_t totalBonusMs = 0;
+  totalBonusMs += scaledDelayMs(lengthBonusPercentForWord(word), config.longWordDelayMs);
+  totalBonusMs += scaledDelayMs(complexityBonusPercentForWord(word), config.complexWordDelayMs);
+  totalBonusMs += scaledDelayMs(
+      punctuationPausePercentForWord(word, nextWordStartsLowercase), config.punctuationDelayMs);
 
-  return baseIntervalMs + percentOf(baseIntervalMs, totalBonusPercent);
+  return baseIntervalMs + totalBonusMs;
 }
 
 }  // namespace
@@ -600,9 +589,9 @@ void ReadingLoop::setWpm(uint16_t wpm) {
 }
 
 void ReadingLoop::setPacingConfig(const PacingConfig &config) {
-  pacingConfig_.longWordScalePercent = clampScalePercent(config.longWordScalePercent);
-  pacingConfig_.complexWordScalePercent = clampScalePercent(config.complexWordScalePercent);
-  pacingConfig_.punctuationScalePercent = clampScalePercent(config.punctuationScalePercent);
+  pacingConfig_.longWordDelayMs = clampPacingDelayMs(config.longWordDelayMs);
+  pacingConfig_.complexWordDelayMs = clampPacingDelayMs(config.complexWordDelayMs);
+  pacingConfig_.punctuationDelayMs = clampPacingDelayMs(config.punctuationDelayMs);
 }
 
 const ReadingLoop::PacingConfig &ReadingLoop::pacingConfig() const { return pacingConfig_; }

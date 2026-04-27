@@ -47,7 +47,6 @@ enum MenuItem : size_t {
   MenuChapters,
   MenuChangeBook,
   MenuSettings,
-  MenuRestart,
 #if RSVP_USB_TRANSFER_ENABLED
   MenuUsbTransfer,
 #endif
@@ -60,7 +59,6 @@ constexpr const char *kMenuItems[] = {
     "Chapters",
     "Library",
     "Settings",
-    "Restart",
 #if RSVP_USB_TRANSFER_ENABLED
     "USB transfer",
 #endif
@@ -85,6 +83,10 @@ enum SettingsItem : size_t {
 
 enum TypographyTuningItem : size_t {
   TypographyTuningBack,
+  TypographyTuningFontSize,
+  TypographyTuningTypeface,
+  TypographyTuningPhantomWords,
+  TypographyTuningFocusHighlight,
   TypographyTuningTracking,
   TypographyTuningAnchor,
   TypographyTuningGuideWidth,
@@ -112,9 +114,6 @@ constexpr size_t kSettingsHomeTypographyIndex = 2;
 constexpr size_t kSettingsHomePacingIndex = 3;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
-constexpr size_t kSettingsDisplayPhantomWordsIndex = 3;
-constexpr size_t kSettingsDisplayFontSizeIndex = 4;
-constexpr size_t kSettingsDisplayTypographyIndex = 5;
 constexpr size_t kSettingsPacingLongWordsIndex = 1;
 constexpr size_t kSettingsPacingComplexityIndex = 2;
 constexpr size_t kSettingsPacingPunctuationIndex = 3;
@@ -132,9 +131,14 @@ constexpr const char *kPrefDarkMode = "dark";
 constexpr const char *kPrefNightMode = "night";
 constexpr const char *kPrefPhantomWords = "phantom_on";
 constexpr const char *kPrefReaderFontSize = "font_size";
-constexpr const char *kPrefPacingLong = "pace_len";
-constexpr const char *kPrefPacingComplex = "pace_cpx";
-constexpr const char *kPrefPacingPunctuation = "pace_pnc";
+constexpr const char *kPrefReaderTypeface = "typeface";
+constexpr const char *kPrefTypographyFocusHighlight = "type_hlt";
+constexpr const char *kPrefLegacyPacingLong = "pace_len";
+constexpr const char *kPrefLegacyPacingComplex = "pace_cpx";
+constexpr const char *kPrefLegacyPacingPunctuation = "pace_pnc";
+constexpr const char *kPrefPacingLongMs = "pace_lms";
+constexpr const char *kPrefPacingComplexMs = "pace_cms";
+constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
 constexpr const char *kPrefTypographyTracking = "type_trk";
 constexpr const char *kPrefTypographyAnchor = "type_anc";
 constexpr const char *kPrefTypographyGuideWidth = "type_wid";
@@ -146,10 +150,10 @@ constexpr size_t kReaderFontSizeCount =
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
 constexpr uint32_t kNoSavedWordIndex = 0xFFFFFFFFUL;
-constexpr uint8_t kPacingScalePercents[] = {60, 80, 100, 125, 150};
-constexpr const char *kPacingScaleLabels[] = {"VLow", "Low", "Bal", "High", "Max"};
-constexpr size_t kPacingLevelCount = sizeof(kPacingScalePercents) / sizeof(kPacingScalePercents[0]);
-constexpr uint8_t kDefaultPacingLevelIndex = 2;
+constexpr uint16_t kPacingDelayMinMs = 0;
+constexpr uint16_t kPacingDelayMaxMs = 600;
+constexpr uint16_t kPacingDelayStepMs = 50;
+constexpr uint16_t kDefaultPacingDelayMs = 200;
 constexpr int8_t kTypographyTrackingMin = -2;
 constexpr int8_t kTypographyTrackingMax = 3;
 constexpr uint8_t kTypographyAnchorMin = 30;
@@ -219,6 +223,56 @@ DisplayManager::TypographyConfig defaultTypographyConfig() {
   return DisplayManager::TypographyConfig();
 }
 
+DisplayManager::ReaderTypeface readerTypefaceFromSetting(uint8_t value) {
+  switch (static_cast<DisplayManager::ReaderTypeface>(value)) {
+    case DisplayManager::ReaderTypeface::Standard:
+    case DisplayManager::ReaderTypeface::OpenDyslexic:
+    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+      return static_cast<DisplayManager::ReaderTypeface>(value);
+  }
+  return DisplayManager::ReaderTypeface::Standard;
+}
+
+DisplayManager::ReaderTypeface nextReaderTypeface(DisplayManager::ReaderTypeface current) {
+  switch (readerTypefaceFromSetting(static_cast<uint8_t>(current))) {
+    case DisplayManager::ReaderTypeface::Standard:
+      return DisplayManager::ReaderTypeface::AtkinsonHyperlegible;
+    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+      return DisplayManager::ReaderTypeface::OpenDyslexic;
+    case DisplayManager::ReaderTypeface::OpenDyslexic:
+    default:
+      return DisplayManager::ReaderTypeface::Standard;
+  }
+}
+
+uint16_t pacingDelayMsForLegacyLevel(uint8_t levelIndex) {
+  constexpr uint16_t kLegacyPacingDelayMs[] = {100, 150, 200, 250, 300};
+  constexpr size_t kLegacyPacingLevelCount =
+      sizeof(kLegacyPacingDelayMs) / sizeof(kLegacyPacingDelayMs[0]);
+
+  if (levelIndex >= kLegacyPacingLevelCount) {
+    levelIndex = 2;
+  }
+  return kLegacyPacingDelayMs[levelIndex];
+}
+
+uint16_t loadPacingDelayMs(Preferences &preferences, const char *key, const char *legacyKey) {
+  if (preferences.isKey(key)) {
+    return static_cast<uint16_t>(
+        clampIntSetting(preferences.getUShort(key, kDefaultPacingDelayMs), kPacingDelayMinMs,
+                        kPacingDelayMaxMs));
+  }
+
+  if (preferences.isKey(legacyKey)) {
+    const uint16_t migratedDelayMs =
+        pacingDelayMsForLegacyLevel(preferences.getUChar(legacyKey, 2));
+    preferences.putUShort(key, migratedDelayMs);
+    return migratedDelayMs;
+  }
+
+  return kDefaultPacingDelayMs;
+}
+
 }  // namespace
 
 App::App() : button_(BoardConfig::PIN_BOOT_BUTTON), powerButton_(BoardConfig::PIN_PWR_BUTTON) {}
@@ -242,22 +296,17 @@ void App::begin() {
   if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
     readerFontSizeIndex_ = 0;
   }
-  pacingLongWordLevelIndex_ =
-      preferences_.getUChar(kPrefPacingLong, pacingLongWordLevelIndex_);
-  if (pacingLongWordLevelIndex_ >= kPacingLevelCount) {
-    pacingLongWordLevelIndex_ = kDefaultPacingLevelIndex;
-  }
-  pacingComplexWordLevelIndex_ =
-      preferences_.getUChar(kPrefPacingComplex, pacingComplexWordLevelIndex_);
-  if (pacingComplexWordLevelIndex_ >= kPacingLevelCount) {
-    pacingComplexWordLevelIndex_ = kDefaultPacingLevelIndex;
-  }
-  pacingPunctuationLevelIndex_ =
-      preferences_.getUChar(kPrefPacingPunctuation, pacingPunctuationLevelIndex_);
-  if (pacingPunctuationLevelIndex_ >= kPacingLevelCount) {
-    pacingPunctuationLevelIndex_ = kDefaultPacingLevelIndex;
-  }
+  pacingLongWordDelayMs_ =
+      loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
+  pacingComplexWordDelayMs_ =
+      loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
+  pacingPunctuationDelayMs_ =
+      loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
   typographyConfig_ = defaultTypographyConfig();
+  typographyConfig_.typeface = readerTypefaceFromSetting(
+      preferences_.getUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface)));
+  typographyConfig_.focusHighlight =
+      preferences_.getBool(kPrefTypographyFocusHighlight, typographyConfig_.focusHighlight);
   typographyConfig_.trackingPx = static_cast<int8_t>(clampIntSetting(
       preferences_.getChar(kPrefTypographyTracking, typographyConfig_.trackingPx),
       kTypographyTrackingMin, kTypographyTrackingMax));
@@ -636,7 +685,9 @@ void App::applyDisplayPreferences(uint32_t nowMs, bool rerender) {
 void App::applyTypographySettings(uint32_t nowMs, bool rerender) {
   display_.setTypographyConfig(typographyConfig_);
 
-  Serial.printf("[typography] track=%d anchor=%u guideWidth=%u guideGap=%u\n",
+  Serial.printf("[typography] face=%s highlight=%s track=%d anchor=%u guideWidth=%u guideGap=%u\n",
+                readerTypefaceLabel().c_str(),
+                focusHighlightLabel().c_str(),
                 static_cast<int>(typographyConfig_.trackingPx),
                 static_cast<unsigned int>(typographyConfig_.anchorPercent),
                 static_cast<unsigned int>(typographyConfig_.guideHalfWidth),
@@ -1039,9 +1090,6 @@ void App::selectMenuItem(uint32_t nowMs) {
     case MenuResume:
       setState(AppState::Paused, nowMs);
       return;
-    case MenuRestart:
-      openRestartConfirm();
-      return;
     case MenuPowerOff:
       enterPowerOff(nowMs);
       return;
@@ -1117,15 +1165,6 @@ void App::selectSettingsItem(uint32_t nowMs) {
       case kSettingsDisplayBrightnessIndex:
         cycleBrightness();
         return;
-      case kSettingsDisplayPhantomWordsIndex:
-        togglePhantomWords(nowMs);
-        return;
-      case kSettingsDisplayFontSizeIndex:
-        cycleReaderFontSize(nowMs);
-        return;
-      case kSettingsDisplayTypographyIndex:
-        openTypographyTuning();
-        return;
       default:
         return;
     }
@@ -1143,27 +1182,27 @@ void App::selectSettingsItem(uint32_t nowMs) {
       renderSettings();
       return;
     case kSettingsPacingLongWordsIndex:
-      pacingLongWordLevelIndex_ =
-          static_cast<uint8_t>((pacingLongWordLevelIndex_ + 1) % kPacingLevelCount);
-      preferences_.putUChar(kPrefPacingLong, pacingLongWordLevelIndex_);
+      pacingLongWordDelayMs_ = static_cast<uint16_t>(nextCyclicSetting(
+          pacingLongWordDelayMs_, kPacingDelayMinMs, kPacingDelayMaxMs, kPacingDelayStepMs));
+      preferences_.putUShort(kPrefPacingLongMs, pacingLongWordDelayMs_);
       break;
     case kSettingsPacingComplexityIndex:
-      pacingComplexWordLevelIndex_ =
-          static_cast<uint8_t>((pacingComplexWordLevelIndex_ + 1) % kPacingLevelCount);
-      preferences_.putUChar(kPrefPacingComplex, pacingComplexWordLevelIndex_);
+      pacingComplexWordDelayMs_ = static_cast<uint16_t>(nextCyclicSetting(
+          pacingComplexWordDelayMs_, kPacingDelayMinMs, kPacingDelayMaxMs, kPacingDelayStepMs));
+      preferences_.putUShort(kPrefPacingComplexMs, pacingComplexWordDelayMs_);
       break;
     case kSettingsPacingPunctuationIndex:
-      pacingPunctuationLevelIndex_ =
-          static_cast<uint8_t>((pacingPunctuationLevelIndex_ + 1) % kPacingLevelCount);
-      preferences_.putUChar(kPrefPacingPunctuation, pacingPunctuationLevelIndex_);
+      pacingPunctuationDelayMs_ = static_cast<uint16_t>(nextCyclicSetting(
+          pacingPunctuationDelayMs_, kPacingDelayMinMs, kPacingDelayMaxMs, kPacingDelayStepMs));
+      preferences_.putUShort(kPrefPacingPunctuationMs, pacingPunctuationDelayMs_);
       break;
     case kSettingsPacingResetIndex:
-      pacingLongWordLevelIndex_ = kDefaultPacingLevelIndex;
-      pacingComplexWordLevelIndex_ = kDefaultPacingLevelIndex;
-      pacingPunctuationLevelIndex_ = kDefaultPacingLevelIndex;
-      preferences_.putUChar(kPrefPacingLong, pacingLongWordLevelIndex_);
-      preferences_.putUChar(kPrefPacingComplex, pacingComplexWordLevelIndex_);
-      preferences_.putUChar(kPrefPacingPunctuation, pacingPunctuationLevelIndex_);
+      pacingLongWordDelayMs_ = kDefaultPacingDelayMs;
+      pacingComplexWordDelayMs_ = kDefaultPacingDelayMs;
+      pacingPunctuationDelayMs_ = kDefaultPacingDelayMs;
+      preferences_.putUShort(kPrefPacingLongMs, pacingLongWordDelayMs_);
+      preferences_.putUShort(kPrefPacingComplexMs, pacingComplexWordDelayMs_);
+      preferences_.putUShort(kPrefPacingPunctuationMs, pacingPunctuationDelayMs_);
       break;
     default:
       return;
@@ -1176,10 +1215,10 @@ void App::selectSettingsItem(uint32_t nowMs) {
 
 void App::openTypographyTuning() {
   if (typographyTuningSelectedIndex_ >= TypographyTuningItemCount) {
-    typographyTuningSelectedIndex_ = TypographyTuningTracking;
+    typographyTuningSelectedIndex_ = TypographyTuningFontSize;
   }
   if (typographyTuningSelectedIndex_ == TypographyTuningBack) {
-    typographyTuningSelectedIndex_ = TypographyTuningTracking;
+    typographyTuningSelectedIndex_ = TypographyTuningFontSize;
   }
   menuScreen_ = MenuScreen::TypographyTuning;
   renderTypographyTuning();
@@ -1193,6 +1232,20 @@ void App::selectTypographyTuningItem(uint32_t nowMs) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
+    case TypographyTuningFontSize:
+      cycleReaderFontSize(nowMs);
+      return;
+    case TypographyTuningTypeface:
+      typographyConfig_.typeface = nextReaderTypeface(typographyConfig_.typeface);
+      preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+      break;
+    case TypographyTuningPhantomWords:
+      togglePhantomWords(nowMs);
+      return;
+    case TypographyTuningFocusHighlight:
+      typographyConfig_.focusHighlight = !typographyConfig_.focusHighlight;
+      preferences_.putBool(kPrefTypographyFocusHighlight, typographyConfig_.focusHighlight);
+      break;
     case TypographyTuningTracking:
       typographyConfig_.trackingPx = static_cast<int8_t>(
           nextCyclicSetting(typographyConfig_.trackingPx, kTypographyTrackingMin,
@@ -1218,6 +1271,8 @@ void App::selectTypographyTuningItem(uint32_t nowMs) {
       break;
     case TypographyTuningReset:
       typographyConfig_ = defaultTypographyConfig();
+      preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+      preferences_.putBool(kPrefTypographyFocusHighlight, typographyConfig_.focusHighlight);
       preferences_.putChar(kPrefTypographyTracking, typographyConfig_.trackingPx);
       preferences_.putUChar(kPrefTypographyAnchor, typographyConfig_.anchorPercent);
       preferences_.putUChar(kPrefTypographyGuideWidth, typographyConfig_.guideHalfWidth);
@@ -1258,14 +1313,11 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Back");
     settingsMenuItems_.push_back("Theme: " + themeModeLabel());
     settingsMenuItems_.push_back("Brightness: " + String(currentBrightnessPercent()) + "%");
-    settingsMenuItems_.push_back("Phantom words: " + phantomWordsLabel());
-    settingsMenuItems_.push_back("Font size: " + readerFontSizeLabel());
-    settingsMenuItems_.push_back("Typography tune");
   } else if (menuScreen_ == MenuScreen::SettingsPacing) {
     settingsMenuItems_.push_back("Back");
-    settingsMenuItems_.push_back("Long words: " + pacingLevelLabel(pacingLongWordLevelIndex_));
-    settingsMenuItems_.push_back("Complexity: " + pacingLevelLabel(pacingComplexWordLevelIndex_));
-    settingsMenuItems_.push_back("Punctuation: " + pacingLevelLabel(pacingPunctuationLevelIndex_));
+    settingsMenuItems_.push_back("Long words: " + pacingDelayLabel(pacingLongWordDelayMs_));
+    settingsMenuItems_.push_back("Complexity: " + pacingDelayLabel(pacingComplexWordDelayMs_));
+    settingsMenuItems_.push_back("Punctuation: " + pacingDelayLabel(pacingPunctuationDelayMs_));
     settingsMenuItems_.push_back("Reset pacing");
   }
 
@@ -1276,23 +1328,18 @@ void App::rebuildSettingsMenuItems() {
 
 void App::applyPacingSettings() {
   ReadingLoop::PacingConfig pacingConfig;
-  pacingConfig.longWordScalePercent = kPacingScalePercents[pacingLongWordLevelIndex_];
-  pacingConfig.complexWordScalePercent = kPacingScalePercents[pacingComplexWordLevelIndex_];
-  pacingConfig.punctuationScalePercent = kPacingScalePercents[pacingPunctuationLevelIndex_];
+  pacingConfig.longWordDelayMs = pacingLongWordDelayMs_;
+  pacingConfig.complexWordDelayMs = pacingComplexWordDelayMs_;
+  pacingConfig.punctuationDelayMs = pacingPunctuationDelayMs_;
   reader_.setPacingConfig(pacingConfig);
 
-  Serial.printf("[settings] pacing long=%s complexity=%s punctuation=%s\n",
-                pacingLevelLabel(pacingLongWordLevelIndex_).c_str(),
-                pacingLevelLabel(pacingComplexWordLevelIndex_).c_str(),
-                pacingLevelLabel(pacingPunctuationLevelIndex_).c_str());
+  Serial.printf("[settings] pacing long=%u ms complexity=%u ms punctuation=%u ms\n",
+                static_cast<unsigned int>(pacingLongWordDelayMs_),
+                static_cast<unsigned int>(pacingComplexWordDelayMs_),
+                static_cast<unsigned int>(pacingPunctuationDelayMs_));
 }
 
-String App::pacingLevelLabel(uint8_t levelIndex) const {
-  if (levelIndex >= kPacingLevelCount) {
-    levelIndex = kDefaultPacingLevelIndex;
-  }
-  return kPacingScaleLabels[levelIndex];
-}
+String App::pacingDelayLabel(uint16_t delayMs) const { return String(delayMs) + " ms"; }
 
 String App::themeModeLabel() const {
   if (nightMode_) {
@@ -1303,6 +1350,10 @@ String App::themeModeLabel() const {
 
 String App::phantomWordsLabel() const { return phantomWordsEnabled_ ? "On" : "Off"; }
 
+String App::focusHighlightLabel() const {
+  return typographyConfig_.focusHighlight ? "On" : "Off";
+}
+
 String App::readerFontSizeLabel() const {
   uint8_t levelIndex = readerFontSizeIndex_;
   if (levelIndex >= kReaderFontSizeCount) {
@@ -1311,10 +1362,30 @@ String App::readerFontSizeLabel() const {
   return kReaderFontSizeLabels[levelIndex];
 }
 
+String App::readerTypefaceLabel() const {
+  switch (typographyConfig_.typeface) {
+    case DisplayManager::ReaderTypeface::AtkinsonHyperlegible:
+      return "Atkinson";
+    case DisplayManager::ReaderTypeface::OpenDyslexic:
+      return "OpenDyslexic";
+    case DisplayManager::ReaderTypeface::Standard:
+    default:
+      return "Standard";
+  }
+}
+
 String App::typographyTuningLabel() const {
   switch (typographyTuningSelectedIndex_) {
     case TypographyTuningBack:
       return "Back";
+    case TypographyTuningFontSize:
+      return "Font size";
+    case TypographyTuningTypeface:
+      return "Typeface";
+    case TypographyTuningPhantomWords:
+      return "Phantom words";
+    case TypographyTuningFocusHighlight:
+      return "Red highlight";
     case TypographyTuningTracking:
       return "Tracking";
     case TypographyTuningAnchor:
@@ -1334,6 +1405,14 @@ String App::typographyTuningValueLabel() const {
   switch (typographyTuningSelectedIndex_) {
     case TypographyTuningBack:
       return "tap to exit";
+    case TypographyTuningFontSize:
+      return readerFontSizeLabel();
+    case TypographyTuningTypeface:
+      return readerTypefaceLabel();
+    case TypographyTuningPhantomWords:
+      return phantomWordsLabel();
+    case TypographyTuningFocusHighlight:
+      return focusHighlightLabel();
     case TypographyTuningTracking:
       return String(typographyConfig_.trackingPx >= 0 ? "+" : "") +
              String(static_cast<int>(typographyConfig_.trackingPx)) + " px";
@@ -1460,6 +1539,8 @@ void App::openChapterPicker() {
     chapterPickerSelectedIndex_ = selectedChapter + 1;
   }
 
+  chapterMenuItems_.push_back("Restart book");
+
   menuScreen_ = MenuScreen::ChapterPicker;
   renderChapterPicker();
 }
@@ -1468,6 +1549,12 @@ void App::selectChapterPickerItem(uint32_t nowMs) {
   if (chapterPickerSelectedIndex_ == kChapterPickerBackIndex || chapterMenuItems_.size() <= 1) {
     menuScreen_ = MenuScreen::Main;
     renderMainMenu();
+    return;
+  }
+
+  const size_t restartIndex = chapterMenuItems_.size() - 1;
+  if (chapterPickerSelectedIndex_ == restartIndex) {
+    openRestartConfirm();
     return;
   }
 
@@ -1496,6 +1583,7 @@ void App::selectChapterPickerItem(uint32_t nowMs) {
 }
 
 void App::openRestartConfirm() {
+  restartConfirmReturnScreen_ = menuScreen_;
   restartConfirmSelectedIndex_ = RestartConfirmNo;
   menuScreen_ = MenuScreen::RestartConfirm;
   renderRestartConfirm();
@@ -1503,12 +1591,13 @@ void App::openRestartConfirm() {
 
 void App::selectRestartConfirmItem(uint32_t nowMs) {
   if (restartConfirmSelectedIndex_ != RestartConfirmYes) {
-    menuScreen_ = MenuScreen::Main;
-    renderMainMenu();
+    menuScreen_ = restartConfirmReturnScreen_;
+    renderMenu();
     return;
   }
 
   reader_.begin(nowMs);
+  restartConfirmReturnScreen_ = MenuScreen::Main;
   menuScreen_ = MenuScreen::Main;
   setState(AppState::Paused, nowMs);
   saveReadingPosition(true);
@@ -1883,7 +1972,7 @@ void App::renderTypographyTuning() {
     typographyPreviewSampleIndex_ = 0;
   }
   if (typographyTuningSelectedIndex_ >= TypographyTuningItemCount) {
-    typographyTuningSelectedIndex_ = TypographyTuningTracking;
+    typographyTuningSelectedIndex_ = TypographyTuningFontSize;
   }
 
   const size_t index = typographyPreviewSampleIndex_;
@@ -1891,6 +1980,8 @@ void App::renderTypographyTuning() {
       index == 0 ? kTypographyPreviewWordCount - 1 : index - 1;
   const size_t afterIndex =
       (index + 1 >= kTypographyPreviewWordCount) ? 0 : index + 1;
+  const String beforeText = phantomWordsEnabled_ ? kTypographyPreviewWords[beforeIndex] : "";
+  const String afterText = phantomWordsEnabled_ ? kTypographyPreviewWords[afterIndex] : "";
   const String line1 = typographyTuningLabel() + ": " + typographyTuningValueLabel();
   const String title =
       "Typography " + String(static_cast<unsigned int>(index + 1)) + "/" +
@@ -1898,13 +1989,19 @@ void App::renderTypographyTuning() {
   String line2 = "Tap change  L/R sample";
   if (typographyTuningSelectedIndex_ == TypographyTuningBack) {
     line2 = "Tap exit  L/R sample";
+  } else if (typographyTuningSelectedIndex_ == TypographyTuningPhantomWords ||
+             typographyTuningSelectedIndex_ == TypographyTuningFocusHighlight) {
+    line2 = "Tap toggle  L/R sample";
+  } else if (typographyTuningSelectedIndex_ == TypographyTuningFontSize ||
+             typographyTuningSelectedIndex_ == TypographyTuningTypeface) {
+    line2 = "Tap cycle  L/R sample";
   } else if (typographyTuningSelectedIndex_ == TypographyTuningReset) {
     line2 = "Tap reset  L/R sample";
   }
 
-  display_.renderTypographyPreview(kTypographyPreviewWords[beforeIndex],
+  display_.renderTypographyPreview(beforeText,
                                    kTypographyPreviewWords[index],
-                                   kTypographyPreviewWords[afterIndex],
+                                   afterText,
                                    readerFontSizeIndex_, title, line1, line2);
 }
 

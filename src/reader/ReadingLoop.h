@@ -6,9 +6,9 @@
 class ReadingLoop {
  public:
   struct PacingConfig {
-    uint8_t longWordScalePercent = 100;
-    uint8_t complexWordScalePercent = 100;
-    uint8_t punctuationScalePercent = 100;
+    uint16_t longWordDelayMs = 200;
+    uint16_t complexWordDelayMs = 200;
+    uint16_t punctuationDelayMs = 200;
   };
 
   void begin(uint32_t nowMs);
