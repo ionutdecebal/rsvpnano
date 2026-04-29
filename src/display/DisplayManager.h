@@ -59,8 +59,14 @@ class DisplayManager {
   void renderTypographyPreview(const String &beforeText, const String &word, const String &afterText,
                                uint8_t fontSizeLevel, const String &title,
                                const String &line1 = "", const String &line2 = "");
-  void renderContextView(const std::vector<ContextWord> &words, const String &chapterLabel = "",
-                         uint8_t progressPercent = 0);
+  void renderScrollView(const std::vector<ContextWord> &words, uint32_t contentToken,
+                        size_t windowStartIndex, size_t currentWordIndex,
+                        uint16_t scrollProgressPermille = 0, const String &chapterLabel = "",
+                        uint8_t progressPercent = 0, const String &overlayText = "");
+  void renderWordTickerView(const std::vector<ContextWord> &words, size_t currentWordIndex,
+                            uint8_t fontSizeLevel, uint16_t motionPermille = 0,
+                            const String &chapterLabel = "", uint8_t progressPercent = 0,
+                            const String &overlayText = "", bool showFooter = true);
   void renderMenu(const char *const *items, size_t itemCount, size_t selectedIndex);
   void renderMenu(const std::vector<String> &items, size_t selectedIndex);
   void renderLibrary(const std::vector<LibraryItem> &items, size_t selectedIndex);
@@ -120,6 +126,7 @@ class DisplayManager {
   void drawMenuItem(const String &item, int y, bool selected);
   void applyBrightness();
   void flushScaledFrame(int scale, int virtualWidth, int virtualHeight);
+  void flushFullWidthLogicalBand(int yStart, int yEnd);
 
   uint16_t *virtualFrame_ = nullptr;
   uint16_t *txBuffer_ = nullptr;
@@ -128,6 +135,7 @@ class DisplayManager {
   uint8_t brightnessPercent_ = 100;
   bool darkMode_ = true;
   bool nightMode_ = false;
+  bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;
 };

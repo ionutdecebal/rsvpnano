@@ -26,6 +26,7 @@ enum class UiText : uint8_t {
   Theme,
   Brightness,
   Language,
+  ReadingMode,
   LongWords,
   Complexity,
   Punctuation,
@@ -63,6 +64,8 @@ enum class UiText : uint8_t {
   Medium,
   Small,
   Standard,
+  RsvpMode,
+  ScrollMode,
 };
 
 namespace Localization {
@@ -128,6 +131,8 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Brillo";
         case UiText::Language:
           return "Idioma";
+        case UiText::ReadingMode:
+          return "Modo lectura";
         case UiText::LongWords:
           return "Palabras largas";
         case UiText::Complexity:
@@ -202,6 +207,10 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Pequeno";
         case UiText::Standard:
           return "Estandar";
+        case UiText::RsvpMode:
+          return "RSVP";
+        case UiText::ScrollMode:
+          return "Scroll pagina";
       }
       break;
     case UiLanguage::French:
@@ -232,6 +241,8 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Luminosite";
         case UiText::Language:
           return "Langue";
+        case UiText::ReadingMode:
+          return "Mode lecture";
         case UiText::LongWords:
           return "Mots longs";
         case UiText::Complexity:
@@ -306,6 +317,10 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Petit";
         case UiText::Standard:
           return "Standard";
+        case UiText::RsvpMode:
+          return "RSVP";
+        case UiText::ScrollMode:
+          return "Defilement page";
       }
       break;
     case UiLanguage::German:
@@ -336,6 +351,8 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Helligkeit";
         case UiText::Language:
           return "Sprache";
+        case UiText::ReadingMode:
+          return "Lesemodus";
         case UiText::LongWords:
           return "Lange Worter";
         case UiText::Complexity:
@@ -410,6 +427,10 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Klein";
         case UiText::Standard:
           return "Standard";
+        case UiText::RsvpMode:
+          return "RSVP";
+        case UiText::ScrollMode:
+          return "Seiten-Scroll";
       }
       break;
     case UiLanguage::Romanian:
@@ -440,6 +461,8 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Luminoz.";
         case UiText::Language:
           return "Limba";
+        case UiText::ReadingMode:
+          return "Mod citire";
         case UiText::LongWords:
           return "Cuvinte lungi";
         case UiText::Complexity:
@@ -514,6 +537,10 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Mic";
         case UiText::Standard:
           return "Standard";
+        case UiText::RsvpMode:
+          return "RSVP";
+        case UiText::ScrollMode:
+          return "Derulare pagina";
       }
       break;
     case UiLanguage::Polish:
@@ -544,6 +571,8 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Jasnosc";
         case UiText::Language:
           return "Jezyk";
+        case UiText::ReadingMode:
+          return "Tryb czyt.";
         case UiText::LongWords:
           return "Dlugie slowa";
         case UiText::Complexity:
@@ -618,6 +647,10 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Maly";
         case UiText::Standard:
           return "Standard";
+        case UiText::RsvpMode:
+          return "RSVP";
+        case UiText::ScrollMode:
+          return "Scroll strony";
       }
       break;
     case UiLanguage::English:
@@ -649,6 +682,8 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Brightness";
         case UiText::Language:
           return "Language";
+        case UiText::ReadingMode:
+          return "Reading mode";
         case UiText::LongWords:
           return "Long words";
         case UiText::Complexity:
@@ -723,6 +758,10 @@ inline const char *text(UiLanguage language, UiText key) {
           return "Small";
         case UiText::Standard:
           return "Standard";
+        case UiText::RsvpMode:
+          return "RSVP";
+        case UiText::ScrollMode:
+          return "Page scroll";
       }
       break;
   }

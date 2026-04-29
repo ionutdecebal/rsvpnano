@@ -16,7 +16,7 @@ class ReadingLoop {
 
   void begin(uint32_t nowMs);
   void start(uint32_t nowMs);
-  bool update(uint32_t nowMs);
+  bool update(uint32_t nowMs, bool allowCatchUp = true);
   void setWords(std::vector<String> words, uint32_t nowMs);
   void scrub(int steps);
   void seekTo(size_t wordIndex);
@@ -33,6 +33,9 @@ class ReadingLoop {
   uint16_t wpm() const;
   uint32_t wordIntervalMs() const;
   uint32_t currentWordDurationMs() const;
+  uint32_t elapsedInCurrentWordMs(uint32_t nowMs) const;
+  bool currentWordEndsSentence() const;
+  bool atEnd() const;
 
  private:
   bool advance(size_t steps);

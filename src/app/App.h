@@ -15,6 +15,11 @@
 
 class App {
  public:
+  enum class ReaderMode : uint8_t {
+    Rsvp = 0,
+    Scroll = 1,
+  };
+
   App();
 
   void begin();
@@ -30,13 +35,15 @@ class App {
     uint32_t startMs = 0;
     uint32_t lastMs = 0;
     size_t startWordIndex = 0;
-    int scrubStepsApplied = 0;
+    int gestureStepsApplied = 0;
+    int32_t browseOffsetPermille = 0;
   };
 
   enum class TouchIntent {
     None,
     PlayHold,
     Scrub,
+    BrowseScroll,
     Wpm,
   };
 
@@ -63,6 +70,7 @@ class App {
   void cycleBrightness();
   void cycleThemeMode(uint32_t nowMs);
   void cycleUiLanguage(uint32_t nowMs);
+  void cycleReaderMode(uint32_t nowMs);
   void togglePhantomWords(uint32_t nowMs);
   void cycleReaderFontSize(uint32_t nowMs);
   void applyDisplayPreferences(uint32_t nowMs, bool rerender = true);
@@ -71,8 +79,16 @@ class App {
   bool updateBatteryStatus(uint32_t nowMs, bool force = false);
   void handleTouch(uint32_t nowMs);
   void applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs);
+  void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
+  void requestReaderPauseAtSentenceEnd(uint32_t nowMs);
+  void finalizeReaderPause(uint32_t nowMs);
+  bool shouldFinalizeReaderPause(uint32_t nowMs) const;
+  void resetReaderTapTracking();
   int scrubStepsForDrag(int deltaX) const;
-  void applyScrubTarget(int targetSteps);
+  void applyScrubTarget(int targetSteps, uint32_t nowMs);
+  int browseScrollRatePermille(uint16_t y) const;
+  void applyBrowseHoldScroll(uint16_t y, uint32_t elapsedMs, uint32_t nowMs);
+  void renderContextBrowsePreview(size_t currentIndex, uint16_t scrollProgressPermille);
   void applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs);
   void moveMenuSelection(int direction);
   void selectMenuItem(uint32_t nowMs);
@@ -88,6 +104,7 @@ class App {
   String phantomWordsLabel() const;
   String focusHighlightLabel() const;
   String uiLanguageLabel() const;
+  String readerModeLabel() const;
   String readerFontSizeLabel() const;
   String readerTypefaceLabel() const;
   String typographyTuningLabel() const;
@@ -124,6 +141,8 @@ class App {
   void renderBookPicker();
   void renderChapterPicker();
   void renderRestartConfirm();
+  void renderActiveReader(uint32_t nowMs);
+  void renderScrollReader(uint32_t nowMs, const String &overlayText = "");
   DisplayManager::LibraryItem libraryItemForBook(size_t bookIndex);
   String chapterMenuLabel(size_t chapterIndex) const;
   String currentChapterLabel() const;
@@ -140,6 +159,7 @@ class App {
   bool isParagraphStart(size_t wordIndex) const;
   size_t paragraphStartAtOrBefore(size_t wordIndex) const;
   size_t contextPreviewAnchorIndex(size_t currentIndex) const;
+  void updateContextPreviewWindow(size_t currentIndex);
   void invalidateContextPreviewWindow();
   void renderStorageStatus(const char *title, const char *line1, const char *line2,
                            int progressPercent);
@@ -147,6 +167,8 @@ class App {
                                   const char *line2, int progressPercent);
   const char *stateName(AppState state) const;
   const char *touchPhaseName(TouchPhase phase) const;
+  bool scrollModeEnabled() const;
+  uint32_t currentReaderContentToken() const;
 
   AppState state_ = AppState::Booting;
   DisplayManager display_;
@@ -165,8 +187,11 @@ class App {
   uint32_t wpmFeedbackUntilMs_ = 0;
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
+  uint32_t lastScrollAnimationRenderMs_ = 0;
+  uint32_t lastReaderTapMs_ = 0;
   size_t lastSavedWordIndex_ = static_cast<size_t>(-1);
   size_t contextPreviewStartIndex_ = 0;
+  size_t contextPreviewCurrentLocalIndex_ = static_cast<size_t>(-1);
   size_t currentBookIndex_ = 0;
   size_t menuSelectedIndex_ = 0;
   size_t settingsSelectedIndex_ = 0;
@@ -188,11 +213,17 @@ class App {
   std::vector<String> chapterMenuItems_;
   std::vector<ChapterMarker> chapterMarkers_;
   std::vector<size_t> paragraphStarts_;
+  std::vector<DisplayManager::ContextWord> contextPreviewWords_;
   String currentBookPath_;
   String currentBookTitle_;
   String batteryLabel_;
+  uint16_t lastReaderTapX_ = 0;
+  uint16_t lastReaderTapY_ = 0;
   bool touchInitialized_ = false;
   bool touchPlayHeld_ = false;
+  bool playLocked_ = false;
+  bool pauseAtSentenceEndRequested_ = false;
+  bool lastReaderTapValid_ = false;
   bool bootButtonReleasedSinceBoot_ = false;
   bool bootButtonLongPressHandled_ = false;
   bool powerButtonReleasedSinceBoot_ = false;
@@ -206,5 +237,6 @@ class App {
   bool darkMode_ = true;
   bool nightMode_ = false;
   UiLanguage uiLanguage_ = UiLanguage::English;
+  ReaderMode readerMode_ = ReaderMode::Rsvp;
   DisplayManager::TypographyConfig typographyConfig_;
 };

@@ -5,6 +5,9 @@ RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at
 ## Highlights
 
 - One-word RSVP reader with stable anchor alignment.
+- Optional page-scroll reading mode that keeps the same pacing/book-position mechanics without the RSVP anchor.
+- Hold to read, double-tap to lock autoplay, tap to stop locked autoplay, and pause on sentence boundaries.
+- Horizontal scrub preview with hold-to-scroll text browsing, then tap to return to RSVP.
 - Adjustable typeface, font size, typography, anchor guides, pacing, and phantom words.
 - Menu language selection for English, Spanish, French, German, Romanian, and Polish.
 - Chapter and paragraph-aware navigation.
@@ -29,6 +32,11 @@ into `.rsvp`, downloading a `.zip` of the results, cleaning interrupted sidecar 
 the converted outputs back into the SD card's `/books` folder.
 
 On the device, you can switch the menu language in `Settings -> Display -> Language`.
+You can also switch between anchored RSVP and the page scroller in `Settings -> Display ->
+Reading mode`.
+While paused in RSVP mode, swipe left or right to open the larger scrub preview, hold and move
+your finger vertically to browse smoothly through the text, and tap to return to the anchored
+word view.
 
 The browser workflow currently accepts:
 
@@ -80,6 +88,141 @@ If a conversion is interrupted, you may see sidecar files such as:
 .rsvp.converting
 .rsvp.failed
 ```
+
+## User Guide
+
+Most reader settings and your current reading position are saved automatically.
+
+### Hardware Buttons
+
+- `BOOT` short press: cycle brightness.
+- `BOOT` hold: cycle theme (`Dark -> Light -> Night -> Dark`).
+- `PWR` short press: open the menu from the reader.
+- `PWR` short press while in a submenu: jump back to the main menu.
+- `PWR` short press while on the main menu: return to the reader.
+- `PWR` hold: power the device off.
+
+### Reader Shortcuts
+
+#### RSVP Mode
+
+- Hold on the screen: start reading.
+- Release after a hold: pause at the end of the current sentence.
+- Double-tap while paused: lock autoplay on.
+- Tap while locked autoplay is running: stop at the end of the current sentence.
+- Swipe left: scrub backward through the text.
+- Swipe right: scrub forward through the text.
+- Swipe up while paused: increase WPM.
+- Swipe down while paused: decrease WPM.
+
+Horizontal scrubbing in RSVP mode opens a larger preview. In that preview:
+
+- Tap: return to the anchored RSVP view.
+- Hold, then move your finger in the top half of the screen: scroll upward.
+- Hold, then move your finger in the bottom half of the screen: scroll downward.
+- Moving farther from the center increases browse speed.
+
+#### Page Scroll Mode
+
+- Hold on the screen: start reading.
+- Release after a hold: pause at the end of the current sentence.
+- Double-tap while paused: lock autoplay on.
+- Tap while locked autoplay is running: stop at the end of the current sentence.
+- Swipe left: scrub backward through the text.
+- Swipe right: scrub forward through the text.
+- Swipe up while paused: increase WPM.
+- Swipe down while paused: decrease WPM.
+
+Page scroll mode keeps the same pacing and saved-position behavior as RSVP mode, but it shows a
+larger scrolling text view instead of the anchored word display.
+
+### Menu Navigation
+
+- Open the menu with the `PWR` button.
+- Swipe up or down to move the selection.
+- Tap to activate the highlighted item.
+- In the typography tuning screen, swipe left or right to change the preview sample word.
+- In the typography tuning screen, tap the selected control to cycle or toggle that setting.
+
+### Menu Map
+
+```text
+Main Menu
+|- Resume
+|- Chapters
+|  |- Back
+|  |- Start of Book or chapter list
+|  `- Restart Book
+|     |- No, keep place
+|     `- Yes, restart
+|- Library
+|  |- Back
+|  `- Book list
+|- Settings
+|  |- Back
+|  |- Display
+|  |  |- Back
+|  |  |- Reading mode
+|  |  |- Theme
+|  |  |- Brightness
+|  |  `- Language
+|  |- Typography
+|  |  |- Back
+|  |  |- Font size
+|  |  |- Typeface
+|  |  |- Phantom words
+|  |  |- Red highlight
+|  |  |- Tracking
+|  |  |- Anchor
+|  |  |- Guide width
+|  |  |- Guide gap
+|  |  `- Reset
+|  `- Word pacing
+|     |- Back
+|     |- Long words
+|     |- Complexity
+|     |- Punctuation
+|     `- Reset pacing
+|- USB transfer (default USB build)
+`- Power off
+```
+
+### Settings Reference
+
+#### Display
+
+- `Reading mode`: switch between anchored RSVP and page scroll.
+- `Theme`: cycle `Dark`, `Light`, and `Night`.
+- `Brightness`: cycle the backlight level.
+- `Language`: cycle `English`, `Espanol`, `Francais`, `Deutsch`, `Romana`, and `Polski`.
+
+#### Typography
+
+- `Font size`: cycle `Large`, `Medium`, and `Small`.
+- `Typeface`: cycle `Standard`, `Atkinson`, and `OpenDyslexic`.
+- `Phantom words`: show or hide the surrounding helper words in RSVP mode.
+- `Red highlight`: turn the focus-letter highlight on or off in RSVP mode.
+- `Tracking`: adjust letter spacing.
+- `Anchor`: move the RSVP focus position horizontally.
+- `Guide width`: change the width of the anchor guides.
+- `Guide gap`: change the gap between the anchor guides.
+- `Reset`: restore the typography settings to their defaults.
+
+#### Word Pacing
+
+- `Long words`: add extra delay to longer words.
+- `Complexity`: add extra delay to more complex words.
+- `Punctuation`: add extra delay around sentence rhythm and punctuation.
+- `Reset pacing`: restore pacing delays to their defaults.
+
+### USB Transfer
+
+On the default USB-enabled firmware build, open `USB transfer` from the main menu to expose the SD
+card over USB. When you are done copying books:
+
+1. Eject the device from your computer.
+2. Hold `BOOT` to leave USB transfer mode.
+3. Wait for the device to remount the SD card and return to the reader.
 
 ## Build From Source
 

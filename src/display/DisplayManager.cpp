@@ -58,14 +58,17 @@ constexpr int kLibraryTitleYOffset = 4;
 constexpr int kLibrarySubtitleYOffset = 20;
 constexpr int kLibraryScreenPaddingY = 28;
 constexpr uint8_t kLibrarySubtitleAlpha = 120;
-constexpr int kContextMarginX = 18;
-constexpr int kContextTop = 8;
-constexpr int kContextLineHeight = 23;
-constexpr int kContextParagraphGap = 7;
-constexpr int kContextParagraphIndent = 22;
-constexpr int kContextSpaceWidth = 8;
-constexpr int kContextSerifDivisor = 3;
-constexpr size_t kContextTargetLines = 6;
+constexpr int kScrollMarginX = 18;
+constexpr int kScrollTop = 8;
+constexpr int kScrollLineHeight = 29;
+constexpr int kScrollParagraphGap = 8;
+constexpr int kScrollParagraphIndent = 22;
+constexpr int kScrollSpaceWidth = 10;
+constexpr int kScrollSerifDivisor = 2;
+constexpr int kWordTickerGapLarge = 16;
+constexpr int kWordTickerGapMedium = 12;
+constexpr int kWordTickerGapSmall = 9;
+constexpr int kWordTickerBandPadding = 10;
 constexpr int kPhantomCurrentGapLarge = 30;
 constexpr int kPhantomCurrentGapMedium = 24;
 constexpr int kPhantomCurrentGapSmall = 20;
@@ -766,6 +769,7 @@ void DisplayManager::setBatteryLabel(const String &label) {
   }
 
   batteryLabel_ = label;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
 }
 
@@ -788,6 +792,7 @@ void DisplayManager::setDarkMode(bool darkMode) {
   }
 
   darkMode_ = darkMode;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
 }
 
@@ -797,6 +802,7 @@ void DisplayManager::setNightMode(bool nightMode) {
   }
 
   nightMode_ = nightMode;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
 }
 
@@ -819,6 +825,7 @@ void DisplayManager::setTypographyConfig(const TypographyConfig &config) {
   }
 
   current = next;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
 }
 
@@ -845,6 +852,7 @@ bool DisplayManager::begin() {
   }
 
   initialized_ = true;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
   fillScreen(backgroundColor());
   applyBrightness();
@@ -860,6 +868,7 @@ void DisplayManager::prepareForSleep() {
   fillScreen(kTrueBlack);
   axs15231bSleep();
   initialized_ = false;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
 }
 
@@ -871,6 +880,7 @@ bool DisplayManager::wakeFromSleep() {
 
   axs15231bWake();
   initialized_ = true;
+  tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
   applyBrightness();
   return true;
@@ -1502,6 +1512,7 @@ void DisplayManager::applyBrightness() {
 }
 
 void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHeight) {
+  tickerPlaybackFrameActive_ = false;
   for (int nativeYStart = 0; nativeYStart < kPanelNativeHeight;
        nativeYStart += kMaxChunkPhysicalRows) {
     const int nativeRows = std::min(kMaxChunkPhysicalRows, kPanelNativeHeight - nativeYStart);
@@ -1531,6 +1542,55 @@ void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHe
       return;
     }
   }
+}
+
+void DisplayManager::flushFullWidthLogicalBand(int yStart, int yEnd) {
+  if (!initialized_) {
+    return;
+  }
+
+  yStart = std::max(0, std::min(kDisplayHeight, yStart));
+  yEnd = std::max(0, std::min(kDisplayHeight, yEnd));
+  if (yEnd <= yStart) {
+    return;
+  }
+
+  const int physicalXStart =
+      BoardConfig::UI_ROTATED_180 ? (kDisplayHeight - yEnd) : yStart;
+  const int physicalXEnd =
+      BoardConfig::UI_ROTATED_180 ? (kDisplayHeight - yStart) : yEnd;
+  const int physicalWidth = physicalXEnd - physicalXStart;
+  if (physicalWidth <= 0 || txBuffer_ == nullptr) {
+    return;
+  }
+
+  for (int nativeYStart = 0; nativeYStart < kPanelNativeHeight;
+       nativeYStart += kMaxChunkPhysicalRows) {
+    const int nativeRows = std::min(kMaxChunkPhysicalRows, kPanelNativeHeight - nativeYStart);
+
+    for (int localNativeY = 0; localNativeY < nativeRows; ++localNativeY) {
+      const int nativeY = nativeYStart + localNativeY;
+      uint16_t *dstRow = txBuffer_ + (localNativeY * physicalWidth);
+
+      for (int localNativeX = 0; localNativeX < physicalWidth; ++localNativeX) {
+        const int nativeX = physicalXStart + localNativeX;
+        int logicalX = kDisplayWidth - 1 - nativeY;
+        int logicalY = nativeX;
+        if (BoardConfig::UI_ROTATED_180) {
+          logicalX = nativeY;
+          logicalY = kDisplayHeight - 1 - nativeX;
+        }
+        dstRow[localNativeX] = virtualFrame_[logicalY * kVirtualBufferWidth + logicalX];
+      }
+    }
+
+    if (!drawBitmap(physicalXStart, nativeYStart, physicalXEnd, nativeYStart + nativeRows,
+                    txBuffer_)) {
+      return;
+    }
+  }
+
+  tickerPlaybackFrameActive_ = true;
 }
 
 void DisplayManager::renderCenteredWord(const String &word, uint16_t color) {
@@ -1711,6 +1771,208 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
   }
   drawBatteryBadge();
   flushScaledFrame(scale, virtualWidth, virtualHeight);
+}
+
+void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
+                                          size_t currentWordIndex, uint8_t fontSizeLevel,
+                                          uint16_t motionPermille, const String &chapterLabel,
+                                          uint8_t progressPercent, const String &overlayText,
+                                          bool showFooter) {
+  if (words.empty()) {
+    renderRsvpWord("", chapterLabel, progressPercent, showFooter);
+    return;
+  }
+  if (currentWordIndex >= words.size()) {
+    currentWordIndex = words.size() - 1;
+  }
+  if (motionPermille > 1000) {
+    motionPermille = 1000;
+  }
+
+  const bool canUseBandOnly = !showFooter && overlayText.isEmpty() && tickerPlaybackFrameActive_;
+  String renderKey =
+      "ticker|" + String(fontSizeLevel) + "|i:" + String(currentWordIndex) + "|m:" +
+      String(motionPermille) + "|f:" + String(showFooter ? 1 : 0) + "|d:" +
+      String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0) + "|wc:" +
+      String(words.size());
+  if (!canUseBandOnly) {
+    renderKey += "|c:";
+    renderKey += chapterLabel;
+    renderKey += "|p:";
+    renderKey += String(progressPercent);
+    renderKey += "|o:";
+    renderKey += overlayText;
+    renderKey += "|b:";
+    renderKey += batteryLabel_;
+  }
+  const size_t keyStart = currentWordIndex > 2 ? currentWordIndex - 2 : 0;
+  const size_t keyEnd = std::min(words.size(), currentWordIndex + 3);
+  for (size_t index = keyStart; index < keyEnd; ++index) {
+    renderKey += "|";
+    renderKey += words[index].text;
+  }
+  if (!initialized_ || renderKey == lastRenderKey_) {
+    return;
+  }
+
+  lastRenderKey_ = renderKey;
+
+  const int scale = 1;
+  const int virtualWidth = kDisplayWidth;
+  const int virtualHeight = kDisplayHeight;
+  const int overlayY =
+      std::max(0, virtualHeight - kTinyGlyphHeight * kTinyScale - kWpmFeedbackBottomMargin - 24);
+  const uint16_t textColor = wordColor();
+
+  if (fontSizeLevel == 1) {
+    auto layoutFor = [&](size_t index) { return serif70WordLayout(words[index].text, -1); };
+    auto widthFor = [&](const TextLayoutMetrics &layout) { return textLayoutWidth(layout); };
+
+    const int gap = kWordTickerGapMedium;
+    const int mediumHeight =
+        mediumGlyphHeightForTypeface(effectiveReaderTypefaceForText(words[currentWordIndex].text));
+    const int textY = std::max(0, (virtualHeight - mediumHeight) / 2);
+    const TextLayoutMetrics currentLayout = layoutFor(currentWordIndex);
+    const int currentWidth = widthFor(currentLayout);
+    const int currentLeftBase = (virtualWidth - currentWidth) / 2;
+    int shiftX = 0;
+    if (currentWordIndex + 1 < words.size()) {
+      const int nextWidth = widthFor(layoutFor(currentWordIndex + 1));
+      const int travel = gap + (currentWidth / 2) + (nextWidth / 2);
+      shiftX = static_cast<int>((static_cast<int32_t>(travel) * motionPermille) / 1000);
+    }
+
+    const int bandTop = std::max(0, textY - kWordTickerBandPadding);
+    const int bandBottom =
+        std::min(virtualHeight, textY + mediumHeight + kWordTickerBandPadding);
+    if (canUseBandOnly) {
+      fillVirtualRect(0, bandTop, virtualWidth, bandBottom - bandTop, backgroundColor());
+    } else {
+      clearVirtualBuffer(virtualWidth, virtualHeight);
+    }
+    int left = currentLeftBase - shiftX;
+    int originX = left - currentLayout.minX;
+    drawSerif70TextAt(words[currentWordIndex].text, originX, textY, textColor);
+
+    int nextLeft = left + currentWidth + gap;
+    for (size_t index = currentWordIndex + 1; index < words.size(); ++index) {
+      if (nextLeft >= virtualWidth + gap) {
+        break;
+      }
+      const TextLayoutMetrics layout = layoutFor(index);
+      const int width = widthFor(layout);
+      originX = nextLeft - layout.minX;
+      drawSerif70TextAt(words[index].text, originX, textY, textColor);
+      nextLeft += width + gap;
+    }
+
+    int prevRight = left - gap;
+    for (size_t index = currentWordIndex; index > 0;) {
+      --index;
+      if (prevRight <= -gap) {
+        break;
+      }
+      const TextLayoutMetrics layout = layoutFor(index);
+      const int width = widthFor(layout);
+      const int prevLeft = prevRight - width;
+      originX = prevLeft - layout.minX;
+      drawSerif70TextAt(words[index].text, originX, textY, textColor);
+      prevRight = prevLeft - gap;
+    }
+    if (!overlayText.isEmpty()) {
+      drawTinyTextCentered(overlayText, overlayY, focusColor(), kTinyScale);
+    }
+    if (showFooter) {
+      drawFooter(chapterLabel, progressPercent);
+    }
+    if (!canUseBandOnly) {
+      drawBatteryBadge();
+      flushScaledFrame(scale, virtualWidth, virtualHeight);
+      tickerPlaybackFrameActive_ = !showFooter && overlayText.isEmpty();
+    } else {
+      flushFullWidthLogicalBand(bandTop, bandBottom);
+    }
+    return;
+  }
+
+  const ReaderTextStyle style = readerTextStyle(fontSizeLevel);
+  auto layoutFor = [&](size_t index) {
+    return serifWordLayoutScaledPercent(words[index].text, -1, style.scalePercent);
+  };
+  auto widthFor = [&](const TextLayoutMetrics &layout) { return textLayoutWidth(layout); };
+
+  int gap = kWordTickerGapLarge;
+  if (fontSizeLevel == 1) {
+    gap = kWordTickerGapMedium;
+  } else if (fontSizeLevel >= 2) {
+    gap = kWordTickerGapSmall;
+  }
+  gap = std::max(4, scaledPercentDimension(gap, style.scalePercent));
+
+  const int textHeight = scaledPercentDimension(
+      baseGlyphHeightForTypeface(effectiveReaderTypefaceForText(words[currentWordIndex].text)),
+      style.scalePercent);
+  const int textY = std::max(0, (virtualHeight - textHeight) / 2);
+  const TextLayoutMetrics currentLayout = layoutFor(currentWordIndex);
+  const int currentWidth = widthFor(currentLayout);
+  const int currentLeftBase = (virtualWidth - currentWidth) / 2;
+  int shiftX = 0;
+  if (currentWordIndex + 1 < words.size()) {
+    const int nextWidth = widthFor(layoutFor(currentWordIndex + 1));
+    const int travel = gap + (currentWidth / 2) + (nextWidth / 2);
+    shiftX = static_cast<int>((static_cast<int32_t>(travel) * motionPermille) / 1000);
+  }
+
+  const int bandTop = std::max(0, textY - kWordTickerBandPadding);
+  const int bandBottom = std::min(virtualHeight, textY + textHeight + kWordTickerBandPadding);
+  if (canUseBandOnly) {
+    fillVirtualRect(0, bandTop, virtualWidth, bandBottom - bandTop, backgroundColor());
+  } else {
+    clearVirtualBuffer(virtualWidth, virtualHeight);
+  }
+  int left = currentLeftBase - shiftX;
+  int originX = left - currentLayout.minX;
+  drawSerifTextScaledAt(words[currentWordIndex].text, originX, textY, textColor,
+                        style.scalePercent);
+
+  int nextLeft = left + currentWidth + gap;
+  for (size_t index = currentWordIndex + 1; index < words.size(); ++index) {
+    if (nextLeft >= virtualWidth + gap) {
+      break;
+    }
+    const TextLayoutMetrics layout = layoutFor(index);
+    const int width = widthFor(layout);
+    originX = nextLeft - layout.minX;
+    drawSerifTextScaledAt(words[index].text, originX, textY, textColor, style.scalePercent);
+    nextLeft += width + gap;
+  }
+
+  int prevRight = left - gap;
+  for (size_t index = currentWordIndex; index > 0;) {
+    --index;
+    if (prevRight <= -gap) {
+      break;
+    }
+    const TextLayoutMetrics layout = layoutFor(index);
+    const int width = widthFor(layout);
+    const int prevLeft = prevRight - width;
+    originX = prevLeft - layout.minX;
+    drawSerifTextScaledAt(words[index].text, originX, textY, textColor, style.scalePercent);
+    prevRight = prevLeft - gap;
+  }
+  if (!overlayText.isEmpty()) {
+    drawTinyTextCentered(overlayText, overlayY, focusColor(), kTinyScale);
+  }
+  if (showFooter) {
+    drawFooter(chapterLabel, progressPercent);
+  }
+  if (!canUseBandOnly) {
+    drawBatteryBadge();
+    flushScaledFrame(scale, virtualWidth, virtualHeight);
+    tickerPlaybackFrameActive_ = !showFooter && overlayText.isEmpty();
+  } else {
+    flushFullWidthLogicalBand(bandTop, bandBottom);
+  }
 }
 
 void DisplayManager::renderTypographyPreview(const String &beforeText, const String &word,
@@ -1910,75 +2172,72 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }
 
-void DisplayManager::renderContextView(const std::vector<ContextWord> &words,
-                                       const String &chapterLabel, uint8_t progressPercent) {
+void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uint32_t contentToken,
+                                      size_t windowStartIndex, size_t currentWordIndex,
+                                      uint16_t scrollProgressPermille,
+                                      const String &chapterLabel, uint8_t progressPercent,
+                                      const String &overlayText) {
   if (words.empty()) {
     renderRsvpWord("", chapterLabel, progressPercent, true);
     return;
   }
 
-  String renderKey = "context|" + chapterLabel + "|" + String(progressPercent);
-  renderKey += "|b:";
-  renderKey += batteryLabel_;
-  renderKey += "|d:";
-  renderKey += String(darkMode_ ? 1 : 0);
-  renderKey += "|n:";
-  renderKey += String(nightMode_ ? 1 : 0);
-  for (const ContextWord &word : words) {
-    renderKey += "|";
-    renderKey += word.current ? "*" : "";
-    renderKey += word.paragraphStart ? ">" : "";
-    renderKey += word.text;
-  }
-
-  if (!initialized_ || renderKey == lastRenderKey_) {
-    return;
-  }
-
-  lastRenderKey_ = renderKey;
-
   struct ContextLine {
     size_t start = 0;
     size_t end = 0;
     bool paragraphStart = false;
-    bool containsCurrent = false;
   };
 
   const int scale = 1;
   const int virtualWidth = kDisplayWidth;
   const int virtualHeight = kDisplayHeight;
+  const int overlayReserve = overlayText.isEmpty() ? 0 : (kTinyGlyphHeight * kTinyScale + 6);
   const int textBottom =
-      virtualHeight - kTinyGlyphHeight * kTinyScale - kFooterMarginBottom - 6;
+      virtualHeight - kTinyGlyphHeight * kTinyScale - kFooterMarginBottom - 6 - overlayReserve;
   const ReaderTypeface contextTypeface = currentReaderTypeface();
   const int contextGlyphHeight = std::max(
-      1, (baseGlyphHeightForTypeface(contextTypeface) + kContextSerifDivisor - 1) /
-             kContextSerifDivisor);
-  const int maxLineWidth = virtualWidth - (kContextMarginX * 2);
+      1, (baseGlyphHeightForTypeface(contextTypeface) + kScrollSerifDivisor - 1) /
+             kScrollSerifDivisor);
+  const int maxLineWidth = virtualWidth - (kScrollMarginX * 2);
+
+  size_t currentLocalIndex = 0;
+  if (currentWordIndex >= windowStartIndex && currentWordIndex < windowStartIndex + words.size()) {
+    currentLocalIndex = currentWordIndex - windowStartIndex;
+  }
+  size_t nextLocalIndex = currentLocalIndex;
+  if (nextLocalIndex + 1 < words.size()) {
+    ++nextLocalIndex;
+  }
+  if (scrollProgressPermille > 1000) {
+    scrollProgressPermille = 1000;
+  }
+
   std::vector<ContextLine> lines;
   lines.reserve(16);
+  size_t currentLineIndex = 0;
+  size_t nextLineIndex = 0;
+  bool foundCurrentLine = false;
+  bool foundNextLine = false;
 
   size_t index = 0;
-  int currentLine = 0;
-  bool foundCurrentLine = false;
   while (index < words.size()) {
     ContextLine line;
     line.start = index;
     line.paragraphStart = words[index].paragraphStart;
-    int lineWidth = line.paragraphStart ? kContextParagraphIndent : 0;
+    int lineWidth = line.paragraphStart ? kScrollParagraphIndent : 0;
 
     while (index < words.size()) {
       if (index > line.start && words[index].paragraphStart) {
         break;
       }
 
-      const int wordWidth = measureSerifTextWidth(words[index].text, kContextSerifDivisor);
-      const int gap = (index == line.start) ? 0 : kContextSpaceWidth;
+      const int wordWidth = measureSerifTextWidth(words[index].text, kScrollSerifDivisor);
+      const int gap = (index == line.start) ? 0 : kScrollSpaceWidth;
       if (index > line.start && lineWidth + gap + wordWidth > maxLineWidth) {
         break;
       }
 
       lineWidth += gap + wordWidth;
-      line.containsCurrent = line.containsCurrent || words[index].current;
       ++index;
 
       if (lineWidth >= maxLineWidth) {
@@ -1990,9 +2249,13 @@ void DisplayManager::renderContextView(const std::vector<ContextWord> &words,
     if (line.end > words.size()) {
       line.end = words.size();
     }
-    if (line.containsCurrent && !foundCurrentLine) {
-      currentLine = static_cast<int>(lines.size());
+    if (!foundCurrentLine && currentLocalIndex >= line.start && currentLocalIndex < line.end) {
+      currentLineIndex = lines.size();
       foundCurrentLine = true;
+    }
+    if (!foundNextLine && nextLocalIndex >= line.start && nextLocalIndex < line.end) {
+      nextLineIndex = lines.size();
+      foundNextLine = true;
     }
     lines.push_back(line);
 
@@ -2001,39 +2264,80 @@ void DisplayManager::renderContextView(const std::vector<ContextWord> &words,
     }
   }
 
-  size_t firstLine = 0;
-  if (currentLine > 2) {
-    firstLine = static_cast<size_t>(currentLine - 2);
-  }
-  if (firstLine + kContextTargetLines > lines.size() && lines.size() > kContextTargetLines) {
-    firstLine = lines.size() - kContextTargetLines;
+  if (lines.empty()) {
+    renderRsvpWord("", chapterLabel, progressPercent, true);
+    return;
   }
 
+  if (!foundCurrentLine) {
+    currentLineIndex = 0;
+  }
+  if (!foundNextLine) {
+    nextLineIndex = currentLineIndex;
+  }
+
+  std::vector<int> lineTops;
+  lineTops.reserve(lines.size());
+  int contentBottom = kScrollTop + contextGlyphHeight;
+  int y = kScrollTop;
+  for (size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+    if (lineIndex != 0 && lines[lineIndex].paragraphStart) {
+      y += kScrollParagraphGap;
+    }
+    lineTops.push_back(y);
+    contentBottom = y + contextGlyphHeight;
+    y += kScrollLineHeight;
+  }
+
+  const int currentCenterY = lineTops[currentLineIndex] + (contextGlyphHeight / 2);
+  const int nextCenterY = lineTops[nextLineIndex] + (contextGlyphHeight / 2);
+  const int focusCenterY =
+      currentCenterY +
+      (((nextCenterY - currentCenterY) * static_cast<int>(scrollProgressPermille)) / 1000);
+  const int preferredFocusY = kScrollTop + ((textBottom - kScrollTop) / 2);
+  int scrollOffset = preferredFocusY - focusCenterY;
+  const int minScrollOffset = std::min(0, textBottom - contentBottom);
+  scrollOffset = std::max(minScrollOffset, std::min(0, scrollOffset));
+
+  const String renderKey =
+      "scroll|" + String(contentToken) + "|" + String(windowStartIndex) + "|" +
+      String(currentWordIndex) + "|" + String(words.size()) + "|" + String(scrollOffset) +
+      "|" + chapterLabel + "|" + String(progressPercent) + "|o:" + overlayText + "|b:" +
+      batteryLabel_ + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0);
+  if (!initialized_ || renderKey == lastRenderKey_) {
+    return;
+  }
+
+  lastRenderKey_ = renderKey;
   clearVirtualBuffer(virtualWidth, virtualHeight);
 
-  int y = kContextTop;
-  for (size_t lineIndex = firstLine; lineIndex < lines.size(); ++lineIndex) {
+  for (size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
     const ContextLine &line = lines[lineIndex];
-    if (lineIndex != firstLine && line.paragraphStart) {
-      y += kContextParagraphGap;
+    const int lineY = lineTops[lineIndex] + scrollOffset;
+    if (lineY + contextGlyphHeight < 0) {
+      continue;
     }
-    if (y + contextGlyphHeight > textBottom) {
+    if (lineY > textBottom) {
       break;
     }
 
-    int x = kContextMarginX + (line.paragraphStart ? kContextParagraphIndent : 0);
+    int x = kScrollMarginX + (line.paragraphStart ? kScrollParagraphIndent : 0);
     for (size_t wordIndex = line.start; wordIndex < line.end && wordIndex < words.size();
          ++wordIndex) {
       const ContextWord &word = words[wordIndex];
       const uint16_t color =
           (word.current && currentFocusHighlightEnabled()) ? focusColor() : wordColor();
-      const String visibleWord = fitSerifText(word.text, virtualWidth - x - kContextMarginX,
-                                              kContextSerifDivisor);
-      drawSerifTextAt(visibleWord, x, y, color, kContextSerifDivisor);
-      x += measureSerifTextWidth(visibleWord, kContextSerifDivisor) + kContextSpaceWidth;
+      const String visibleWord =
+          fitSerifText(word.text, virtualWidth - x - kScrollMarginX, kScrollSerifDivisor);
+      drawSerifTextAt(visibleWord, x, lineY, color, kScrollSerifDivisor);
+      x += measureSerifTextWidth(visibleWord, kScrollSerifDivisor) + kScrollSpaceWidth;
     }
+  }
 
-    y += kContextLineHeight;
+  if (!overlayText.isEmpty()) {
+    const int overlayY = textBottom + 8;
+    drawTinyTextCentered(fitTinyText(overlayText, virtualWidth - 24, kTinyScale), overlayY,
+                         focusColor(), kTinyScale);
   }
 
   drawFooter(chapterLabel, progressPercent);

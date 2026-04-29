@@ -25,12 +25,19 @@ constexpr uint32_t kPowerOffHoldMs = 1600;
 constexpr uint32_t kPowerOffReleaseWaitMs = 4000;
 constexpr uint32_t kBatterySampleIntervalMs = 180000;
 constexpr uint32_t kTouchPlayHoldMs = 180;
+constexpr uint32_t kPreviewBrowseHoldMs = 240;
+constexpr uint32_t kReaderDoubleTapWindowMs = 320;
 constexpr uint32_t kThemeToggleHoldMs = 900;
+constexpr uint32_t kScrollAnimationFrameMs = 16;
 constexpr uint16_t kSwipeThresholdPx = 40;
 constexpr uint16_t kAxisBiasPx = 12;
 constexpr uint16_t kTapSlopPx = 18;
+constexpr uint16_t kReaderDoubleTapSlopPx = 36;
 constexpr uint16_t kScrubStepPx = 22;
+constexpr uint16_t kBrowseNeutralZonePx = 14;
 constexpr int kMaxScrubStepsPerGesture = 96;
+constexpr uint32_t kBrowseMinWordsPerSecondPermille = 4000;
+constexpr uint32_t kBrowseMaxWordsPerSecondPermille = 72000;
 constexpr size_t kContextPreviewWindowWords = 288;
 constexpr size_t kContextPreviewAnchorLeadWords = 112;
 constexpr size_t kContextPreviewMaxParagraphSnapWords = 48;
@@ -95,9 +102,10 @@ constexpr size_t kSettingsBackIndex = 0;
 constexpr size_t kSettingsHomeDisplayIndex = 1;
 constexpr size_t kSettingsHomeTypographyIndex = 2;
 constexpr size_t kSettingsHomePacingIndex = 3;
-constexpr size_t kSettingsDisplayThemeIndex = 1;
-constexpr size_t kSettingsDisplayBrightnessIndex = 2;
-constexpr size_t kSettingsDisplayLanguageIndex = 3;
+constexpr size_t kSettingsDisplayReadingModeIndex = 1;
+constexpr size_t kSettingsDisplayThemeIndex = 2;
+constexpr size_t kSettingsDisplayBrightnessIndex = 3;
+constexpr size_t kSettingsDisplayLanguageIndex = 4;
 constexpr size_t kSettingsPacingLongWordsIndex = 1;
 constexpr size_t kSettingsPacingComplexityIndex = 2;
 constexpr size_t kSettingsPacingPunctuationIndex = 3;
@@ -114,6 +122,7 @@ constexpr const char *kPrefBrightness = "bright";
 constexpr const char *kPrefDarkMode = "dark";
 constexpr const char *kPrefNightMode = "night";
 constexpr const char *kPrefUiLanguage = "ui_lang";
+constexpr const char *kPrefReaderMode = "read_mode";
 constexpr const char *kPrefPhantomWords = "phantom_on";
 constexpr const char *kPrefReaderFontSize = "font_size";
 constexpr const char *kPrefReaderTypeface = "typeface";
@@ -228,6 +237,27 @@ DisplayManager::ReaderTypeface nextReaderTypeface(DisplayManager::ReaderTypeface
   }
 }
 
+App::ReaderMode readerModeFromSetting(uint8_t value) {
+  switch (value) {
+    case static_cast<uint8_t>(App::ReaderMode::Scroll):
+    case 2:  // Migrate the removed word-scroll mode to page scroll.
+      return App::ReaderMode::Scroll;
+    case static_cast<uint8_t>(App::ReaderMode::Rsvp):
+    default:
+      return App::ReaderMode::Rsvp;
+  }
+}
+
+App::ReaderMode nextReaderMode(App::ReaderMode current) {
+  switch (readerModeFromSetting(static_cast<uint8_t>(current))) {
+    case App::ReaderMode::Rsvp:
+      return App::ReaderMode::Scroll;
+    case App::ReaderMode::Scroll:
+    default:
+      return App::ReaderMode::Rsvp;
+  }
+}
+
 uint16_t pacingDelayMsForLegacyLevel(uint8_t levelIndex) {
   constexpr uint16_t kLegacyPacingDelayMs[] = {100, 150, 200, 250, 300};
   constexpr size_t kLegacyPacingLevelCount =
@@ -278,6 +308,8 @@ void App::begin() {
   uiLanguage_ =
       Localization::sanitizeLanguage(preferences_.getUChar(
           kPrefUiLanguage, static_cast<uint8_t>(uiLanguage_)));
+  readerMode_ = readerModeFromSetting(
+      preferences_.getUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_)));
   readerFontSizeIndex_ = preferences_.getUChar(kPrefReaderFontSize, readerFontSizeIndex_);
   if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
     readerFontSizeIndex_ = 0;
@@ -312,6 +344,7 @@ void App::begin() {
   applyPacingSettings();
   bootStartedMs_ = millis();
   lastStateLogMs_ = bootStartedMs_;
+  lastScrollAnimationRenderMs_ = 0;
 
   logApp("Initializing hardware modules");
   const bool displayReady = display_.begin();
@@ -351,6 +384,7 @@ void App::begin() {
     currentBookPath_ = "";
     currentBookTitle_ = "Demo";
     reader_.begin(bootStartedMs_);
+    invalidateContextPreviewWindow();
     Serial.println("[app] using built-in demo text");
   }
 
@@ -378,13 +412,7 @@ void App::update(uint32_t nowMs) {
   maybeSaveReadingPosition(nowMs);
 
   if (batteryChanged && (state_ == AppState::Paused || state_ == AppState::Playing)) {
-    if (contextViewVisible_) {
-      renderContextPreview();
-    } else if (wpmFeedbackVisible_) {
-      renderWpmFeedback(nowMs);
-    } else {
-      renderReaderWord();
-    }
+    renderActiveReader(nowMs);
   } else if (batteryChanged && state_ == AppState::Menu) {
     renderMenu();
   }
@@ -443,17 +471,22 @@ void App::setState(AppState nextState, uint32_t nowMs) {
   }
   if (nextState != AppState::Playing) {
     touchPlayHeld_ = false;
+    playLocked_ = false;
+    pauseAtSentenceEndRequested_ = false;
+  }
+  if (nextState != AppState::Paused && nextState != AppState::Playing) {
+    resetReaderTapTracking();
   }
 
   state_ = nextState;
 
   switch (state_) {
     case AppState::Paused:
-      renderReaderWord();
+      renderActiveReader(nowMs);
       break;
     case AppState::Playing:
       reader_.start(nowMs);
-      renderReaderWord();
+      renderActiveReader(nowMs);
       break;
     case AppState::Menu:
       renderMenu();
@@ -484,7 +517,9 @@ void App::updateState(uint32_t nowMs) {
       return;
     }
 
-    setState(touchPlayHeld_ ? AppState::Playing : AppState::Paused, nowMs);
+    setState((touchPlayHeld_ || playLocked_ || pauseAtSentenceEndRequested_) ? AppState::Playing
+                                                                              : AppState::Paused,
+             nowMs);
     return;
   }
 
@@ -498,7 +533,7 @@ void App::updateState(uint32_t nowMs) {
     return;
   }
 
-  if (touchPlayHeld_) {
+  if (touchPlayHeld_ || playLocked_ || pauseAtSentenceEndRequested_) {
     setState(AppState::Playing, nowMs);
     return;
   }
@@ -511,11 +546,23 @@ void App::updateReader(uint32_t nowMs) {
     return;
   }
 
-  if (!reader_.update(nowMs)) {
+  if (shouldFinalizeReaderPause(nowMs)) {
+    finalizeReaderPause(nowMs);
     return;
   }
 
-  renderReaderWord();
+  const bool changed = reader_.update(nowMs, !pauseAtSentenceEndRequested_);
+  if (scrollModeEnabled()) {
+    if (changed || nowMs - lastScrollAnimationRenderMs_ >= kScrollAnimationFrameMs) {
+      renderScrollReader(nowMs);
+      lastScrollAnimationRenderMs_ = nowMs;
+    }
+    return;
+  }
+
+  if (changed) {
+    renderReaderWord();
+  }
 }
 
 void App::maybeSaveReadingPosition(uint32_t nowMs) {
@@ -653,13 +700,7 @@ void App::applyDisplayPreferences(uint32_t nowMs, bool rerender) {
   }
 
   if (state_ == AppState::Paused || state_ == AppState::Playing) {
-    if (contextViewVisible_) {
-      renderContextPreview();
-    } else if (wpmFeedbackVisible_) {
-      renderWpmFeedback(nowMs);
-    } else {
-      renderReaderWord();
-    }
+    renderActiveReader(nowMs);
     return;
   }
 
@@ -689,13 +730,7 @@ void App::applyTypographySettings(uint32_t nowMs, bool rerender) {
   }
 
   if (state_ == AppState::Paused || state_ == AppState::Playing) {
-    if (contextViewVisible_) {
-      renderContextPreview();
-    } else if (wpmFeedbackVisible_) {
-      renderWpmFeedback(nowMs);
-    } else {
-      renderReaderWord();
-    }
+    renderActiveReader(nowMs);
   }
 }
 
@@ -744,14 +779,23 @@ void App::cycleUiLanguage(uint32_t nowMs) {
   }
 
   if (state_ == AppState::Paused || state_ == AppState::Playing) {
-    if (contextViewVisible_) {
-      renderContextPreview();
-    } else if (wpmFeedbackVisible_) {
-      renderWpmFeedback(nowMs);
-    } else {
-      renderReaderWord();
-    }
+    renderActiveReader(nowMs);
   }
+}
+
+void App::cycleReaderMode(uint32_t nowMs) {
+  readerMode_ = nextReaderMode(readerMode_);
+  preferences_.putUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_));
+  Serial.printf("[display] reader mode=%s\n", readerModeLabel().c_str());
+  invalidateContextPreviewWindow();
+
+  if (state_ == AppState::Menu) {
+    rebuildSettingsMenuItems();
+    renderSettings();
+    return;
+  }
+
+  renderActiveReader(nowMs);
 }
 
 void App::togglePhantomWords(uint32_t nowMs) {
@@ -813,7 +857,71 @@ void App::updateWpmFeedback(uint32_t nowMs) {
   }
 
   wpmFeedbackVisible_ = false;
-  renderReaderWord();
+  renderActiveReader(nowMs);
+}
+
+void App::resetReaderTapTracking() { lastReaderTapValid_ = false; }
+
+void App::handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs) {
+  if (lastReaderTapValid_ && nowMs - lastReaderTapMs_ <= kReaderDoubleTapWindowMs &&
+      abs(static_cast<int>(x) - static_cast<int>(lastReaderTapX_)) <=
+          static_cast<int>(kReaderDoubleTapSlopPx) &&
+      abs(static_cast<int>(y) - static_cast<int>(lastReaderTapY_)) <=
+          static_cast<int>(kReaderDoubleTapSlopPx)) {
+    resetReaderTapTracking();
+
+    if (state_ == AppState::Playing) {
+      requestReaderPauseAtSentenceEnd(nowMs);
+    } else if (state_ == AppState::Paused) {
+      playLocked_ = true;
+      pauseAtSentenceEndRequested_ = false;
+      wpmFeedbackVisible_ = false;
+      setState(AppState::Playing, nowMs);
+    }
+    return;
+  }
+
+  lastReaderTapValid_ = true;
+  lastReaderTapMs_ = nowMs;
+  lastReaderTapX_ = x;
+  lastReaderTapY_ = y;
+}
+
+void App::requestReaderPauseAtSentenceEnd(uint32_t nowMs) {
+  if (state_ != AppState::Playing) {
+    return;
+  }
+
+  playLocked_ = false;
+  touchPlayHeld_ = false;
+  if (!pauseAtSentenceEndRequested_) {
+    pauseAtSentenceEndRequested_ = true;
+    Serial.println("[app] pause requested at sentence end");
+  }
+
+  if (shouldFinalizeReaderPause(nowMs)) {
+    finalizeReaderPause(nowMs);
+  }
+}
+
+bool App::shouldFinalizeReaderPause(uint32_t nowMs) const {
+  if (state_ != AppState::Playing || !pauseAtSentenceEndRequested_) {
+    return false;
+  }
+
+  const uint32_t durationMs = reader_.currentWordDurationMs();
+  if (durationMs == 0 || reader_.elapsedInCurrentWordMs(nowMs) < durationMs) {
+    return false;
+  }
+
+  return reader_.currentWordEndsSentence() || reader_.atEnd();
+}
+
+void App::finalizeReaderPause(uint32_t nowMs) {
+  pauseAtSentenceEndRequested_ = false;
+  playLocked_ = false;
+  touchPlayHeld_ = false;
+  setState(AppState::Paused, nowMs);
 }
 
 void App::handleTouch(uint32_t nowMs) {
@@ -827,6 +935,7 @@ void App::handleTouch(uint32_t nowMs) {
     pausedTouch_.active = false;
     pausedTouchIntent_ = TouchIntent::None;
     touchPlayHeld_ = false;
+    resetReaderTapTracking();
     return;
   }
 
@@ -847,21 +956,19 @@ void App::handleTouch(uint32_t nowMs) {
 
 void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   if (event.phase == TouchPhase::End && touchPlayHeld_) {
-    touchPlayHeld_ = false;
+    resetReaderTapTracking();
     pausedTouch_.active = false;
     pausedTouchIntent_ = TouchIntent::None;
-    setState(AppState::Paused, nowMs);
-    return;
-  }
-
-  if (state_ == AppState::Playing) {
+    requestReaderPauseAtSentenceEnd(nowMs);
     return;
   }
 
   if (event.phase == TouchPhase::Start) {
     pausedTouch_.active = true;
     pausedTouchIntent_ = TouchIntent::None;
-    invalidateContextPreviewWindow();
+    if (state_ != AppState::Playing) {
+      invalidateContextPreviewWindow();
+    }
     pausedTouch_.startX = event.x;
     pausedTouch_.startY = event.y;
     pausedTouch_.lastX = event.x;
@@ -869,7 +976,8 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     pausedTouch_.startMs = nowMs;
     pausedTouch_.lastMs = nowMs;
     pausedTouch_.startWordIndex = reader_.currentIndex();
-    pausedTouch_.scrubStepsApplied = 0;
+    pausedTouch_.gestureStepsApplied = 0;
+    pausedTouch_.browseOffsetPermille = 0;
     return;
   }
 
@@ -877,6 +985,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     return;
   }
 
+  const uint32_t elapsedSinceLastEventMs = nowMs - pausedTouch_.lastMs;
   pausedTouch_.lastX = event.x;
   pausedTouch_.lastY = event.y;
   pausedTouch_.lastMs = nowMs;
@@ -889,9 +998,29 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   const bool ended = event.phase == TouchPhase::End;
   const bool tapLike = absDeltaX <= static_cast<int>(kTapSlopPx) &&
                        absDeltaY <= static_cast<int>(kTapSlopPx);
+  const bool previewBrowseMode = contextViewVisible_ && !scrollModeEnabled();
 
-  if (!ended && pausedTouchIntent_ == TouchIntent::None &&
+  if (state_ == AppState::Playing) {
+    if (ended) {
+      pausedTouch_.active = false;
+      pausedTouchIntent_ = TouchIntent::None;
+      if (tapLike) {
+        if (playLocked_ || pauseAtSentenceEndRequested_) {
+          resetReaderTapTracking();
+          requestReaderPauseAtSentenceEnd(nowMs);
+        } else {
+          handleReaderTap(event.x, event.y, nowMs);
+        }
+      } else {
+        resetReaderTapTracking();
+      }
+    }
+    return;
+  }
+
+  if (!previewBrowseMode && !ended && pausedTouchIntent_ == TouchIntent::None &&
       pressDurationMs >= kTouchPlayHoldMs && tapLike) {
+    resetReaderTapTracking();
     touchPlayHeld_ = true;
     pausedTouchIntent_ = TouchIntent::PlayHold;
     wpmFeedbackVisible_ = false;
@@ -902,15 +1031,31 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   if (pausedTouchIntent_ == TouchIntent::None) {
     if (absDeltaX >= static_cast<int>(kSwipeThresholdPx) &&
         absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx)) {
+      resetReaderTapTracking();
       pausedTouchIntent_ = TouchIntent::Scrub;
-    } else if (absDeltaY >= static_cast<int>(kSwipeThresholdPx) &&
+    } else if (previewBrowseMode && !ended && pressDurationMs >= kPreviewBrowseHoldMs &&
                absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
+      resetReaderTapTracking();
+      pausedTouchIntent_ = TouchIntent::BrowseScroll;
+    } else if (!previewBrowseMode && absDeltaY >= static_cast<int>(kSwipeThresholdPx) &&
+               absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
+      resetReaderTapTracking();
       pausedTouchIntent_ = TouchIntent::Wpm;
     }
   }
 
   if (pausedTouchIntent_ == TouchIntent::Scrub) {
-    applyScrubTarget(scrubStepsForDrag(deltaX));
+    applyScrubTarget(scrubStepsForDrag(deltaX), nowMs);
+    if (ended) {
+      pausedTouch_.active = false;
+      pausedTouchIntent_ = TouchIntent::None;
+      saveReadingPosition(true);
+    }
+    return;
+  }
+
+  if (pausedTouchIntent_ == TouchIntent::BrowseScroll) {
+    applyBrowseHoldScroll(event.y, elapsedSinceLastEventMs, nowMs);
     if (ended) {
       pausedTouch_.active = false;
       pausedTouchIntent_ = TouchIntent::None;
@@ -938,9 +1083,16 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   if (ended) {
     pausedTouch_.active = false;
     pausedTouchIntent_ = TouchIntent::None;
+    if (tapLike && previewBrowseMode) {
+      resetReaderTapTracking();
+      contextViewVisible_ = false;
+      renderActiveReader(nowMs);
+    } else if (tapLike) {
+      handleReaderTap(event.x, event.y, nowMs);
+    } else {
+      resetReaderTapTracking();
+    }
   }
-
-  // Paused taps are intentionally ignored unless they become part of the UX.
 }
 
 int App::scrubStepsForDrag(int deltaX) const {
@@ -956,16 +1108,84 @@ int App::scrubStepsForDrag(int deltaX) const {
   return (deltaX > 0) ? steps : -steps;
 }
 
-void App::applyScrubTarget(int targetSteps) {
-  if (targetSteps == pausedTouch_.scrubStepsApplied) {
+void App::applyScrubTarget(int targetSteps, uint32_t nowMs) {
+  if (targetSteps == pausedTouch_.gestureStepsApplied) {
     return;
   }
 
   reader_.seekRelative(pausedTouch_.startWordIndex, targetSteps);
-  pausedTouch_.scrubStepsApplied = targetSteps;
+  pausedTouch_.gestureStepsApplied = targetSteps;
+  if (!scrollModeEnabled()) {
+    contextViewVisible_ = true;
+  }
   wpmFeedbackVisible_ = false;
-  renderContextPreview();
+  renderActiveReader(nowMs);
   Serial.printf("[app] scrub target=%d word=%s\n", targetSteps, reader_.currentWord().c_str());
+}
+
+int App::browseScrollRatePermille(uint16_t y) const {
+  const int centerY = BoardConfig::DISPLAY_HEIGHT / 2;
+  const int signedDistance = static_cast<int>(y) - centerY;
+  const int absDistance = abs(signedDistance);
+  if (absDistance <= static_cast<int>(kBrowseNeutralZonePx)) {
+    return 0;
+  }
+
+  const int activeRange = std::max(1, centerY - static_cast<int>(kBrowseNeutralZonePx));
+  const int activeDistance =
+      std::min(activeRange, absDistance - static_cast<int>(kBrowseNeutralZonePx));
+  const uint32_t speedPermille =
+      kBrowseMinWordsPerSecondPermille +
+      ((kBrowseMaxWordsPerSecondPermille - kBrowseMinWordsPerSecondPermille) *
+       static_cast<uint32_t>(activeDistance)) /
+          static_cast<uint32_t>(activeRange);
+
+  return signedDistance < 0 ? -static_cast<int>(speedPermille) : static_cast<int>(speedPermille);
+}
+
+void App::renderContextBrowsePreview(size_t currentIndex, uint16_t scrollProgressPermille) {
+  const size_t wordCount = reader_.wordCount();
+  if (wordCount == 0) {
+    renderReaderWord();
+    return;
+  }
+
+  if (currentIndex >= wordCount) {
+    currentIndex = wordCount - 1;
+    scrollProgressPermille = 0;
+  }
+
+  updateContextPreviewWindow(currentIndex);
+  contextViewVisible_ = true;
+  display_.renderScrollView(contextPreviewWords_, currentReaderContentToken(),
+                            contextPreviewStartIndex_, currentIndex, scrollProgressPermille,
+                            currentChapterLabel(), readingProgressPercent(), "");
+}
+
+void App::applyBrowseHoldScroll(uint16_t y, uint32_t elapsedMs, uint32_t nowMs) {
+  if (elapsedMs == 0) {
+    return;
+  }
+
+  const int ratePermille = browseScrollRatePermille(y);
+  pausedTouch_.browseOffsetPermille +=
+      (static_cast<int32_t>(ratePermille) * static_cast<int32_t>(elapsedMs)) / 1000;
+
+  int targetWords = pausedTouch_.browseOffsetPermille / 1000;
+  int32_t remainderPermille = pausedTouch_.browseOffsetPermille % 1000;
+  if (remainderPermille < 0) {
+    remainderPermille += 1000;
+    --targetWords;
+  }
+
+  reader_.seekRelative(pausedTouch_.startWordIndex, targetWords);
+  pausedTouch_.gestureStepsApplied = targetWords;
+  contextViewVisible_ = true;
+  wpmFeedbackVisible_ = false;
+  renderContextBrowsePreview(reader_.currentIndex(),
+                             static_cast<uint16_t>(remainderPermille));
+  Serial.printf("[app] browse hold target=%d progress=%ld word=%s\n", targetWords,
+                static_cast<long>(remainderPermille), reader_.currentWord().c_str());
 }
 
 void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
@@ -1180,7 +1400,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
         renderMainMenu();
         return;
       case kSettingsHomeDisplayIndex:
-        settingsSelectedIndex_ = kSettingsDisplayThemeIndex;
+        settingsSelectedIndex_ = kSettingsDisplayReadingModeIndex;
         menuScreen_ = MenuScreen::SettingsDisplay;
         rebuildSettingsMenuItems();
         renderSettings();
@@ -1206,6 +1426,9 @@ void App::selectSettingsItem(uint32_t nowMs) {
         menuScreen_ = MenuScreen::SettingsHome;
         rebuildSettingsMenuItems();
         renderSettings();
+        return;
+      case kSettingsDisplayReadingModeIndex:
+        cycleReaderMode(nowMs);
         return;
       case kSettingsDisplayThemeIndex:
         cycleThemeMode(nowMs);
@@ -1362,6 +1585,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::WordPacing));
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
+    settingsMenuItems_.push_back(uiText(UiText::ReadingMode) + ": " + readerModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::Theme) + ": " + themeModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::Brightness) + ": " +
                                  String(currentBrightnessPercent()) + "%");
@@ -1415,6 +1639,16 @@ String App::focusHighlightLabel() const {
 }
 
 String App::uiLanguageLabel() const { return Localization::languageName(uiLanguage_); }
+
+String App::readerModeLabel() const {
+  switch (readerMode_) {
+    case ReaderMode::Scroll:
+      return uiText(UiText::ScrollMode);
+    case ReaderMode::Rsvp:
+    default:
+      return uiText(UiText::RsvpMode);
+  }
+}
 
 String App::readerFontSizeLabel() const {
   uint8_t levelIndex = readerFontSizeIndex_;
@@ -1817,7 +2051,7 @@ void App::wakeFromSleep() {
 
   const bool displayReady = display_.wakeFromSleep();
   if (displayReady) {
-    renderReaderWord();
+    renderActiveReader(nowMs);
   }
 
   touchInitialized_ = touch_.begin();
@@ -1881,6 +2115,7 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPosition
   chapterMarkers_ = std::move(book.chapters);
   paragraphStarts_ = std::move(book.paragraphStarts);
   reader_.setWords(std::move(book.words), nowMs);
+  invalidateContextPreviewWindow();
   currentBookIndex_ = loadedIndex;
   currentBookPath_ = loadedPath;
   currentBookTitle_ = book.title.isEmpty() ? displayNameForPath(loadedPath) : book.title;
@@ -2173,6 +2408,12 @@ uint8_t App::readingProgressPercent() const {
   return static_cast<uint8_t>(std::min(static_cast<size_t>(100), percent));
 }
 
+bool App::scrollModeEnabled() const { return readerMode_ == ReaderMode::Scroll; }
+
+uint32_t App::currentReaderContentToken() const {
+  return hashBookPath(currentBookPath_.isEmpty() ? String("__demo__") : currentBookPath_);
+}
+
 size_t App::phantomBeforeCharTarget() const {
   uint8_t levelIndex = readerFontSizeIndex_;
   if (levelIndex >= kReaderFontSizeCount) {
@@ -2262,6 +2503,25 @@ String App::phantomAfterText() const {
   return collectPhantomAfterText(currentIndex, phantomAfterCharTarget());
 }
 
+void App::renderActiveReader(uint32_t nowMs) {
+  if (scrollModeEnabled()) {
+    if (wpmFeedbackVisible_) {
+      renderScrollReader(nowMs, String(reader_.wpm()) + " WPM");
+    } else {
+      renderScrollReader(nowMs);
+    }
+    return;
+  }
+
+  if (contextViewVisible_) {
+    renderContextPreview();
+  } else if (wpmFeedbackVisible_) {
+    renderWpmFeedback(nowMs);
+  } else {
+    renderReaderWord();
+  }
+}
+
 void App::renderReaderWord() {
   contextViewVisible_ = false;
   const bool showFooter = state_ != AppState::Playing;
@@ -2307,7 +2567,60 @@ size_t App::contextPreviewAnchorIndex(size_t currentIndex) const {
   return anchorTarget;
 }
 
-void App::invalidateContextPreviewWindow() { contextPreviewWindowValid_ = false; }
+void App::updateContextPreviewWindow(size_t currentIndex) {
+  const size_t wordCount = reader_.wordCount();
+  if (wordCount == 0) {
+    contextPreviewWords_.clear();
+    contextPreviewWindowValid_ = false;
+    contextPreviewCurrentLocalIndex_ = static_cast<size_t>(-1);
+    return;
+  }
+
+  size_t startIndex = contextPreviewStartIndex_;
+  size_t endIndex = 0;
+  bool rebuildWindow = !contextPreviewWindowValid_ || contextPreviewWords_.empty();
+  if (!rebuildWindow) {
+    endIndex = std::min(wordCount, startIndex + kContextPreviewWindowWords);
+    rebuildWindow = currentIndex < startIndex || currentIndex >= endIndex ||
+                    (currentIndex + 1 >= endIndex && endIndex < wordCount);
+  }
+
+  if (rebuildWindow) {
+    startIndex = contextPreviewAnchorIndex(currentIndex);
+    endIndex = std::min(wordCount, startIndex + kContextPreviewWindowWords);
+    contextPreviewStartIndex_ = startIndex;
+    contextPreviewWindowValid_ = true;
+    contextPreviewWords_.clear();
+    contextPreviewWords_.reserve(endIndex - startIndex);
+    for (size_t index = startIndex; index < endIndex; ++index) {
+      DisplayManager::ContextWord word;
+      word.text = reader_.wordAt(index);
+      word.paragraphStart = isParagraphStart(index);
+      word.current = index == currentIndex;
+      contextPreviewWords_.push_back(word);
+    }
+    contextPreviewCurrentLocalIndex_ =
+        currentIndex >= startIndex ? currentIndex - startIndex : static_cast<size_t>(-1);
+    return;
+  }
+
+  const size_t nextLocalIndex = currentIndex - startIndex;
+  if (contextPreviewCurrentLocalIndex_ < contextPreviewWords_.size()) {
+    contextPreviewWords_[contextPreviewCurrentLocalIndex_].current = false;
+  }
+  if (nextLocalIndex < contextPreviewWords_.size()) {
+    contextPreviewWords_[nextLocalIndex].current = true;
+    contextPreviewCurrentLocalIndex_ = nextLocalIndex;
+  } else {
+    contextPreviewCurrentLocalIndex_ = static_cast<size_t>(-1);
+  }
+}
+
+void App::invalidateContextPreviewWindow() {
+  contextPreviewWindowValid_ = false;
+  contextPreviewWords_.clear();
+  contextPreviewCurrentLocalIndex_ = static_cast<size_t>(-1);
+}
 
 void App::renderContextPreview() {
   const size_t wordCount = reader_.wordCount();
@@ -2317,37 +2630,49 @@ void App::renderContextPreview() {
   }
 
   const size_t currentIndex = std::min(reader_.currentIndex(), wordCount - 1);
-  if (!contextPreviewWindowValid_) {
-    contextPreviewStartIndex_ = contextPreviewAnchorIndex(currentIndex);
-    contextPreviewWindowValid_ = true;
-  }
-
-  size_t startIndex = contextPreviewStartIndex_;
-  size_t endIndex = std::min(wordCount, startIndex + kContextPreviewWindowWords);
-  if (currentIndex < startIndex || currentIndex >= endIndex) {
-    startIndex = contextPreviewAnchorIndex(currentIndex);
-    endIndex = std::min(wordCount, startIndex + kContextPreviewWindowWords);
-    contextPreviewStartIndex_ = startIndex;
-  }
-
-  std::vector<DisplayManager::ContextWord> words;
-  words.reserve(endIndex - startIndex);
-  for (size_t index = startIndex; index < endIndex; ++index) {
-    DisplayManager::ContextWord word;
-    word.text = reader_.wordAt(index);
-    word.paragraphStart = isParagraphStart(index);
-    word.current = index == currentIndex;
-    words.push_back(word);
-  }
+  updateContextPreviewWindow(currentIndex);
 
   contextViewVisible_ = true;
-  display_.renderContextView(words, currentChapterLabel(), readingProgressPercent());
+  display_.renderScrollView(contextPreviewWords_, currentReaderContentToken(),
+                            contextPreviewStartIndex_, currentIndex, 0,
+                            currentChapterLabel(), readingProgressPercent(), "");
+}
+
+void App::renderScrollReader(uint32_t nowMs, const String &overlayText) {
+  contextViewVisible_ = false;
+  const size_t wordCount = reader_.wordCount();
+  if (wordCount == 0) {
+    renderReaderWord();
+    return;
+  }
+
+  const size_t currentIndex = std::min(reader_.currentIndex(), wordCount - 1);
+  updateContextPreviewWindow(currentIndex);
+
+  uint16_t scrollProgressPermille = 0;
+  if (state_ == AppState::Playing && currentIndex + 1 < wordCount) {
+    const uint32_t durationMs = reader_.currentWordDurationMs();
+    if (durationMs > 0) {
+      const uint32_t elapsedMs = reader_.elapsedInCurrentWordMs(nowMs);
+      scrollProgressPermille = static_cast<uint16_t>(
+          std::min<uint32_t>(1000UL, (elapsedMs * 1000UL) / durationMs));
+    }
+  }
+
+  display_.renderScrollView(contextPreviewWords_, currentReaderContentToken(),
+                            contextPreviewStartIndex_, currentIndex, scrollProgressPermille,
+                            currentChapterLabel(), readingProgressPercent(), overlayText);
 }
 
 void App::renderWpmFeedback(uint32_t nowMs) {
-  contextViewVisible_ = false;
   wpmFeedbackVisible_ = true;
   wpmFeedbackUntilMs_ = nowMs + kWpmFeedbackMs;
+  if (scrollModeEnabled()) {
+    renderScrollReader(nowMs, String(reader_.wpm()) + " WPM");
+    return;
+  }
+
+  contextViewVisible_ = false;
   const String beforeText = phantomWordsEnabled_ ? phantomBeforeText() : "";
   const String afterText = phantomWordsEnabled_ ? phantomAfterText() : "";
   display_.renderPhantomRsvpWordWithWpm(beforeText, reader_.currentWord(), afterText,

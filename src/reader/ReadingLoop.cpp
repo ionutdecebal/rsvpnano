@@ -484,10 +484,11 @@ void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
 
 void ReadingLoop::start(uint32_t nowMs) { lastAdvanceMs_ = nowMs; }
 
-bool ReadingLoop::update(uint32_t nowMs) {
+bool ReadingLoop::update(uint32_t nowMs, bool allowCatchUp) {
   bool changed = false;
+  const uint8_t maxCatchUpWords = allowCatchUp ? kMaxCatchUpWords : 1;
 
-  for (uint8_t catchUp = 0; catchUp < kMaxCatchUpWords; ++catchUp) {
+  for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
     const uint32_t durationMs = currentWordDurationMs();
     if (durationMs == 0 || nowMs - lastAdvanceMs_ < durationMs) {
       break;
@@ -523,6 +524,44 @@ uint32_t ReadingLoop::currentWordDurationMs() const {
   }
 
   return durationForWord(currentWord_, nextWordStartsLowercase, wordIntervalMs(), pacingConfig_);
+}
+
+uint32_t ReadingLoop::elapsedInCurrentWordMs(uint32_t nowMs) const {
+  if (nowMs <= lastAdvanceMs_) {
+    return 0;
+  }
+  return nowMs - lastAdvanceMs_;
+}
+
+bool ReadingLoop::currentWordEndsSentence() const {
+  if (currentWord_.isEmpty()) {
+    return false;
+  }
+
+  bool nextWordStartsLowercase = false;
+  const size_t nextIndex = currentIndex_ + 1;
+  if (!loadedWords_.empty()) {
+    if (nextIndex < loadedWords_.size()) {
+      nextWordStartsLowercase = startsWithLowercaseLetter(loadedWords_[nextIndex]);
+    }
+  } else if (nextIndex < kDemoWordCount) {
+    nextWordStartsLowercase = startsWithLowercaseLetter(String(kDemoWords[nextIndex]));
+  }
+
+  switch (trailingRhythmChar(currentWord_)) {
+    case '!':
+    case '?':
+      return true;
+    case '.':
+      return !looksLikeAbbreviation(currentWord_, nextWordStartsLowercase);
+    default:
+      return false;
+  }
+}
+
+bool ReadingLoop::atEnd() const {
+  const size_t count = wordCount();
+  return count == 0 || currentIndex_ + 1 >= count;
 }
 
 void ReadingLoop::scrub(int steps) {
