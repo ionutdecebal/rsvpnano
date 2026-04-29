@@ -1,4 +1,6 @@
 #include "app/App.h"
+#include "net/OtaService.h"
+#include "Secrets.h"
 
 #include <esp_sleep.h>
 #include <esp_log.h>
@@ -393,9 +395,15 @@ void App::begin() {
 
   state_ = AppState::Booting;
   Serial.println("[app] READY splash active");
+
+  // Wireless OTA — uses Secrets.h (gitignored). Empty SSID = OTA disabled.
+  OtaService::begin(Secrets::kWifiSsid, Secrets::kWifiPassword,
+                    Secrets::kOtaHostname, Secrets::kOtaPassword,
+                    &display_);
 }
 
 void App::update(uint32_t nowMs) {
+  OtaService::handle();
   button_.update(nowMs);
   powerButton_.update(nowMs);
   handleBootButton(nowMs);
