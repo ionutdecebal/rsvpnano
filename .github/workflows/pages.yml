@@ -28,14 +28,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PlatformIO
-        run: python -m pip install --upgrade platformio
-
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Export web firmware
-        run: python tools/export_web_firmware.py --version "${GITHUB_SHA::7}"
+      - name: Download latest release firmware
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/fetch_release_firmware.py --repo "${{ github.repository }}"
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3

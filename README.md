@@ -26,6 +26,8 @@ The easiest way to install the firmware is the web flasher:
 <https://ionutdecebal.github.io/rsvpnano/>
 
 Use Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts.
+The hosted flasher installs the latest published GitHub Release rather than unreleased `main`
+commits.
 
 The browser flasher uses ESP Web Tools and Web Serial, so it must be opened over HTTPS or localhost.
 It also includes a browser-side Library Workspace for importing supported books, converting them
@@ -306,7 +308,7 @@ web/firmware/rsvp-nano-ota.bin
 ```
 
 `rsvp-nano.bin` is the merged browser-flasher image.
-`rsvp-nano-ota.bin` is the app-only binary to upload as a GitHub Release asset.
+`rsvp-nano-ota.bin` is the app-only OTA image.
 
 For OTA releases:
 
@@ -314,10 +316,13 @@ For OTA releases:
    the release tag.
 2. Run `python3 tools/export_web_firmware.py`.
 3. Create a GitHub Release in `ionutdecebal/rsvpnano`.
-4. Upload `web/firmware/rsvp-nano-ota.bin` to that release.
+4. Upload both `web/firmware/rsvp-nano.bin` and `web/firmware/rsvp-nano-ota.bin` to that release.
 
 The device checks `releases/latest`, compares the release tag to its built-in firmware version,
 and only downloads the OTA asset when the release tag is newer.
+
+GitHub Pages also pulls the latest published release assets for the hosted web flasher, so browser
+installs and OTA installs stay on the same official release line.
 
 ## Hardware
 
