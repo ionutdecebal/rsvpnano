@@ -22,6 +22,9 @@ constexpr uint32_t kWifiConnectTimeoutMs = 15000;
 constexpr uint32_t kWifiConnectPollMs = 250;
 constexpr size_t kMaxReleaseJsonBytes = 32768;
 constexpr const char *kStatusTitle = "OTA";
+const char *kRedirectHeaderKeys[] = {
+    "Location",
+};
 
 bool isAsciiWhitespace(char c) {
   switch (c) {
@@ -368,6 +371,50 @@ bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release
   return true;
 }
 
+bool OtaUpdater::resolveDownloadUrl(const String &assetUrl, const String &version,
+                                    String &resolvedUrl, String &errorDetail,
+                                    StatusCallback callback, void *context) const {
+  reportStatus(callback, context, kStatusTitle, "Resolving asset", version, 29);
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  client.setHandshakeTimeout(15);
+
+  HTTPClient http;
+  http.collectHeaders(kRedirectHeaderKeys, 1);
+  http.setUserAgent(userAgentForVersion(version));
+  http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+  http.setTimeout(15000);
+  if (!http.begin(client, assetUrl)) {
+    errorDetail = "Asset URL failed";
+    return false;
+  }
+
+  http.addHeader("Accept", "application/octet-stream");
+  const int statusCode = http.GET();
+  if (statusCode == HTTP_CODE_OK) {
+    resolvedUrl = assetUrl;
+    http.end();
+    return true;
+  }
+
+  if (statusCode == HTTP_CODE_MOVED_PERMANENTLY || statusCode == HTTP_CODE_FOUND ||
+      statusCode == HTTP_CODE_SEE_OTHER || statusCode == HTTP_CODE_TEMPORARY_REDIRECT ||
+      statusCode == HTTP_CODE_PERMANENT_REDIRECT) {
+    resolvedUrl = http.header("Location");
+    http.end();
+    if (!resolvedUrl.isEmpty()) {
+      return true;
+    }
+    errorDetail = "Asset redirect missing";
+    return false;
+  }
+
+  errorDetail = "Asset HTTP " + String(statusCode);
+  http.end();
+  return false;
+}
+
 void OtaUpdater::reportStatus(StatusCallback callback, void *context, const char *title,
                               const String &line1, const String &line2,
                               int progressPercent) const {
@@ -428,6 +475,17 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallb
   reportStatus(callback, context, kStatusTitle, "Preparing update",
                versionDetail(result.currentVersion, result.latestVersion), 28);
 
+  String resolvedAssetUrl;
+  String resolveError;
+  if (!resolveDownloadUrl(release.assetUrl, result.latestVersion, resolvedAssetUrl, resolveError,
+                          callback, context)) {
+    disconnectWiFi();
+    result.code = ResultCode::InstallFailed;
+    result.summary = "Asset failed";
+    result.detail = resolveError;
+    return result;
+  }
+
   WiFiClientSecure client;
   // Match the metadata request behavior until the update path gains certificate pinning or
   // signature verification above the transport layer.
@@ -459,7 +517,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallb
 
   const String version = result.currentVersion;
   const t_httpUpdate_return updateResult =
-      updater.update(client, release.assetUrl, version, [version](HTTPClient *http) {
+      updater.update(client, resolvedAssetUrl, version, [version](HTTPClient *http) {
         http->setUserAgent(userAgentForVersion(version));
         http->addHeader("Accept", "application/octet-stream");
       });
