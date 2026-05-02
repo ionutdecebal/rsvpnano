@@ -282,6 +282,11 @@ std::vector<String> collectBookPaths() {
   while (entry) {
     if (!entry.isDirectory()) {
       const String path = normalizeBookPath(String(entry.name()));
+      if (displayNameForPath(path).startsWith("._")) {
+        entry.close();
+        entry = dir.openNextFile();
+        continue;
+      }
       const bool staleGeneratedRsvp =
           hasRsvpExtension(path) && fileExistsAndHasBytes(epubSiblingPathForRsvp(path)) &&
           !EpubConverter::isCurrentCache(path);
