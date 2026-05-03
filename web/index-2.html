@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RSVP Nano Web Flasher</title>
+    <script
+      type="module"
+      src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"
+    ></script>
+    <script type="module" src="./library.js"></script>
+    <style>
+      :root {
+        --ink: #1d1711;
+        --muted: #75695c;
+        --paper: #f7efe2;
+        --panel: #fffaf1;
+        --accent: #d3542f;
+        --accent-deep: #842f20;
+        --line: #decdb7;
+        --shadow: rgba(73, 45, 24, 0.16);
+        --esp-tools-button-color: var(--accent);
+        --esp-tools-button-text-color: #fffaf1;
+        --esp-tools-button-border-radius: 999px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at 14% 16%, rgba(211, 84, 47, 0.18), transparent 30rem),
+          radial-gradient(circle at 88% 10%, rgba(132, 47, 32, 0.12), transparent 24rem),
+          linear-gradient(145deg, #fff8ed 0%, var(--paper) 46%, #eadac5 100%);
+      }
+
+      main {
+        width: min(1040px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 52px 0 44px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.86);
+        box-shadow: 0 24px 60px var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .intro {
+        text-align: center;
+        padding: 4px;
+        margin-bottom: -28px;
+        position: relative;
+        z-index: 0;
+        opacity: 0.45;
+      }
+
+      .eyebrow {
+        margin: 0 0 16px;
+        color: var(--accent-deep);
+        font: 700 0.76rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(3.3rem, 10vw, 7.5rem);
+        line-height: 0.86;
+        letter-spacing: -0.075em;
+      }
+
+      .install-steps {
+        overflow: hidden;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        padding: 20px 18px 18px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .section-header h2 {
+        flex: 1;
+        margin: 0;
+        padding: 0;
+        font-size: 1.05rem;
+      }
+
+      .flash-history {
+        margin-left: auto;
+        font: 0.78rem/1 ui-sans-serif, system-ui, sans-serif;
+        color: var(--muted);
+      }
+
+      .flash-history:empty {
+        display: none;
+      }
+
+      .chevron {
+        width: 20px;
+        height: 20px;
+        color: var(--muted);
+        transition: transform 200ms ease;
+        flex-shrink: 0;
+        margin-left: 12px;
+      }
+
+      .install-steps.is-collapsed .chevron {
+        transform: rotate(-90deg);
+      }
+
+      .section-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: start;
+        border-top: 1px solid var(--line);
+        transition: grid-template-rows 200ms ease;
+        grid-template-rows: 1fr;
+      }
+
+      .install-steps.is-collapsed .section-body {
+        grid-template-rows: 0fr;
+        border-top-color: transparent;
+      }
+
+      .section-body-inner {
+        overflow: hidden;
+        padding: 18px;
+      }
+
+      .install-steps.is-collapsed .section-body-inner {
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      .install {
+        padding: 28px;
+      }
+
+      .install-option-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .latest-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font: 700 0.76rem/1 ui-sans-serif, system-ui, sans-serif;
+        color: #2f5d32;
+      }
+
+      .pulse-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #4c7a4a;
+        box-shadow: 0 0 0 0 rgba(76, 122, 74, 0.5);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(76, 122, 74, 0.5); }
+        70% { box-shadow: 0 0 0 6px rgba(76, 122, 74, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(76, 122, 74, 0); }
+      }
+
+      .feature-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .feature-list li::before {
+        content: "✓";
+        margin-right: 6px;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7em;
+        height: 1.7em;
+        margin-right: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fffaf1;
+        font: 800 0.82rem/1 ui-sans-serif, system-ui, sans-serif;
+        vertical-align: middle;
+        flex-shrink: 0;
+      }
+
+      .install h2,
+      .steps h2,
+      .workspace h2 {
+        display: flex;
+        align-items: center;
+        margin: 0;
+        font-size: 1.38rem;
+      }
+
+      .install p,
+      .steps p,
+      .section-body-inner p,
+      li {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      p {
+        margin: 0 0 1em;
+      }
+
+      .install-option {
+        display: grid;
+        gap: 12px;
+        margin-top: 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.38);
+      }
+
+      .install-option strong {
+        font-size: 1.04rem;
+      }
+
+      esp-web-install-button {
+        margin-top: 4px;
+      }
+
+      button[slot="activate"] {
+        width: 100%;
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 18px;
+        color: #fffaf1;
+        background: var(--accent);
+        font: 800 0.95rem/1 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      button[slot="activate"]:hover {
+        background: var(--accent-deep);
+      }
+
+      .warning {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        border-radius: 14px;
+        background: rgba(211, 84, 47, 0.08);
+        color: var(--accent-deep);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.9rem;
+      }
+
+      .steps {
+        padding: 28px;
+        border-left: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
+      }
+
+      .workspace {
+        margin-top: 28px;
+        padding: 0;
+        overflow: hidden;
+      }
+
+      .workspace-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+      }
+
+      .workspace-pane {
+        padding: 28px;
+      }
+
+      .workspace-pane + .workspace-pane {
+        border-left: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
+      }
+
+      .workspace h2,
+      .workspace h3 {
+        margin: 0;
+      }
+
+      .workspace h2 {
+        font-size: 1.38rem;
+      }
+
+      .workspace-copy {
+        margin: 12px 0 0;
+        color: var(--muted);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+        align-items: flex-start;
+      }
+
+      .tool-button,
+      .tool-select {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        color: var(--ink);
+        font: 700 0.93rem/1.15 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .tool-button {
+        padding: 12px 16px;
+        cursor: pointer;
+        max-width: 100%;
+        white-space: nowrap;
+      }
+
+      .tool-button:hover:enabled {
+        border-color: rgba(132, 47, 32, 0.42);
+        background: rgba(255, 250, 241, 0.98);
+      }
+
+      .tool-button:disabled,
+      .tool-select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .tool-button-primary {
+        border-color: transparent;
+        color: #fffaf1;
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      .tool-button-primary:hover:enabled {
+        background: var(--accent-deep);
+      }
+
+      .tool-select {
+        min-width: 220px;
+        padding: 11px 16px;
+      }
+
+      .dropzone {
+        display: block;
+        margin-top: 22px;
+        padding: 24px;
+        border: 1.5px dashed rgba(132, 47, 32, 0.34);
+        border-radius: 24px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
+          radial-gradient(circle at top right, rgba(211, 84, 47, 0.14), transparent 16rem);
+        overflow: hidden;
+        transition:
+          border-color 150ms ease,
+          transform 150ms ease,
+          box-shadow 150ms ease;
+      }
+
+      .dropzone.is-active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(211, 84, 47, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .dropzone strong {
+        display: block;
+        font-size: 1.04rem;
+      }
+
+      .dropzone p {
+        margin: 10px 0 0;
+        color: var(--muted);
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .meta-card {
+        min-width: 0;
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      .meta-card span {
+        display: block;
+        color: var(--muted);
+        font: 700 0.73rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .meta-card strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 1.03rem;
+        line-height: 1.24;
+        overflow-wrap: anywhere;
+      }
+
+      .meta-card-copy {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+
+      .inline-note {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(117, 105, 92, 0.1);
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .workspace-status {
+        margin-top: 20px;
+        padding: 15px 16px;
+        border-left: 4px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.5);
+        color: var(--muted);
+        min-height: 66px;
+        overflow-wrap: anywhere;
+      }
+
+      .workspace-status[data-tone="busy"] {
+        border-left-color: var(--accent);
+        color: var(--accent-deep);
+        background: rgba(211, 84, 47, 0.08);
+      }
+
+      .workspace-status[data-tone="error"] {
+        border-left-color: #9c3024;
+        color: #8e241a;
+        background: rgba(156, 48, 36, 0.08);
+      }
+
+      .workspace-status[data-tone="success"] {
+        border-left-color: #4c7a4a;
+        color: #2f5d32;
+        background: rgba(76, 122, 74, 0.1);
+      }
+
+      .workspace-status strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--ink);
+        font-size: 0.96rem;
+      }
+
+      .library-list {
+        display: grid;
+        gap: 14px;
+        margin: 20px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .library-item {
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .library-item-head,
+      .library-item-meta,
+      .library-item-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .library-item-head {
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .library-item-title {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .library-item-title strong {
+        font-size: 1.02rem;
+      }
+
+      .library-item-title span,
+      .library-item-copy,
+      .library-empty {
+        color: var(--muted);
+      }
+
+      .library-item-meta {
+        margin-top: 14px;
+      }
+
+      .pill {
+        padding: 0.42rem 0.72rem;
+        border-radius: 999px;
+        background: rgba(132, 47, 32, 0.08);
+        color: var(--accent-deep);
+        font: 700 0.76rem/1 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.02em;
+      }
+
+      .pill[data-state="ready"] {
+        background: rgba(76, 122, 74, 0.12);
+        color: #2f5d32;
+      }
+
+      .pill[data-state="error"] {
+        background: rgba(156, 48, 36, 0.1);
+        color: #8e241a;
+      }
+
+      .pill[data-state="working"] {
+        background: rgba(211, 84, 47, 0.12);
+        color: var(--accent-deep);
+      }
+
+      .library-item-copy {
+        margin-top: 12px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .library-item-actions {
+        margin-top: 16px;
+      }
+
+      .library-item-actions .tool-button {
+        padding: 10px 14px;
+        font-size: 0.86rem;
+      }
+
+      .library-empty {
+        margin-top: 20px;
+        padding: 26px 20px;
+        border: 1px dashed var(--line);
+        border-radius: 22px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.36);
+      }
+
+      ol {
+        padding-left: 1.35rem;
+      }
+
+      code {
+        padding: 0.12em 0.35em;
+        border-radius: 0.4em;
+        background: rgba(132, 47, 32, 0.1);
+        color: var(--accent-deep);
+      }
+
+      footer {
+        margin-top: 24px;
+        color: var(--muted);
+        text-align: center;
+        font: 0.9rem/1.4 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      @media (max-width: 980px) {
+        .section-body {
+          grid-template-columns: 1fr;
+        }
+
+        .workspace-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .workspace-pane + .workspace-pane {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100% - 20px, 560px);
+          padding-top: 18px;
+        }
+
+        .section-body {
+          grid-template-columns: 1fr;
+        }
+
+        .meta-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .install,
+        .steps,
+        .workspace-pane {
+          padding: 22px;
+        }
+      }
+
+      .compat-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(29, 23, 17, 0.55);
+        backdrop-filter: blur(4px);
+      }
+
+      .compat-overlay[hidden] {
+        display: none;
+      }
+
+      .compat-modal {
+        max-width: 480px;
+        width: 100%;
+        padding: clamp(24px, 5vw, 40px);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.86);
+        box-shadow: 0 24px 60px var(--shadow);
+        backdrop-filter: blur(16px);
+        text-align: left;
+      }
+
+      .compat-modal h2 {
+        margin: 0 0 12px;
+        font-size: 1.3rem;
+      }
+
+      .compat-modal p {
+        color: var(--muted);
+        line-height: 1.55;
+        margin: 0 0 10px;
+      }
+
+      .compat-dismiss {
+        margin-top: 20px;
+        padding: 13px 28px;
+        border: 0;
+        border-radius: 999px;
+        color: #fffaf1;
+        background: var(--accent);
+        font: 800 0.95rem/1 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      .compat-dismiss:hover {
+        background: var(--accent-deep);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="intro">
+        <p class="eyebrow">Browser firmware installer</p>
+        <h1>RSVP Nano</h1>
+      </div>
+
+      <section class="card install-steps" id="install-section">
+        <div class="section-header" id="install-toggle">
+          <h2><span class="step-number">1</span>Install Firmware</h2>
+          <span class="flash-history" id="flash-history"></span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+
+        <div class="section-body">
+          <div class="section-body-inner">
+            <p>Flashing takes under a minute.<br>Put the device in boot mode first:</p>
+            <ol>
+              <li>Turn the device off</li>
+              <li>Keep pressed <code>BOOT</code> (sun icon button)</li>
+              <li>Connect the USB cable</li>
+            </ol>
+          </div>
+
+          <div class="section-body-inner">
+            <div class="install-option">
+              <div class="install-option-head">
+                <strong>Version 1.0.3</strong>
+                <span class="latest-badge"><span class="pulse-dot"></span>Latest Release</span>
+              </div>
+              <ul class="feature-list">
+                <li>On-device EPUB conversion</li>
+                <li>USB SD-card transfer mode</li>
+                <li>Extended-Latin character support</li>
+              </ul>
+              <esp-web-install-button manifest="firmware/manifest.json">
+                <button slot="activate">Install Firmware</button>
+                <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
+                <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
+              </esp-web-install-button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card workspace">
+        <div class="workspace-shell">
+          <div class="workspace-pane">
+            <h2><span class="step-number">2</span>Library Workspace</h2>
+            <p class="workspace-copy">
+              Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
+              results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
+            </p>
+
+            <div class="toolbar">
+              <button class="tool-button tool-button-primary" id="library-add-button" type="button">
+                Add Books
+              </button>
+              <button class="tool-button" id="library-folder-button" type="button">
+                Choose /books Folder
+              </button>
+              <button class="tool-button" id="library-folder-import-button" type="button">
+                Import From Folder
+              </button>
+              <button class="tool-button" id="library-folder-clean-button" type="button">
+                Clean Sidecars
+              </button>
+              <button class="tool-button" id="library-download-button" type="button">
+                Download .zip
+              </button>
+              <button class="tool-button" id="library-sync-button" type="button">
+                Sync To Folder
+              </button>
+              <button class="tool-button" id="library-clear-button" type="button">
+                Clear Library
+              </button>
+            </div>
+
+            <label class="dropzone" id="library-dropzone" for="library-file-input">
+              <strong>Drop supported books here</strong>
+              <p>
+                EPUB, TXT, Markdown, and HTML sources are converted locally in your browser. Nothing
+                is uploaded to a server.
+              </p>
+            </label>
+            <input
+              id="library-file-input"
+              type="file"
+              accept=".epub,.txt,.md,.markdown,.html,.htm,.xhtml"
+              multiple
+              hidden
+            />
+
+            <div class="meta-grid">
+              <div class="meta-card">
+                <span>Compatibility</span>
+                <strong>Automatic extended-Latin output</strong>
+                <p class="meta-card-copy">
+                  Preserves common accented, Baltic, Sami, and other extended-Latin letters while
+                  staying friendly to the current firmware.
+                </p>
+              </div>
+              <div class="meta-card">
+                <span>Selected Folder</span>
+                <strong id="library-folder-label">No /books folder selected</strong>
+              </div>
+              <div class="meta-card">
+                <span>Library Summary</span>
+                <strong id="library-summary">0 converted books ready</strong>
+              </div>
+              <div class="meta-card">
+                <span>Folder Inventory</span>
+                <strong id="library-folder-summary">Pick the SD card&rsquo;s /books folder to scan it</strong>
+              </div>
+            </div>
+
+            <p class="inline-note">
+              Everything is converted locally in your browser. Pick the SD card&rsquo;s
+              <code>/books</code> folder if you want one-click import, cleanup, and sync.
+            </p>
+
+            <div class="workspace-status" id="library-status" data-tone="info">
+              <strong>Ready to build a library</strong>
+              Add files from your computer or pick the SD card&rsquo;s <code>/books</code> folder to bring
+              supported source books into the workspace.
+            </div>
+          </div>
+
+          <div class="workspace-pane">
+            <h3>Converted Books</h3>
+            <p class="workspace-copy">
+              Each imported source is turned into a reader-ready <code>.rsvp</code> file so you can
+              download it or sync everything back to the selected folder in one step.
+            </p>
+
+            <ul class="library-list" id="library-list"></ul>
+            <div class="library-empty" id="library-empty">
+              Add a few books and the converted library will appear here.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        RSVP Nano is open source. Build it, modify it, improve it, and share what you make.
+      </footer>
+      <div class="compat-overlay" id="compat-modal" hidden>
+        <div class="compat-modal">
+          <h2>Browser Not Supported</h2>
+          <p>
+            The firmware installer requires the Web Serial API, available in
+            <strong>Chrome</strong> or <strong>Edge</strong> on macOS, Windows, Linux, or ChromeOS.
+          </p>
+          <p>
+            Safari, Firefox, and all mobile browsers do not currently support Web Serial.
+            You can still use the <strong>Library Workspace</strong> below to convert books.
+          </p>
+          <button class="compat-dismiss" id="compat-dismiss">Got It</button>
+        </div>
+      </div>
+    </main>
+    <script>
+      if (!("serial" in navigator)) {
+        document.getElementById("compat-modal").hidden = false;
+        document.getElementById("compat-dismiss").addEventListener("click", function () {
+          document.getElementById("compat-modal").hidden = true;
+        });
+      }
+
+      document.getElementById("install-toggle").addEventListener("click", function () {
+        document.getElementById("install-section").classList.toggle("is-collapsed");
+      });
+
+      // Flash history tracking
+      var FLASH_KEY = "rsvpnano_last_flash";
+      var FLASH_VERSION = "1.0.3";
+
+      function timeAgo(ts) {
+        var s = Math.floor((Date.now() - ts) / 1000);
+        if (s < 60) return "just now";
+        var m = Math.floor(s / 60);
+        if (m < 60) return m + (m === 1 ? " minute ago" : " minutes ago");
+        var h = Math.floor(m / 60);
+        if (h < 24) return h + (h === 1 ? " hour ago" : " hours ago");
+        var d = Math.floor(h / 24);
+        return d + (d === 1 ? " day ago" : " days ago");
+      }
+
+      function showFlashHistory() {
+        var el = document.getElementById("flash-history");
+        try {
+          var data = JSON.parse(localStorage.getItem(FLASH_KEY));
+          if (data && data.timestamp) {
+            el.textContent = "v" + data.version + " flashed " + timeAgo(data.timestamp);
+          } else {
+            el.textContent = "No installations in history";
+          }
+        } catch (e) {
+          el.textContent = "No installations in history";
+        }
+      }
+
+      showFlashHistory();
+
+      (function () {
+        try {
+          var data = JSON.parse(localStorage.getItem(FLASH_KEY));
+          if (data && data.version && data.version !== FLASH_VERSION) {
+            var btn = document.querySelector('button[slot="activate"]');
+            if (btn) btn.textContent = "Update Firmware";
+          }
+        } catch (e) {}
+      })();
+
+      new MutationObserver(function (mutations) {
+        mutations.forEach(function (m) {
+          m.addedNodes.forEach(function (node) {
+            if (node.nodeName === "EWT-INSTALL-DIALOG") {
+              node.addEventListener("closed", function () {
+                var success = false;
+                try {
+                  var shadow = node.shadowRoot;
+                  if (shadow) {
+                    var text = shadow.textContent || "";
+                    success = text.indexOf("Installation complete") !== -1
+                      || text.indexOf("DASHBOARD") !== -1;
+                  }
+                } catch (e) {}
+                if (success) {
+                  localStorage.setItem(FLASH_KEY, JSON.stringify({
+                    version: FLASH_VERSION,
+                    timestamp: Date.now()
+                  }));
+                  showFlashHistory();
+                }
+              }, { once: true });
+            }
+          });
+        });
+      }).observe(document.body, { childList: true });
+    </script>
+  </body>
+</html>
