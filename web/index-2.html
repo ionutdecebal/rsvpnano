@@ -122,7 +122,8 @@
         margin-left: 12px;
       }
 
-      .install-steps.is-collapsed .chevron {
+      .install-steps.is-collapsed .chevron,
+      .workspace.is-collapsed .chevron {
         transform: rotate(-90deg);
       }
 
@@ -292,10 +293,25 @@
       .workspace-shell {
         display: grid;
         grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+        border-top: 1px solid var(--line);
+        transition: grid-template-rows 200ms ease;
+        grid-template-rows: 1fr;
+      }
+
+      .workspace.is-collapsed .workspace-shell {
+        grid-template-rows: 0fr;
+        border-top-color: transparent;
       }
 
       .workspace-pane {
         padding: 28px;
+        overflow: hidden;
+        transition: padding 200ms ease;
+      }
+
+      .workspace.is-collapsed .workspace-pane {
+        padding-top: 0;
+        padding-bottom: 0;
       }
 
       .workspace-pane + .workspace-pane {
@@ -306,10 +322,6 @@
       .workspace h2,
       .workspace h3 {
         margin: 0;
-      }
-
-      .workspace h2 {
-        font-size: 1.38rem;
       }
 
       .workspace-copy {
@@ -739,10 +751,26 @@
         </div>
       </section>
 
-      <section class="card workspace">
+      <section class="card install-steps" id="sdcard-section">
+        <div class="section-header" id="sdcard-toggle">
+          <h2><span class="step-number">2</span>Prepare SD Card</h2>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="section-body">
+          <div class="section-body-inner">
+            <p>Instructions coming soon.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card workspace" id="workspace-section">
+        <div class="section-header" id="workspace-toggle">
+          <h2><span class="step-number">3</span>Library Workspace</h2>
+          <span class="flash-history" id="workspace-summary-header"></span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
         <div class="workspace-shell">
           <div class="workspace-pane">
-            <h2><span class="step-number">2</span>Library Workspace</h2>
             <p class="workspace-copy">
               Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
               results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
@@ -867,6 +895,14 @@
         document.getElementById("install-section").classList.toggle("is-collapsed");
       });
 
+      document.getElementById("sdcard-toggle").addEventListener("click", function () {
+        document.getElementById("sdcard-section").classList.toggle("is-collapsed");
+      });
+
+      document.getElementById("workspace-toggle").addEventListener("click", function () {
+        document.getElementById("workspace-section").classList.toggle("is-collapsed");
+      });
+
       // Flash history tracking
       var FLASH_KEY = "rsvpnano_last_flash";
       var FLASH_VERSION = "1.0.3";
@@ -898,6 +934,16 @@
 
       showFlashHistory();
 
+      // Collapse install section for returning users
+      (function () {
+        try {
+          var data = JSON.parse(localStorage.getItem(FLASH_KEY));
+          if (data && data.timestamp) {
+            document.getElementById("install-section").classList.add("is-collapsed");
+          }
+        } catch (e) {}
+      })();
+
       (function () {
         try {
           var data = JSON.parse(localStorage.getItem(FLASH_KEY));
@@ -911,26 +957,32 @@
       new MutationObserver(function (mutations) {
         mutations.forEach(function (m) {
           m.addedNodes.forEach(function (node) {
-            if (node.nodeName === "EWT-INSTALL-DIALOG") {
-              node.addEventListener("closed", function () {
-                var success = false;
-                try {
-                  var shadow = node.shadowRoot;
-                  if (shadow) {
-                    var text = shadow.textContent || "";
-                    success = text.indexOf("Installation complete") !== -1
-                      || text.indexOf("DASHBOARD") !== -1;
-                  }
-                } catch (e) {}
-                if (success) {
+            if (node.nodeName !== "EWT-INSTALL-DIALOG") return;
+
+            var saved = false;
+            var pollTimer = setInterval(function () {
+              if (!document.body.contains(node)) {
+                clearInterval(pollTimer);
+                return;
+              }
+              if (saved) return;
+              try {
+                var shadow = node.shadowRoot;
+                if (!shadow) return;
+                var text = shadow.textContent || "";
+                if (text.indexOf("Installation complete") !== -1) {
+                  saved = true;
+                  clearInterval(pollTimer);
                   localStorage.setItem(FLASH_KEY, JSON.stringify({
                     version: FLASH_VERSION,
                     timestamp: Date.now()
                   }));
                   showFlashHistory();
                 }
-              }, { once: true });
-            }
+              } catch (e) {}
+            }, 500);
+
+            setTimeout(function () { clearInterval(pollTimer); }, 600000);
           });
         });
       }).observe(document.body, { childList: true });
