@@ -507,6 +507,61 @@
           border-radius: 22px;
         }
       }
+
+      .compat-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(29, 23, 17, 0.55);
+        backdrop-filter: blur(4px);
+      }
+
+      .compat-overlay[hidden] {
+        display: none;
+      }
+
+      .compat-modal {
+        max-width: 480px;
+        width: 100%;
+        padding: clamp(24px, 5vw, 40px);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.86);
+        box-shadow: 0 24px 60px var(--shadow);
+        backdrop-filter: blur(16px);
+        text-align: left;
+      }
+
+      .compat-modal h2 {
+        margin: 0 0 12px;
+        font-size: 1.3rem;
+      }
+
+      .compat-modal p {
+        margin: 0 0 10px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .compat-dismiss {
+        margin-top: 20px;
+        padding: 13px 28px;
+        border: 0;
+        border-radius: 999px;
+        color: #fffaf1;
+        background: var(--accent);
+        font: 800 0.95rem/1 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      .compat-dismiss:hover {
+        background: var(--accent-deep);
+      }
     </style>
   </head>
   <body>
@@ -546,15 +601,10 @@
       <section class="card steps">
         <h2>Before You Click Install</h2>
         <ol>
-          <li>Use Chrome or Edge on macOS, Windows, Linux, or ChromeOS.</li>
           <li>Connect the device with a USB data cable.</li>
           <li>If the installer cannot connect, hold <code>BOOT</code>, tap reset or power-cycle, then try again.</li>
           <li>After flashing, place books on the SD card under <code>/books</code>.</li>
         </ol>
-        <p>
-          The browser flasher is powered by ESP Web Tools and Web Serial. iOS Safari and Firefox
-          do not currently support the required browser serial API.
-        </p>
       </section>
 
       <section class="card workspace">
@@ -658,6 +708,28 @@
       <footer>
         RSVP Nano is open source. Build it, modify it, improve it, and share what you make.
       </footer>
+      <div class="compat-overlay" id="compat-modal" hidden>
+        <div class="compat-modal">
+          <h2>Browser Not Supported</h2>
+          <p>
+            The firmware installer requires the Web Serial API, available in
+            <strong>Chrome</strong> or <strong>Edge</strong> on macOS, Windows, Linux, or ChromeOS.
+          </p>
+          <p>
+            Safari, Firefox, and all mobile browsers do not currently support Web Serial.
+            You can still use the <strong>Library Workspace</strong> below to convert books.
+          </p>
+          <button class="compat-dismiss" id="compat-dismiss" type="button">Got It</button>
+        </div>
+      </div>
     </main>
+    <script>
+      if (!("serial" in navigator)) {
+        document.getElementById("compat-modal").hidden = false;
+        document.getElementById("compat-dismiss").addEventListener("click", function () {
+          document.getElementById("compat-modal").hidden = true;
+        });
+      }
+    </script>
   </body>
 </html>
