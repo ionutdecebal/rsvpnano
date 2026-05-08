@@ -24,6 +24,7 @@ class TouchHandler {
   void end();
   bool poll(TouchEvent &event);
   void cancel();
+  void setUiOrientation(BoardConfig::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
 
  private:
@@ -35,7 +36,9 @@ class TouchHandler {
   uint8_t consecutiveReadFailures_ = 0;
   uint8_t emptyTouchSamples_ = 0;
   bool touchActive_ = false;
-  bool uiRotated180_ = BoardConfig::UI_ROTATED_180;
+  BoardConfig::UiOrientation uiOrientation_ =
+      BoardConfig::UI_ROTATED_180 ? BoardConfig::UiOrientation::LandscapeFlipped
+                                  : BoardConfig::UiOrientation::Landscape;
   uint16_t lastX_ = 0;
   uint16_t lastY_ = 0;
 

@@ -85,8 +85,8 @@ constexpr int kTypographyGuideGapMin = 2;
 constexpr int kTypographyGuideGapMax = 8;
 constexpr int kOpticalLetterGapPx = 2;
 
-constexpr int kVirtualBufferWidth = (kDisplayWidth + kMinTextScale - 1) / kMinTextScale;
-constexpr int kVirtualBufferHeight = (kDisplayHeight + kMinTextScale - 1) / kMinTextScale;
+constexpr int kVirtualBufferWidth = kDisplayWidth;
+constexpr int kVirtualBufferHeight = kPanelNativeHeight;
 
 constexpr size_t kBytesPerPixel = sizeof(uint16_t);
 constexpr size_t kMaxChunkBytes = 16 * 1024;
@@ -95,6 +95,62 @@ constexpr int kMaxChunkPhysicalRows = kMaxChunkBytes / (kTxBufferWidth * kBytesP
 static_assert(kMaxChunkPhysicalRows > 0, "Display chunk buffer must hold at least one row");
 
 constexpr size_t kTxBufferPixels = static_cast<size_t>(kTxBufferWidth) * kMaxChunkPhysicalRows;
+
+int logicalWidthForOrientation(BoardConfig::UiOrientation orientation) {
+  switch (orientation) {
+    case BoardConfig::UiOrientation::Portrait:
+    case BoardConfig::UiOrientation::PortraitFlipped:
+      return kPanelNativeWidth;
+    case BoardConfig::UiOrientation::Landscape:
+    case BoardConfig::UiOrientation::LandscapeFlipped:
+    default:
+      return kDisplayWidth;
+  }
+}
+
+int logicalHeightForOrientation(BoardConfig::UiOrientation orientation) {
+  switch (orientation) {
+    case BoardConfig::UiOrientation::Portrait:
+    case BoardConfig::UiOrientation::PortraitFlipped:
+      return kPanelNativeHeight;
+    case BoardConfig::UiOrientation::Landscape:
+    case BoardConfig::UiOrientation::LandscapeFlipped:
+    default:
+      return kDisplayHeight;
+  }
+}
+
+bool isPortraitOrientation(BoardConfig::UiOrientation orientation) {
+  return orientation == BoardConfig::UiOrientation::Portrait ||
+         orientation == BoardConfig::UiOrientation::PortraitFlipped;
+}
+
+void mapPhysicalToLogical(BoardConfig::UiOrientation orientation, int physicalX, int physicalY,
+                          int &logicalX, int &logicalY) {
+  switch (orientation) {
+    case BoardConfig::UiOrientation::Portrait:
+      logicalX = physicalX;
+      logicalY = physicalY;
+      break;
+    case BoardConfig::UiOrientation::PortraitFlipped:
+      logicalX = kPanelNativeWidth - 1 - physicalX;
+      logicalY = kPanelNativeHeight - 1 - physicalY;
+      break;
+    case BoardConfig::UiOrientation::Landscape:
+      logicalX = kDisplayWidth - 1 - physicalY;
+      logicalY = physicalX;
+      break;
+    case BoardConfig::UiOrientation::LandscapeFlipped:
+    default:
+      logicalX = physicalY;
+      logicalY = kDisplayHeight - 1 - physicalX;
+      break;
+  }
+}
+
+uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+  return static_cast<uint16_t>(((r & 0xF8U) << 8) | ((g & 0xFCU) << 3) | (b >> 3));
+}
 
 struct TinyGlyph {
   char c;
@@ -806,14 +862,19 @@ void DisplayManager::setNightMode(bool nightMode) {
   lastRenderKey_ = "";
 }
 
-void DisplayManager::setUiRotated180(bool rotated180) {
-  if (uiRotated180_ == rotated180) {
+void DisplayManager::setUiOrientation(BoardConfig::UiOrientation orientation) {
+  if (uiOrientation_ == orientation) {
     return;
   }
 
-  uiRotated180_ = rotated180;
+  uiOrientation_ = orientation;
   tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
+}
+
+void DisplayManager::setUiRotated180(bool rotated180) {
+  setUiOrientation(rotated180 ? BoardConfig::UiOrientation::LandscapeFlipped
+                              : BoardConfig::UiOrientation::Landscape);
 }
 
 void DisplayManager::setTypographyConfig(const TypographyConfig &config) {
@@ -999,6 +1060,10 @@ uint16_t DisplayManager::selectedBarColor() const {
   return nightMode_ ? focusColor() : kFocusLetterColor;
 }
 
+uint16_t DisplayManager::focusTimerBreakColor() const {
+  return nightMode_ ? rgb565(112, 176, 126) : rgb565(68, 132, 88);
+}
+
 uint16_t DisplayManager::blendOverBackground(uint16_t rgb565, uint8_t alpha) const {
   if (alpha >= 250) {
     return rgb565;
@@ -1013,6 +1078,10 @@ uint16_t DisplayManager::blendOverBackground(uint16_t rgb565, uint8_t alpha) con
   const uint32_t b = (((rgb565 & 0x1F) * alpha) + ((bg & 0x1F) * inverseAlpha)) / 255U;
   return static_cast<uint16_t>((r << 11) | (g << 5) | b);
 }
+
+int DisplayManager::logicalWidth() const { return logicalWidthForOrientation(uiOrientation_); }
+
+int DisplayManager::logicalHeight() const { return logicalHeightForOrientation(uiOrientation_); }
 
 int DisplayManager::chooseTextScale(const String &word) const {
   const int usableWidth = std::max(1, measureTextWidth(word));
@@ -1425,14 +1494,38 @@ void DisplayManager::drawTinyTextCentered(const String &text, int y, uint16_t co
   drawTinyTextAt(text, std::max(0, (kVirtualBufferWidth - textWidth) / 2), y, color, scale);
 }
 
+void DisplayManager::drawTinyTextCentered(const String &text, int y, uint16_t color, int scale,
+                                          int width, int xOffset) {
+  const int textWidth = measureTinyTextWidth(text, scale);
+  drawTinyTextAt(text, std::max(xOffset, xOffset + ((width - textWidth) / 2)), y, color, scale);
+}
+
+void DisplayManager::drawSerif70TextCentered(const String &text, int y, uint16_t color, int width,
+                                             int xOffset) {
+  const int textWidth = measureSerif70TextWidth(text);
+  drawSerif70TextAt(text, std::max(xOffset, xOffset + ((width - textWidth) / 2)), y, color);
+}
+
+void DisplayManager::drawSerifTextScaledCentered(const String &text, int y, uint16_t color,
+                                                 uint8_t scalePercent, int width, int xOffset) {
+  const int textWidth = measureSerifTextWidthScaled(text, scalePercent);
+  drawSerifTextScaledAt(text, std::max(xOffset, xOffset + ((width - textWidth) / 2)), y, color,
+                        scalePercent);
+}
+
 void DisplayManager::drawBatteryBadge() {
+  drawBatteryBadge(kDisplayWidth, kDisplayHeight);
+}
+
+void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight) {
   if (batteryLabel_.isEmpty()) {
     return;
   }
 
   const int width = measureTinyTextWidth(batteryLabel_, kTinyScale);
-  const int x = std::max(kFooterMarginX, kDisplayWidth - kFooterMarginX - width);
-  drawTinyTextAt(batteryLabel_, x, kFooterMarginBottom, footerColor(), kTinyScale);
+  const int x = std::max(kFooterMarginX, logicalWidth - kFooterMarginX - width);
+  const int y = logicalHeight > (kDisplayHeight * 2) ? kFooterMarginBottom + 8 : kFooterMarginBottom;
+  drawTinyTextAt(batteryLabel_, x, y, footerColor(), kTinyScale);
 }
 
 void DisplayManager::drawFooter(const String &chapterLabel, const String &statusLabel) {
@@ -1585,12 +1678,9 @@ void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHe
       uint16_t *dstRow = txBuffer_ + localNativeY * kPanelNativeWidth;
 
       for (int nativeX = 0; nativeX < kPanelNativeWidth; ++nativeX) {
-        int logicalX = kDisplayWidth - 1 - nativeY;
-        int logicalY = nativeX;
-        if (uiRotated180_) {
-          logicalX = nativeY;
-          logicalY = kDisplayHeight - 1 - nativeX;
-        }
+        int logicalX = 0;
+        int logicalY = 0;
+        mapPhysicalToLogical(uiOrientation_, nativeX, nativeY, logicalX, logicalY);
         const int sourceX = logicalX / scale;
         const int sourceY = logicalY / scale;
 
@@ -1611,14 +1701,20 @@ void DisplayManager::flushFullWidthLogicalBand(int yStart, int yEnd) {
     return;
   }
 
+  if (isPortraitOrientation(uiOrientation_)) {
+    flushScaledFrame(1, logicalWidth(), logicalHeight());
+    return;
+  }
+
   yStart = std::max(0, std::min(kDisplayHeight, yStart));
   yEnd = std::max(0, std::min(kDisplayHeight, yEnd));
   if (yEnd <= yStart) {
     return;
   }
 
-  const int physicalXStart = uiRotated180_ ? (kDisplayHeight - yEnd) : yStart;
-  const int physicalXEnd = uiRotated180_ ? (kDisplayHeight - yStart) : yEnd;
+  const bool flipped = uiOrientation_ == BoardConfig::UiOrientation::LandscapeFlipped;
+  const int physicalXStart = flipped ? (kDisplayHeight - yEnd) : yStart;
+  const int physicalXEnd = flipped ? (kDisplayHeight - yStart) : yEnd;
   const int physicalWidth = physicalXEnd - physicalXStart;
   if (physicalWidth <= 0 || txBuffer_ == nullptr) {
     return;
@@ -1634,12 +1730,9 @@ void DisplayManager::flushFullWidthLogicalBand(int yStart, int yEnd) {
 
       for (int localNativeX = 0; localNativeX < physicalWidth; ++localNativeX) {
         const int nativeX = physicalXStart + localNativeX;
-        int logicalX = kDisplayWidth - 1 - nativeY;
-        int logicalY = nativeX;
-        if (uiRotated180_) {
-          logicalX = nativeY;
-          logicalY = kDisplayHeight - 1 - nativeX;
-        }
+        int logicalX = 0;
+        int logicalY = 0;
+        mapPhysicalToLogical(uiOrientation_, nativeX, nativeY, logicalX, logicalY);
         dstRow[localNativeX] = virtualFrame_[logicalY * kVirtualBufferWidth + logicalX];
       }
     }
@@ -1693,8 +1786,8 @@ void DisplayManager::renderRsvpWord(const String &word, const String &chapterLab
   lastRenderKey_ = renderKey;
 
   const int scale = 1;
-  const int virtualWidth = kDisplayWidth;
-  const int virtualHeight = kDisplayHeight;
+  const int virtualWidth = logicalWidth();
+  const int virtualHeight = logicalHeight();
   const int glyphHeight = baseGlyphHeightForTypeface(effectiveReaderTypefaceForText(word));
   const int y = std::max(0, (virtualHeight - glyphHeight) / 2);
   const int focusIndex = findFocusLetterIndex(word);
@@ -1708,7 +1801,7 @@ void DisplayManager::renderRsvpWord(const String &word, const String &chapterLab
     drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
                                                          : footerStatusLabel);
   }
-  drawBatteryBadge();
+  drawBatteryBadge(virtualWidth, virtualHeight);
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }
 
@@ -2793,4 +2886,285 @@ void DisplayManager::renderProgress(const String &title, const String &line1, co
 
   drawBatteryBadge();
   flushScaledFrame(scale, virtualWidth, virtualHeight);
+}
+
+void DisplayManager::renderFocusTimerScreen(const String &mode, const String &genre,
+                                            const String &timer, const String &instruction,
+                                            const String &footer, int progressPercent,
+                                            bool breakAccent) {
+  (void)genre;
+  (void)footer;
+  progressPercent = std::max(-1, std::min(100, progressPercent));
+  const int virtualWidth = logicalWidth();
+  const int virtualHeight = logicalHeight();
+  const bool portrait = isPortraitOrientation(uiOrientation_);
+  const bool timerRunning = progressPercent >= 0;
+
+  String renderKey = "timer|";
+  renderKey += mode;
+  renderKey += "|";
+  renderKey += genre;
+  renderKey += "|";
+  renderKey += timer;
+  renderKey += "|";
+  renderKey += instruction;
+  renderKey += "|";
+  renderKey += footer;
+  renderKey += "|";
+  renderKey += String(progressPercent);
+  renderKey += "|o:";
+  renderKey += String(static_cast<int>(uiOrientation_));
+  renderKey += "|ba:";
+  renderKey += String(breakAccent ? 1 : 0);
+  renderKey += "|b:";
+  renderKey += batteryLabel_;
+  renderKey += "|d:";
+  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += "|n:";
+  renderKey += String(nightMode_ ? 1 : 0);
+
+  if (!initialized_ || renderKey == lastRenderKey_) {
+    return;
+  }
+
+  lastRenderKey_ = renderKey;
+
+  clearVirtualBuffer(virtualWidth, virtualHeight);
+
+  const uint16_t accent = breakAccent ? focusTimerBreakColor() : focusColor();
+  const uint16_t baseTextColor = wordColor();
+  const uint16_t inverseTextColor = nightMode_ || darkMode_ ? wordColor() : kPureWhite;
+  const uint16_t instructionColor = accent;
+  int fillX = 0;
+  int fillY = 0;
+  int fillWidth = 0;
+  int fillHeight = 0;
+  if (timerRunning && progressPercent > 0) {
+    if (portrait) {
+      fillHeight = std::max(1, (virtualHeight * progressPercent) / 100);
+      fillVirtualRect(0, virtualHeight - fillHeight, virtualWidth, fillHeight, accent);
+      fillY = virtualHeight - fillHeight;
+      fillWidth = virtualWidth;
+    } else {
+      fillWidth = std::max(1, (virtualWidth * progressPercent) / 100);
+      fillVirtualRect(0, 0, fillWidth, virtualHeight, accent);
+      fillHeight = virtualHeight;
+    }
+  }
+
+  const int sidePadding = portrait ? 12 : 20;
+  const int contentX = sidePadding;
+  const int contentWidth = std::max(0, virtualWidth - (sidePadding * 2));
+  auto wrapTinyLines = [&](const String &text, int maxWidth, int scale) {
+    std::vector<String> lines;
+    if (text.isEmpty() || maxWidth <= 0) {
+      return lines;
+    }
+
+    auto fits = [&](const String &candidate) {
+      return measureTinyTextWidth(candidate, scale) <= maxWidth;
+    };
+
+    auto appendBrokenWord = [&](const String &word, String &currentLine) {
+      String segment;
+      for (size_t i = 0; i < word.length(); ++i) {
+        const String candidate = segment + word[i];
+        if (!segment.isEmpty() && !fits(candidate)) {
+          if (!currentLine.isEmpty()) {
+            lines.push_back(currentLine);
+            currentLine = "";
+          }
+          lines.push_back(segment);
+          segment = String(word[i]);
+        } else {
+          segment = candidate;
+        }
+      }
+
+      if (!segment.isEmpty()) {
+        currentLine = segment;
+      }
+    };
+
+    String currentLine;
+    size_t index = 0;
+    while (index < text.length()) {
+      while (index < text.length() && text[index] == ' ') {
+        ++index;
+      }
+      if (index >= text.length()) {
+        break;
+      }
+
+      if (text[index] == '\n') {
+        if (!currentLine.isEmpty()) {
+          lines.push_back(currentLine);
+          currentLine = "";
+        }
+        ++index;
+        continue;
+      }
+
+      const size_t start = index;
+      while (index < text.length() && text[index] != ' ' && text[index] != '\n') {
+        ++index;
+      }
+      const String word = text.substring(start, index);
+      if (currentLine.isEmpty()) {
+        if (fits(word)) {
+          currentLine = word;
+        } else {
+          appendBrokenWord(word, currentLine);
+        }
+        continue;
+      }
+
+      const String candidate = currentLine + " " + word;
+      if (fits(candidate)) {
+        currentLine = candidate;
+      } else {
+        lines.push_back(currentLine);
+        currentLine = "";
+        if (fits(word)) {
+          currentLine = word;
+        } else {
+          appendBrokenWord(word, currentLine);
+        }
+      }
+    }
+
+    if (!currentLine.isEmpty()) {
+      lines.push_back(currentLine);
+    }
+
+    return lines;
+  };
+
+  auto drawTinyTextAtClipped = [&](const String &text, int x, int y, uint16_t color, int scale,
+                                   int clipX, int clipY, int clipWidth, int clipHeight) {
+    if (clipWidth <= 0 || clipHeight <= 0) {
+      return;
+    }
+
+    const int clipXEnd = clipX + clipWidth;
+    const int clipYEnd = clipY + clipHeight;
+    const uint16_t panel = panelColor(color);
+    int cursorX = x;
+    for (size_t i = 0; i < text.length(); ++i) {
+      const uint8_t *rows = tinyRowsFor(text[i]);
+      for (int row = 0; row < kTinyGlyphHeight; ++row) {
+        for (int col = 0; col < kTinyGlyphWidth; ++col) {
+          if ((rows[row] & (1 << (kTinyGlyphWidth - 1 - col))) == 0) {
+            continue;
+          }
+
+          for (int yy = 0; yy < scale; ++yy) {
+            const int dstY = y + row * scale + yy;
+            if (dstY < 0 || dstY >= kVirtualBufferHeight || dstY < clipY || dstY >= clipYEnd) {
+              continue;
+            }
+
+            for (int xx = 0; xx < scale; ++xx) {
+              const int dstX = cursorX + col * scale + xx;
+              if (dstX < 0 || dstX >= kVirtualBufferWidth || dstX < clipX || dstX >= clipXEnd) {
+                continue;
+              }
+              virtualFrame_[dstY * kVirtualBufferWidth + dstX] = panel;
+            }
+          }
+        }
+      }
+      cursorX += (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
+    }
+  };
+
+  auto centeredXForTiny = [&](const String &text, int scale) {
+    const int textWidth = measureTinyTextWidth(text, scale);
+    return std::max(contentX, contentX + ((contentWidth - textWidth) / 2));
+  };
+
+  auto centeredXWithin = [&](const String &text, int scale, int blockX, int blockWidth) {
+    const int textWidth = measureTinyTextWidth(text, scale);
+    return std::max(blockX, blockX + ((blockWidth - textWidth) / 2));
+  };
+
+  const bool portraitFocusLayout = portrait && !breakAccent && (mode == "BEGIN" || mode == "WORK");
+  int titleScale = portrait ? 5 : 7;
+  if (portraitFocusLayout && timerRunning) {
+    titleScale = 4;
+  }
+  while (titleScale > 1 && measureTinyTextWidth(mode, titleScale) > contentWidth) {
+    --titleScale;
+  }
+
+  if (timerRunning) {
+    int timerScale = portrait ? 5 : 7;
+    while (timerScale > 1 && measureTinyTextWidth(timer, timerScale) > contentWidth) {
+      --timerScale;
+    }
+
+    int titleY = portrait ? 120 : 24;
+    int timerY = portrait ? 352 : 88;
+    if (portraitFocusLayout) {
+      titleY = 92;
+      timerY = 306;
+      const int dividerWidth =
+          std::min(contentWidth, 40 + (static_cast<int>(mode.length()) * 12));
+      const int dividerX = contentX + ((contentWidth - dividerWidth) / 2);
+      const int dividerY = titleY + (kTinyGlyphHeight * titleScale) + 20;
+      fillVirtualRect(dividerX, dividerY, dividerWidth, 2, accent);
+    }
+    const int titleX = centeredXForTiny(mode, titleScale);
+    const int timerX = centeredXForTiny(timer, timerScale);
+
+    drawTinyTextAt(mode, titleX, titleY, baseTextColor, titleScale);
+    drawTinyTextAt(timer, timerX, timerY, baseTextColor, timerScale);
+
+    if (fillWidth > 0 && fillHeight > 0) {
+      drawTinyTextAtClipped(mode, titleX, titleY, inverseTextColor, titleScale, fillX, fillY,
+                            fillWidth, fillHeight);
+      drawTinyTextAtClipped(timer, timerX, timerY, inverseTextColor, timerScale, fillX, fillY,
+                            fillWidth, fillHeight);
+    }
+  } else {
+    int titleY = portrait ? 176 : 42;
+    int dividerY = 0;
+    int instructionScale = portrait ? 2 : 3;
+    int instructionBlockWidth = contentWidth;
+    int instructionBlockX = contentX;
+
+    if (portraitFocusLayout) {
+      titleY = 126;
+      instructionScale = 2;
+      instructionBlockWidth = std::max(96, contentWidth - 18);
+      instructionBlockX = contentX + ((contentWidth - instructionBlockWidth) / 2);
+      dividerY = titleY + (kTinyGlyphHeight * titleScale) + 22;
+      const int dividerWidth =
+          std::min(contentWidth, 40 + (static_cast<int>(mode.length()) * 12));
+      const int dividerX = contentX + ((contentWidth - dividerWidth) / 2);
+      fillVirtualRect(dividerX, dividerY, dividerWidth, 2, instructionColor);
+    }
+
+    drawTinyTextAt(mode, centeredXForTiny(mode, titleScale), titleY, baseTextColor, titleScale);
+
+    if (!instruction.isEmpty()) {
+      const std::vector<String> lines =
+          wrapTinyLines(instruction, instructionBlockWidth, instructionScale);
+      const int lineHeight = (kTinyGlyphHeight * instructionScale) + instructionScale + 4;
+      int y = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 42 : 28);
+      if (portraitFocusLayout) {
+        y = dividerY + 66;
+      }
+      for (const String &line : lines) {
+        drawTinyTextAt(line,
+                       centeredXWithin(line, instructionScale, instructionBlockX,
+                                       instructionBlockWidth),
+                       y, instructionColor, instructionScale);
+        y += lineHeight;
+      }
+    }
+  }
+
+  drawBatteryBadge(virtualWidth, virtualHeight);
+  flushScaledFrame(1, virtualWidth, virtualHeight);
 }

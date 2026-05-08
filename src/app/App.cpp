@@ -39,9 +39,11 @@ constexpr uint16_t kFooterMetricTapWidthPx = 220;
 constexpr uint16_t kFooterMetricTapHeightPx = 32;
 constexpr uint16_t kScrubStepPx = 22;
 constexpr uint16_t kBrowseNeutralZonePx = 14;
+constexpr uint16_t kFocusTimerCancelHoldMaxDriftPx = 20;
 constexpr int kMaxScrubStepsPerGesture = 96;
 constexpr uint32_t kBrowseMinWordsPerSecondPermille = 4000;
 constexpr uint32_t kBrowseMaxWordsPerSecondPermille = 72000;
+constexpr uint32_t kFocusTimerCancelHoldMs = 850;
 constexpr size_t kContextPreviewWindowWords = 288;
 constexpr size_t kContextPreviewAnchorLeadWords = 112;
 constexpr size_t kContextPreviewMaxParagraphSnapWords = 48;
@@ -57,6 +59,7 @@ enum MenuItem : size_t {
   MenuResume,
   MenuChapters,
   MenuChangeBook,
+  MenuFocusTimer,
   MenuSettings,
 #if RSVP_USB_TRANSFER_ENABLED
   MenuUsbTransfer,
@@ -128,6 +131,8 @@ constexpr size_t kChapterPickerBackIndex = 0;
 constexpr size_t kChapterPickerFallbackIndex = 1;
 constexpr size_t kWifiNetworksBackIndex = 0;
 constexpr size_t kWifiNetworksFirstItemIndex = 1;
+constexpr size_t kFocusTimerGenreBackIndex = 0;
+constexpr size_t kFocusTimerGenreFirstIndex = 1;
 constexpr const char *kPrefsNamespace = "rsvp";
 constexpr const char *kPrefBookPath = "book";
 constexpr const char *kPrefLegacyWordIndex = "word";
@@ -475,6 +480,8 @@ void App::begin() {
   }
 
   touchInitialized_ = touch_.begin();
+  audio_.begin();
+  focusTimer_.begin();
 
 #if RSVP_USB_TRANSFER_ENABLED && RSVP_USB_TRANSFER_AUTO_START
   state_ = AppState::Booting;
@@ -523,6 +530,7 @@ void App::update(uint32_t nowMs) {
 
   const bool batteryChanged = updateBatteryStatus(nowMs);
   updateState(nowMs);
+  updateFocusTimer(nowMs);
   updateReader(nowMs);
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
@@ -768,6 +776,9 @@ void App::toggleMenuFromPowerButton(uint32_t nowMs) {
     if (menuScreen_ == MenuScreen::Main) {
       setState(AppState::Paused, nowMs);
     } else {
+      if (isFocusTimerMenuScreen(menuScreen_)) {
+        resetFocusTimer();
+      }
       menuScreen_ = MenuScreen::Main;
       renderMainMenu();
     }
@@ -827,8 +838,8 @@ void App::applyDisplayPreferences(uint32_t nowMs, bool rerender) {
 }
 
 void App::applyHandednessSettings(uint32_t nowMs, bool rerender) {
-  touch_.setUiRotated180(uiRotated180());
-  display_.setUiRotated180(uiRotated180());
+  (void)nowMs;
+  applyReaderUiOrientation();
 
   if (!rerender) {
     return;
@@ -1158,7 +1169,11 @@ void App::handleTouch(uint32_t nowMs) {
                 touchPhaseName(ev.phase), ev.touched ? 1 : 0, ev.x, ev.y, ev.gesture,
                 stateName(state_));
   if (state_ == AppState::Menu) {
-    applyMenuTouchGesture(ev, nowMs);
+    if (menuScreen_ == MenuScreen::FocusTimerSession) {
+      applyFocusTimerTouch(ev, nowMs);
+    } else {
+      applyMenuTouchGesture(ev, nowMs);
+    }
   } else {
     applyPausedTouchGesture(ev, nowMs);
   }
@@ -1470,6 +1485,156 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   }
 }
 
+void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
+  if (event.phase == TouchPhase::Start) {
+    pausedTouch_.active = true;
+    pausedTouch_.startX = event.x;
+    pausedTouch_.startY = event.y;
+    pausedTouch_.lastX = event.x;
+    pausedTouch_.lastY = event.y;
+    pausedTouch_.startMs = nowMs;
+    pausedTouch_.lastMs = nowMs;
+    focusTimerCancelHoldTriggered_ = false;
+    return;
+  }
+
+  if (!pausedTouch_.active) {
+    return;
+  }
+
+  pausedTouch_.lastX = event.x;
+  pausedTouch_.lastY = event.y;
+  pausedTouch_.lastMs = nowMs;
+
+  const int deltaX = static_cast<int>(pausedTouch_.lastX) - static_cast<int>(pausedTouch_.startX);
+  const int deltaY = static_cast<int>(pausedTouch_.lastY) - static_cast<int>(pausedTouch_.startY);
+  const int absDeltaX = abs(deltaX);
+  const int absDeltaY = abs(deltaY);
+  const bool tapLike = absDeltaX <= static_cast<int>(kTapSlopPx) &&
+                       absDeltaY <= static_cast<int>(kTapSlopPx);
+
+  if (focusTimer_.isActiveTimerRunning() && !focusTimerCancelHoldTriggered_ &&
+      event.phase != TouchPhase::End &&
+      absDeltaX <= static_cast<int>(kFocusTimerCancelHoldMaxDriftPx) &&
+      absDeltaY <= static_cast<int>(kFocusTimerCancelHoldMaxDriftPx) &&
+      nowMs - pausedTouch_.startMs >= kFocusTimerCancelHoldMs) {
+    focusTimer_.cancelActiveTimer(nowMs);
+    pausedTouch_.active = false;
+    focusTimerCancelHoldTriggered_ = true;
+    renderFocusTimerSession();
+    return;
+  }
+
+  if (event.phase != TouchPhase::End) {
+    return;
+  }
+
+  pausedTouch_.active = false;
+
+  if (focusTimerCancelHoldTriggered_) {
+    focusTimerCancelHoldTriggered_ = false;
+    return;
+  }
+
+  (void)tapLike;
+}
+
+void App::openFocusTimer() {
+  focusTimer_.open();
+  rebuildFocusTimerGenreMenuItems();
+  focusTimerGenreSelectedIndex_ =
+      focusTimerGenreMenuItems_.size() > 1 ? kFocusTimerGenreFirstIndex : kFocusTimerGenreBackIndex;
+  focusTimerCancelHoldTriggered_ = false;
+  menuScreen_ = (focusTimer_.state() == FocusTimer::State::GenreSelect)
+                    ? MenuScreen::FocusTimerGenres
+                    : MenuScreen::FocusTimerSession;
+  renderMenu();
+}
+
+void App::updateFocusTimer(uint32_t nowMs) {
+  if (state_ != AppState::Menu || menuScreen_ != MenuScreen::FocusTimerSession) {
+    return;
+  }
+
+  focusTimer_.update(nowMs);
+  if (focusTimer_.consumeCompletionCue()) {
+    playFocusTimerCompletionCue();
+  }
+  if (focusTimer_.state() == FocusTimer::State::GenreSelect) {
+    menuScreen_ = MenuScreen::FocusTimerGenres;
+    rebuildFocusTimerGenreMenuItems();
+    renderFocusTimerGenres();
+    return;
+  }
+
+  renderFocusTimerSession();
+}
+
+void App::resetFocusTimer() {
+  focusTimer_.abandon();
+  focusTimerCancelHoldTriggered_ = false;
+  pausedTouch_.active = false;
+  focusTimerGenreSelectedIndex_ = kFocusTimerGenreBackIndex;
+}
+
+void App::rebuildFocusTimerGenreMenuItems() {
+  focusTimerGenreMenuItems_.clear();
+  focusTimerGenreMenuItems_.push_back(uiText(UiText::Back));
+  focusTimerGenreMenuItems_.push_back("Chores");
+  focusTimerGenreMenuItems_.push_back("Work");
+  focusTimerGenreMenuItems_.push_back("Fitness");
+  focusTimerGenreMenuItems_.push_back("Self Care");
+  focusTimerGenreMenuItems_.push_back("Other");
+
+  if (focusTimerGenreSelectedIndex_ >= focusTimerGenreMenuItems_.size()) {
+    focusTimerGenreSelectedIndex_ =
+        focusTimerGenreMenuItems_.size() > 1 ? kFocusTimerGenreFirstIndex : kFocusTimerGenreBackIndex;
+  }
+}
+
+void App::selectFocusTimerGenre(uint32_t nowMs) {
+  if (focusTimerGenreMenuItems_.empty()) {
+    rebuildFocusTimerGenreMenuItems();
+  }
+
+  if (focusTimerGenreSelectedIndex_ == kFocusTimerGenreBackIndex) {
+    resetFocusTimer();
+    menuScreen_ = MenuScreen::Main;
+    renderMainMenu();
+    return;
+  }
+
+  FocusTimer::Genre genre = FocusTimer::Genre::None;
+  switch (focusTimerGenreSelectedIndex_) {
+    case 1:
+      genre = FocusTimer::Genre::Chores;
+      break;
+    case 2:
+      genre = FocusTimer::Genre::RsvpNano;
+      break;
+    case 3:
+      genre = FocusTimer::Genre::StrengthLabs;
+      break;
+    case 4:
+      genre = FocusTimer::Genre::SelfCare;
+      break;
+    case 5:
+      genre = FocusTimer::Genre::Other;
+      break;
+    default:
+      break;
+  }
+
+  if (genre == FocusTimer::Genre::None) {
+    return;
+  }
+
+  focusTimer_.chooseGenre(genre, nowMs);
+  focusTimerCancelHoldTriggered_ = false;
+  menuScreen_ = MenuScreen::FocusTimerSession;
+  renderFocusTimerSession();
+}
+
 void App::moveMenuSelection(int direction) {
   if (direction == 0 || menuScreen_ == MenuScreen::TextEntry) {
     return;
@@ -1496,6 +1661,9 @@ void App::moveMenuSelection(int direction) {
   } else if (menuScreen_ == MenuScreen::RestartConfirm) {
     selectedIndex = &restartConfirmSelectedIndex_;
     itemCount = RestartConfirmItemCount;
+  } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
+    selectedIndex = &focusTimerGenreSelectedIndex_;
+    itemCount = focusTimerGenreMenuItems_.size();
   }
 
   if (itemCount == 0) {
@@ -1538,6 +1706,9 @@ void App::moveMenuSelection(int direction) {
         break;
     }
     Serial.printf("[restart] selected=%s\n", selectedLabel.c_str());
+  } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
+    Serial.printf("[timer] selected genre=%s\n",
+                  focusTimerGenreMenuItems_[focusTimerGenreSelectedIndex_].c_str());
   } else {
     String selectedLabel = uiText(UiText::Resume);
     switch (menuSelectedIndex_) {
@@ -1549,6 +1720,9 @@ void App::moveMenuSelection(int direction) {
         break;
       case MenuChangeBook:
         selectedLabel = uiText(UiText::Library);
+        break;
+      case MenuFocusTimer:
+        selectedLabel = "Focus Timer";
         break;
       case MenuSettings:
         selectedLabel = uiText(UiText::Settings);
@@ -1594,6 +1768,13 @@ void App::selectMenuItem(uint32_t nowMs) {
     selectRestartConfirmItem(nowMs);
     return;
   }
+  if (menuScreen_ == MenuScreen::FocusTimerGenres) {
+    selectFocusTimerGenre(nowMs);
+    return;
+  }
+  if (menuScreen_ == MenuScreen::FocusTimerSession) {
+    return;
+  }
 
   switch (menuSelectedIndex_) {
     case MenuResume:
@@ -1612,6 +1793,9 @@ void App::selectMenuItem(uint32_t nowMs) {
       return;
     case MenuChangeBook:
       openBookPicker();
+      return;
+    case MenuFocusTimer:
+      openFocusTimer();
       return;
     case MenuSettings:
       openSettings();
@@ -3002,6 +3186,10 @@ int App::findBookIndexByPath(const String &path) const {
 }
 
 void App::renderMenu() {
+  if (!isFocusTimerMenuScreen(menuScreen_)) {
+    applyReaderUiOrientation();
+  }
+
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
     renderSettings();
@@ -3017,6 +3205,10 @@ void App::renderMenu() {
     renderChapterPicker();
   } else if (menuScreen_ == MenuScreen::RestartConfirm) {
     renderRestartConfirm();
+  } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
+    renderFocusTimerGenres();
+  } else if (menuScreen_ == MenuScreen::FocusTimerSession) {
+    renderFocusTimerSession();
   } else {
     renderMainMenu();
   }
@@ -3028,6 +3220,7 @@ void App::renderMainMenu() {
   items.push_back(uiText(UiText::Resume));
   items.push_back(uiText(UiText::Chapters));
   items.push_back(uiText(UiText::Library));
+  items.push_back("Focus Timer");
   items.push_back(uiText(UiText::Settings));
 #if RSVP_USB_TRANSFER_ENABLED
   items.push_back(uiText(UiText::UsbTransfer));
@@ -3102,6 +3295,59 @@ void App::renderRestartConfirm() {
   items.push_back(uiText(UiText::YesRestart));
 
   display_.renderMenu(items, restartConfirmSelectedIndex_ + kRestartConfirmHeaderRows);
+}
+
+void App::renderFocusTimerGenres() {
+  applyReaderUiOrientation();
+  if (focusTimerGenreMenuItems_.empty()) {
+    rebuildFocusTimerGenreMenuItems();
+  }
+  display_.renderMenu(focusTimerGenreMenuItems_, focusTimerGenreSelectedIndex_);
+}
+
+void App::renderFocusTimerSession() {
+  applyUiOrientation(focusTimer_.uiOrientation());
+  const String remainingLabel = formatFocusTimerRemaining(millis());
+
+  switch (focusTimer_.state()) {
+    case FocusTimer::State::Unavailable:
+      display_.renderFocusTimerScreen("TIMER", "", "", "IMU unavailable");
+      return;
+    case FocusTimer::State::GenreSelect:
+      renderFocusTimerGenres();
+      return;
+    case FocusTimer::State::WaitForTouchStart:
+      display_.renderFocusTimerScreen("BEGIN", "", "", "Place on short side");
+      return;
+    case FocusTimer::State::TouchRunning:
+      display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "",
+                                      "", focusTimer_.progressPercent(millis()));
+      return;
+    case FocusTimer::State::WaitAfterTouch:
+      display_.renderFocusTimerScreen("WORK", "", "", "Flip to continue");
+      return;
+    case FocusTimer::State::WorkRunning:
+      display_.renderFocusTimerScreen("WORK", "", remainingLabel, "",
+                                      "", focusTimer_.progressPercent(millis()));
+      return;
+    case FocusTimer::State::BreakRunning:
+      display_.renderFocusTimerScreen("BREAK", "", remainingLabel, "",
+                                      "", focusTimer_.progressPercent(millis()), true);
+      return;
+    case FocusTimer::State::WaitAfterWork:
+      display_.renderFocusTimerScreen("BREAK", "", "", "Turn for break", "",
+                                      -1, true);
+      return;
+    case FocusTimer::State::WaitAfterBreak:
+      display_.renderFocusTimerScreen("WORK", "", "", "Flip to begin");
+      return;
+    case FocusTimer::State::Cancelled:
+      display_.renderFocusTimerScreen("BEGIN", "", "", "Place to begin again");
+      return;
+    case FocusTimer::State::Complete:
+      display_.renderFocusTimerScreen("DONE", "", "", "Session complete");
+      return;
+  }
 }
 
 DisplayManager::LibraryItem App::libraryItemForBook(size_t bookIndex) {
@@ -3253,6 +3499,55 @@ uint8_t App::readingProgressPercent() const {
   return static_cast<uint8_t>(std::min(static_cast<size_t>(100), percent));
 }
 
+bool App::isFocusTimerMenuScreen(MenuScreen screen) const {
+  return screen == MenuScreen::FocusTimerGenres || screen == MenuScreen::FocusTimerSession;
+}
+
+void App::applyUiOrientation(BoardConfig::UiOrientation orientation) {
+  touch_.setUiOrientation(orientation);
+  display_.setUiOrientation(orientation);
+}
+
+void App::applyReaderUiOrientation() {
+  applyUiOrientation(readerUiOrientation());
+}
+
+BoardConfig::UiOrientation App::readerUiOrientation() const {
+  return uiRotated180() ? BoardConfig::UiOrientation::LandscapeFlipped
+                        : BoardConfig::UiOrientation::Landscape;
+}
+
+String App::formatFocusTimerRemaining(uint32_t nowMs) const {
+  const uint32_t remainingMs = focusTimer_.remainingMs(nowMs);
+  const uint32_t totalSeconds = remainingMs / 1000UL;
+  const uint32_t minutes = totalSeconds / 60UL;
+  const uint32_t seconds = totalSeconds % 60UL;
+  char buffer[8];
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu",
+                static_cast<unsigned long>(minutes),
+                static_cast<unsigned long>(seconds));
+  return String(buffer);
+}
+
+String App::focusTimerCountsLabel() const {
+  return "T" + String(focusTimer_.completedTouchBlocks()) + " W" +
+         String(focusTimer_.completedWorkBlocks()) + " B" +
+         String(focusTimer_.completedBreakBlocks());
+}
+
+void App::playFocusTimerCompletionCue() {
+  if (audio_.beep()) {
+    return;
+  }
+
+  for (int i = 0; i < 3; ++i) {
+    digitalWrite(BoardConfig::PIN_LCD_BACKLIGHT, HIGH);
+    delay(55);
+    digitalWrite(BoardConfig::PIN_LCD_BACKLIGHT, LOW);
+    delay(45);
+  }
+}
+
 bool App::scrollModeEnabled() const { return readerMode_ == ReaderMode::Scroll; }
 
 bool App::uiRotated180() const {
@@ -3366,6 +3661,7 @@ String App::phantomAfterText() const {
 }
 
 void App::renderActiveReader(uint32_t nowMs) {
+  applyReaderUiOrientation();
   if (scrollModeEnabled()) {
     if (wpmFeedbackVisible_) {
       renderScrollReader(nowMs, String(reader_.wpm()) + " WPM");
@@ -3385,6 +3681,7 @@ void App::renderActiveReader(uint32_t nowMs) {
 }
 
 void App::renderReaderWord() {
+  applyReaderUiOrientation();
   contextViewVisible_ = false;
   const bool showFooter = state_ != AppState::Playing;
   const String beforeText = phantomWordsEnabled_ ? phantomBeforeText() : "";
@@ -3486,6 +3783,7 @@ void App::invalidateContextPreviewWindow() {
 }
 
 void App::renderContextPreview() {
+  applyReaderUiOrientation();
   const size_t wordCount = reader_.wordCount();
   if (wordCount == 0) {
     renderReaderWord();
@@ -3503,6 +3801,7 @@ void App::renderContextPreview() {
 }
 
 void App::renderScrollReader(uint32_t nowMs, const String &overlayText) {
+  applyReaderUiOrientation();
   contextViewVisible_ = false;
   const size_t wordCount = reader_.wordCount();
   if (wordCount == 0) {
@@ -3530,6 +3829,7 @@ void App::renderScrollReader(uint32_t nowMs, const String &overlayText) {
 }
 
 void App::renderWpmFeedback(uint32_t nowMs) {
+  applyReaderUiOrientation();
   wpmFeedbackVisible_ = true;
   wpmFeedbackUntilMs_ = nowMs + kWpmFeedbackMs;
   if (scrollModeEnabled()) {
@@ -3549,6 +3849,7 @@ void App::renderWpmFeedback(uint32_t nowMs) {
 
 void App::renderStorageStatus(const char *title, const char *line1, const char *line2,
                               int progressPercent) {
+  applyReaderUiOrientation();
   display_.renderProgress(title == nullptr ? "SD" : title, line1 == nullptr ? "" : line1,
                           line2 == nullptr ? "" : line2, progressPercent);
 }
