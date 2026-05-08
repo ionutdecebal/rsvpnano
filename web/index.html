@@ -9,6 +9,8 @@
       src="https://unpkg.com/esp-web-tools@10.1.0/dist/web/install-button.js?module"
     ></script>
     <script type="module" src="./library.js"></script>
+    <script type="module" src="./components/install-firmware.js"></script>
+    <script type="module" src="./components/prepare-sdcard.js"></script>
     <style>
       :root {
         --ink: #1d1711;
@@ -42,11 +44,14 @@
       main {
         width: min(1040px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 52px 0 44px;
+        padding: 40px 0 44px;
       }
 
       .hero {
-        margin-bottom: 28px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+        gap: 28px;
+        align-items: stretch;
       }
 
       .card {
@@ -58,7 +63,12 @@
       }
 
       .intro {
-        padding: clamp(28px, 6vw, 58px);
+        text-align: center;
+        padding: 4px;
+        margin-bottom: -28px;
+        position: relative;
+        z-index: 0;
+        opacity: 0.45;
       }
 
       .eyebrow {
@@ -70,166 +80,140 @@
       }
 
       h1 {
-        max-width: 11ch;
         margin: 0;
         font-size: clamp(3.3rem, 10vw, 7.5rem);
         line-height: 0.86;
         letter-spacing: -0.075em;
       }
 
-      .lead {
-        max-width: 56ch;
-        margin: 28px 0 0;
-        color: var(--muted);
-        font-size: clamp(1.05rem, 2vw, 1.32rem);
-        line-height: 1.55;
+      .install-steps {
+        overflow: hidden;
       }
 
-      p,
-      li {
+      .section-header {
+        display: flex;
+        align-items: center;
+        padding: 20px 18px 18px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+.section-header h2 {
+        flex: 1;
+        margin: 0;
+        padding: 0;
+        font-size: 1.05rem;
+      }
+
+      .flash-history {
+        margin-left: auto;
+        font: 0.78rem/1 ui-sans-serif, system-ui, sans-serif;
         color: var(--muted);
+      }
+
+      .flash-history:empty {
+        display: none;
+      }
+
+      .sdcard-tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 16px;
+      }
+
+      .sdcard-tab {
+        padding: 6px 18px;
+        border-radius: 999px;
+        border: 1.5px solid var(--line);
+        background: transparent;
+        color: var(--muted);
+        font: 0.85rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
+      }
+
+      .sdcard-tab.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fffaf1;
+      }
+
+      .sdcard-tab:not(.active):hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .sdcard-panel ol {
+        margin: 0;
+        padding-left: 1.4em;
+      }
+
+      .sdcard-panel li {
+        margin-bottom: 8px;
         line-height: 1.5;
       }
 
-      .step-card + .step-card {
-        margin-top: 28px;
-      }
-
-      .step-card-toggle {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        width: 100%;
-        padding: 20px 24px;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        text-align: left;
-        cursor: pointer;
-      }
-
-      .step-card-toggle:hover {
-        background: rgba(255, 255, 255, 0.18);
-      }
-
-      .step-card-toggle:focus-visible {
-        outline: 3px solid rgba(211, 84, 47, 0.28);
-        outline-offset: -3px;
-      }
-
-      .section-header-main {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        min-width: 0;
-        flex: 1;
-      }
-
-      .section-header-label {
-        min-width: 0;
-      }
-
-      .section-kicker {
+      .sdcard-panel small {
         display: block;
-        margin-bottom: 2px;
-        color: var(--accent-deep);
-        font: 700 0.72rem/1.2 ui-sans-serif, system-ui, sans-serif;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-      }
-
-      .section-title {
-        display: block;
-        font-size: 1.18rem;
-        line-height: 1.15;
-      }
-
-      .step-number {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.85rem;
-        height: 1.85rem;
-        flex-shrink: 0;
-        border-radius: 999px;
-        background: var(--accent);
-        color: #fffaf1;
-        font: 800 0.86rem/1 ui-sans-serif, system-ui, sans-serif;
-      }
-
-      .section-summary {
+        margin-top: 4px;
         color: var(--muted);
-        font: 700 0.78rem/1.3 ui-sans-serif, system-ui, sans-serif;
-        text-align: right;
-      }
-
-      .section-summary:empty {
-        display: none;
+        font-size: 0.8em;
       }
 
       .chevron {
         width: 20px;
         height: 20px;
-        flex-shrink: 0;
         color: var(--muted);
-        transition: transform 180ms ease;
+        transition: transform 200ms ease;
+        flex-shrink: 0;
+        margin-left: 12px;
       }
 
-      .step-card.is-collapsed .chevron {
+      .install-steps.is-collapsed .chevron,
+      .workspace.is-collapsed .chevron {
         transform: rotate(-90deg);
       }
 
       .section-body {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr 1fr;
+        align-items: start;
         border-top: 1px solid var(--line);
+        transition: grid-template-rows 200ms ease;
+        grid-template-rows: 1fr;
       }
 
-      .section-body.section-body-single {
-        display: block;
+      .install-steps.is-collapsed .section-body {
+        grid-template-rows: 0fr;
+        border-top-color: transparent;
       }
 
       .section-body-inner {
-        min-width: 0;
-        padding: 24px 28px 28px;
-      }
-
-      .section-body:not(.section-body-single) > .section-body-inner + .section-body-inner {
-        border-left: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
-      }
-
-      .section-card-stack {
-        display: grid;
-        gap: 12px;
-      }
-
-      .install-option {
-        display: grid;
-        gap: 12px;
+        overflow: hidden;
         padding: 18px;
-        border: 1px solid var(--line);
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.38);
       }
 
-      .install-option strong {
-        font-size: 1.04rem;
+      .install-steps.is-collapsed .section-body-inner {
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      .install {
+        padding: 28px;
       }
 
       .install-option-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
       }
 
       .latest-badge {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        color: #2f5d32;
         font: 700 0.76rem/1 ui-sans-serif, system-ui, sans-serif;
+        color: #2f5d32;
       }
 
       .pulse-dot {
@@ -242,17 +226,9 @@
       }
 
       @keyframes pulse {
-        0% {
-          box-shadow: 0 0 0 0 rgba(76, 122, 74, 0.5);
-        }
-
-        70% {
-          box-shadow: 0 0 0 6px rgba(76, 122, 74, 0);
-        }
-
-        100% {
-          box-shadow: 0 0 0 0 rgba(76, 122, 74, 0);
-        }
+        0% { box-shadow: 0 0 0 0 rgba(76, 122, 74, 0.5); }
+        70% { box-shadow: 0 0 0 6px rgba(76, 122, 74, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(76, 122, 74, 0); }
       }
 
       .feature-list {
@@ -261,20 +237,72 @@
         list-style: none;
       }
 
-      .feature-list li {
-        display: flex;
-        gap: 8px;
-        align-items: flex-start;
-      }
-
       .feature-list li::before {
         content: "✓";
+        margin-right: 6px;
         color: var(--accent);
         font-weight: 700;
       }
 
+      .step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7em;
+        height: 1.7em;
+        margin-right: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fffaf1;
+        font: 800 0.82rem/1 ui-sans-serif, system-ui, sans-serif;
+        vertical-align: middle;
+        flex-shrink: 0;
+      }
+
+      .install h2,
+      .steps h2,
+      .workspace h2 {
+        display: flex;
+        align-items: center;
+        margin: 0;
+        font-size: 1.38rem;
+      }
+
+      .install p,
+      .steps p,
+      .section-body-inner p,
+      li {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      p {
+        margin: 0 0 1em;
+      }
+
+      .install-option {
+        display: grid;
+        gap: 12px;
+        margin-top: 0;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.38);
+      }
+
+      .install-option strong {
+        font-size: 1.04rem;
+      }
+
       esp-web-install-button {
         margin-top: 4px;
+      }
+
+      .install-warning {
+        margin: 8px 0 0;
+        font-size: 0.82rem;
+        color: var(--accent-deep);
+        text-align: center;
       }
 
       button[slot="activate"] {
@@ -304,13 +332,49 @@
         font-size: 0.9rem;
       }
 
+      .steps {
+        padding: 28px;
+        border-left: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
+      }
+
+      .card + .card {
+        margin-top: 12px;
+      }
+
+      .sections {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .workspace {
+        padding: 0;
+        overflow: hidden;
+      }
+
       .workspace-shell {
         display: grid;
         grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+        border-top: 1px solid var(--line);
+        transition: grid-template-rows 200ms ease;
+        grid-template-rows: 1fr;
+      }
+
+      .workspace.is-collapsed .workspace-shell {
+        grid-template-rows: 0fr;
+        border-top-color: transparent;
       }
 
       .workspace-pane {
         padding: 28px;
+        overflow: hidden;
+        transition: padding 200ms ease;
+      }
+
+      .workspace.is-collapsed .workspace-pane {
+        padding-top: 0;
+        padding-bottom: 0;
       }
 
       .workspace-pane + .workspace-pane {
@@ -318,10 +382,9 @@
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
       }
 
-      .workspace-pane h2,
-      .workspace-pane h3 {
+      .workspace h2,
+      .workspace h3 {
         margin: 0;
-        font-size: 1.38rem;
       }
 
       .workspace-copy {
@@ -619,11 +682,6 @@
           grid-template-columns: 1fr;
         }
 
-        .section-body:not(.section-body-single) > .section-body-inner + .section-body-inner {
-          border-left: 0;
-          border-top: 1px solid var(--line);
-        }
-
         .workspace-shell {
           grid-template-columns: 1fr;
         }
@@ -640,22 +698,18 @@
           padding-top: 18px;
         }
 
+        .section-body {
+          grid-template-columns: 1fr;
+        }
+
         .meta-grid {
           grid-template-columns: 1fr;
         }
 
-        .intro,
-        .workspace-pane,
-        .section-body-inner {
+        .install,
+        .steps,
+        .workspace-pane {
           padding: 22px;
-        }
-
-        .step-card-toggle {
-          padding: 18px 20px;
-        }
-
-        .section-summary {
-          max-width: 11rem;
         }
       }
 
@@ -693,9 +747,9 @@
       }
 
       .compat-modal p {
-        margin: 0 0 10px;
         color: var(--muted);
         line-height: 1.55;
+        margin: 0 0 10px;
       }
 
       .compat-dismiss {
@@ -717,265 +771,119 @@
   </head>
   <body>
     <main>
-      <section class="hero">
-        <div class="card intro">
-          <p class="eyebrow">Browser firmware installer</p>
-          <h1>RSVP Nano</h1>
-          <p class="lead">
-            Flash the reader from Chrome or Edge without installing VS Code, PlatformIO,
-            or command-line tools. Connect the device by USB, click install,
-            and let the browser write it directly to the ESP32-S3.
-          </p>
-        </div>
+      <div class="intro">
+        <p class="eyebrow">Browser firmware installer</p>
+        <h1>RSVP Nano</h1>
+      </div>
 
-      </section>
-
-      <section class="card step-card" id="install-section">
-        <button
-          class="step-card-toggle"
-          id="install-toggle"
-          type="button"
-          aria-expanded="true"
-          aria-controls="install-content"
-        >
-          <span class="section-header-main">
-            <span class="step-number">1</span>
-            <span class="section-header-label">
-              <span class="section-kicker">Browser Flasher</span>
-              <span class="section-title">Install Firmware</span>
-            </span>
-          </span>
-          <span class="section-summary" id="flash-history">No installations in history</span>
-          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
-        <div class="section-body" id="install-content">
-          <div class="section-body-inner">
-            <p>
-              Flash the current browser installer manifest, then use the next steps to prepare
-              books and sync them onto the SD card.
-            </p>
-            <p>Put the device in boot mode before starting the installer:</p>
-            <ol>
-              <li>Turn the device off.</li>
-              <li>Hold <code>BOOT</code> while connecting a USB data cable.</li>
-              <li>If the installer cannot connect, tap reset or power-cycle, then try again.</li>
-            </ol>
-          </div>
-          <div class="section-body-inner">
-            <div class="install-option">
-              <div class="install-option-head">
-                <strong>RSVP Nano firmware</strong>
-                <span class="latest-badge"><span class="pulse-dot"></span>Latest manifest</span>
-              </div>
-              <ul class="feature-list">
-                <li>On-device EPUB conversion</li>
-                <li>USB SD-card transfer mode</li>
-                <li>Extended-Latin character support</li>
-              </ul>
-              <esp-web-install-button manifest="firmware/manifest.json">
-                <button id="firmware-install-button" slot="activate">Install Firmware</button>
-                <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
-                <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
-              </esp-web-install-button>
-            </div>
-
-            <div class="warning">
-              Flashing replaces the firmware on the connected ESP32-S3. Keep the device plugged in
-              until the installer says it is finished.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card step-card" id="sdcard-section">
-        <button
-          class="step-card-toggle"
-          id="sdcard-toggle"
-          type="button"
-          aria-expanded="true"
-          aria-controls="sdcard-content"
-        >
-          <span class="section-header-main">
-            <span class="step-number">2</span>
-            <span class="section-header-label">
-              <span class="section-kicker">Storage Workflow</span>
-              <span class="section-title">Prepare SD Card</span>
-            </span>
-          </span>
-          <span class="section-summary">Sync into <code>/books</code></span>
-          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
-        <div class="section-body" id="sdcard-content">
-          <div class="section-body-inner">
-            <p>
-              The recommended path is to convert supported source books in the browser, then place
-              the generated <code>.rsvp</code> files in the SD card&rsquo;s <code>/books</code> folder.
-            </p>
-            <ol>
-              <li>Insert the SD card into the reader.</li>
-              <li>Open <code>USB transfer</code> on the device, or remove the card and use a card reader.</li>
-              <li>Pick the SD card&rsquo;s <code>/books</code> folder in the workspace below, then import, clean sidecars, and sync.</li>
-            </ol>
-            <p class="inline-note">
-              The firmware can read <code>.rsvp</code>, <code>.txt</code>, and <code>.epub</code>
-              files from <code>/books</code>, but browser-converted <code>.rsvp</code> files are
-              the best-supported format.
-            </p>
-          </div>
-          <div class="section-body-inner">
-            <div class="section-card-stack">
-              <div class="meta-card">
-                <span>USB Transfer</span>
-                <strong>Expose the SD card from the device menu</strong>
-                <p class="meta-card-copy">
-                  On the default USB-enabled firmware, open <code>USB transfer</code> from the main
-                  menu to expose the SD card over USB. When you finish copying files, eject the
-                  device from your computer, then hold <code>BOOT</code> to leave transfer mode.
-                </p>
-              </div>
-              <div class="meta-card">
-                <span>Folder Layout</span>
-                <strong>Keep book files under <code>/books</code></strong>
-                <p class="meta-card-copy">
-                  The workspace below can sync directly into that folder and the device library will
-                  scan it automatically after the SD card remounts.
-                </p>
-              </div>
-              <div class="meta-card">
-                <span>Cleanup</span>
-                <strong>Remove metadata and interrupted sidecars</strong>
-                <p class="meta-card-copy">
-                  The <code>Clean Sidecars</code> action helps clear platform metadata and temporary
-                  files such as <code>.rsvp.tmp</code>, <code>.rsvp.converting</code>, and
-                  <code>.rsvp.failed</code>.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card step-card" id="workspace-section">
-        <button
-          class="step-card-toggle"
-          id="workspace-toggle"
-          type="button"
-          aria-expanded="true"
-          aria-controls="workspace-content"
-        >
-          <span class="section-header-main">
+      <div class="sections">
+        <install-firmware></install-firmware>
+        <prepare-sdcard></prepare-sdcard>
+        <section class="card workspace" id="workspace-section">
+        <div class="section-header" id="workspace-toggle">
+          <div style="flex:1;display:flex;align-items:center;gap:10px">
             <span class="step-number">3</span>
-            <span class="section-header-label">
-              <span class="section-kicker">Browser Conversion</span>
-              <span class="section-title">Library Workspace</span>
-            </span>
-          </span>
-          <span class="section-summary" id="workspace-summary-header"></span>
-          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
-        <div class="section-body section-body-single" id="workspace-content">
-          <div class="workspace-shell">
-            <div class="workspace-pane">
-              <p class="workspace-copy">
-                Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
-                results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
+            <h2>Library Workspace</h2>
+          </div>
+          <span class="flash-history" id="workspace-summary-header"></span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        <div class="workspace-shell">
+          <div class="workspace-pane">
+            <p class="workspace-copy">
+              Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
+              results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
+            </p>
+
+            <div class="toolbar">
+              <button class="tool-button tool-button-primary" id="library-add-button" type="button">
+                Add Books
+              </button>
+              <button class="tool-button" id="library-folder-button" type="button">
+                Choose /books Folder
+              </button>
+              <button class="tool-button" id="library-folder-import-button" type="button">
+                Import From Folder
+              </button>
+              <button class="tool-button" id="library-folder-clean-button" type="button">
+                Clean Sidecars
+              </button>
+              <button class="tool-button" id="library-download-button" type="button">
+                Download .zip
+              </button>
+              <button class="tool-button" id="library-sync-button" type="button">
+                Sync To Folder
+              </button>
+              <button class="tool-button" id="library-clear-button" type="button">
+                Clear Library
+              </button>
+            </div>
+
+            <label class="dropzone" id="library-dropzone" for="library-file-input">
+              <strong>Drop supported books here</strong>
+              <p>
+                EPUB, TXT, Markdown, and HTML sources are converted locally in your browser. Nothing
+                is uploaded to a server.
               </p>
+            </label>
+            <input
+              id="library-file-input"
+              type="file"
+              accept=".epub,.txt,.md,.markdown,.html,.htm,.xhtml"
+              multiple
+              hidden
+            />
 
-              <div class="toolbar">
-                <button class="tool-button tool-button-primary" id="library-add-button" type="button">
-                  Add Books
-                </button>
-                <button class="tool-button" id="library-folder-button" type="button">
-                  Choose /books Folder
-                </button>
-                <button class="tool-button" id="library-folder-import-button" type="button">
-                  Import From Folder
-                </button>
-                <button class="tool-button" id="library-folder-clean-button" type="button">
-                  Clean Sidecars
-                </button>
-                <button class="tool-button" id="library-download-button" type="button">
-                  Download .zip
-                </button>
-                <button class="tool-button" id="library-sync-button" type="button">
-                  Sync To Folder
-                </button>
-                <button class="tool-button" id="library-clear-button" type="button">
-                  Clear Library
-                </button>
-              </div>
-
-              <label class="dropzone" id="library-dropzone" for="library-file-input">
-                <strong>Drop supported books here</strong>
-                <p>
-                  EPUB, TXT, Markdown, and HTML sources are converted locally in your browser. Nothing
-                  is uploaded to a server.
+            <div class="meta-grid">
+              <div class="meta-card">
+                <span>Compatibility</span>
+                <strong>Automatic extended-Latin output</strong>
+                <p class="meta-card-copy">
+                  Preserves common accented, Baltic, Sami, and other extended-Latin letters while
+                  staying friendly to the current firmware.
                 </p>
-              </label>
-              <input
-                id="library-file-input"
-                type="file"
-                accept=".epub,.txt,.md,.markdown,.html,.htm,.xhtml"
-                multiple
-                hidden
-              />
-
-              <div class="meta-grid">
-                <div class="meta-card">
-                  <span>Compatibility</span>
-                  <strong>Automatic extended-Latin output</strong>
-                  <p class="meta-card-copy">
-                    Preserves common accented, Baltic, Sami, and other extended-Latin letters while
-                    staying friendly to the current firmware.
-                  </p>
-                </div>
-                <div class="meta-card">
-                  <span>Selected Folder</span>
-                  <strong id="library-folder-label">No /books folder selected</strong>
-                </div>
-                <div class="meta-card">
-                  <span>Library Summary</span>
-                  <strong id="library-summary">0 converted books ready</strong>
-                </div>
-                <div class="meta-card">
-                  <span>Folder Inventory</span>
-                  <strong id="library-folder-summary">Pick the SD card&rsquo;s /books folder to scan it</strong>
-                </div>
               </div>
-
-              <p class="inline-note">
-                Everything is converted locally in your browser. Pick the SD card&rsquo;s
-                <code>/books</code> folder if you want one-click import, cleanup, and sync.
-              </p>
-
-              <div class="workspace-status" id="library-status" data-tone="info">
-                <strong>Ready to build a library</strong>
-                Add files from your computer or pick the SD card&rsquo;s <code>/books</code> folder to bring
-                supported source books into the workspace.
+              <div class="meta-card">
+                <span>Selected Folder</span>
+                <strong id="library-folder-label">No /books folder selected</strong>
+              </div>
+              <div class="meta-card">
+                <span>Library Summary</span>
+                <strong id="library-summary">0 converted books ready</strong>
+              </div>
+              <div class="meta-card">
+                <span>Folder Inventory</span>
+                <strong id="library-folder-summary">Pick the SD card&rsquo;s /books folder to scan it</strong>
               </div>
             </div>
 
-            <div class="workspace-pane">
-              <h3>Converted Books</h3>
-              <p class="workspace-copy">
-                Each imported source is turned into a reader-ready <code>.rsvp</code> file so you can
-                download it or sync everything back to the selected folder in one step.
-              </p>
+            <p class="inline-note">
+              Everything is converted locally in your browser. Pick the SD card&rsquo;s
+              <code>/books</code> folder if you want one-click import, cleanup, and sync.
+            </p>
 
-              <ul class="library-list" id="library-list"></ul>
-              <div class="library-empty" id="library-empty">
-                Add a few books and the converted library will appear here.
-              </div>
+            <div class="workspace-status" id="library-status" data-tone="info">
+              <strong>Ready to build a library</strong>
+              Add files from your computer or pick the SD card&rsquo;s <code>/books</code> folder to bring
+              supported source books into the workspace.
+            </div>
+          </div>
+
+          <div class="workspace-pane">
+            <h3>Converted Books</h3>
+            <p class="workspace-copy">
+              Each imported source is turned into a reader-ready <code>.rsvp</code> file so you can
+              download it or sync everything back to the selected folder in one step.
+            </p>
+
+            <ul class="library-list" id="library-list"></ul>
+            <div class="library-empty" id="library-empty">
+              Add a few books and the converted library will appear here.
             </div>
           </div>
         </div>
       </section>
+      </div>
 
       <footer>
         RSVP Nano is open source. Build it, modify it, improve it, and share what you make.
@@ -991,7 +899,7 @@
             Safari, Firefox, and all mobile browsers do not currently support Web Serial.
             You can still use the <strong>Library Workspace</strong> below to convert books.
           </p>
-          <button class="compat-dismiss" id="compat-dismiss" type="button">Got It</button>
+          <button class="compat-dismiss" id="compat-dismiss">Got It</button>
         </div>
       </div>
     </main>
@@ -1003,168 +911,10 @@
         });
       }
 
-      const flashStorageKey = "rsvpnano_last_flash";
-      const flashHistoryLabel = document.getElementById("flash-history");
-      const installButton = document.getElementById("firmware-install-button");
-      let currentManifestVersion = "";
+      document.getElementById("workspace-toggle").addEventListener("click", function () {
+        document.getElementById("workspace-section").classList.toggle("is-collapsed");
+      });
 
-      function readFlashHistory() {
-        try {
-          return JSON.parse(localStorage.getItem(flashStorageKey));
-        } catch (error) {
-          return null;
-        }
-      }
-
-      function formatTimeAgo(timestamp) {
-        const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-        if (seconds < 60) {
-          return "just now";
-        }
-
-        const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) {
-          return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
-        }
-
-        const hours = Math.floor(minutes / 60);
-        if (hours < 24) {
-          return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-        }
-
-        const days = Math.floor(hours / 24);
-        return `${days} ${days === 1 ? "day" : "days"} ago`;
-      }
-
-      function refreshFlashHistory() {
-        if (!flashHistoryLabel) {
-          return;
-        }
-
-        const history = readFlashHistory();
-        if (!history || typeof history.timestamp !== "number") {
-          flashHistoryLabel.textContent = "No installations in history";
-          return;
-        }
-
-        flashHistoryLabel.textContent = `Last flashed ${formatTimeAgo(history.timestamp)}`;
-      }
-
-      function refreshInstallButton() {
-        if (!installButton) {
-          return;
-        }
-
-        const history = readFlashHistory();
-        const shouldOfferUpdate =
-          !!history &&
-          typeof history.version === "string" &&
-          history.version.length > 0 &&
-          currentManifestVersion.length > 0 &&
-          history.version !== currentManifestVersion;
-
-        installButton.textContent = shouldOfferUpdate ? "Update Firmware" : "Install Firmware";
-      }
-
-      async function loadManifestVersion() {
-        try {
-          const response = await fetch("firmware/manifest.json", { cache: "no-store" });
-          if (!response.ok) {
-            return;
-          }
-
-          const manifest = await response.json();
-          if (typeof manifest.version === "string") {
-            currentManifestVersion = manifest.version;
-          }
-        } catch (error) {
-          currentManifestVersion = "";
-        }
-
-        refreshInstallButton();
-      }
-
-      function trackInstallDialog(dialog) {
-        let saved = false;
-        const pollTimer = window.setInterval(function () {
-          if (!document.body.contains(dialog)) {
-            window.clearInterval(pollTimer);
-            return;
-          }
-
-          if (saved || !dialog.shadowRoot) {
-            return;
-          }
-
-          const text = dialog.shadowRoot.textContent || "";
-          if (text.indexOf("Installation complete") === -1) {
-            return;
-          }
-
-          saved = true;
-          window.clearInterval(pollTimer);
-          const history = { timestamp: Date.now() };
-          if (currentManifestVersion.length > 0) {
-            history.version = currentManifestVersion;
-          }
-          localStorage.setItem(flashStorageKey, JSON.stringify(history));
-          refreshFlashHistory();
-          refreshInstallButton();
-        }, 500);
-
-        window.setTimeout(function () {
-          window.clearInterval(pollTimer);
-        }, 600000);
-      }
-
-      new MutationObserver(function (mutations) {
-        mutations.forEach(function (mutation) {
-          mutation.addedNodes.forEach(function (node) {
-            if (node.nodeType !== Node.ELEMENT_NODE || node.nodeName !== "EWT-INSTALL-DIALOG") {
-              return;
-            }
-            trackInstallDialog(node);
-          });
-        });
-      }).observe(document.body, { childList: true });
-
-      function setSectionCollapsed(sectionId, collapsed) {
-        const section = document.getElementById(sectionId);
-        const toggle = document.getElementById(sectionId.replace("-section", "-toggle"));
-        const content = document.getElementById(sectionId.replace("-section", "-content"));
-        if (!section || !toggle || !content) {
-          return;
-        }
-
-        section.classList.toggle("is-collapsed", collapsed);
-        toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-        content.hidden = collapsed;
-      }
-
-      function initSectionToggle(sectionId, collapsed) {
-        const toggle = document.getElementById(sectionId.replace("-section", "-toggle"));
-        if (!toggle) {
-          return;
-        }
-
-        setSectionCollapsed(sectionId, collapsed);
-        toggle.addEventListener("click", function () {
-          const section = document.getElementById(sectionId);
-          setSectionCollapsed(sectionId, !section.classList.contains("is-collapsed"));
-        });
-      }
-
-      const existingFlashHistory = readFlashHistory();
-      initSectionToggle(
-        "install-section",
-        !!existingFlashHistory && typeof existingFlashHistory.timestamp === "number",
-      );
-      initSectionToggle("sdcard-section", false);
-      initSectionToggle("workspace-section", false);
-
-      refreshFlashHistory();
-      refreshInstallButton();
-      loadManifestVersion();
     </script>
   </body>
 </html>

@@ -1,8 +1,13 @@
 {
   "name": "RSVP Nano",
-  "version": "v0.0.1",
+  "version": "v0.0.3",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
+  "features": [
+    "On-device EPUB conversion",
+    "USB SD-card transfer mode",
+    "Extended-Latin character support"
+  ],
   "builds": [
     {
       "chipFamily": "ESP32-S3",
