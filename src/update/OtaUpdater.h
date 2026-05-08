@@ -10,7 +10,7 @@ class OtaUpdater {
   struct Config {
     String wifiSsid;
     String wifiPassword;
-    String githubOwner = "ionutdecebal";
+    String githubOwner = "claudiopostinghel";
     String githubRepo = "rsvpnano";
     String assetName = "rsvp-nano-ota.bin";
     bool autoCheck = false;
