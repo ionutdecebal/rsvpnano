@@ -92,6 +92,14 @@
         padding: 28px;
       }
 
+      .install-heading,
+      .workspace-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
       .install h2,
       .steps h2 {
         margin: 0 0 10px;
@@ -117,6 +125,72 @@
 
       .install-option strong {
         font-size: 1.04rem;
+      }
+
+      .install-option-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .flash-history {
+        color: var(--muted);
+        font: 700 0.78rem/1.3 ui-sans-serif, system-ui, sans-serif;
+        text-align: right;
+      }
+
+      .flash-history:empty {
+        display: none;
+      }
+
+      .latest-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #2f5d32;
+        font: 700 0.76rem/1 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .pulse-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #4c7a4a;
+        box-shadow: 0 0 0 0 rgba(76, 122, 74, 0.5);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(76, 122, 74, 0.5);
+        }
+
+        70% {
+          box-shadow: 0 0 0 6px rgba(76, 122, 74, 0);
+        }
+
+        100% {
+          box-shadow: 0 0 0 0 rgba(76, 122, 74, 0);
+        }
+      }
+
+      .feature-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .feature-list li {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+
+      .feature-list li::before {
+        content: "✓";
+        color: var(--accent);
+        font-weight: 700;
       }
 
       esp-web-install-button {
@@ -578,14 +652,27 @@
         </div>
 
         <div class="card install">
-          <h2>Install Firmware</h2>
-          <p>The hosted installer tracks the latest official release, including the reader and USB SD-card transfer support.</p>
+          <div class="install-heading">
+            <h2>Install Firmware</h2>
+            <span class="flash-history" id="flash-history">No installations in history</span>
+          </div>
+          <p>
+            Flash the current browser installer manifest, then use the workspace below to
+            prepare books and sync them to the SD card.
+          </p>
 
           <div class="install-option">
-            <strong>RSVP Nano firmware</strong>
-            <span>Main reader firmware with on-device EPUB conversion and USB SD-card transfer mode.</span>
+            <div class="install-option-head">
+              <strong>RSVP Nano firmware</strong>
+              <span class="latest-badge"><span class="pulse-dot"></span>Latest manifest</span>
+            </div>
+            <ul class="feature-list">
+              <li>On-device EPUB conversion</li>
+              <li>USB SD-card transfer mode</li>
+              <li>Extended-Latin character support</li>
+            </ul>
             <esp-web-install-button manifest="firmware/manifest.json">
-              <button slot="activate">Install Firmware</button>
+              <button id="firmware-install-button" slot="activate">Install Firmware</button>
               <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
               <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
             </esp-web-install-button>
@@ -600,17 +687,21 @@
 
       <section class="card steps">
         <h2>Before You Click Install</h2>
+        <p>Put the device in boot mode before starting the browser installer:</p>
         <ol>
-          <li>Connect the device with a USB data cable.</li>
-          <li>If the installer cannot connect, hold <code>BOOT</code>, tap reset or power-cycle, then try again.</li>
-          <li>After flashing, place books on the SD card under <code>/books</code>.</li>
+          <li>Turn the device off.</li>
+          <li>Hold <code>BOOT</code> while connecting a USB data cable.</li>
+          <li>If the installer cannot connect, tap reset or power-cycle, then try again.</li>
         </ol>
       </section>
 
       <section class="card workspace">
         <div class="workspace-shell">
           <div class="workspace-pane">
-            <h2>Library Workspace</h2>
+            <div class="workspace-heading">
+              <h2>Library Workspace</h2>
+              <span class="flash-history" id="workspace-summary-header"></span>
+            </div>
             <p class="workspace-copy">
               Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
               results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
@@ -730,6 +821,135 @@
           document.getElementById("compat-modal").hidden = true;
         });
       }
+
+      const flashStorageKey = "rsvpnano_last_flash";
+      const flashHistoryLabel = document.getElementById("flash-history");
+      const installButton = document.getElementById("firmware-install-button");
+      let currentManifestVersion = "";
+
+      function readFlashHistory() {
+        try {
+          return JSON.parse(localStorage.getItem(flashStorageKey));
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function formatTimeAgo(timestamp) {
+        const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+        if (seconds < 60) {
+          return "just now";
+        }
+
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) {
+          return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
+        }
+
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) {
+          return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+        }
+
+        const days = Math.floor(hours / 24);
+        return `${days} ${days === 1 ? "day" : "days"} ago`;
+      }
+
+      function refreshFlashHistory() {
+        if (!flashHistoryLabel) {
+          return;
+        }
+
+        const history = readFlashHistory();
+        if (!history || typeof history.timestamp !== "number") {
+          flashHistoryLabel.textContent = "No installations in history";
+          return;
+        }
+
+        flashHistoryLabel.textContent = `Last flashed ${formatTimeAgo(history.timestamp)}`;
+      }
+
+      function refreshInstallButton() {
+        if (!installButton) {
+          return;
+        }
+
+        const history = readFlashHistory();
+        const shouldOfferUpdate =
+          !!history &&
+          typeof history.version === "string" &&
+          history.version.length > 0 &&
+          currentManifestVersion.length > 0 &&
+          history.version !== currentManifestVersion;
+
+        installButton.textContent = shouldOfferUpdate ? "Update Firmware" : "Install Firmware";
+      }
+
+      async function loadManifestVersion() {
+        try {
+          const response = await fetch("firmware/manifest.json", { cache: "no-store" });
+          if (!response.ok) {
+            return;
+          }
+
+          const manifest = await response.json();
+          if (typeof manifest.version === "string") {
+            currentManifestVersion = manifest.version;
+          }
+        } catch (error) {
+          currentManifestVersion = "";
+        }
+
+        refreshInstallButton();
+      }
+
+      function trackInstallDialog(dialog) {
+        let saved = false;
+        const pollTimer = window.setInterval(function () {
+          if (!document.body.contains(dialog)) {
+            window.clearInterval(pollTimer);
+            return;
+          }
+
+          if (saved || !dialog.shadowRoot) {
+            return;
+          }
+
+          const text = dialog.shadowRoot.textContent || "";
+          if (text.indexOf("Installation complete") === -1) {
+            return;
+          }
+
+          saved = true;
+          window.clearInterval(pollTimer);
+          const history = { timestamp: Date.now() };
+          if (currentManifestVersion.length > 0) {
+            history.version = currentManifestVersion;
+          }
+          localStorage.setItem(flashStorageKey, JSON.stringify(history));
+          refreshFlashHistory();
+          refreshInstallButton();
+        }, 500);
+
+        window.setTimeout(function () {
+          window.clearInterval(pollTimer);
+        }, 600000);
+      }
+
+      new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          mutation.addedNodes.forEach(function (node) {
+            if (node.nodeType !== Node.ELEMENT_NODE || node.nodeName !== "EWT-INSTALL-DIALOG") {
+              return;
+            }
+            trackInstallDialog(node);
+          });
+        });
+      }).observe(document.body, { childList: true });
+
+      refreshFlashHistory();
+      refreshInstallButton();
+      loadManifestVersion();
     </script>
   </body>
 </html>

@@ -179,6 +179,7 @@ const elements = {
   empty: document.querySelector("#library-empty"),
   status: document.querySelector("#library-status"),
   summary: document.querySelector("#library-summary"),
+  summaryHeader: document.querySelector("#workspace-summary-header"),
   syncButton: document.querySelector("#library-sync-button"),
 };
 
@@ -319,6 +320,11 @@ function refreshUi() {
     readyItems.length === 0
       ? "0 converted books ready"
       : `${readyItems.length} converted ${pluralize("book", readyItems.length)} ready, ${formatNumber(totalWords)} ${pluralize("word", totalWords)}`;
+
+  if (elements.summaryHeader) {
+    elements.summaryHeader.textContent =
+      readyItems.length === 0 ? "" : elements.summary.textContent;
+  }
 
   elements.folderLabel.textContent = state.directoryHandle
     ? `/${state.directoryHandle.name}`
