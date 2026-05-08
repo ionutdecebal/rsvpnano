@@ -50,6 +50,7 @@ class DisplayManager {
   void setBrightnessPercent(uint8_t percent);
   void setDarkMode(bool darkMode);
   void setNightMode(bool nightMode);
+  void setUiOrientation(BoardConfig::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
   void setTypographyConfig(const TypographyConfig &config);
   TypographyConfig typographyConfig() const;
@@ -93,6 +94,9 @@ class DisplayManager {
   void renderStatus(const String &title, const String &line1 = "", const String &line2 = "");
   void renderProgress(const String &title, const String &line1 = "", const String &line2 = "",
                       int progressPercent = -1);
+  void renderFocusTimerScreen(const String &mode, const String &genre, const String &timer,
+                              const String &instruction, const String &footer = "",
+                              int progressPercent = -1, bool breakAccent = false);
 
  private:
   bool initPanel();
@@ -136,7 +140,13 @@ class DisplayManager {
   void drawTinyGlyph(int x, int y, char c, uint16_t color, int scale);
   void drawTinyTextAt(const String &text, int x, int y, uint16_t color, int scale);
   void drawTinyTextCentered(const String &text, int y, uint16_t color, int scale);
+  void drawTinyTextCentered(const String &text, int y, uint16_t color, int scale, int width,
+                            int xOffset);
+  void drawSerif70TextCentered(const String &text, int y, uint16_t color, int width, int xOffset);
+  void drawSerifTextScaledCentered(const String &text, int y, uint16_t color, uint8_t scalePercent,
+                                   int width, int xOffset);
   void drawBatteryBadge();
+  void drawBatteryBadge(int logicalWidth, int logicalHeight);
   void drawFooter(const String &chapterLabel, const String &statusLabel);
   void drawRsvpAnchorGuide(int anchorX, int textY, int textHeight);
   void drawWordAt(const String &word, int x, int y, uint16_t color);
@@ -150,6 +160,9 @@ class DisplayManager {
   void applyBrightness();
   void flushScaledFrame(int scale, int virtualWidth, int virtualHeight);
   void flushFullWidthLogicalBand(int yStart, int yEnd);
+  int logicalWidth() const;
+  int logicalHeight() const;
+  uint16_t focusTimerBreakColor() const;
 
   uint16_t *virtualFrame_ = nullptr;
   uint16_t *txBuffer_ = nullptr;
@@ -158,7 +171,9 @@ class DisplayManager {
   uint8_t brightnessPercent_ = 100;
   bool darkMode_ = true;
   bool nightMode_ = false;
-  bool uiRotated180_ = BoardConfig::UI_ROTATED_180;
+  BoardConfig::UiOrientation uiOrientation_ =
+      BoardConfig::UI_ROTATED_180 ? BoardConfig::UiOrientation::LandscapeFlipped
+                                  : BoardConfig::UiOrientation::Landscape;
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;

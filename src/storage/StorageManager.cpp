@@ -160,6 +160,21 @@ String displayNameForPath(const String &path) {
   return path.substring(separator + 1);
 }
 
+bool isHiddenOrSidecarPath(const String &path) {
+  const String name = displayNameForPath(path);
+  if (name.length() == 0) {
+    return true;
+  }
+
+  String lowered = name;
+  lowered.toLowerCase();
+  if (lowered.startsWith(".")) {
+    return true;
+  }
+
+  return lowered == "thumbs.db" || lowered == "desktop.ini";
+}
+
 String displayNameWithoutExtension(const String &path) {
   String name = displayNameForPath(path);
   String lowered = name;
@@ -282,6 +297,11 @@ std::vector<String> collectBookPaths() {
   while (entry) {
     if (!entry.isDirectory()) {
       const String path = normalizeBookPath(String(entry.name()));
+      if (isHiddenOrSidecarPath(path)) {
+        entry.close();
+        entry = dir.openNextFile();
+        continue;
+      }
       const bool staleGeneratedRsvp =
           hasRsvpExtension(path) && fileExistsAndHasBytes(epubSiblingPathForRsvp(path)) &&
           !EpubConverter::isCurrentCache(path);
@@ -1607,35 +1627,45 @@ void StorageManager::refreshBookPaths() {
 
 bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
   book.clear();
+  book.words.reserve(file.size() / 6);
   String line;
+  line.reserve(256);
   bool paragraphPending = true;
+  bool keepReading = true;
 
-  while (file.available()) {
-    const char c = static_cast<char>(file.read());
+  constexpr size_t kBufSize = 512;
+  static uint8_t buf[kBufSize];
 
-    if (c == '\r') {
-      continue;
+  while (keepReading && file.available()) {
+    const size_t bytesRead = file.read(buf, kBufSize);
+    if (bytesRead == 0) {
+      break;
     }
+    yield();
 
-    if (c == '\n') {
-      const bool keepReading =
-          rsvpFormat ? processRsvpLine(line, book, paragraphPending)
-                     : processBookLine(line, book, paragraphPending);
-      if (!keepReading) {
-        if (hasBookWordLimit()) {
+    for (size_t i = 0; i < bytesRead && keepReading; ++i) {
+      const char c = static_cast<char>(buf[i]);
+
+      if (c == '\r') {
+        continue;
+      }
+
+      if (c == '\n') {
+        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending)
+                                 : processBookLine(line, book, paragraphPending);
+        if (!keepReading && hasBookWordLimit()) {
           Serial.printf("[storage] Reached %lu word limit, truncating book\n",
                         static_cast<unsigned long>(kMaxBookWords));
         }
-        break;
+        line = "";
+        continue;
       }
-      line = "";
-      continue;
-    }
 
-    line += c;
+      line += c;
+    }
   }
 
-  if (!line.isEmpty() && !reachedBookWordLimit(book.words.size())) {
+  if (!line.isEmpty() && keepReading && !reachedBookWordLimit(book.words.size())) {
     if (rsvpFormat) {
       processRsvpLine(line, book, paragraphPending);
     } else {

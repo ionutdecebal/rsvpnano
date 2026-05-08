@@ -22,6 +22,14 @@ uint16_t clampDisplayY(uint16_t y) {
   return std::min<uint16_t>(y, static_cast<uint16_t>(BoardConfig::DISPLAY_HEIGHT - 1));
 }
 
+uint16_t clampPhysicalX(uint16_t x) {
+  return std::min<uint16_t>(x, static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_WIDTH - 1));
+}
+
+uint16_t clampPhysicalY(uint16_t y) {
+  return std::min<uint16_t>(y, static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_HEIGHT - 1));
+}
+
 }  // namespace
 
 bool TouchHandler::begin() {
@@ -61,13 +69,18 @@ void TouchHandler::cancel() {
   emptyTouchSamples_ = 0;
 }
 
-void TouchHandler::setUiRotated180(bool rotated180) {
-  if (uiRotated180_ == rotated180) {
+void TouchHandler::setUiOrientation(BoardConfig::UiOrientation orientation) {
+  if (uiOrientation_ == orientation) {
     return;
   }
 
-  uiRotated180_ = rotated180;
+  uiOrientation_ = orientation;
   cancel();
+}
+
+void TouchHandler::setUiRotated180(bool rotated180) {
+  setUiOrientation(rotated180 ? BoardConfig::UiOrientation::LandscapeFlipped
+                              : BoardConfig::UiOrientation::Landscape);
 }
 
 bool TouchHandler::readTouchPacket(uint8_t *buffer, size_t len) {
@@ -146,14 +159,31 @@ bool TouchHandler::poll(TouchEvent &event) {
   event.phase = touchActive_ ? TouchPhase::Move : TouchPhase::Start;
   const uint16_t rawLongAxis = static_cast<uint16_t>(((data[2] & 0x0F) << 8) | data[3]);
   const uint16_t rawShortAxis = static_cast<uint16_t>(((data[4] & 0x0F) << 8) | data[5]);
-  const uint16_t mappedX = clampDisplayX(rawLongAxis);
-  const uint16_t mappedY = clampDisplayY(rawShortAxis);
-  if (uiRotated180_) {
-    event.x = static_cast<uint16_t>(BoardConfig::DISPLAY_WIDTH - 1 - mappedX);
-    event.y = static_cast<uint16_t>(BoardConfig::DISPLAY_HEIGHT - 1 - mappedY);
-  } else {
-    event.x = mappedX;
-    event.y = mappedY;
+  const uint16_t physicalX = clampPhysicalX(rawShortAxis);
+  const uint16_t physicalY =
+      clampPhysicalY(rawLongAxis >= BoardConfig::PANEL_NATIVE_HEIGHT
+                         ? 0
+                         : static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_HEIGHT - 1 - rawLongAxis));
+
+  switch (uiOrientation_) {
+    case BoardConfig::UiOrientation::Portrait:
+      event.x = physicalX;
+      event.y = physicalY;
+      break;
+    case BoardConfig::UiOrientation::PortraitFlipped:
+      event.x = static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_WIDTH - 1 - physicalX);
+      event.y = static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_HEIGHT - 1 - physicalY);
+      break;
+    case BoardConfig::UiOrientation::Landscape:
+      event.x = clampDisplayX(static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_HEIGHT - 1 - physicalY));
+      event.y = clampDisplayY(physicalX);
+      break;
+    case BoardConfig::UiOrientation::LandscapeFlipped:
+    default:
+      event.x = clampDisplayX(physicalY);
+      event.y = clampDisplayY(
+          static_cast<uint16_t>(BoardConfig::PANEL_NATIVE_WIDTH - 1 - physicalX));
+      break;
   }
   touchActive_ = true;
   lastX_ = event.x;

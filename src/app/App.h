@@ -6,11 +6,13 @@
 
 #include "app/AppState.h"
 #include "app/Localization.h"
+#include "audio/AudioManager.h"
 #include "display/DisplayManager.h"
 #include "input/ButtonHandler.h"
 #include "input/TouchHandler.h"
 #include "reader/ReadingLoop.h"
 #include "storage/StorageManager.h"
+#include "timer/FocusTimer.h"
 #include "update/OtaUpdater.h"
 #include "usb/UsbMassStorageManager.h"
 
@@ -65,6 +67,8 @@ class App {
     BookPicker,
     ChapterPicker,
     RestartConfirm,
+    FocusTimerGenres,
+    FocusTimerSession,
   };
 
   enum class FooterMetricMode : uint8_t {
@@ -163,8 +167,14 @@ class App {
   void applyBrowseHoldScroll(uint16_t y, uint32_t elapsedMs, uint32_t nowMs);
   void renderContextBrowsePreview(size_t currentIndex, uint16_t scrollProgressPermille);
   void applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs);
+  void applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs);
   void moveMenuSelection(int direction);
   void selectMenuItem(uint32_t nowMs);
+  void openFocusTimer();
+  void updateFocusTimer(uint32_t nowMs);
+  void resetFocusTimer();
+  void rebuildFocusTimerGenreMenuItems();
+  void selectFocusTimerGenre(uint32_t nowMs);
   void openSettings();
   void selectSettingsItem(uint32_t nowMs);
   void openWifiSettings();
@@ -235,6 +245,8 @@ class App {
   void renderBookPicker();
   void renderChapterPicker();
   void renderRestartConfirm();
+  void renderFocusTimerGenres();
+  void renderFocusTimerSession();
   void renderActiveReader(uint32_t nowMs);
   void renderScrollReader(uint32_t nowMs, const String &overlayText = "");
   DisplayManager::LibraryItem libraryItemForBook(size_t bookIndex);
@@ -265,14 +277,23 @@ class App {
                                   const char *line2, int progressPercent);
   const char *stateName(AppState state) const;
   const char *touchPhaseName(TouchPhase phase) const;
+  bool isFocusTimerMenuScreen(MenuScreen screen) const;
   bool scrollModeEnabled() const;
+  void applyUiOrientation(BoardConfig::UiOrientation orientation);
+  void applyReaderUiOrientation();
+  BoardConfig::UiOrientation readerUiOrientation() const;
   bool uiRotated180() const;
   uint8_t effectiveAnchorPercent() const;
   DisplayManager::TypographyConfig effectiveTypographyConfig() const;
   uint32_t currentReaderContentToken() const;
+  String formatFocusTimerRemaining(uint32_t nowMs) const;
+  String focusTimerCountsLabel() const;
+  void playFocusTimerCompletionCue();
 
   AppState state_ = AppState::Booting;
   DisplayManager display_;
+  AudioManager audio_;
+  FocusTimer focusTimer_;
   ReadingLoop reader_;
   ButtonHandler button_;
   ButtonHandler powerButton_;
@@ -301,6 +322,7 @@ class App {
   size_t bookPickerSelectedIndex_ = 0;
   size_t chapterPickerSelectedIndex_ = 0;
   size_t restartConfirmSelectedIndex_ = 0;
+  size_t focusTimerGenreSelectedIndex_ = 0;
   uint8_t brightnessLevelIndex_ = 4;
   uint8_t readerFontSizeIndex_ = 0;
   uint16_t pacingLongWordDelayMs_ = 200;
@@ -311,6 +333,7 @@ class App {
   MenuScreen menuScreen_ = MenuScreen::Main;
   MenuScreen restartConfirmReturnScreen_ = MenuScreen::Main;
   std::vector<String> settingsMenuItems_;
+  std::vector<String> focusTimerGenreMenuItems_;
   std::vector<DisplayManager::LibraryItem> wifiNetworkMenuItems_;
   std::vector<DisplayManager::LibraryItem> bookMenuItems_;
   std::vector<size_t> bookPickerBookIndices_;
@@ -336,6 +359,7 @@ class App {
   bool powerButtonReleasedSinceBoot_ = false;
   bool powerButtonLongPressHandled_ = false;
   bool powerOffStarted_ = false;
+  bool focusTimerCancelHoldTriggered_ = false;
   bool contextViewVisible_ = false;
   bool contextPreviewWindowValid_ = false;
   bool wpmFeedbackVisible_ = false;
