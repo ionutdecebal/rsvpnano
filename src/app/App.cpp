@@ -122,6 +122,7 @@ constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
 constexpr size_t kWifiSettingsForgetIndex = 4;
+constexpr size_t kWifiSettingsOtaOwnerIndex = 5;
 
 constexpr size_t kBookPickerBackIndex = 0;
 constexpr size_t kChapterPickerBackIndex = 0;
@@ -157,6 +158,7 @@ constexpr const char *kPrefRecentSeq = "seq";
 constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
+constexpr const char *kPrefOtaOwner = "ota_owner";
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -1782,6 +1784,11 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
+    case kWifiSettingsOtaOwnerIndex:
+      openTextEntry(TextEntryPurpose::OtaOwner, "OTA Source", "GitHub owner", "",
+                    preferences_.getString(kPrefOtaOwner, ""), "", false, 39,
+                    MenuScreen::WifiSettings);
+      return;
     default:
       return;
   }
@@ -2129,6 +2136,21 @@ void App::commitTextEntry(uint32_t nowMs) {
       openWifiSettings();
       return;
     }
+    case TextEntryPurpose::OtaOwner: {
+      const String owner = textEntrySession_.value;
+      if (owner.isEmpty()) {
+        preferences_.remove(kPrefOtaOwner);
+        display_.renderStatus("OTA", "Reset to default", "");
+      } else {
+        preferences_.putString(kPrefOtaOwner, owner);
+        display_.renderStatus("OTA", "Owner saved", owner);
+      }
+      delay(900);
+      textEntrySession_ = TextEntrySession();
+      textEntryButtons_.clear();
+      openWifiSettings();
+      return;
+    }
     case TextEntryPurpose::None:
     default:
       menuScreen_ = textEntrySession_.returnScreen;
@@ -2268,6 +2290,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Choose network");
     settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
     settingsMenuItems_.push_back("Forget network");
+    settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
   }
 
   if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -2288,6 +2311,15 @@ void App::applyPacingSettings() {
                 static_cast<unsigned int>(pacingPunctuationDelayMs_));
 }
 
+String App::otaOwnerLabel() {
+  if (preferences_.isKey(kPrefOtaOwner)) {
+    return preferences_.getString(kPrefOtaOwner, "");
+  }
+  OtaUpdater::Config cfg;
+  otaUpdater_.loadConfig(cfg);
+  return cfg.githubOwner;
+}
+
 OtaUpdater::Config App::preferredOtaConfig() {
   OtaUpdater::Config otaConfig;
   otaUpdater_.loadConfig(otaConfig);
@@ -2300,6 +2332,9 @@ OtaUpdater::Config App::preferredOtaConfig() {
   }
   if (preferences_.isKey(kPrefOtaAuto)) {
     otaConfig.autoCheck = preferences_.getBool(kPrefOtaAuto, otaConfig.autoCheck);
+  }
+  if (preferences_.isKey(kPrefOtaOwner)) {
+    otaConfig.githubOwner = preferences_.getString(kPrefOtaOwner, "");
   }
 
   return otaConfig;
