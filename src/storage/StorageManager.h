@@ -19,6 +19,7 @@ class StorageManager {
   bool loadFirstBookWords(std::vector<String> &words, String *loadedPath = nullptr);
   bool loadBookContent(size_t index, BookContent &book, String *loadedPath = nullptr,
                        size_t *loadedIndex = nullptr);
+  bool isMounted() const { return mounted_; }
   size_t bookCount() const;
   String bookPath(size_t index) const;
   String bookDisplayName(size_t index) const;
