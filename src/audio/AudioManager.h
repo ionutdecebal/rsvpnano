@@ -8,6 +8,8 @@ class AudioManager {
   bool begin();
   bool beep();
   bool available() const;
+  void releaseI2s();
+  bool prepareCodecForStreaming();
 
  private:
   static constexpr uint32_t kSampleRateHz = 16000;

@@ -10,6 +10,7 @@
 #include "display/DisplayManager.h"
 #include "input/ButtonHandler.h"
 #include "input/TouchHandler.h"
+#include "radio/InternetRadio.h"
 #include "reader/ReadingLoop.h"
 #include "storage/StorageManager.h"
 #include "timer/FocusTimer.h"
@@ -69,6 +70,7 @@ class App {
     RestartConfirm,
     FocusTimerGenres,
     FocusTimerSession,
+    RadioPlayer,
   };
 
   enum class FooterMetricMode : uint8_t {
@@ -173,6 +175,12 @@ class App {
   void openFocusTimer();
   void updateFocusTimer(uint32_t nowMs);
   void resetFocusTimer();
+  void openRadio();
+  void updateRadio(uint32_t nowMs);
+  void applyRadioTouch(const TouchEvent &event, uint32_t nowMs);
+  void renderRadioPlayer();
+  void saveRadioPreferences();
+  void restoreRadioPreferences();
   void rebuildFocusTimerGenreMenuItems();
   void selectFocusTimerGenre(uint32_t nowMs);
   void openSettings();
@@ -293,6 +301,7 @@ class App {
   AppState state_ = AppState::Booting;
   DisplayManager display_;
   AudioManager audio_;
+  InternetRadio radio_;
   FocusTimer focusTimer_;
   ReadingLoop reader_;
   ButtonHandler button_;

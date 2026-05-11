@@ -97,6 +97,9 @@ class DisplayManager {
   void renderFocusTimerScreen(const String &mode, const String &genre, const String &timer,
                               const String &instruction, const String &footer = "",
                               int progressPercent = -1, bool breakAccent = false);
+  void renderRadioScreen(const String &bandLabel, const String &frequency,
+                         const String &stationName, const String &statusLine,
+                         uint8_t volumePercent, bool playing);
 
  private:
   bool initPanel();

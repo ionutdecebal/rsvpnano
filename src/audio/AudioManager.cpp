@@ -100,6 +100,34 @@ bool AudioManager::beep() {
 
 bool AudioManager::available() const { return available_; }
 
+void AudioManager::releaseI2s() {
+  if (!i2sInitialized_) {
+    return;
+  }
+
+  i2s_driver_uninstall(kI2sPort);
+  i2sInitialized_ = false;
+}
+
+bool AudioManager::prepareCodecForStreaming() {
+  if (!enableAudioRail()) {
+    ESP_LOGW(kTag, "Failed to enable audio rail for streaming");
+    return false;
+  }
+
+  delay(kAudioStartupDelayMs);
+
+  /* re-run full codec init so clock dividers match whatever
+     sample rate the external I2S master is using */
+  if (!initCodec() || !configureCodec()) {
+    ESP_LOGW(kTag, "Codec reconfigure for streaming failed");
+    return false;
+  }
+
+  ESP_LOGI(kTag, "Codec ready for external streaming");
+  return true;
+}
+
 bool AudioManager::enableAudioRail() {
   uint8_t direction = 0xFF;
   uint8_t output = 0xFF;
@@ -274,7 +302,12 @@ bool AudioManager::startCodec() {
 }
 
 bool AudioManager::prepareForBeep() {
-  if (!available_ || !i2sInitialized_) {
+  if (!available_) {
+    return false;
+  }
+
+  /* re-init I2S if it was released for another subsystem */
+  if (!i2sInitialized_ && !initI2s()) {
     return false;
   }
 
