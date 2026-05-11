@@ -299,8 +299,9 @@ constexpr TinyGlyph kTinyGlyphs[] = {
     {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E}},
     {':', {0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00}},
     {';', {0x00, 0x0C, 0x0C, 0x00, 0x06, 0x04, 0x08}},
-    {'?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04}},
+    {'<', {0x02, 0x04, 0x08, 0x10, 0x08, 0x04, 0x02}},
     {'>', {0x10, 0x08, 0x04, 0x02, 0x04, 0x08, 0x10}},
+    {'?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04}},
     {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
     {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
     {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}},
@@ -327,7 +328,10 @@ constexpr TinyGlyph kTinyGlyphs[] = {
     {'X', {0x11, 0x0A, 0x04, 0x04, 0x04, 0x0A, 0x11}},
     {'Y', {0x11, 0x0A, 0x04, 0x04, 0x04, 0x04, 0x04}},
     {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
+    {'^', {0x04, 0x0A, 0x11, 0x00, 0x00, 0x00, 0x00}},
+    {'`', {0x00, 0x00, 0x00, 0x00, 0x11, 0x0A, 0x04}},
     {'_', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F}},
+    {'|', {0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
 };
 
 ReaderGlyph serifGlyphForByte(uint8_t value) {
@@ -3166,5 +3170,98 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
   }
 
   drawBatteryBadge(virtualWidth, virtualHeight);
+  flushScaledFrame(1, virtualWidth, virtualHeight);
+}
+
+void DisplayManager::renderRadioScreen(const String &bandLabel, const String &frequency,
+                                       const String &stationName, const String &statusLine,
+                                       uint8_t volumePercent, bool playing) {
+  String renderKey = "radio|";
+  renderKey += bandLabel;
+  renderKey += "|";
+  renderKey += frequency;
+  renderKey += "|";
+  renderKey += stationName;
+  renderKey += "|";
+  renderKey += statusLine;
+  renderKey += "|v:";
+  renderKey += String(volumePercent);
+  renderKey += "|p:";
+  renderKey += String(playing ? 1 : 0);
+  renderKey += "|b:";
+  renderKey += batteryLabel_;
+  renderKey += "|d:";
+  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += "|n:";
+  renderKey += String(nightMode_ ? 1 : 0);
+
+  if (!initialized_ || renderKey == lastRenderKey_) {
+    return;
+  }
+
+  lastRenderKey_ = renderKey;
+
+  const int virtualWidth = kDisplayWidth;
+  const int virtualHeight = kDisplayHeight;
+  clearVirtualBuffer(virtualWidth, virtualHeight);
+
+  const uint16_t textColor = wordColor();
+  const uint16_t accentColor = focusColor();
+  const uint16_t subtleColor = dimColor();
+
+  /* band label (FM / AM) top-left */
+  const int bandScale = 3;
+  drawTinyTextAt(bandLabel, 16, 12, accentColor, bandScale);
+
+  /* frequency display, large and centered */
+  const int freqScale = 7;
+  const int freqWidth = measureTinyTextWidth(frequency, freqScale);
+  const int freqX = (virtualWidth - freqWidth) / 2;
+  const int freqY = std::max(0, (virtualHeight / 2) - ((kTinyGlyphHeight * freqScale) / 2) - 12);
+  drawTinyTextAt(frequency, freqX, freqY, textColor, freqScale);
+
+  /* station name below frequency */
+  const int nameScale = 2;
+  const int nameWidth = measureTinyTextWidth(stationName, nameScale);
+  const int nameX = (virtualWidth - nameWidth) / 2;
+  const int nameY = freqY + (kTinyGlyphHeight * freqScale) + 8;
+  drawTinyTextAt(stationName, nameX, nameY, accentColor, nameScale);
+
+  /* volume bar on the right side, vertically centered */
+  const int barWidth = 6;
+  const int barMaxHeight = 90;
+  const int barX = virtualWidth - 28;
+  const int barCenterY = virtualHeight / 2;
+  const int barOutlineY = barCenterY - barMaxHeight / 2;
+  const int barBottomY = barOutlineY + barMaxHeight;
+  const int barOutlineHeight = barMaxHeight;
+
+  /* volume bar outline */
+  fillVirtualRect(barX - 1, barOutlineY - 1, barWidth + 2, 1, subtleColor);
+  fillVirtualRect(barX - 1, barBottomY, barWidth + 2, 1, subtleColor);
+  fillVirtualRect(barX - 1, barOutlineY - 1, 1, barOutlineHeight + 2, subtleColor);
+  fillVirtualRect(barX + barWidth, barOutlineY - 1, 1, barOutlineHeight + 2, subtleColor);
+
+  /* volume bar fill */
+  if (volumePercent > 0) {
+    int fillHeight = (barMaxHeight * static_cast<int>(volumePercent)) / 100;
+    if (fillHeight < 1) fillHeight = 1;
+    const int fillY = barBottomY - fillHeight;
+    fillVirtualRect(barX, fillY, barWidth, fillHeight, accentColor);
+  }
+
+  /* status line at bottom-left */
+  if (!statusLine.isEmpty()) {
+    const int statusScale = 2;
+    drawTinyTextAt(statusLine, 16, virtualHeight - 22, subtleColor, statusScale);
+  }
+
+  /* play/pause indicator next to band label */
+  const String playIcon = playing ? "> >" : "||";
+  const int iconScale = 2;
+  const int bandLabelWidth = measureTinyTextWidth(bandLabel, bandScale);
+  drawTinyTextAt(playIcon, 16 + bandLabelWidth + 12, 18, subtleColor, iconScale);
+
+  drawBatteryBadge();
   flushScaledFrame(1, virtualWidth, virtualHeight);
 }

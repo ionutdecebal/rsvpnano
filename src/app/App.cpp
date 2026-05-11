@@ -60,6 +60,7 @@ enum MenuItem : size_t {
   MenuChapters,
   MenuChangeBook,
   MenuFocusTimer,
+  MenuRadio,
   MenuSettings,
 #if RSVP_USB_TRANSFER_ENABLED
   MenuUsbTransfer,
@@ -123,8 +124,9 @@ constexpr size_t kSettingsPacingPunctuationIndex = 3;
 constexpr size_t kSettingsPacingResetIndex = 4;
 constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
-constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
-constexpr size_t kWifiSettingsForgetIndex = 4;
+constexpr size_t kWifiSettingsTestIndex = 3;
+constexpr size_t kWifiSettingsAutoUpdateIndex = 4;
+constexpr size_t kWifiSettingsForgetIndex = 5;
 
 constexpr size_t kBookPickerBackIndex = 0;
 constexpr size_t kChapterPickerBackIndex = 0;
@@ -162,6 +164,10 @@ constexpr const char *kPrefRecentSeq = "seq";
 constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
+constexpr const char *kPrefRadioBand = "rad_band";
+constexpr const char *kPrefRadioFmIdx = "rad_fm";
+constexpr const char *kPrefRadioAmIdx = "rad_am";
+constexpr const char *kPrefRadioVol = "rad_vol";
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -482,6 +488,7 @@ void App::begin() {
   touchInitialized_ = touch_.begin();
   audio_.begin();
   focusTimer_.begin();
+  restoreRadioPreferences();
 
 #if RSVP_USB_TRANSFER_ENABLED && RSVP_USB_TRANSFER_AUTO_START
   state_ = AppState::Booting;
@@ -531,6 +538,7 @@ void App::update(uint32_t nowMs) {
   const bool batteryChanged = updateBatteryStatus(nowMs);
   updateState(nowMs);
   updateFocusTimer(nowMs);
+  updateRadio(nowMs);
   updateReader(nowMs);
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
@@ -778,6 +786,10 @@ void App::toggleMenuFromPowerButton(uint32_t nowMs) {
     } else {
       if (isFocusTimerMenuScreen(menuScreen_)) {
         resetFocusTimer();
+      }
+      if (menuScreen_ == MenuScreen::RadioPlayer) {
+        radio_.stop();
+        saveRadioPreferences();
       }
       menuScreen_ = MenuScreen::Main;
       renderMainMenu();
@@ -1171,6 +1183,8 @@ void App::handleTouch(uint32_t nowMs) {
   if (state_ == AppState::Menu) {
     if (menuScreen_ == MenuScreen::FocusTimerSession) {
       applyFocusTimerTouch(ev, nowMs);
+    } else if (menuScreen_ == MenuScreen::RadioPlayer) {
+      applyRadioTouch(ev, nowMs);
     } else {
       applyMenuTouchGesture(ev, nowMs);
     }
@@ -1724,6 +1738,9 @@ void App::moveMenuSelection(int direction) {
       case MenuFocusTimer:
         selectedLabel = "Focus Timer";
         break;
+      case MenuRadio:
+        selectedLabel = "Radio";
+        break;
       case MenuSettings:
         selectedLabel = uiText(UiText::Settings);
         break;
@@ -1775,6 +1792,9 @@ void App::selectMenuItem(uint32_t nowMs) {
   if (menuScreen_ == MenuScreen::FocusTimerSession) {
     return;
   }
+  if (menuScreen_ == MenuScreen::RadioPlayer) {
+    return;
+  }
 
   switch (menuSelectedIndex_) {
     case MenuResume:
@@ -1796,6 +1816,9 @@ void App::selectMenuItem(uint32_t nowMs) {
       return;
     case MenuFocusTimer:
       openFocusTimer();
+      return;
+    case MenuRadio:
+      openRadio();
       return;
     case MenuSettings:
       openSettings();
@@ -1953,6 +1976,45 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
     case kWifiSettingsChooseIndex:
       scanWifiNetworks();
       return;
+    case kWifiSettingsTestIndex: {
+      const OtaUpdater::Config otaCfg = preferredOtaConfig();
+      if (otaCfg.wifiSsid.isEmpty()) {
+        display_.renderStatus("Wi-Fi", "No network saved", "");
+        delay(1200);
+        renderSettings();
+        return;
+      }
+      display_.renderProgress("Wi-Fi", "Connecting...", otaCfg.wifiSsid, 10);
+      WiFi.persistent(false);
+      WiFi.setAutoReconnect(false);
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(otaCfg.wifiSsid.c_str(), otaCfg.wifiPassword.c_str());
+      const uint32_t startMs = millis();
+      constexpr uint32_t kTestTimeoutMs = 12000;
+      bool connected = false;
+      while (millis() - startMs < kTestTimeoutMs) {
+        if (WiFi.status() == WL_CONNECTED) {
+          connected = true;
+          break;
+        }
+        const uint32_t elapsed = millis() - startMs;
+        const int progress = 10 + static_cast<int>((elapsed * 80) / kTestTimeoutMs);
+        display_.renderProgress("Wi-Fi", "Connecting...", otaCfg.wifiSsid, progress);
+        delay(200);
+      }
+      if (connected) {
+        const String ipStr = WiFi.localIP().toString();
+        display_.renderStatus("Wi-Fi", "Connected!", ipStr);
+      } else {
+        display_.renderStatus("Wi-Fi", "Connection failed", "Check password");
+      }
+      WiFi.disconnect(true, false);
+      WiFi.mode(WIFI_OFF);
+      delay(2000);
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    }
     case kWifiSettingsAutoUpdateIndex:
       preferences_.putBool(kPrefOtaAuto, !otaAutoCheckEnabled());
       rebuildSettingsMenuItems();
@@ -2450,6 +2512,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Network: " + storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
     settingsMenuItems_.push_back("Choose network");
+    settingsMenuItems_.push_back("Test connection");
     settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
     settingsMenuItems_.push_back("Forget network");
   }
@@ -3209,6 +3272,8 @@ void App::renderMenu() {
     renderFocusTimerGenres();
   } else if (menuScreen_ == MenuScreen::FocusTimerSession) {
     renderFocusTimerSession();
+  } else if (menuScreen_ == MenuScreen::RadioPlayer) {
+    renderRadioPlayer();
   } else {
     renderMainMenu();
   }
@@ -3221,6 +3286,7 @@ void App::renderMainMenu() {
   items.push_back(uiText(UiText::Chapters));
   items.push_back(uiText(UiText::Library));
   items.push_back("Focus Timer");
+  items.push_back("Radio");
   items.push_back(uiText(UiText::Settings));
 #if RSVP_USB_TRANSFER_ENABLED
   items.push_back(uiText(UiText::UsbTransfer));
@@ -3546,6 +3612,172 @@ void App::playFocusTimerCompletionCue() {
     digitalWrite(BoardConfig::PIN_LCD_BACKLIGHT, LOW);
     delay(45);
   }
+}
+
+void App::openRadio() {
+  /* release beep I2S so the Audio library can claim the port,
+     then re-configure the ES8311 codec for streaming output */
+  audio_.releaseI2s();
+  audio_.prepareCodecForStreaming();
+  menuScreen_ = MenuScreen::RadioPlayer;
+  renderRadioPlayer();
+}
+
+void App::updateRadio(uint32_t nowMs) {
+  if (state_ != AppState::Menu || menuScreen_ != MenuScreen::RadioPlayer) {
+    return;
+  }
+
+  radio_.update();
+  renderRadioPlayer();
+}
+
+void App::applyRadioTouch(const TouchEvent &event, uint32_t nowMs) {
+  if (event.phase == TouchPhase::Start) {
+    pausedTouch_.active = true;
+    pausedTouch_.startX = event.x;
+    pausedTouch_.startY = event.y;
+    pausedTouch_.lastX = event.x;
+    pausedTouch_.lastY = event.y;
+    pausedTouch_.startMs = nowMs;
+    pausedTouch_.lastMs = nowMs;
+    return;
+  }
+
+  if (!pausedTouch_.active) {
+    return;
+  }
+
+  pausedTouch_.lastX = event.x;
+  pausedTouch_.lastY = event.y;
+  pausedTouch_.lastMs = nowMs;
+
+  if (event.phase != TouchPhase::End) {
+    return;
+  }
+
+  pausedTouch_.active = false;
+
+  const int deltaX = static_cast<int>(pausedTouch_.lastX) - static_cast<int>(pausedTouch_.startX);
+  const int deltaY = static_cast<int>(pausedTouch_.lastY) - static_cast<int>(pausedTouch_.startY);
+  const int absDeltaX = abs(deltaX);
+  const int absDeltaY = abs(deltaY);
+  const bool tapLike = absDeltaX <= static_cast<int>(kTapSlopPx) &&
+                       absDeltaY <= static_cast<int>(kTapSlopPx);
+  const uint32_t holdMs = nowMs - pausedTouch_.startMs;
+
+  /* long-press toggles AM/FM band (checked before tap) */
+  if (tapLike && holdMs >= 600) {
+    radio_.toggleBand();
+    saveRadioPreferences();
+    renderRadioPlayer();
+    return;
+  }
+
+  if (tapLike) {
+    /* short tap toggles play/pause */
+    if (radio_.isPlaying()) {
+      radio_.pause();
+    } else {
+      OtaUpdater::Config otaCfg = preferredOtaConfig();
+      radio_.play(otaCfg.wifiSsid, otaCfg.wifiPassword);
+    }
+    renderRadioPlayer();
+    return;
+  }
+
+  const bool horizontalSwipe = absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx);
+  const bool verticalSwipe = absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx);
+
+  if (horizontalSwipe && absDeltaX >= static_cast<int>(kSwipeThresholdPx)) {
+    if (deltaX > 0) {
+      radio_.tuneNext();
+    } else {
+      radio_.tunePrevious();
+    }
+    saveRadioPreferences();
+    renderRadioPlayer();
+    return;
+  }
+
+  if (verticalSwipe && absDeltaY >= static_cast<int>(kSwipeThresholdPx)) {
+    if (deltaY < 0) {
+      radio_.adjustVolume(1);
+    } else {
+      radio_.adjustVolume(-1);
+    }
+    saveRadioPreferences();
+    renderRadioPlayer();
+    return;
+  }
+}
+
+void App::renderRadioPlayer() {
+  applyReaderUiOrientation();
+
+  const char *bandStr = (radio_.band() == InternetRadio::Band::FM) ? "FM" : "AM";
+
+  /* format frequency string */
+  char freqBuf[16];
+  float freq = radio_.frequency();
+  if (radio_.band() == InternetRadio::Band::FM) {
+    snprintf(freqBuf, sizeof(freqBuf), "%.1f", freq);
+  } else {
+    snprintf(freqBuf, sizeof(freqBuf), "%.0f", freq);
+  }
+
+  const char *stationName = radio_.stationName();
+
+  /* status line */
+  const char *statusStr = "";
+  switch (radio_.state()) {
+    case InternetRadio::State::Idle:
+      statusStr = "Tap to play";
+      break;
+    case InternetRadio::State::WifiConnecting:
+      statusStr = "Connecting to Wi-Fi...";
+      break;
+    case InternetRadio::State::Connecting:
+      statusStr = "Tuning in...";
+      break;
+    case InternetRadio::State::Playing:
+      statusStr = "< tune >   ^ vol `";
+      break;
+    case InternetRadio::State::Buffering:
+      statusStr = "Buffering...";
+      break;
+    case InternetRadio::State::NoCredentials:
+      statusStr = "Set Wi-Fi in Settings";
+      break;
+    case InternetRadio::State::WifiError:
+      statusStr = "Wi-Fi connect failed";
+      break;
+    case InternetRadio::State::StreamError:
+      statusStr = "Stream unavailable";
+      break;
+  }
+
+  uint8_t volPercent = static_cast<uint8_t>((static_cast<int>(radio_.volume()) * 100) / 10);
+
+  display_.renderRadioScreen(String(bandStr), String(freqBuf), String(stationName),
+                             String(statusStr), volPercent, radio_.isPlaying());
+}
+
+void App::saveRadioPreferences() {
+  preferences_.putUChar(kPrefRadioBand, static_cast<uint8_t>(radio_.band()));
+  preferences_.putUChar(kPrefRadioFmIdx, radio_.savedFmIndex());
+  preferences_.putUChar(kPrefRadioAmIdx, radio_.savedAmIndex());
+  preferences_.putUChar(kPrefRadioVol, radio_.volume());
+}
+
+void App::restoreRadioPreferences() {
+  const uint8_t band = preferences_.getUChar(kPrefRadioBand, 0);
+  const uint8_t fmIdx = preferences_.getUChar(kPrefRadioFmIdx, 0);
+  const uint8_t amIdx = preferences_.getUChar(kPrefRadioAmIdx, 0);
+  const uint8_t vol = preferences_.getUChar(kPrefRadioVol, 12);
+  radio_.restoreTuning(
+      (band == 1) ? InternetRadio::Band::AM : InternetRadio::Band::FM,
+      fmIdx, amIdx, vol);
 }
 
 bool App::scrollModeEnabled() const { return readerMode_ == ReaderMode::Scroll; }

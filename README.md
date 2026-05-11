@@ -12,6 +12,7 @@ RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at
 - Menu language selection for English, Spanish, French, German, Romanian, and Polish.
 - Chapter and paragraph-aware navigation.
 - SD card library under `/books`.
+- Internet radio with NYC-area FM/AM stations, SomaFM streams, swipe-to-tune, and volume control.
 - Web-first book conversion and SD-card library sync from the browser flasher.
 - Optional GitHub Release OTA updates over Wi-Fi with on-device network setup and touch keyboard entry.
 - USB mass-storage mode for copying books to the SD card.
@@ -227,12 +228,31 @@ Main Menu
 |     |- Back
 |     |- Network
 |     |- Choose network
+|     |- Test connection
 |     |- Auto OTA
 |     `- Forget network
 |  `- Firmware update
+|- Radio
 |- USB transfer (default USB build)
 `- Power off
 ```
+
+### Radio
+
+Open `Radio` from the main menu to start the internet radio player. The radio connects to
+Wi-Fi using the credentials saved in `Settings -> Wi-Fi` and streams audio through the
+on-board speaker.
+
+- Tap: play or pause the current station.
+- Swipe left or right: tune to the previous or next station.
+- Swipe up or down: adjust volume.
+- Long-press: toggle between FM and AM bands.
+
+FM presets include NYC-area stations (WNYC, HOT 97, Z100, KTU, WQXR, WBLS) and NPR national.
+AM presets include WNYC AM, WCBS, WINS, and several SomaFM streams.
+
+The radio, band, station, and volume selections are saved automatically and restored on next
+launch.
 
 ### Settings Reference
 
@@ -267,6 +287,7 @@ Main Menu
 
 - `Network`: shows the currently saved SSID and also acts as a shortcut into a fresh scan.
 - `Choose network`: scan nearby SSIDs and open the on-device keyboard for secure networks.
+- `Test connection`: connect to the saved network, show the result, and disconnect.
 - `Auto OTA`: check `releases/latest` during boot when Wi-Fi credentials are available.
 - `Forget network`: clear the stored Wi-Fi credentials from `Preferences`.
 
