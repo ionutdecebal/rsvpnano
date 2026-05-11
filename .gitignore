@@ -13,3 +13,4 @@ tools/*.rsvp
 *.rsvp.failed
 *.rsvp.converting
 web/firmware/*.bin
+.cache/
