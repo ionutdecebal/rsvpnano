@@ -14,3 +14,4 @@ tools/*.rsvp
 *.rsvp.converting
 web/firmware/*.bin
 .cache/
+compile_commands.json
