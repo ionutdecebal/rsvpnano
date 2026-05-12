@@ -446,6 +446,33 @@ void test_word_duration_at_scales_with_wpm(void) {
   TEST_ASSERT_TRUE(r.wordDurationMsAt(0) < base);
 }
 
+void test_word_pacing_bonus_at_is_invariant_to_wpm(void) {
+  // The pacing bonus is the WPM-independent part of the per-word duration. Changing WPM must not
+  // change the bonus, which lets us cache it once per book.
+  ReadingLoop r = makeReader(300, {"This", "is,", "honestly,", "information.", "Then"});
+  uint32_t baselineBonuses[5];
+  for (size_t i = 0; i < 5; ++i) {
+    baselineBonuses[i] = r.wordPacingBonusMsAt(i);
+    TEST_ASSERT_EQUAL_UINT32(r.wordDurationMsAt(i) - r.wordIntervalMs(), baselineBonuses[i]);
+  }
+
+  r.setWpm(600);
+  for (size_t i = 0; i < 5; ++i) {
+    TEST_ASSERT_EQUAL_UINT32(baselineBonuses[i], r.wordPacingBonusMsAt(i));
+  }
+
+  r.setWpm(150);
+  for (size_t i = 0; i < 5; ++i) {
+    TEST_ASSERT_EQUAL_UINT32(baselineBonuses[i], r.wordPacingBonusMsAt(i));
+  }
+}
+
+void test_word_pacing_bonus_at_out_of_range_returns_zero(void) {
+  ReadingLoop r = makeReader(300, {"a", "b"});
+  TEST_ASSERT_EQUAL_UINT32(0u, r.wordPacingBonusMsAt(2));
+  TEST_ASSERT_EQUAL_UINT32(0u, r.wordPacingBonusMsAt(99));
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -515,6 +542,8 @@ int main(void) {
   RUN_TEST(test_word_duration_at_out_of_range_returns_zero);
   RUN_TEST(test_word_duration_at_sum_uses_pacing_bonuses);
   RUN_TEST(test_word_duration_at_scales_with_wpm);
+  RUN_TEST(test_word_pacing_bonus_at_is_invariant_to_wpm);
+  RUN_TEST(test_word_pacing_bonus_at_out_of_range_returns_zero);
 
   return UNITY_END();
 }

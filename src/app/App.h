@@ -344,11 +344,10 @@ class App {
   std::vector<String> chapterMenuItems_;
   std::vector<ChapterMarker> chapterMarkers_;
   std::vector<size_t> paragraphStarts_;
-  std::vector<uint32_t> wordPrefixSumMs_;
+  std::vector<uint32_t> wordBonusPrefixSumMs_;
   bool timeEstimateCacheValid_ = false;
   bool accurateTimeEstimateEnabled_ = true;
   bool pacingCacheDirty_ = false;
-  uint32_t pacingCacheDirtyAtMs_ = 0;
   std::vector<DisplayManager::ContextWord> contextPreviewWords_;
   std::vector<WifiNetworkInfo> wifiNetworks_;
   std::vector<TextEntryButton> textEntryButtons_;

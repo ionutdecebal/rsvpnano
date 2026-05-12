@@ -540,11 +540,6 @@ void App::update(uint32_t nowMs) {
   updateWpmFeedback(nowMs);
   maybeSaveReadingPosition(nowMs);
 
-  if (pacingCacheDirty_ && state_ != AppState::Menu &&
-      nowMs - pacingCacheDirtyAtMs_ >= 500) {
-    flushPendingTimeEstimateRebuild();
-  }
-
   if (batteryChanged && (state_ == AppState::Paused || state_ == AppState::Playing)) {
     renderActiveReader(nowMs);
   } else if (batteryChanged && state_ == AppState::Menu) {
@@ -595,7 +590,9 @@ void App::setState(AppState nextState, uint32_t nowMs) {
   }
 
   const AppState previousState = state_;
-  flushPendingTimeEstimateRebuild();
+  if (previousState == AppState::Menu && nextState != AppState::Menu) {
+    flushPendingTimeEstimateRebuild();
+  }
 
   if (nextState != AppState::Paused) {
     pausedTouch_.active = false;
@@ -1314,8 +1311,6 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     const int wpmDelta = (deltaY < 0) ? 1 : -1;
     reader_.adjustWpm(wpmDelta);
     preferences_.putUShort(kPrefWpm, reader_.wpm());
-    pacingCacheDirty_ = true;
-    pacingCacheDirtyAtMs_ = nowMs;
     renderWpmFeedback(nowMs);
     Serial.printf("[app] WPM=%u interval=%lu ms\n", reader_.wpm(),
                   static_cast<unsigned long>(reader_.wordIntervalMs()));
@@ -3494,18 +3489,20 @@ uint32_t App::estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex
     return 0;
   }
 
+  const uint32_t baseMs = static_cast<uint32_t>(
+      (static_cast<uint64_t>(endIndex - startIndex) * 60000ULL) /
+      static_cast<uint64_t>(reader_.wpm()));
+
   if (!accurateTimeEstimateEnabled_ || !timeEstimateCacheValid_) {
-    const size_t remainingWords = endIndex - startIndex;
-    return static_cast<uint32_t>((static_cast<uint64_t>(remainingWords) * 60000ULL) /
-                                 static_cast<uint64_t>(reader_.wpm()));
+    return baseMs;
   }
 
-  return wordPrefixSumMs_[endIndex] - wordPrefixSumMs_[startIndex];
+  return baseMs + wordBonusPrefixSumMs_[endIndex] - wordBonusPrefixSumMs_[startIndex];
 }
 
 void App::invalidateTimeEstimateCache() {
   timeEstimateCacheValid_ = false;
-  std::vector<uint32_t>().swap(wordPrefixSumMs_);
+  std::vector<uint32_t>().swap(wordBonusPrefixSumMs_);
 }
 
 void App::rebuildTimeEstimateCache() {
@@ -3519,17 +3516,17 @@ void App::rebuildTimeEstimateCache() {
     return;
   }
 
-  wordPrefixSumMs_.assign(n + 1, 0);
+  wordBonusPrefixSumMs_.assign(n + 1, 0);
   uint32_t running = 0;
   const uint32_t startMs = millis();
   for (size_t i = 0; i < n; ++i) {
-    wordPrefixSumMs_[i] = running;
-    running += reader_.wordDurationMsAt(i);
+    wordBonusPrefixSumMs_[i] = running;
+    running += reader_.wordPacingBonusMsAt(i);
   }
-  wordPrefixSumMs_[n] = running;
+  wordBonusPrefixSumMs_[n] = running;
   timeEstimateCacheValid_ = true;
 
-  Serial.printf("[time-est] cached %u words total=%lums took=%lums\n",
+  Serial.printf("[time-est] cached %u words bonus=%lums took=%lums\n",
                 static_cast<unsigned int>(n), static_cast<unsigned long>(running),
                 static_cast<unsigned long>(millis() - startMs));
 }

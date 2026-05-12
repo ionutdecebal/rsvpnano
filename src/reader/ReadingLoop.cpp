@@ -529,10 +529,10 @@ uint16_t punctuationPausePercentForWord(const String &word, bool nextWordStartsL
   }
 }
 
-uint32_t durationForWord(const String &word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
-                         const ReadingLoop::PacingConfig &config) {
-  if (word.isEmpty() || baseIntervalMs == 0) {
-    return baseIntervalMs;
+uint32_t pacingBonusMsForWord(const String &word, bool nextWordStartsLowercase,
+                              const ReadingLoop::PacingConfig &config) {
+  if (word.isEmpty()) {
+    return 0;
   }
 
   uint32_t totalBonusMs = 0;
@@ -546,8 +546,15 @@ uint32_t durationForWord(const String &word, bool nextWordStartsLowercase, uint3
       scaledDelayMs(scaledPercent(punctuationPausePercentForWord(word, nextWordStartsLowercase),
                                   config.punctuationScalePercent),
                     config.punctuationDelayMs);
+  return totalBonusMs;
+}
 
-  return baseIntervalMs + totalBonusMs;
+uint32_t durationForWord(const String &word, bool nextWordStartsLowercase, uint32_t baseIntervalMs,
+                         const ReadingLoop::PacingConfig &config) {
+  if (baseIntervalMs == 0) {
+    return 0;
+  }
+  return baseIntervalMs + pacingBonusMsForWord(word, nextWordStartsLowercase, config);
 }
 
 }  // namespace
@@ -618,6 +625,17 @@ uint32_t ReadingLoop::wordDurationMsAt(size_t index) const {
   const String word = wordAt(index);
   const bool nextLowercase = nextWordStartsLowercaseAt(index);
   return durationForWord(word, nextLowercase, wordIntervalMs(), pacingConfig_);
+}
+
+uint32_t ReadingLoop::wordPacingBonusMsAt(size_t index) const {
+  const size_t count = wordCount();
+  if (count == 0 || index >= count) {
+    return 0;
+  }
+
+  const String word = wordAt(index);
+  const bool nextLowercase = nextWordStartsLowercaseAt(index);
+  return pacingBonusMsForWord(word, nextLowercase, pacingConfig_);
 }
 
 uint32_t ReadingLoop::elapsedInCurrentWordMs(uint32_t nowMs) const {
