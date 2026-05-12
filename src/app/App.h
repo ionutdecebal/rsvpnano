@@ -228,7 +228,8 @@ class App {
   void wakeFromSleep();
   bool restoreSavedBook(uint32_t nowMs);
   void saveReadingPosition(bool force = false);
-  bool loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback = false);
+  bool loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback = false,
+                       bool allowStorageFallback = false, bool allowEpubConversion = true);
   String bookPositionKey(const String &bookPath) const;
   String bookWordCountKey(const String &bookPath) const;
   String bookRecentKey(const String &bookPath) const;

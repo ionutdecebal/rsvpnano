@@ -492,13 +492,16 @@ void App::begin() {
 
   display_.renderProgress("SD", "Loading books", "Use SD converter for EPUB", 0);
   const bool storageReady = storage_.begin();
-  storage_.listBooks();
   const uint16_t savedWpm = preferences_.getUShort(kPrefWpm, reader_.wpm());
   reader_.setWpm(savedWpm);
 
+  if (storageReady) {
+    storage_.refreshBooks();
+  }
+
   if (storageReady && restoreSavedBook(bootStartedMs_)) {
     usingStorageBook_ = true;
-  } else if (storageReady && loadBookAtIndex(0, bootStartedMs_)) {
+  } else if (storageReady && loadBookAtIndex(0, bootStartedMs_, false, true, false)) {
     usingStorageBook_ = true;
   } else {
     usingStorageBook_ = false;
@@ -2754,9 +2757,14 @@ void App::selectBookPickerItem(uint32_t nowMs) {
   }
 
   const size_t bookIndex = bookPickerBookIndices_[rowIndex];
+  const String previousBookPath = currentBookPath_;
   saveReadingPosition(true);
   if (!loadBookAtIndex(bookIndex, nowMs)) {
     Serial.println("[book-picker] Failed to load selected book");
+    const int previousBookIndex = findBookIndexByPath(previousBookPath);
+    if (previousBookIndex >= 0) {
+      loadBookAtIndex(static_cast<size_t>(previousBookIndex), nowMs);
+    }
     renderBookPicker();
     return;
   }
@@ -2910,7 +2918,7 @@ void App::exitUsbTransfer(uint32_t nowMs) {
     if (refreshedBookIndex >= 0) {
       currentBookIndex_ = static_cast<size_t>(refreshedBookIndex);
     } else if (storage_.bookCount() > 0) {
-      loadBookAtIndex(0, nowMs);
+      loadBookAtIndex(0, nowMs, false, true, false);
     }
   } else {
     Serial.println("[app] SD remount failed after USB transfer");
@@ -3001,8 +3009,12 @@ void App::wakeFromSleep() {
 
   touchInitialized_ = touch_.begin();
   const bool storageReady = storage_.begin();
-  if (storageReady) {
-    storage_.listBooks();
+  if (storageReady && !currentBookPath_.isEmpty()) {
+    storage_.refreshBooks();
+    const int refreshedBookIndex = findBookIndexByPath(currentBookPath_);
+    if (refreshedBookIndex >= 0) {
+      currentBookIndex_ = static_cast<size_t>(refreshedBookIndex);
+    }
   }
 }
 
@@ -3018,7 +3030,7 @@ bool App::restoreSavedBook(uint32_t nowMs) {
     return false;
   }
 
-  if (!loadBookAtIndex(static_cast<size_t>(bookIndex), nowMs, true)) {
+  if (!loadBookAtIndex(static_cast<size_t>(bookIndex), nowMs, true, false, false)) {
     return false;
   }
 
@@ -3049,11 +3061,26 @@ void App::saveReadingPosition(bool force) {
                 currentBookPath_.c_str());
 }
 
-bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback) {
+bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback,
+                          bool allowStorageFallback, bool allowEpubConversion) {
+  const String requestedPath = storage_.bookPath(index);
+  const bool switchingStorageBook =
+      usingStorageBook_ && !currentBookPath_.isEmpty() && !requestedPath.isEmpty() &&
+      requestedPath != currentBookPath_;
+  if (switchingStorageBook) {
+    reader_.setWords(std::vector<String>(), nowMs);
+    std::vector<ChapterMarker>().swap(chapterMarkers_);
+    std::vector<size_t>().swap(paragraphStarts_);
+    std::vector<DisplayManager::ContextWord>().swap(contextPreviewWords_);
+    invalidateContextPreviewWindow();
+    Serial.printf("[app] released current book before loading %s\n", requestedPath.c_str());
+  }
+
   BookContent book;
   String loadedPath;
   size_t loadedIndex = index;
-  if (!storage_.loadBookContent(index, book, &loadedPath, &loadedIndex)) {
+  if (!storage_.loadBookContent(index, book, &loadedPath, &loadedIndex, allowStorageFallback,
+                                allowEpubConversion)) {
     return false;
   }
 

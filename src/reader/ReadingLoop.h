@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <vector>
 
+#include "reader/BookContent.h"
+
 class ReadingLoop {
  public:
   struct PacingConfig {
@@ -17,6 +19,7 @@ class ReadingLoop {
   void begin(uint32_t nowMs);
   void start(uint32_t nowMs);
   bool update(uint32_t nowMs, bool allowCatchUp = true);
+  void setWords(WordStore words, uint32_t nowMs);
   void setWords(std::vector<String> words, uint32_t nowMs);
   void scrub(int steps);
   void seekTo(size_t wordIndex);
@@ -51,5 +54,5 @@ class ReadingLoop {
   uint16_t wpm_ = 300;
   PacingConfig pacingConfig_;
   String currentWord_;
-  std::vector<String> loadedWords_;
+  WordStore loadedWords_;
 };
