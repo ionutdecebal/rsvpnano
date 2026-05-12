@@ -391,6 +391,62 @@ void test_word_at_returns_correct_word(void) {
 }
 
 // ---------------------------------------------------------------------------
+// wordDurationMsAt: pacing-aware per-word duration for time estimates
+// ---------------------------------------------------------------------------
+
+void test_word_duration_at_matches_current_after_seek(void) {
+  ReadingLoop r = makeReader(300, {"This", "is", "fine.", "Then", "done."});
+  for (size_t i = 0; i < 5; ++i) {
+    r.seekTo(i);
+    TEST_ASSERT_EQUAL_UINT32(r.currentWordDurationMs(), r.wordDurationMsAt(i));
+  }
+}
+
+void test_word_duration_at_out_of_range_returns_zero(void) {
+  ReadingLoop r = makeReader(300, {"a", "b"});
+  TEST_ASSERT_EQUAL_UINT32(0u, r.wordDurationMsAt(2));
+  TEST_ASSERT_EQUAL_UINT32(0u, r.wordDurationMsAt(99));
+}
+
+void test_word_duration_at_sum_uses_pacing_bonuses(void) {
+  // Phrase mixes a comma pause, a sentence pause, and a long word so the pacing-aware sum is
+  // strictly larger than the naive uniform-pacing estimate.
+  ReadingLoop r = makeReader(300, {"This", "is,", "honestly,", "information.", "Then"});
+
+  uint32_t pacingAwareSum = 0;
+  for (size_t i = 0; i < 5; ++i) {
+    pacingAwareSum += r.wordDurationMsAt(i);
+  }
+  const uint32_t naiveSum = 5u * r.wordIntervalMs();
+  TEST_ASSERT_TRUE(pacingAwareSum > naiveSum);
+
+  // Recompute manually:
+  //   "This"          → 200 (base)
+  //   "is,"           → 200 + comma(45% of 200) = 290
+  //   "honestly,"     → readable=8, tier1 extra=2→12%; syllables h,o(1),n,e(2),s,t,l,y(3 if y vowel?
+  //                       y is treated as vowel by LatinText::isVowel → groups=3, but lettersOnly="honestly"
+  //                       ends 'y' (not 'e'), no decrement → groups=3 → syll bonus=(3-2)*10=10%.
+  //                       length 12% + complexity 10% + comma 45% = 67% → 200 + 134 = 334.
+  //   "information."  → next "Then" (uppercase) → sentence pause +135%.
+  //                       length: readable=11. tier1 extra=5→30, tier2 extra=1→9 = 39%.
+  //                       complexity: syllables=4, (4-2)*10=20% → length 39 + complexity 20 = 59%.
+  //                       total = 59% + 135% = 194% → 200 + 388 = 588.
+  //   "Then"          → 200 (base).
+  // Expected = 200 + 290 + 334 + 588 + 200 = 1612.
+  TEST_ASSERT_EQUAL_UINT32(1612u, pacingAwareSum);
+}
+
+void test_word_duration_at_scales_with_wpm(void) {
+  ReadingLoop r = makeReader(300, {"This", "is,", "fine."});
+  const uint32_t base = r.wordDurationMsAt(0);
+
+  // wordIntervalMs at 600 is half of 300; punctuation bonuses are absolute (ms), so faster WPM
+  // produces a strictly smaller per-word duration.
+  r.setWpm(600);
+  TEST_ASSERT_TRUE(r.wordDurationMsAt(0) < base);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -454,6 +510,11 @@ int main(void) {
   RUN_TEST(test_rewind_sentence_ignores_abbreviation_periods);
 
   RUN_TEST(test_word_at_returns_correct_word);
+
+  RUN_TEST(test_word_duration_at_matches_current_after_seek);
+  RUN_TEST(test_word_duration_at_out_of_range_returns_zero);
+  RUN_TEST(test_word_duration_at_sum_uses_pacing_bonuses);
+  RUN_TEST(test_word_duration_at_scales_with_wpm);
 
   return UNITY_END();
 }

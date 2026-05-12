@@ -120,7 +120,8 @@ constexpr size_t kSettingsDisplayLanguageIndex = 5;
 constexpr size_t kSettingsPacingLongWordsIndex = 1;
 constexpr size_t kSettingsPacingComplexityIndex = 2;
 constexpr size_t kSettingsPacingPunctuationIndex = 3;
-constexpr size_t kSettingsPacingResetIndex = 4;
+constexpr size_t kSettingsPacingTimeEstimateIndex = 4;
+constexpr size_t kSettingsPacingResetIndex = 5;
 constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
@@ -154,6 +155,7 @@ constexpr const char *kPrefLegacyPacingPunctuation = "pace_pnc";
 constexpr const char *kPrefPacingLongMs = "pace_lms";
 constexpr const char *kPrefPacingComplexMs = "pace_cms";
 constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
+constexpr const char *kPrefAccurateTime = "time_est_a";
 constexpr const char *kPrefTypographyTracking = "type_trk";
 constexpr const char *kPrefTypographyAnchor = "type_anc";
 constexpr const char *kPrefTypographyGuideWidth = "type_wid";
@@ -439,6 +441,7 @@ void App::begin() {
       loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
   pacingPunctuationDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
+  accurateTimeEstimateEnabled_ = preferences_.getBool(kPrefAccurateTime, true);
   typographyConfig_ = defaultTypographyConfig();
   typographyConfig_.typeface = readerTypefaceFromSetting(
       preferences_.getUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface)));
@@ -508,6 +511,7 @@ void App::begin() {
     currentBookTitle_ = "Demo";
     reader_.begin(bootStartedMs_);
     invalidateContextPreviewWindow();
+    rebuildTimeEstimateCache();
     Serial.println("[app] using built-in demo text");
   }
 
@@ -1304,6 +1308,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     const int wpmDelta = (deltaY < 0) ? 1 : -1;
     reader_.adjustWpm(wpmDelta);
     preferences_.putUShort(kPrefWpm, reader_.wpm());
+    rebuildTimeEstimateCache();
     renderWpmFeedback(nowMs);
     Serial.printf("[app] WPM=%u interval=%lu ms\n", reader_.wpm(),
                   static_cast<unsigned long>(reader_.wordIntervalMs()));
@@ -1914,6 +1919,17 @@ void App::selectSettingsItem(uint32_t nowMs) {
           pacingPunctuationDelayMs_, kPacingDelayMinMs, kPacingDelayMaxMs, kPacingDelayStepMs));
       preferences_.putUShort(kPrefPacingPunctuationMs, pacingPunctuationDelayMs_);
       break;
+    case kSettingsPacingTimeEstimateIndex:
+      accurateTimeEstimateEnabled_ = !accurateTimeEstimateEnabled_;
+      preferences_.putBool(kPrefAccurateTime, accurateTimeEstimateEnabled_);
+      if (accurateTimeEstimateEnabled_) {
+        rebuildTimeEstimateCache();
+      } else {
+        invalidateTimeEstimateCache();
+      }
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
     case kSettingsPacingResetIndex:
       pacingLongWordDelayMs_ = kDefaultPacingDelayMs;
       pacingComplexWordDelayMs_ = kDefaultPacingDelayMs;
@@ -2445,6 +2461,7 @@ void App::rebuildSettingsMenuItems() {
                                  pacingDelayLabel(pacingComplexWordDelayMs_));
     settingsMenuItems_.push_back(uiText(UiText::Punctuation) + ": " +
                                  pacingDelayLabel(pacingPunctuationDelayMs_));
+    settingsMenuItems_.push_back(uiText(UiText::TimeEstimate) + ": " + timeEstimateModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::ResetPacing));
   } else if (menuScreen_ == MenuScreen::WifiSettings) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
@@ -2470,6 +2487,7 @@ void App::applyPacingSettings() {
                 static_cast<unsigned int>(pacingLongWordDelayMs_),
                 static_cast<unsigned int>(pacingComplexWordDelayMs_),
                 static_cast<unsigned int>(pacingPunctuationDelayMs_));
+  rebuildTimeEstimateCache();
 }
 
 OtaUpdater::Config App::preferredOtaConfig() {
@@ -3061,6 +3079,7 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPosition
   paragraphStarts_ = std::move(book.paragraphStarts);
   reader_.setWords(std::move(book.words), nowMs);
   invalidateContextPreviewWindow();
+  rebuildTimeEstimateCache();
   currentBookIndex_ = loadedIndex;
   currentBookPath_ = loadedPath;
   currentBookTitle_ = book.title.isEmpty() ? displayNameForPath(loadedPath) : book.title;
@@ -3445,19 +3464,118 @@ String App::currentFooterMetricLabel() const {
 
 uint32_t App::estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex) const {
   const size_t wordCount = reader_.wordCount();
-  if (wordCount == 0) {
+  if (wordCount == 0 || reader_.wpm() == 0) {
     return 0;
   }
 
-  startIndex = std::min(startIndex, wordCount - 1);
+  startIndex = std::min(startIndex, wordCount);
   endIndex = std::min(endIndex, wordCount);
   if (endIndex <= startIndex) {
     return 0;
   }
 
-  const size_t remainingWords = endIndex - startIndex;
-  return static_cast<uint32_t>((static_cast<uint64_t>(remainingWords) * 60000ULL) /
-                               static_cast<uint64_t>(reader_.wpm()));
+  if (!accurateTimeEstimateEnabled_ || !timeEstimateCacheValid_) {
+    const size_t remainingWords = endIndex - startIndex;
+    return static_cast<uint32_t>((static_cast<uint64_t>(remainingWords) * 60000ULL) /
+                                 static_cast<uint64_t>(reader_.wpm()));
+  }
+
+  const size_t curChapter = currentChapterIndex();
+  const size_t curChapterEnd = (curChapter + 1 < chapterMarkers_.size())
+                                   ? chapterMarkers_[curChapter + 1].wordIndex
+                                   : wordCount;
+
+  if (endIndex <= curChapterEnd) {
+    return pacingAwareDurationMsBetween(startIndex, endIndex);
+  }
+
+  uint32_t total = pacingAwareDurationMsBetween(startIndex, curChapterEnd);
+  for (size_t c = curChapter + 1; c < chapterDurationsMs_.size(); ++c) {
+    const size_t chapterStart = chapterMarkers_[c].wordIndex;
+    const size_t chapterEndIdx = (c + 1 < chapterMarkers_.size())
+                                     ? chapterMarkers_[c + 1].wordIndex
+                                     : wordCount;
+    if (chapterStart >= endIndex) {
+      break;
+    }
+    if (chapterEndIdx <= endIndex) {
+      total += chapterDurationsMs_[c];
+    } else {
+      total += pacingAwareDurationMsBetween(chapterStart, endIndex);
+      break;
+    }
+  }
+  return total;
+}
+
+uint32_t App::pacingAwareDurationMsBetween(size_t fromIndex, size_t endIndex) const {
+  const size_t n = reader_.wordCount();
+  if (n == 0) {
+    return 0;
+  }
+  fromIndex = std::min(fromIndex, n);
+  endIndex = std::min(endIndex, n);
+  if (endIndex <= fromIndex) {
+    return 0;
+  }
+  uint32_t total = 0;
+  for (size_t i = fromIndex; i < endIndex; ++i) {
+    total += reader_.wordDurationMsAt(i);
+  }
+  return total;
+}
+
+void App::invalidateTimeEstimateCache() {
+  timeEstimateCacheValid_ = false;
+  chapterDurationsMs_.clear();
+  bookDurationMs_ = 0;
+}
+
+void App::rebuildTimeEstimateCache() {
+  invalidateTimeEstimateCache();
+  if (!accurateTimeEstimateEnabled_) {
+    return;
+  }
+
+  const size_t n = reader_.wordCount();
+  if (n == 0) {
+    return;
+  }
+
+  const size_t chapterCount = std::max<size_t>(1, chapterMarkers_.size());
+  chapterDurationsMs_.assign(chapterCount, 0);
+
+  size_t chapterIdx = 0;
+  size_t chapterEnd = (chapterMarkers_.size() > 1) ? chapterMarkers_[1].wordIndex : n;
+  uint32_t acc = 0;
+  const uint32_t startMs = millis();
+  for (size_t i = 0; i < n; ++i) {
+    while (i >= chapterEnd && chapterIdx + 1 < chapterDurationsMs_.size()) {
+      chapterDurationsMs_[chapterIdx] = acc;
+      ++chapterIdx;
+      acc = 0;
+      chapterEnd = (chapterIdx + 1 < chapterMarkers_.size())
+                       ? chapterMarkers_[chapterIdx + 1].wordIndex
+                       : n;
+    }
+    acc += reader_.wordDurationMsAt(i);
+  }
+  chapterDurationsMs_[chapterIdx] = acc;
+
+  for (uint32_t d : chapterDurationsMs_) {
+    bookDurationMs_ += d;
+  }
+  timeEstimateCacheValid_ = true;
+
+  Serial.printf("[time-est] cached %u chapters total=%lums took=%lums\n",
+                static_cast<unsigned int>(chapterDurationsMs_.size()),
+                static_cast<unsigned long>(bookDurationMs_),
+                static_cast<unsigned long>(millis() - startMs));
+}
+
+String App::timeEstimateModeLabel() const {
+  return uiText(accurateTimeEstimateEnabled_ ? UiText::TimeEstimateAccurate
+                                             : UiText::TimeEstimateFast);
 }
 
 String App::formatReadingTimeRemaining(uint32_t remainingMs) const {

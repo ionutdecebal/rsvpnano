@@ -34,6 +34,7 @@ class ReadingLoop {
   uint16_t wpm() const;
   uint32_t wordIntervalMs() const;
   uint32_t currentWordDurationMs() const;
+  uint32_t wordDurationMsAt(size_t index) const;
   uint32_t elapsedInCurrentWordMs(uint32_t nowMs) const;
   bool currentWordEndsSentence() const;
   bool atEnd() const;

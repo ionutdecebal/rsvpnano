@@ -66,6 +66,9 @@ enum class UiText : uint8_t {
   Standard,
   RsvpMode,
   ScrollMode,
+  TimeEstimate,
+  TimeEstimateAccurate,
+  TimeEstimateFast,
 };
 
 namespace Localization {
@@ -211,6 +214,12 @@ inline const char *text(UiLanguage language, UiText key) {
           return "RSVP";
         case UiText::ScrollMode:
           return "Scroll pagina";
+        case UiText::TimeEstimate:
+          return "Tiempo restante";
+        case UiText::TimeEstimateAccurate:
+          return "Preciso";
+        case UiText::TimeEstimateFast:
+          return "Rapido";
       }
       break;
     case UiLanguage::French:
@@ -321,6 +330,12 @@ inline const char *text(UiLanguage language, UiText key) {
           return "RSVP";
         case UiText::ScrollMode:
           return "Defilement page";
+        case UiText::TimeEstimate:
+          return "Temps restant";
+        case UiText::TimeEstimateAccurate:
+          return "Precis";
+        case UiText::TimeEstimateFast:
+          return "Rapide";
       }
       break;
     case UiLanguage::German:
@@ -431,6 +446,12 @@ inline const char *text(UiLanguage language, UiText key) {
           return "RSVP";
         case UiText::ScrollMode:
           return "Seiten-Scroll";
+        case UiText::TimeEstimate:
+          return "Restzeit";
+        case UiText::TimeEstimateAccurate:
+          return "Genau";
+        case UiText::TimeEstimateFast:
+          return "Schnell";
       }
       break;
     case UiLanguage::Romanian:
@@ -541,6 +562,12 @@ inline const char *text(UiLanguage language, UiText key) {
           return "RSVP";
         case UiText::ScrollMode:
           return "Derulare pagina";
+        case UiText::TimeEstimate:
+          return "Timp ramas";
+        case UiText::TimeEstimateAccurate:
+          return "Exact";
+        case UiText::TimeEstimateFast:
+          return "Rapid";
       }
       break;
     case UiLanguage::Polish:
@@ -651,6 +678,12 @@ inline const char *text(UiLanguage language, UiText key) {
           return "RSVP";
         case UiText::ScrollMode:
           return "Scroll strony";
+        case UiText::TimeEstimate:
+          return "Pozostaly czas";
+        case UiText::TimeEstimateAccurate:
+          return "Dokladny";
+        case UiText::TimeEstimateFast:
+          return "Szybki";
       }
       break;
     case UiLanguage::English:
@@ -762,6 +795,12 @@ inline const char *text(UiLanguage language, UiText key) {
           return "RSVP";
         case UiText::ScrollMode:
           return "Page scroll";
+        case UiText::TimeEstimate:
+          return "Time estimate";
+        case UiText::TimeEstimateAccurate:
+          return "Accurate";
+        case UiText::TimeEstimateFast:
+          return "Fast";
       }
       break;
   }
