@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <vector>
 
+#include "reader/WordStore.h"
+
 struct ChapterMarker {
   String title;
   size_t wordIndex = 0;
@@ -11,7 +13,7 @@ struct ChapterMarker {
 struct BookContent {
   String title;
   String author;
-  std::vector<String> words;
+  WordStore words;
   std::vector<ChapterMarker> chapters;
   std::vector<size_t> paragraphStarts;
 

@@ -241,7 +241,7 @@ bool fileExistsAndHasBytes(const String &path) {
 
 bool hasCurrentEpubCache(const String &epubPath) {
   const String rsvpPath = rsvpCachePathForEpub(epubPath);
-  return fileExistsAndHasBytes(rsvpPath) && EpubConverter::isCurrentCache(rsvpPath);
+  return fileExistsAndHasBytes(rsvpPath);
 }
 
 bool markerExists(const String &path) {
@@ -302,13 +302,10 @@ std::vector<String> collectBookPaths() {
         entry = dir.openNextFile();
         continue;
       }
-      const bool staleGeneratedRsvp =
-          hasRsvpExtension(path) && fileExistsAndHasBytes(epubSiblingPathForRsvp(path)) &&
-          !EpubConverter::isCurrentCache(path);
       const bool readableText = hasTextExtension(path) && !hasRsvpSibling(path);
       const bool pendingEpub =
           RSVP_ON_DEVICE_EPUB_CONVERSION && hasEpubExtension(path) && !hasCurrentEpubCache(path);
-      if ((!staleGeneratedRsvp && hasRsvpExtension(path)) || readableText || pendingEpub) {
+      if (hasRsvpExtension(path) || readableText || pendingEpub) {
         bookPaths.push_back(path);
       }
     }
@@ -1061,7 +1058,7 @@ String normalizeDisplayText(const String &text) {
   return collapsed;
 }
 
-void pushCleanWord(String token, std::vector<String> &words) {
+void pushCleanWord(String token, WordStore &words) {
   trimAsciiWhitespace(token);
 
   if (token.length() >= 3 && static_cast<uint8_t>(token[0]) == 0xEF &&
@@ -1081,7 +1078,7 @@ void pushCleanWord(String token, std::vector<String> &words) {
   }
 
   if (!token.isEmpty() && hasAlphaNumeric) {
-    words.push_back(token);
+    words.add(std::move(token));
   }
 }
 
@@ -1159,7 +1156,7 @@ String directiveValue(const String &line, const char *directive) {
   return normalizeDisplayText(value);
 }
 
-bool appendLineWords(const String &line, std::vector<String> &words) {
+bool appendLineWords(const String &line, WordStore &words) {
   const String normalizedLine = normalizeDisplayText(line);
   String currentWord;
 
@@ -1343,8 +1340,6 @@ bool StorageManager::begin() {
     if (mounted_) {
       const uint64_t sizeMb = SD_MMC.cardSize() / (1024ULL * 1024ULL);
       Serial.printf("[storage] SD initialized (%llu MB) at %d kHz\n", sizeMb, frequencyKhz);
-      notifyStatus("SD", "Scanning books", "EPUB converts on open", 10);
-      refreshBookPaths();
       return true;
     }
   }
@@ -1373,7 +1368,9 @@ void StorageManager::listBooks() {
     return;
   }
 
-  refreshBookPaths();
+  if (bookPaths_.empty()) {
+    refreshBookPaths();
+  }
   if (bookPaths_.empty()) {
     Serial.println("[storage] No readable .rsvp, .txt, or .epub books found under /books");
     return;
@@ -1399,8 +1396,8 @@ void StorageManager::refreshBooks() {
   refreshBookPaths();
 }
 
-bool StorageManager::loadFirstBookWords(std::vector<String> &words, String *loadedPath) {
-  return loadBookWords(0, words, loadedPath);
+bool StorageManager::loadFirstBookWords(WordStore &words, String *loadedPath) {
+  return loadBookWords(0, words, loadedPath, nullptr, true, false);
 }
 
 size_t StorageManager::bookCount() const { return bookPaths_.size(); }
@@ -1505,7 +1502,8 @@ bool StorageManager::ensureEpubConverted(const String &epubPath, String &rsvpPat
 }
 
 bool StorageManager::loadBookContent(size_t index, BookContent &book, String *loadedPath,
-                                     size_t *loadedIndex) {
+                                     size_t *loadedIndex, bool allowFallback,
+                                     bool allowEpubConversion) {
   book.clear();
 
   if (!mounted_) {
@@ -1529,14 +1527,25 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
     return false;
   }
 
-  for (size_t offset = 0; offset < bookPaths_.size(); ++offset) {
+  const String requestedPath = bookPaths_[index];
+  const size_t attempts = allowFallback ? bookPaths_.size() : 1;
+  for (size_t offset = 0; offset < attempts; ++offset) {
     const size_t candidateIndex = (index + offset) % bookPaths_.size();
     String path = bookPaths_[candidateIndex];
     size_t parsedIndex = candidateIndex;
 
     if (hasEpubExtension(path)) {
+      if (!allowEpubConversion) {
+        book.clear();
+        continue;
+      }
+
       String rsvpPath;
       if (!ensureEpubConverted(path, rsvpPath)) {
+        if (allowFallback) {
+          book.clear();
+          continue;
+        }
         return false;
       }
 
@@ -1545,6 +1554,10 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
       if (convertedIndex < 0) {
         Serial.printf("[storage] Converted RSVP not found in refreshed library: %s\n",
                       rsvpPath.c_str());
+        if (allowFallback) {
+          book.clear();
+          continue;
+        }
         return false;
       }
 
@@ -1581,14 +1594,21 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
     entry.close();
   }
 
-  Serial.println("[storage] No readable book files found under /books");
+  if (allowFallback) {
+    Serial.println("[storage] No readable book files found under /books");
+  } else {
+    Serial.printf("[storage] Selected book is not readable: %s\n",
+                  requestedPath.c_str());
+  }
   return false;
 }
 
-bool StorageManager::loadBookWords(size_t index, std::vector<String> &words, String *loadedPath,
-                                   size_t *loadedIndex) {
+bool StorageManager::loadBookWords(size_t index, WordStore &words, String *loadedPath,
+                                   size_t *loadedIndex, bool allowFallback,
+                                   bool allowEpubConversion) {
   BookContent book;
-  if (!loadBookContent(index, book, loadedPath, loadedIndex)) {
+  if (!loadBookContent(index, book, loadedPath, loadedIndex, allowFallback,
+                       allowEpubConversion)) {
     words.clear();
     return false;
   }
@@ -1627,13 +1647,18 @@ void StorageManager::refreshBookPaths() {
 
 bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
   book.clear();
-  book.words.reserve(file.size() / 6);
+  constexpr size_t kInitialReserveWordLimit = 300000;
+  const size_t estimatedWords = static_cast<size_t>(file.size() / 8);
+  const size_t reserveWords =
+      hasBookWordLimit() ? std::min(estimatedWords, kMaxBookWords) : estimatedWords;
+  book.words.reserve(std::min(reserveWords, kInitialReserveWordLimit), static_cast<size_t>(file.size()));
   String line;
   line.reserve(256);
   bool paragraphPending = true;
   bool keepReading = true;
 
   constexpr size_t kBufSize = 512;
+  constexpr size_t kMaxBufferedLineBytes = 4096;
   static uint8_t buf[kBufSize];
 
   while (keepReading && file.available()) {
@@ -1662,6 +1687,16 @@ bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
       }
 
       line += c;
+
+      if (line.length() >= kMaxBufferedLineBytes && isWordBoundary(c)) {
+        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending)
+                                 : processBookLine(line, book, paragraphPending);
+        if (!keepReading && hasBookWordLimit()) {
+          Serial.printf("[storage] Reached %lu word limit, truncating book\n",
+                        static_cast<unsigned long>(kMaxBookWords));
+        }
+        line = "";
+      }
     }
   }
 

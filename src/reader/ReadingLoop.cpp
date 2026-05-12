@@ -559,6 +559,16 @@ void ReadingLoop::begin(uint32_t nowMs) {
 }
 
 void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
+  WordStore psramWords;
+  psramWords.reserve(words.size());
+  for (String &word : words) {
+    psramWords.add(std::move(word));
+  }
+  setWords(std::move(psramWords), nowMs);
+}
+
+void ReadingLoop::setWords(WordStore words, uint32_t nowMs) {
+  loadedWords_.clear();
   loadedWords_ = std::move(words);
   currentIndex_ = 0;
   lastAdvanceMs_ = nowMs;
@@ -600,7 +610,7 @@ uint32_t ReadingLoop::currentWordDurationMs() const {
   const size_t nextIndex = currentIndex_ + 1;
   if (!loadedWords_.empty()) {
     if (nextIndex < loadedWords_.size()) {
-      nextWordStartsLowercase = startsWithLowercaseLetter(loadedWords_[nextIndex]);
+      nextWordStartsLowercase = startsWithLowercaseLetter(loadedWords_.wordAt(nextIndex));
     }
   } else if (nextIndex < kDemoWordCount) {
     nextWordStartsLowercase = startsWithLowercaseLetter(String(kDemoWords[nextIndex]));
@@ -769,7 +779,7 @@ size_t ReadingLoop::wordCount() const {
 
 String ReadingLoop::wordAt(size_t index) const {
   if (!loadedWords_.empty()) {
-    return loadedWords_[index];
+    return loadedWords_.wordAt(index);
   }
   return String(kDemoWords[index]);
 }

@@ -1,7 +1,7 @@
 {
   "name": "RSVP Nano",
-  "version": "v0.0.1",
-  "new_install_prompt_erase": true,
+  "version": "v0.0.3-dirty",
+  "new_install_prompt_erase": false,
   "new_install_improv_wait_time": 0,
   "builds": [
     {
