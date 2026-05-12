@@ -590,6 +590,9 @@ void App::setState(AppState nextState, uint32_t nowMs) {
   }
 
   const AppState previousState = state_;
+  if (previousState == AppState::Menu && nextState != AppState::Menu) {
+    flushPendingTimeEstimateRebuild();
+  }
 
   if (nextState != AppState::Paused) {
     pausedTouch_.active = false;
@@ -1899,6 +1902,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
 
   switch (settingsSelectedIndex_) {
     case kSettingsBackIndex:
+      flushPendingTimeEstimateRebuild();
       settingsSelectedIndex_ = kSettingsHomePacingIndex;
       menuScreen_ = MenuScreen::SettingsHome;
       rebuildSettingsMenuItems();
@@ -2487,6 +2491,18 @@ void App::applyPacingSettings() {
                 static_cast<unsigned int>(pacingLongWordDelayMs_),
                 static_cast<unsigned int>(pacingComplexWordDelayMs_),
                 static_cast<unsigned int>(pacingPunctuationDelayMs_));
+  if (state_ == AppState::Menu && menuScreen_ == MenuScreen::SettingsPacing) {
+    pacingCacheDirty_ = true;
+  } else {
+    rebuildTimeEstimateCache();
+  }
+}
+
+void App::flushPendingTimeEstimateRebuild() {
+  if (!pacingCacheDirty_) {
+    return;
+  }
+  pacingCacheDirty_ = false;
   rebuildTimeEstimateCache();
 }
 

@@ -258,6 +258,7 @@ class App {
   uint32_t pacingAwareDurationMsBetween(size_t fromIndex, size_t endIndex) const;
   void rebuildTimeEstimateCache();
   void invalidateTimeEstimateCache();
+  void flushPendingTimeEstimateRebuild();
   String formatReadingTimeRemaining(uint32_t remainingMs) const;
   String timeEstimateModeLabel() const;
   uint8_t readingProgressPercent() const;
@@ -349,6 +350,7 @@ class App {
   uint32_t bookDurationMs_ = 0;
   bool timeEstimateCacheValid_ = false;
   bool accurateTimeEstimateEnabled_ = true;
+  bool pacingCacheDirty_ = false;
   std::vector<DisplayManager::ContextWord> contextPreviewWords_;
   std::vector<WifiNetworkInfo> wifiNetworks_;
   std::vector<TextEntryButton> textEntryButtons_;
