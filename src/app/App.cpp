@@ -2501,7 +2501,6 @@ void App::flushPendingTimeEstimateRebuild() {
   if (!pacingCacheDirty_) {
     return;
   }
-  pacingCacheDirty_ = false;
   rebuildTimeEstimateCache();
 }
 
@@ -3507,6 +3506,7 @@ void App::invalidateTimeEstimateCache() {
 
 void App::rebuildTimeEstimateCache() {
   invalidateTimeEstimateCache();
+  pacingCacheDirty_ = false;
   if (!accurateTimeEstimateEnabled_) {
     return;
   }

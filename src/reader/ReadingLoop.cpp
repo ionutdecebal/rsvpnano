@@ -616,17 +616,6 @@ uint32_t ReadingLoop::currentWordDurationMs() const {
   return durationForWord(currentWord_, nextWordStartsLowercase, wordIntervalMs(), pacingConfig_);
 }
 
-uint32_t ReadingLoop::wordDurationMsAt(size_t index) const {
-  const size_t count = wordCount();
-  if (count == 0 || index >= count) {
-    return 0;
-  }
-
-  const String word = wordAt(index);
-  const bool nextLowercase = nextWordStartsLowercaseAt(index);
-  return durationForWord(word, nextLowercase, wordIntervalMs(), pacingConfig_);
-}
-
 uint32_t ReadingLoop::wordPacingBonusMsAt(size_t index) const {
   const size_t count = wordCount();
   if (count == 0 || index >= count) {
