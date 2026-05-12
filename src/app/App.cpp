@@ -495,6 +495,10 @@ void App::begin() {
   const uint16_t savedWpm = preferences_.getUShort(kPrefWpm, reader_.wpm());
   reader_.setWpm(savedWpm);
 
+  if (storageReady) {
+    storage_.refreshBooks();
+  }
+
   if (storageReady && restoreSavedBook(bootStartedMs_)) {
     usingStorageBook_ = true;
   } else if (storageReady && loadBookAtIndex(0, bootStartedMs_, false, true, false)) {
@@ -3006,6 +3010,7 @@ void App::wakeFromSleep() {
   touchInitialized_ = touch_.begin();
   const bool storageReady = storage_.begin();
   if (storageReady && !currentBookPath_.isEmpty()) {
+    storage_.refreshBooks();
     const int refreshedBookIndex = findBookIndexByPath(currentBookPath_);
     if (refreshedBookIndex >= 0) {
       currentBookIndex_ = static_cast<size_t>(refreshedBookIndex);
