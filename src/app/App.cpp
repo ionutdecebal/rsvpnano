@@ -3518,10 +3518,26 @@ uint32_t App::pacingAwareDurationMsBetween(size_t fromIndex, size_t endIndex) co
   if (endIndex <= fromIndex) {
     return 0;
   }
+
+  if (tailCacheValid_ && tailCacheEnd_ == endIndex && fromIndex >= tailCacheStart_) {
+    uint32_t total = tailCacheMs_;
+    for (size_t i = tailCacheStart_; i < fromIndex; ++i) {
+      const uint32_t d = reader_.wordDurationMsAt(i);
+      total = (d >= total) ? 0 : (total - d);
+    }
+    tailCacheStart_ = fromIndex;
+    tailCacheMs_ = total;
+    return total;
+  }
+
   uint32_t total = 0;
   for (size_t i = fromIndex; i < endIndex; ++i) {
     total += reader_.wordDurationMsAt(i);
   }
+  tailCacheValid_ = true;
+  tailCacheStart_ = fromIndex;
+  tailCacheEnd_ = endIndex;
+  tailCacheMs_ = total;
   return total;
 }
 
@@ -3529,6 +3545,7 @@ void App::invalidateTimeEstimateCache() {
   timeEstimateCacheValid_ = false;
   chapterDurationsMs_.clear();
   bookDurationMs_ = 0;
+  tailCacheValid_ = false;
 }
 
 void App::rebuildTimeEstimateCache() {

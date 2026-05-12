@@ -348,6 +348,10 @@ class App {
   uint32_t bookDurationMs_ = 0;
   bool timeEstimateCacheValid_ = false;
   bool accurateTimeEstimateEnabled_ = true;
+  mutable bool tailCacheValid_ = false;
+  mutable size_t tailCacheStart_ = 0;
+  mutable size_t tailCacheEnd_ = 0;
+  mutable uint32_t tailCacheMs_ = 0;
   std::vector<DisplayManager::ContextWord> contextPreviewWords_;
   std::vector<WifiNetworkInfo> wifiNetworks_;
   std::vector<TextEntryButton> textEntryButtons_;
