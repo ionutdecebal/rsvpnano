@@ -348,6 +348,7 @@ class App {
   bool timeEstimateCacheValid_ = false;
   bool accurateTimeEstimateEnabled_ = true;
   bool pacingCacheDirty_ = false;
+  uint32_t pacingCacheDirtyAtMs_ = 0;
   std::vector<DisplayManager::ContextWord> contextPreviewWords_;
   std::vector<WifiNetworkInfo> wifiNetworks_;
   std::vector<TextEntryButton> textEntryButtons_;

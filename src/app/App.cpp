@@ -540,6 +540,11 @@ void App::update(uint32_t nowMs) {
   updateWpmFeedback(nowMs);
   maybeSaveReadingPosition(nowMs);
 
+  if (pacingCacheDirty_ && state_ != AppState::Menu &&
+      nowMs - pacingCacheDirtyAtMs_ >= 500) {
+    flushPendingTimeEstimateRebuild();
+  }
+
   if (batteryChanged && (state_ == AppState::Paused || state_ == AppState::Playing)) {
     renderActiveReader(nowMs);
   } else if (batteryChanged && state_ == AppState::Menu) {
@@ -590,9 +595,7 @@ void App::setState(AppState nextState, uint32_t nowMs) {
   }
 
   const AppState previousState = state_;
-  if (previousState == AppState::Menu && nextState != AppState::Menu) {
-    flushPendingTimeEstimateRebuild();
-  }
+  flushPendingTimeEstimateRebuild();
 
   if (nextState != AppState::Paused) {
     pausedTouch_.active = false;
@@ -1311,7 +1314,8 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     const int wpmDelta = (deltaY < 0) ? 1 : -1;
     reader_.adjustWpm(wpmDelta);
     preferences_.putUShort(kPrefWpm, reader_.wpm());
-    rebuildTimeEstimateCache();
+    pacingCacheDirty_ = true;
+    pacingCacheDirtyAtMs_ = nowMs;
     renderWpmFeedback(nowMs);
     Serial.printf("[app] WPM=%u interval=%lu ms\n", reader_.wpm(),
                   static_cast<unsigned long>(reader_.wordIntervalMs()));
