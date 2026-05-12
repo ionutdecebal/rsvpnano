@@ -255,7 +255,6 @@ class App {
   String currentChapterLabel() const;
   String currentFooterMetricLabel() const;
   uint32_t estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex) const;
-  uint32_t pacingAwareDurationMsBetween(size_t fromIndex, size_t endIndex) const;
   void rebuildTimeEstimateCache();
   void invalidateTimeEstimateCache();
   void flushPendingTimeEstimateRebuild();
@@ -345,9 +344,7 @@ class App {
   std::vector<String> chapterMenuItems_;
   std::vector<ChapterMarker> chapterMarkers_;
   std::vector<size_t> paragraphStarts_;
-  std::vector<uint32_t> chapterDurationsMs_;
   std::vector<uint32_t> wordPrefixSumMs_;
-  uint32_t bookDurationMs_ = 0;
   bool timeEstimateCacheValid_ = false;
   bool accurateTimeEstimateEnabled_ = true;
   bool pacingCacheDirty_ = false;

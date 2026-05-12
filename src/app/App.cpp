@@ -3496,58 +3496,11 @@ uint32_t App::estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex
                                  static_cast<uint64_t>(reader_.wpm()));
   }
 
-  const size_t curChapter = currentChapterIndex();
-  const size_t curChapterEnd = (curChapter + 1 < chapterMarkers_.size())
-                                   ? chapterMarkers_[curChapter + 1].wordIndex
-                                   : wordCount;
-
-  if (endIndex <= curChapterEnd) {
-    return pacingAwareDurationMsBetween(startIndex, endIndex);
-  }
-
-  uint32_t total = pacingAwareDurationMsBetween(startIndex, curChapterEnd);
-  for (size_t c = curChapter + 1; c < chapterDurationsMs_.size(); ++c) {
-    const size_t chapterStart = chapterMarkers_[c].wordIndex;
-    const size_t chapterEndIdx = (c + 1 < chapterMarkers_.size())
-                                     ? chapterMarkers_[c + 1].wordIndex
-                                     : wordCount;
-    if (chapterStart >= endIndex) {
-      break;
-    }
-    if (chapterEndIdx <= endIndex) {
-      total += chapterDurationsMs_[c];
-    } else {
-      total += pacingAwareDurationMsBetween(chapterStart, endIndex);
-      break;
-    }
-  }
-  return total;
-}
-
-uint32_t App::pacingAwareDurationMsBetween(size_t fromIndex, size_t endIndex) const {
-  const size_t n = reader_.wordCount();
-  if (n == 0) {
-    return 0;
-  }
-  fromIndex = std::min(fromIndex, n);
-  endIndex = std::min(endIndex, n);
-  if (endIndex <= fromIndex) {
-    return 0;
-  }
-  if (wordPrefixSumMs_.size() == n + 1) {
-    return wordPrefixSumMs_[endIndex] - wordPrefixSumMs_[fromIndex];
-  }
-  uint32_t total = 0;
-  for (size_t i = fromIndex; i < endIndex; ++i) {
-    total += reader_.wordDurationMsAt(i);
-  }
-  return total;
+  return wordPrefixSumMs_[endIndex] - wordPrefixSumMs_[startIndex];
 }
 
 void App::invalidateTimeEstimateCache() {
   timeEstimateCacheValid_ = false;
-  chapterDurationsMs_.clear();
-  bookDurationMs_ = 0;
   std::vector<uint32_t>().swap(wordPrefixSumMs_);
 }
 
@@ -3562,40 +3515,18 @@ void App::rebuildTimeEstimateCache() {
     return;
   }
 
-  const size_t chapterCount = std::max<size_t>(1, chapterMarkers_.size());
-  chapterDurationsMs_.assign(chapterCount, 0);
   wordPrefixSumMs_.assign(n + 1, 0);
-
-  size_t chapterIdx = 0;
-  size_t chapterEnd = (chapterMarkers_.size() > 1) ? chapterMarkers_[1].wordIndex : n;
-  uint32_t acc = 0;
   uint32_t running = 0;
   const uint32_t startMs = millis();
   for (size_t i = 0; i < n; ++i) {
-    while (i >= chapterEnd && chapterIdx + 1 < chapterDurationsMs_.size()) {
-      chapterDurationsMs_[chapterIdx] = acc;
-      ++chapterIdx;
-      acc = 0;
-      chapterEnd = (chapterIdx + 1 < chapterMarkers_.size())
-                       ? chapterMarkers_[chapterIdx + 1].wordIndex
-                       : n;
-    }
     wordPrefixSumMs_[i] = running;
-    const uint32_t d = reader_.wordDurationMsAt(i);
-    acc += d;
-    running += d;
+    running += reader_.wordDurationMsAt(i);
   }
   wordPrefixSumMs_[n] = running;
-  chapterDurationsMs_[chapterIdx] = acc;
-
-  for (uint32_t d : chapterDurationsMs_) {
-    bookDurationMs_ += d;
-  }
   timeEstimateCacheValid_ = true;
 
-  Serial.printf("[time-est] cached %u chapters total=%lums took=%lums\n",
-                static_cast<unsigned int>(chapterDurationsMs_.size()),
-                static_cast<unsigned long>(bookDurationMs_),
+  Serial.printf("[time-est] cached %u words total=%lums took=%lums\n",
+                static_cast<unsigned int>(n), static_cast<unsigned long>(running),
                 static_cast<unsigned long>(millis() - startMs));
 }
 
