@@ -3518,26 +3518,13 @@ uint32_t App::pacingAwareDurationMsBetween(size_t fromIndex, size_t endIndex) co
   if (endIndex <= fromIndex) {
     return 0;
   }
-
-  if (tailCacheValid_ && tailCacheEnd_ == endIndex && fromIndex >= tailCacheStart_) {
-    uint32_t total = tailCacheMs_;
-    for (size_t i = tailCacheStart_; i < fromIndex; ++i) {
-      const uint32_t d = reader_.wordDurationMsAt(i);
-      total = (d >= total) ? 0 : (total - d);
-    }
-    tailCacheStart_ = fromIndex;
-    tailCacheMs_ = total;
-    return total;
+  if (wordPrefixSumMs_.size() == n + 1) {
+    return wordPrefixSumMs_[endIndex] - wordPrefixSumMs_[fromIndex];
   }
-
   uint32_t total = 0;
   for (size_t i = fromIndex; i < endIndex; ++i) {
     total += reader_.wordDurationMsAt(i);
   }
-  tailCacheValid_ = true;
-  tailCacheStart_ = fromIndex;
-  tailCacheEnd_ = endIndex;
-  tailCacheMs_ = total;
   return total;
 }
 
@@ -3545,7 +3532,7 @@ void App::invalidateTimeEstimateCache() {
   timeEstimateCacheValid_ = false;
   chapterDurationsMs_.clear();
   bookDurationMs_ = 0;
-  tailCacheValid_ = false;
+  std::vector<uint32_t>().swap(wordPrefixSumMs_);
 }
 
 void App::rebuildTimeEstimateCache() {
@@ -3561,10 +3548,12 @@ void App::rebuildTimeEstimateCache() {
 
   const size_t chapterCount = std::max<size_t>(1, chapterMarkers_.size());
   chapterDurationsMs_.assign(chapterCount, 0);
+  wordPrefixSumMs_.assign(n + 1, 0);
 
   size_t chapterIdx = 0;
   size_t chapterEnd = (chapterMarkers_.size() > 1) ? chapterMarkers_[1].wordIndex : n;
   uint32_t acc = 0;
+  uint32_t running = 0;
   const uint32_t startMs = millis();
   for (size_t i = 0; i < n; ++i) {
     while (i >= chapterEnd && chapterIdx + 1 < chapterDurationsMs_.size()) {
@@ -3575,8 +3564,12 @@ void App::rebuildTimeEstimateCache() {
                        ? chapterMarkers_[chapterIdx + 1].wordIndex
                        : n;
     }
-    acc += reader_.wordDurationMsAt(i);
+    wordPrefixSumMs_[i] = running;
+    const uint32_t d = reader_.wordDurationMsAt(i);
+    acc += d;
+    running += d;
   }
+  wordPrefixSumMs_[n] = running;
   chapterDurationsMs_[chapterIdx] = acc;
 
   for (uint32_t d : chapterDurationsMs_) {
