@@ -1,4 +1,7 @@
 .pio
+.derivedData
+*.xcuserstate
+xcuserdata/
 .codex
 .DS_Store
 __pycache__/

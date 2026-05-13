@@ -230,6 +230,8 @@ Main Menu
 |     |- Auto OTA
 |     `- Forget network
 |  `- Firmware update
+|- SD card check
+|- Companion sync
 |- USB transfer (default USB build)
 `- Power off
 ```
@@ -283,6 +285,50 @@ card over USB. When you are done copying books:
 1. Eject the device from your computer.
 2. Hold `BOOT` to leave USB transfer mode.
 3. Wait for the device to remount the SD card and return to the reader.
+
+### SD Card Check
+
+Open `SD card check` from the main menu to run a quick on-device diagnostic. It tries to mount the
+card, reports the card type and size when available, checks for the `/books` folder, counts readable
+book files, counts unsupported files in `/books`, and writes then deletes a tiny `.sdcheck.tmp`
+probe file to catch common write failures.
+
+The checker is intentionally conservative. It can point to likely causes such as a missing `/books`
+folder, unsupported file extensions, mount failure, or write failure, but it cannot repair a card,
+reformat it, inspect every filesystem detail, prove a card is genuine, or perfectly distinguish
+exFAT from a damaged filesystem or marginal card. If mounting fails, the best first checks are FAT32
+formatting, single partition layout, full card seating, and trying a known-good card.
+
+### Companion Sync
+
+`Companion sync` is an early Wi-Fi bridge for the future iPhone app. Open it from the main menu to
+start a small HTTP upload server and a temporary `RSVP-Nano-xxxxxx` access point. The reader shows
+the Wi-Fi network name to join; the companion app checks `192.168.4.1` automatically after the
+iPhone is on that network.
+
+Current test endpoints:
+
+```sh
+curl http://192.168.4.1/api/info
+curl http://192.168.4.1/api/books
+curl -F "file=@book.rsvp" "http://192.168.4.1/api/books?name=book.rsvp"
+curl -X DELETE "http://192.168.4.1/api/books?name=book.rsvp"
+```
+
+The `/api/books` response includes `title` and `author` for `.rsvp` files that declare `@title`
+or `@author`; the filename remains available as `name`. Books with saved reading state also include
+`progressPercent`, using the same per-book position data shown in the on-device library.
+
+The iPhone app can convert EPUB, plain text, Markdown, HTML/XHTML, pasted text, and shared text/URLs
+into `.rsvp` before upload. Its converter mirrors the browser workspace's EPUB spine handling,
+metadata extraction, text encoding sniffing, punctuation normalization, chapter detection, and
+reader-friendly line wrapping. If an EPUB is not supported by the first native iOS conversion pass,
+the app can still upload the `.epub` source and let the reader convert it on open. The share
+extension saves converted articles into a pending inbox, so articles can be captured while browsing
+and synced later when the iPhone is connected to the reader Wi-Fi.
+
+Uploaded files are written to `/books` as `.tmp` files first, then renamed into place when the
+upload completes. Hold `BOOT` to leave sync mode and refresh the library.
 
 ## Build From Source
 

@@ -12,6 +12,7 @@
 #include "input/TouchHandler.h"
 #include "reader/ReadingLoop.h"
 #include "storage/StorageManager.h"
+#include "sync/CompanionSyncManager.h"
 #include "timer/FocusTimer.h"
 #include "update/OtaUpdater.h"
 #include "usb/UsbMassStorageManager.h"
@@ -75,6 +76,16 @@ class App {
     Percentage = 0,
     ChapterTime = 1,
     BookTime = 2,
+  };
+
+  enum class BatteryLabelMode : uint8_t {
+    Percent = 0,
+    TimeRemaining = 1,
+  };
+
+  enum class PauseMode : uint8_t {
+    SentenceEnd = 0,
+    Instant = 1,
   };
 
   enum class TextEntryPurpose : uint8_t {
@@ -153,11 +164,13 @@ class App {
   void applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs);
   void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs);
+  bool handleBatteryBadgeTap(uint16_t x, uint16_t y, uint32_t nowMs);
   void requestReaderPauseAtSentenceEnd(uint32_t nowMs);
   void finalizeReaderPause(uint32_t nowMs);
   bool shouldFinalizeReaderPause(uint32_t nowMs) const;
   void resetReaderTapTracking();
   bool isFooterMetricTap(uint16_t x, uint16_t y) const;
+  bool isBatteryBadgeTap(uint16_t x, uint16_t y) const;
   bool isPreviousSentenceTap(uint16_t x) const;
   bool readerFooterVisible() const;
   void rewindReaderSentence(uint32_t nowMs);
@@ -208,6 +221,7 @@ class App {
   String focusHighlightLabel() const;
   String uiLanguageLabel() const;
   String readerModeLabel() const;
+  String pauseModeLabel() const;
   String handednessLabel() const;
   String readerFontSizeLabel() const;
   String readerTypefaceLabel() const;
@@ -220,6 +234,10 @@ class App {
   void selectChapterPickerItem(uint32_t nowMs);
   void openRestartConfirm();
   void selectRestartConfirmItem(uint32_t nowMs);
+  void runSdCardCheck(uint32_t nowMs);
+  void enterCompanionSync(uint32_t nowMs);
+  void updateCompanionSync(uint32_t nowMs);
+  void exitCompanionSync(uint32_t nowMs);
   void enterUsbTransfer(uint32_t nowMs);
   void updateUsbTransfer(uint32_t nowMs);
   void exitUsbTransfer(uint32_t nowMs);
@@ -227,6 +245,8 @@ class App {
   void enterSleep(uint32_t nowMs);
   void wakeFromSleep();
   bool restoreSavedBook(uint32_t nowMs);
+  bool prepareBootBookLoad();
+  void loadPendingBootBook(uint32_t nowMs);
   void saveReadingPosition(bool force = false);
   bool loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback = false);
   String bookPositionKey(const String &bookPath) const;
@@ -254,6 +274,9 @@ class App {
   size_t currentChapterIndex() const;
   String currentChapterLabel() const;
   String currentFooterMetricLabel() const;
+  String currentBatteryLabel() const;
+  String batteryTimeRemainingLabel() const;
+  String formatBatteryTimeRemaining(uint32_t minutes) const;
   uint32_t estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex) const;
   String formatReadingTimeRemaining(uint32_t remainingMs) const;
   uint8_t readingProgressPercent() const;
@@ -300,6 +323,7 @@ class App {
   TouchHandler touch_;
   StorageManager storage_;
   OtaUpdater otaUpdater_;
+  CompanionSyncManager companionSync_;
   UsbMassStorageManager usbTransfer_;
   Preferences preferences_;
   PausedTouchSession pausedTouch_;
@@ -310,12 +334,15 @@ class App {
   uint32_t wpmFeedbackUntilMs_ = 0;
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
+  uint32_t batteryRuntimeAnchorMs_ = 0;
   uint32_t lastScrollAnimationRenderMs_ = 0;
+  uint32_t lastCompanionSyncRenderMs_ = 0;
   uint32_t lastReaderTapMs_ = 0;
   size_t lastSavedWordIndex_ = static_cast<size_t>(-1);
   size_t contextPreviewStartIndex_ = 0;
   size_t contextPreviewCurrentLocalIndex_ = static_cast<size_t>(-1);
   size_t currentBookIndex_ = 0;
+  size_t pendingBootBookIndex_ = 0;
   size_t menuSelectedIndex_ = 0;
   size_t settingsSelectedIndex_ = 0;
   size_t wifiNetworkSelectedIndex_ = 0;
@@ -346,6 +373,11 @@ class App {
   String currentBookPath_;
   String currentBookTitle_;
   String batteryLabel_;
+  float batteryFilteredVoltage_ = 0.0f;
+  float batteryFilteredPercent_ = 0.0f;
+  uint8_t batteryDisplayedPercent_ = 0;
+  uint8_t batteryRuntimeAnchorPercent_ = 0;
+  uint32_t batteryRuntimeMinutesRemaining_ = 0;
   TextEntrySession textEntrySession_;
   uint16_t lastReaderTapX_ = 0;
   uint16_t lastReaderTapY_ = 0;
@@ -364,8 +396,16 @@ class App {
   bool contextPreviewWindowValid_ = false;
   bool wpmFeedbackVisible_ = false;
   bool usingStorageBook_ = false;
+  bool storageReady_ = false;
+  bool pendingBootBookLoad_ = false;
+  bool pendingBootBookLegacyFallback_ = false;
+  bool batteryPresent_ = false;
+  bool batterySampleInitialized_ = false;
+  bool batteryRuntimeEstimateReady_ = false;
   bool phantomWordsEnabled_ = true;
   FooterMetricMode footerMetricMode_ = FooterMetricMode::Percentage;
+  BatteryLabelMode batteryLabelMode_ = BatteryLabelMode::Percent;
+  PauseMode pauseMode_ = PauseMode::SentenceEnd;
   bool darkMode_ = true;
   bool nightMode_ = false;
   UiLanguage uiLanguage_ = UiLanguage::English;
