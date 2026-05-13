@@ -11,6 +11,7 @@
 #include "input/ButtonHandler.h"
 #include "input/TouchHandler.h"
 #include "reader/ReadingLoop.h"
+#include "rss/RssFeedManager.h"
 #include "storage/StorageManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "timer/FocusTimer.h"
@@ -200,6 +201,7 @@ class App {
   void applyPacingSettings();
   void maybeAutoCheckForUpdates(uint32_t nowMs);
   void runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, uint32_t nowMs);
+  void runRssFeedCheck(uint32_t nowMs);
   OtaUpdater::Config preferredOtaConfig();
   void scanWifiNetworks();
   void renderWifiNetworks();
@@ -230,7 +232,7 @@ class App {
   String typographyTuningLabel() const;
   String typographyTuningValueLabel() const;
   String uiText(UiText key) const;
-  void openBookPicker();
+  void openBookPicker(bool articlesOnly = false);
   void selectBookPickerItem(uint32_t nowMs);
   void openChapterPicker();
   void selectChapterPickerItem(uint32_t nowMs);
@@ -277,6 +279,8 @@ class App {
   String currentChapterLabel() const;
   String currentFooterMetricLabel() const;
   String currentBatteryLabel() const;
+  String footerMetricModeLabel() const;
+  String batteryLabelModeLabel() const;
   String batteryTimeRemainingLabel() const;
   String formatBatteryTimeRemaining(uint32_t minutes) const;
   uint32_t estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex) const;
@@ -310,6 +314,7 @@ class App {
   bool scrollModeEnabled() const;
   void applyUiOrientation(BoardConfig::UiOrientation orientation);
   void applyReaderUiOrientation();
+  void reloadRuntimePreferences(uint32_t nowMs, bool rerender);
   BoardConfig::UiOrientation readerUiOrientation() const;
   bool uiRotated180() const;
   uint8_t effectiveAnchorPercent() const;
@@ -329,6 +334,7 @@ class App {
   TouchHandler touch_;
   StorageManager storage_;
   OtaUpdater otaUpdater_;
+  RssFeedManager rssFeedManager_;
   CompanionSyncManager companionSync_;
   UsbMassStorageManager usbTransfer_;
   Preferences preferences_;

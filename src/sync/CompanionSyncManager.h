@@ -35,6 +35,8 @@ class CompanionSyncManager {
   static void handleInfoStatic();
   static void handleRootStatic();
   static void handleBooksListStatic();
+  static void handleSettingsStatic();
+  static void handleRssFeedsStatic();
   static void handleBookDeleteStatic();
   static void handleBooksStatic();
   static void handleBookUploadStatic();
@@ -46,10 +48,16 @@ class CompanionSyncManager {
   void handleInfo();
   void handleRoot();
   void handleBooksList();
+  void handleSettings();
+  void handleRssFeeds();
   void handleBookDelete();
   void handleBooks();
   void handleBookUpload();
   void handleNotFound();
+  String settingsJson();
+  bool applySettingsJson(const String &body, String &error);
+  String rssFeedsJson();
+  bool writeRssFeedsJson(const String &body, String &error);
   String deviceSuffix() const;
   String jsonEscape(const String &value) const;
   String sanitizeFilename(const String &name) const;
