@@ -425,6 +425,52 @@ void OtaUpdater::reportStatus(StatusCallback callback, void *context, const char
   callback(context, title, line1.c_str(), line2.c_str(), progressPercent);
 }
 
+OtaUpdater::Result OtaUpdater::checkOnly(const Config &config, StatusCallback callback,
+                                         void *context) const {
+  Result result;
+  result.currentVersion = currentVersion();
+
+  if (!isConfigured(config)) {
+    result.code = ResultCode::NotConfigured;
+    result.summary = "Wi-Fi not set";
+    result.detail = "Settings -> Wi-Fi";
+    return result;
+  }
+
+  if (!connectWiFi(config, callback, context)) {
+    disconnectWiFi();
+    result.code = ResultCode::ConnectFailed;
+    result.summary = "Wi-Fi failed";
+    result.detail = "Check credentials";
+    return result;
+  }
+
+  LatestRelease release;
+  String metadataError;
+  if (!fetchLatestRelease(config, release, metadataError, callback, context)) {
+    disconnectWiFi();
+    result.code = ResultCode::MetadataFailed;
+    result.summary = "GitHub failed";
+    result.detail = metadataError;
+    return result;
+  }
+
+  disconnectWiFi();
+  result.latestVersion = release.tagName;
+
+  if (release.tagName == result.currentVersion) {
+    result.code = ResultCode::NoUpdate;
+    result.summary = "Already current";
+    result.detail = release.tagName;
+    return result;
+  }
+
+  result.code = ResultCode::UpdateAvailable;
+  result.summary = "Update available";
+  result.detail = release.tagName;
+  return result;
+}
+
 OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallback callback,
                                                void *context) const {
   Result result;

@@ -20,6 +20,7 @@
 #endif
 
 static const char *kAppTag = "app";
+constexpr size_t kOtaCheckTaskStackBytes = 10240;
 constexpr uint32_t kBootSplashMs = 750;
 constexpr uint32_t kWpmFeedbackMs = 900;
 constexpr uint32_t kPowerOffHoldMs = 1600;
@@ -114,6 +115,14 @@ enum RestartConfirmItem : size_t {
 };
 
 constexpr size_t kRestartConfirmHeaderRows = 1;
+
+enum UpdateConfirmItem : size_t {
+  UpdateConfirmSkip,
+  UpdateConfirmUpdate,
+  UpdateConfirmItemCount,
+};
+
+constexpr size_t kUpdateConfirmHeaderRows = 2;
 constexpr size_t kSettingsBackIndex = 0;
 constexpr size_t kSettingsHomeDisplayIndex = 1;
 constexpr size_t kSettingsHomeTypographyIndex = 2;
@@ -548,7 +557,7 @@ void App::begin() {
     }
   }
 
-  maybeAutoCheckForUpdates(bootStartedMs_);
+  maybeAutoCheckForUpdates();
   Serial.printf("[app] WPM=%u interval=%lu ms\n", reader_.wpm(),
                 static_cast<unsigned long>(reader_.wordIntervalMs()));
 
@@ -683,8 +692,23 @@ void App::setState(AppState nextState, uint32_t nowMs) {
 }
 
 void App::updateState(uint32_t nowMs) {
+  if (state_ == AppState::Paused && pendingUpdateConfirm_ &&
+      (nowMs - bootStartedMs_ < 30000)) {
+    pendingUpdateConfirm_ = false;
+    setState(AppState::Menu, nowMs);
+    openUpdateConfirm(pendingUpdateCurrentVersion_, pendingUpdateNewVersion_);
+    return;
+  }
+
   if (state_ == AppState::Booting) {
     if (nowMs - bootStartedMs_ < kBootSplashMs) {
+      return;
+    }
+
+    if (pendingUpdateConfirm_) {
+      pendingUpdateConfirm_ = false;
+      setState(AppState::Menu, nowMs);
+      openUpdateConfirm(pendingUpdateCurrentVersion_, pendingUpdateNewVersion_);
       return;
     }
 
@@ -1800,6 +1824,9 @@ void App::moveMenuSelection(int direction) {
   } else if (menuScreen_ == MenuScreen::RestartConfirm) {
     selectedIndex = &restartConfirmSelectedIndex_;
     itemCount = RestartConfirmItemCount;
+  } else if (menuScreen_ == MenuScreen::UpdateConfirm) {
+    selectedIndex = &updateConfirmSelectedIndex_;
+    itemCount = UpdateConfirmItemCount;
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     selectedIndex = &focusTimerGenreSelectedIndex_;
     itemCount = focusTimerGenreMenuItems_.size();
@@ -1845,6 +1872,9 @@ void App::moveMenuSelection(int direction) {
         break;
     }
     Serial.printf("[restart] selected=%s\n", selectedLabel.c_str());
+  } else if (menuScreen_ == MenuScreen::UpdateConfirm) {
+    Serial.printf("[ota] confirm selected=%u\n",
+                  static_cast<unsigned int>(updateConfirmSelectedIndex_));
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     Serial.printf("[timer] selected genre=%s\n",
                   focusTimerGenreMenuItems_[focusTimerGenreSelectedIndex_].c_str());
@@ -1911,6 +1941,10 @@ void App::selectMenuItem(uint32_t nowMs) {
   }
   if (menuScreen_ == MenuScreen::RestartConfirm) {
     selectRestartConfirmItem(nowMs);
+    return;
+  }
+  if (menuScreen_ == MenuScreen::UpdateConfirm) {
+    selectUpdateConfirmItem(nowMs);
     return;
   }
   if (menuScreen_ == MenuScreen::FocusTimerGenres) {
@@ -2728,14 +2762,45 @@ bool App::otaAutoCheckEnabled() {
   return otaConfig.autoCheck;
 }
 
-void App::maybeAutoCheckForUpdates(uint32_t nowMs) {
+void App::maybeAutoCheckForUpdates() {
   OtaUpdater::Config otaConfig = preferredOtaConfig();
   if (!otaConfig.autoCheck || !otaUpdater_.isConfigured(otaConfig)) {
     return;
   }
 
-  Serial.println("[ota] auto-check enabled");
-  runFirmwareUpdate(otaConfig, true, nowMs);
+  Serial.println("[ota] auto-check enabled, launching background task on core 0");
+
+  OtaCheckTaskParams *params = new OtaCheckTaskParams();
+  params->config = otaConfig;
+  params->updateAvailable = &pendingUpdateConfirm_;
+  params->currentVersion = &pendingUpdateCurrentVersion_;
+  params->newVersion = &pendingUpdateNewVersion_;
+
+  xTaskCreatePinnedToCore(
+      otaCheckTask, "ota_check", kOtaCheckTaskStackBytes,
+      params, 1, nullptr, 0);
+}
+
+void App::otaCheckTask(void *params) {
+  OtaCheckTaskParams *p = static_cast<OtaCheckTaskParams *>(params);
+
+  Serial.println("[ota] background check started");
+  const OtaUpdater::Result result =
+      OtaUpdater().checkOnly(p->config, nullptr, nullptr);
+
+  Serial.printf("[ota] background result: code=%u current=%s latest=%s\n",
+                static_cast<unsigned int>(result.code),
+                result.currentVersion.c_str(),
+                result.latestVersion.c_str());
+
+  if (result.code == OtaUpdater::ResultCode::UpdateAvailable) {
+    *(p->currentVersion) = result.currentVersion;
+    *(p->newVersion) = result.latestVersion;
+    *(p->updateAvailable) = true;
+  }
+
+  delete p;
+  vTaskDelete(NULL);
 }
 
 void App::runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, uint32_t nowMs) {
@@ -3074,6 +3139,37 @@ void App::selectRestartConfirmItem(uint32_t nowMs) {
   setState(AppState::Paused, nowMs);
   saveReadingPosition(true);
   Serial.println("[restart] book restarted from beginning");
+}
+
+void App::openUpdateConfirm(const String &currentVersion, const String &newVersion) {
+  pendingUpdateCurrentVersion_ = currentVersion;
+  pendingUpdateNewVersion_ = newVersion;
+  updateConfirmSelectedIndex_ = UpdateConfirmSkip;
+  menuScreen_ = MenuScreen::UpdateConfirm;
+  renderUpdateConfirm();
+}
+
+void App::selectUpdateConfirmItem(uint32_t nowMs) {
+  if (updateConfirmSelectedIndex_ != UpdateConfirmUpdate) {
+    menuScreen_ = MenuScreen::Main;
+    setState(AppState::Paused, nowMs);
+    Serial.println("[ota] update skipped by user");
+    return;
+  }
+
+  Serial.println("[ota] update confirmed by user");
+  runFirmwareUpdate(preferredOtaConfig(), false, nowMs);
+}
+
+void App::renderUpdateConfirm() {
+  std::vector<String> items;
+  items.reserve(kUpdateConfirmHeaderRows + UpdateConfirmItemCount);
+  items.push_back("Update available");
+  items.push_back(pendingUpdateCurrentVersion_ + " -> " + pendingUpdateNewVersion_);
+  items.push_back("Skip for now");
+  items.push_back("Update");
+
+  display_.renderMenu(items, updateConfirmSelectedIndex_ + kUpdateConfirmHeaderRows);
 }
 
 void App::enterCompanionSync(uint32_t nowMs) {
@@ -3546,6 +3642,8 @@ void App::renderMenu() {
     renderChapterPicker();
   } else if (menuScreen_ == MenuScreen::RestartConfirm) {
     renderRestartConfirm();
+  } else if (menuScreen_ == MenuScreen::UpdateConfirm) {
+    renderUpdateConfirm();
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     renderFocusTimerGenres();
   } else if (menuScreen_ == MenuScreen::FocusTimerSession) {
