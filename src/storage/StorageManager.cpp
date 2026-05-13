@@ -27,6 +27,11 @@ constexpr const char *kMountPoint = "/sdcard";
 constexpr const char *kBooksPath = "/books";
 constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
 constexpr size_t kMaxChapterTitleChars = 64;
+constexpr size_t kMaxBookLineChars = 4096;
+constexpr size_t kInitialWordReserveMax = 50000;
+constexpr size_t kParseMemoryCheckWordInterval = 512;
+constexpr size_t kParseMinFreeHeapBytes = 32 * 1024;
+constexpr size_t kParseMinLargestHeapBlockBytes = 8 * 1024;
 constexpr int kSdFrequenciesKhz[] = {
     SDMMC_FREQ_DEFAULT,
     10000,
@@ -37,6 +42,18 @@ bool hasBookWordLimit() { return kMaxBookWords > 0; }
 
 bool reachedBookWordLimit(size_t wordCount) {
   return hasBookWordLimit() && wordCount >= kMaxBookWords;
+}
+
+struct ParseStats {
+  size_t malformedUtf8 = 0;
+  size_t nonAsciiCodepoints = 0;
+  size_t longLineSplits = 0;
+  bool memoryLow = false;
+};
+
+bool parseMemoryLow() {
+  return heap_caps_get_free_size(MALLOC_CAP_8BIT) < kParseMinFreeHeapBytes ||
+         heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < kParseMinLargestHeapBlockBytes;
 }
 
 bool isAsciiTrimWhitespace(char c) {
@@ -101,6 +118,19 @@ bool booksDirectoryExists() {
   return exists;
 }
 
+String cardTypeLabel(uint8_t cardType) {
+  switch (cardType) {
+    case CARD_MMC:
+      return "MMC";
+    case CARD_SD:
+      return "SDSC";
+    case CARD_SDHC:
+      return "SDHC/SDXC";
+    default:
+      return "Unknown";
+  }
+}
+
 bool hasTextExtension(const String &path) {
   String lowered = path;
   lowered.toLowerCase();
@@ -119,30 +149,18 @@ bool hasEpubExtension(const String &path) {
   return lowered.endsWith(".epub");
 }
 
-bool hasRsvpSibling(const String &path) {
+String siblingPathWithExtension(const String &path, const char *extension) {
   String siblingPath = path;
   const int dot = siblingPath.lastIndexOf('.');
   if (dot > 0) {
     siblingPath = siblingPath.substring(0, dot);
   }
-  siblingPath += ".rsvp";
-
-  File sibling = SD_MMC.open(siblingPath);
-  const bool exists = sibling && !sibling.isDirectory() && sibling.size() > 0;
-  if (sibling) {
-    sibling.close();
-  }
-  return exists;
+  siblingPath += extension;
+  return siblingPath;
 }
 
 String epubSiblingPathForRsvp(const String &rsvpPath) {
-  String epubPath = rsvpPath;
-  const int dot = epubPath.lastIndexOf('.');
-  if (dot > 0) {
-    epubPath = epubPath.substring(0, dot);
-  }
-  epubPath += ".epub";
-  return epubPath;
+  return siblingPathWithExtension(rsvpPath, ".epub");
 }
 
 String normalizeBookPath(const String &path) {
@@ -190,13 +208,7 @@ String displayNameWithoutExtension(const String &path) {
 }
 
 String rsvpCachePathForEpub(const String &epubPath) {
-  String outputPath = epubPath;
-  const int dot = outputPath.lastIndexOf('.');
-  if (dot > 0) {
-    outputPath = outputPath.substring(0, dot);
-  }
-  outputPath += ".rsvp";
-  return outputPath;
+  return siblingPathWithExtension(epubPath, ".rsvp");
 }
 
 struct EpubProgressContext {
@@ -282,41 +294,91 @@ void logHeapSnapshot(const char *label) {
                 static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)));
 }
 
-std::vector<String> collectBookPaths() {
-  std::vector<String> bookPaths;
+struct DirectoryEntryInfo {
+  String path;
+  String loweredPath;
+  size_t bytes = 0;
+};
+
+std::vector<DirectoryEntryInfo> inventoryBookDirectory() {
+  std::vector<DirectoryEntryInfo> entries;
 
   File dir = SD_MMC.open(kBooksPath);
   if (!dir || !dir.isDirectory()) {
     if (dir) {
       dir.close();
     }
-    return bookPaths;
+    return entries;
   }
 
   File entry = dir.openNextFile();
   while (entry) {
     if (!entry.isDirectory()) {
-      const String path = normalizeBookPath(String(entry.name()));
-      if (isHiddenOrSidecarPath(path)) {
-        entry.close();
-        entry = dir.openNextFile();
-        continue;
-      }
-      const bool staleGeneratedRsvp =
-          hasRsvpExtension(path) && fileExistsAndHasBytes(epubSiblingPathForRsvp(path)) &&
-          !EpubConverter::isCurrentCache(path);
-      const bool readableText = hasTextExtension(path) && !hasRsvpSibling(path);
-      const bool pendingEpub =
-          RSVP_ON_DEVICE_EPUB_CONVERSION && hasEpubExtension(path) && !hasCurrentEpubCache(path);
-      if ((!staleGeneratedRsvp && hasRsvpExtension(path)) || readableText || pendingEpub) {
-        bookPaths.push_back(path);
-      }
+      DirectoryEntryInfo info;
+      info.path = normalizeBookPath(String(entry.name()));
+      info.loweredPath = info.path;
+      info.loweredPath.toLowerCase();
+      info.bytes = static_cast<size_t>(entry.size());
+      entries.push_back(info);
     }
     entry.close();
     entry = dir.openNextFile();
   }
 
   dir.close();
+  return entries;
+}
+
+bool inventoryHasFileWithBytes(const std::vector<DirectoryEntryInfo> &entries, const String &path) {
+  String loweredPath = path;
+  loweredPath.toLowerCase();
+  for (const DirectoryEntryInfo &entry : entries) {
+    if (entry.loweredPath == loweredPath) {
+      return entry.bytes > 0;
+    }
+  }
+  return false;
+}
+
+std::vector<String> collectBookPaths() {
+  std::vector<String> bookPaths;
+  const uint32_t startedMs = millis();
+  const std::vector<DirectoryEntryInfo> entries = inventoryBookDirectory();
+  size_t cacheProbeCount = 0;
+
+  for (const DirectoryEntryInfo &entry : entries) {
+    const String &path = entry.path;
+    if (isHiddenOrSidecarPath(path)) {
+      continue;
+    }
+
+    bool staleGeneratedRsvp = false;
+    if (hasRsvpExtension(path) &&
+        inventoryHasFileWithBytes(entries, epubSiblingPathForRsvp(path))) {
+      ++cacheProbeCount;
+      staleGeneratedRsvp = !EpubConverter::isCurrentCache(path);
+    }
+
+    const bool readableText =
+        hasTextExtension(path) &&
+        !inventoryHasFileWithBytes(entries, siblingPathWithExtension(path, ".rsvp"));
+
+    bool pendingEpub = false;
+    if (RSVP_ON_DEVICE_EPUB_CONVERSION && hasEpubExtension(path)) {
+      const String rsvpPath = rsvpCachePathForEpub(path);
+      const bool hasCache = inventoryHasFileWithBytes(entries, rsvpPath);
+      if (!hasCache) {
+        pendingEpub = true;
+      } else {
+        ++cacheProbeCount;
+        pendingEpub = !EpubConverter::isCurrentCache(rsvpPath);
+      }
+    }
+
+    if ((!staleGeneratedRsvp && hasRsvpExtension(path)) || readableText || pendingEpub) {
+      bookPaths.push_back(path);
+    }
+  }
 
   std::sort(bookPaths.begin(), bookPaths.end(), [](const String &left, const String &right) {
     String leftKey = displayNameForPath(left);
@@ -326,7 +388,52 @@ std::vector<String> collectBookPaths() {
     return leftKey < rightKey;
   });
 
+  Serial.printf("[storage] Directory inventory: %u files, %u books, %u cache probes in %lu ms\n",
+                static_cast<unsigned int>(entries.size()),
+                static_cast<unsigned int>(bookPaths.size()),
+                static_cast<unsigned int>(cacheProbeCount),
+                static_cast<unsigned long>(millis() - startedMs));
+
   return bookPaths;
+}
+
+size_t countUnsupportedBookFiles() {
+  size_t unsupported = 0;
+  File dir = SD_MMC.open(kBooksPath);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) {
+      dir.close();
+    }
+    return 0;
+  }
+
+  File entry = dir.openNextFile();
+  while (entry) {
+    if (!entry.isDirectory()) {
+      const String path = normalizeBookPath(String(entry.name()));
+      const bool hidden = isHiddenOrSidecarPath(path);
+      if (!hidden && !hasRsvpExtension(path) && !hasTextExtension(path) && !hasEpubExtension(path)) {
+        ++unsupported;
+      }
+    }
+    entry.close();
+    entry = dir.openNextFile();
+  }
+  dir.close();
+  return unsupported;
+}
+
+bool writeDiagnosticProbeFile() {
+  const String path = String(kBooksPath) + "/.sdcheck.tmp";
+  SD_MMC.remove(path);
+  File file = SD_MMC.open(path, FILE_WRITE);
+  if (!file) {
+    return false;
+  }
+  const size_t written = file.print("rsvp-nano sd check\n");
+  file.close();
+  const bool removed = SD_MMC.remove(path);
+  return written > 0 && removed;
 }
 
 bool isUtf8Continuation(uint8_t value) { return (value & 0xC0) == 0x80; }
@@ -1023,7 +1130,7 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
   }
 }
 
-String normalizeDisplayText(const String &text) {
+String normalizeDisplayText(const String &text, ParseStats *stats = nullptr) {
   String normalized;
   normalized.reserve(text.length());
 
@@ -1032,10 +1139,16 @@ String normalizeDisplayText(const String &text) {
     const size_t before = index;
     uint32_t codepoint = 0;
     if (decodeUtf8Codepoint(text, index, codepoint)) {
+      if (stats != nullptr && codepoint > 0x7F) {
+        ++stats->nonAsciiCodepoints;
+      }
       appendDisplayApproximation(normalized, codepoint);
       continue;
     }
 
+    if (stats != nullptr && static_cast<uint8_t>(text[before]) >= 0x80) {
+      ++stats->malformedUtf8;
+    }
     index = before + 1;
     const uint8_t rawByte = static_cast<uint8_t>(text[before]);
     if (LatinText::isWordCharacter(rawByte) || LatinText::isLowCustomSlotByte(rawByte)) {
@@ -1068,7 +1181,7 @@ String normalizeDisplayText(const String &text) {
   return collapsed;
 }
 
-void pushCleanWord(String token, std::vector<String> &words) {
+bool pushCleanWord(String token, std::vector<String> &words, ParseStats *stats) {
   trimAsciiWhitespace(token);
 
   if (token.length() >= 3 && static_cast<uint8_t>(token[0]) == 0xEF &&
@@ -1076,7 +1189,6 @@ void pushCleanWord(String token, std::vector<String> &words) {
     token.remove(0, 3);
   }
 
-  token = normalizeDisplayText(token);
   trimAsciiWhitespace(token);
 
   bool hasAlphaNumeric = false;
@@ -1087,9 +1199,20 @@ void pushCleanWord(String token, std::vector<String> &words) {
     }
   }
 
-  if (!token.isEmpty() && hasAlphaNumeric) {
-    words.push_back(token);
+  if (token.isEmpty() || !hasAlphaNumeric) {
+    return true;
   }
+
+  if ((words.size() % kParseMemoryCheckWordInterval) == 0 && words.size() > 0 &&
+      parseMemoryLow()) {
+    if (stats != nullptr) {
+      stats->memoryLow = true;
+    }
+    return false;
+  }
+
+  words.push_back(token);
+  return true;
 }
 
 String stripBom(String text) {
@@ -1166,14 +1289,18 @@ String directiveValue(const String &line, const char *directive) {
   return normalizeDisplayText(value);
 }
 
-bool appendLineWords(const String &line, std::vector<String> &words) {
+bool appendLineWords(const String &line, std::vector<String> &words, ParseStats *stats) {
+  const String normalizedLine = normalizeDisplayText(line, stats);
   String currentWord;
+  currentWord.reserve(32);
 
-  for (size_t i = 0; i < line.length(); ++i) {
-    const char c = line[i];
+  for (size_t i = 0; i < normalizedLine.length(); ++i) {
+    const char c = normalizedLine[i];
     if (isWordBoundary(c)) {
       if (!currentWord.isEmpty()) {
-        pushCleanWord(currentWord, words);
+        if (!pushCleanWord(currentWord, words, stats)) {
+          return false;
+        }
         currentWord = "";
         if (reachedBookWordLimit(words.size())) {
           return false;
@@ -1186,13 +1313,16 @@ bool appendLineWords(const String &line, std::vector<String> &words) {
   }
 
   if (!currentWord.isEmpty() && !reachedBookWordLimit(words.size())) {
-    pushCleanWord(currentWord, words);
+    if (!pushCleanWord(currentWord, words, stats)) {
+      return false;
+    }
   }
 
   return !reachedBookWordLimit(words.size());
 }
 
-bool processBookLine(const String &line, BookContent &book, bool &paragraphPending) {
+bool processBookLine(const String &line, BookContent &book, bool &paragraphPending,
+                     ParseStats *stats) {
   const String trimmed = stripBom(line);
   if (trimmed.isEmpty()) {
     paragraphPending = true;
@@ -1209,10 +1339,11 @@ bool processBookLine(const String &line, BookContent &book, bool &paragraphPendi
     addParagraphMarker(book);
     paragraphPending = false;
   }
-  return appendLineWords(line, book.words);
+  return appendLineWords(line, book.words, stats);
 }
 
-bool processRsvpLine(const String &line, BookContent &book, bool &paragraphPending) {
+bool processRsvpLine(const String &line, BookContent &book, bool &paragraphPending,
+                     ParseStats *stats) {
   String trimmed = stripBom(line);
   if (trimmed.isEmpty()) {
     paragraphPending = true;
@@ -1225,7 +1356,7 @@ bool processRsvpLine(const String &line, BookContent &book, bool &paragraphPendi
       addParagraphMarker(book);
       paragraphPending = false;
     }
-    return appendLineWords(trimmed, book.words);
+    return appendLineWords(trimmed, book.words, stats);
   }
 
   if (trimmed.startsWith("@")) {
@@ -1259,7 +1390,68 @@ bool processRsvpLine(const String &line, BookContent &book, bool &paragraphPendi
     addParagraphMarker(book);
     paragraphPending = false;
   }
-  return appendLineWords(line, book.words);
+  return appendLineWords(line, book.words, stats);
+}
+
+struct RsvpDirectiveValues {
+  String title;
+  String author;
+};
+
+RsvpDirectiveValues readRsvpDirectiveValues(const String &path) {
+  RsvpDirectiveValues values;
+  if (!hasRsvpExtension(path)) {
+    return values;
+  }
+
+  File file = SD_MMC.open(path);
+  if (!file || file.isDirectory()) {
+    if (file) {
+      file.close();
+    }
+    return values;
+  }
+
+  String line;
+  while (file.available()) {
+    const char c = static_cast<char>(file.read());
+    if (c == '\r') {
+      continue;
+    }
+
+    if (c != '\n') {
+      line += c;
+      if (line.length() > kMaxChapterTitleChars + 16) {
+        line = "";
+        break;
+      }
+      continue;
+    }
+
+    String trimmed = stripBom(line);
+    if (trimmed.isEmpty()) {
+      line = "";
+      continue;
+    }
+
+    String lowered = trimmed;
+    lowered.toLowerCase();
+    if (values.title.isEmpty() && prefixHasBoundary(lowered, "@title")) {
+      values.title = directiveValue(trimmed, "@title");
+    } else if (values.author.isEmpty() && prefixHasBoundary(lowered, "@author")) {
+      values.author = directiveValue(trimmed, "@author");
+    } else if (!trimmed.startsWith("@")) {
+      break;
+    }
+
+    if (!values.title.isEmpty() && !values.author.isEmpty()) {
+      break;
+    }
+    line = "";
+  }
+
+  file.close();
+  return values;
 }
 
 String readRsvpDirectiveValue(const String &path, const char *directive) {
@@ -1334,7 +1526,7 @@ void StorageManager::notifyStatus(const char *title, const char *line1, const ch
 bool StorageManager::begin() {
   mounted_ = false;
   listedOnce_ = false;
-  bookPaths_.clear();
+  clearBookCache();
 
   if (!SD_MMC.setPins(BoardConfig::PIN_SD_CLK, BoardConfig::PIN_SD_CMD, BoardConfig::PIN_SD_D0)) {
     Serial.println("[storage] SD_MMC pin setup failed");
@@ -1350,7 +1542,7 @@ bool StorageManager::begin() {
       const uint64_t sizeMb = SD_MMC.cardSize() / (1024ULL * 1024ULL);
       Serial.printf("[storage] SD initialized (%llu MB) at %d kHz\n", sizeMb, frequencyKhz);
       notifyStatus("SD", "Scanning books", "EPUB converts on open", 10);
-      refreshBookPaths();
+      refreshBookPaths(false);
       return true;
     }
   }
@@ -1365,7 +1557,7 @@ void StorageManager::end() {
   }
   mounted_ = false;
   listedOnce_ = false;
-  bookPaths_.clear();
+  clearBookCache();
 }
 
 void StorageManager::listBooks() {
@@ -1379,7 +1571,9 @@ void StorageManager::listBooks() {
     return;
   }
 
-  refreshBookPaths();
+  if (bookPaths_.empty()) {
+    refreshBookPaths();
+  }
   if (bookPaths_.empty()) {
     Serial.println("[storage] No readable .rsvp, .txt, or .epub books found under /books");
     return;
@@ -1401,8 +1595,8 @@ void StorageManager::listBooks() {
   }
 }
 
-void StorageManager::refreshBooks() {
-  refreshBookPaths();
+void StorageManager::refreshBooks(bool includeMetadata) {
+  refreshBookPaths(includeMetadata);
 }
 
 bool StorageManager::loadFirstBookWords(std::vector<String> &words, String *loadedPath) {
@@ -1424,9 +1618,8 @@ String StorageManager::bookDisplayName(size_t index) const {
     return "";
   }
 
-  const String title = readRsvpDirectiveValue(path, "@title");
-  if (!title.isEmpty()) {
-    return title;
+  if (index < bookTitles_.size() && !bookTitles_[index].isEmpty()) {
+    return bookTitles_[index];
   }
 
   return normalizeDisplayText(displayNameWithoutExtension(path));
@@ -1436,6 +1629,10 @@ String StorageManager::bookAuthorName(size_t index) const {
   const String path = bookPath(index);
   if (path.isEmpty()) {
     return "";
+  }
+
+  if (index < bookAuthors_.size()) {
+    return bookAuthors_[index];
   }
 
   if (hasEpubExtension(path)) {
@@ -1524,7 +1721,9 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
     return false;
   }
 
-  refreshBookPaths();
+  if (bookPaths_.empty()) {
+    refreshBookPaths(false);
+  }
   if (bookPaths_.empty()) {
     Serial.println("[storage] No readable .rsvp, .txt, or .epub books found under /books");
     return false;
@@ -1566,13 +1765,17 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
       continue;
     }
 
-    if (parseFile(entry, book, hasRsvpExtension(path))) {
+    const uint32_t parseStartedMs = millis();
+    const bool parsed = parseFile(entry, book, hasRsvpExtension(path));
+    const uint32_t parseElapsedMs = millis() - parseStartedMs;
+    if (parsed) {
       if (book.title.isEmpty()) {
         book.title = normalizeDisplayText(displayNameWithoutExtension(path));
       }
-      Serial.printf("[storage] Loaded %u words and %u chapters from %s\n",
+      Serial.printf("[storage] Loaded %u words and %u chapters from %s in %lu ms\n",
                     static_cast<unsigned int>(book.words.size()),
-                    static_cast<unsigned int>(book.chapters.size()), path.c_str());
+                    static_cast<unsigned int>(book.chapters.size()), path.c_str(),
+                    static_cast<unsigned long>(parseElapsedMs));
       if (loadedPath != nullptr) {
         *loadedPath = path;
       }
@@ -1603,14 +1806,100 @@ bool StorageManager::loadBookWords(size_t index, std::vector<String> &words, Str
   return true;
 }
 
-void StorageManager::refreshBookPaths() {
+StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
+  DiagnosticResult result;
+  notifyStatus("SD check", "Mounting card", "", 5);
+
   if (!mounted_) {
-    bookPaths_.clear();
+    if (!SD_MMC.setPins(BoardConfig::PIN_SD_CLK, BoardConfig::PIN_SD_CMD, BoardConfig::PIN_SD_D0)) {
+      result.summary = "Pin setup failed";
+      result.detail = "Check SD wiring";
+      Serial.println("[sd-check] SD_MMC pin setup failed");
+      return result;
+    }
+
+    for (int frequencyKhz : kSdFrequenciesKhz) {
+      Serial.printf("[sd-check] trying mount at %d kHz\n", frequencyKhz);
+      SD_MMC.end();
+      mounted_ = SD_MMC.begin(kMountPoint, true, false, frequencyKhz, 5);
+      if (mounted_) {
+        break;
+      }
+    }
+  }
+
+  result.mounted = mounted_;
+  if (!mounted_) {
+    result.summary = "Card not mounted";
+    result.detail = "FAT32? seated fully?";
+    Serial.println("[sd-check] mount failed; likely format, seating, or card fault");
+    return result;
+  }
+
+  result.sizeMb = SD_MMC.cardSize() / (1024ULL * 1024ULL);
+  result.cardType = cardTypeLabel(SD_MMC.cardType());
+  Serial.printf("[sd-check] mounted type=%s size=%llu MB\n", result.cardType.c_str(),
+                result.sizeMb);
+
+  result.booksDirectory = booksDirectoryExists();
+  if (!result.booksDirectory) {
+    result.summary = "Missing /books";
+    result.detail = "Create folder at root";
+    Serial.println("[sd-check] /books directory missing");
+    return result;
+  }
+
+  notifyStatus("SD check", "Scanning /books", "", 45);
+  bookPaths_ = collectBookPaths();
+  rebuildBookMetadataCache();
+  result.bookCount = bookPaths_.size();
+  result.unsupportedCount = countUnsupportedBookFiles();
+
+  notifyStatus("SD check", "Testing write", "", 70);
+  result.writable = writeDiagnosticProbeFile();
+  if (!result.writable) {
+    result.summary = "Write test failed";
+    result.detail = "Try FAT32/new card";
+    Serial.println("[sd-check] write/delete probe failed");
+    return result;
+  }
+
+  if (result.bookCount == 0) {
+    result.summary = "No books found";
+    if (result.unsupportedCount > 0) {
+      result.detail = "Use .rsvp .txt .epub";
+    } else {
+      result.detail = "Upload to /books";
+    }
+    Serial.printf("[sd-check] no supported books; unsupported=%u\n",
+                  static_cast<unsigned int>(result.unsupportedCount));
+    return result;
+  }
+
+  result.summary = String(result.bookCount) + " books OK";
+  result.detail = result.cardType + " " + String(static_cast<unsigned int>(result.sizeMb)) + " MB";
+  Serial.printf("[sd-check] OK books=%u unsupported=%u writable=%u\n",
+                static_cast<unsigned int>(result.bookCount),
+                static_cast<unsigned int>(result.unsupportedCount), result.writable ? 1 : 0);
+  return result;
+}
+
+void StorageManager::refreshBookPaths(bool includeMetadata) {
+  if (!mounted_) {
+    clearBookCache();
     return;
   }
 
   notifyStatus("SD", "Reading library", "", 96);
   bookPaths_ = collectBookPaths();
+  if (includeMetadata) {
+    rebuildBookMetadataCache();
+  } else {
+    bookTitles_.clear();
+    bookAuthors_.clear();
+    Serial.printf("[storage] Metadata cache skipped for %u entries\n",
+                  static_cast<unsigned int>(bookPaths_.size()));
+  }
 
   size_t rsvpCount = 0;
   size_t textCount = 0;
@@ -1631,15 +1920,58 @@ void StorageManager::refreshBookPaths() {
                 static_cast<unsigned int>(pendingEpubCount));
 }
 
+void StorageManager::rebuildBookMetadataCache() {
+  bookTitles_.clear();
+  bookAuthors_.clear();
+  bookTitles_.reserve(bookPaths_.size());
+  bookAuthors_.reserve(bookPaths_.size());
+
+  const uint32_t startedMs = millis();
+  size_t rsvpMetadataCount = 0;
+  for (const String &path : bookPaths_) {
+    String title;
+    String author;
+
+    if (hasRsvpExtension(path)) {
+      const RsvpDirectiveValues values = readRsvpDirectiveValues(path);
+      title = values.title;
+      author = values.author;
+      ++rsvpMetadataCount;
+    } else if (hasEpubExtension(path)) {
+      author = epubLibraryLabel(path);
+    }
+
+    bookTitles_.push_back(title);
+    bookAuthors_.push_back(author);
+  }
+
+  Serial.printf("[storage] Metadata cache: %u entries (%u rsvp) in %lu ms\n",
+                static_cast<unsigned int>(bookPaths_.size()),
+                static_cast<unsigned int>(rsvpMetadataCount),
+                static_cast<unsigned long>(millis() - startedMs));
+}
+
+void StorageManager::clearBookCache() {
+  bookPaths_.clear();
+  bookTitles_.clear();
+  bookAuthors_.clear();
+}
+
 bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
   book.clear();
-  book.words.reserve(file.size() / 6);
+  const size_t initialReserve =
+      std::min(kInitialWordReserveMax, static_cast<size_t>(file.size() / 8));
+  if (initialReserve > 0) {
+    book.words.reserve(initialReserve);
+  }
   String line;
   line.reserve(256);
   bool paragraphPending = true;
   bool keepReading = true;
+  bool parseFailed = false;
+  ParseStats stats;
 
-  constexpr size_t kBufSize = 512;
+  constexpr size_t kBufSize = 4096;
   static uint8_t buf[kBufSize];
 
   while (keepReading && file.available()) {
@@ -1657,26 +1989,61 @@ bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
       }
 
       if (c == '\n') {
-        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending)
-                                 : processBookLine(line, book, paragraphPending);
+        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending, &stats)
+                                 : processBookLine(line, book, paragraphPending, &stats);
         if (!keepReading && hasBookWordLimit()) {
           Serial.printf("[storage] Reached %lu word limit, truncating book\n",
                         static_cast<unsigned long>(kMaxBookWords));
+        } else if (!keepReading && stats.memoryLow) {
+          parseFailed = true;
+          Serial.printf("[storage] Book load stopped: low memory free8=%lu largest8=%lu\n",
+                        static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                        static_cast<unsigned long>(
+                            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
         }
         line = "";
         continue;
       }
 
       line += c;
+      if (line.length() >= kMaxBookLineChars) {
+        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending, &stats)
+                                 : processBookLine(line, book, paragraphPending, &stats);
+        ++stats.longLineSplits;
+        if (!keepReading && stats.memoryLow) {
+          parseFailed = true;
+          Serial.printf("[storage] Book load stopped: low memory free8=%lu largest8=%lu\n",
+                        static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                        static_cast<unsigned long>(
+                            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+        }
+        line = "";
+      }
     }
   }
 
   if (!line.isEmpty() && keepReading && !reachedBookWordLimit(book.words.size())) {
     if (rsvpFormat) {
-      processRsvpLine(line, book, paragraphPending);
+      keepReading = processRsvpLine(line, book, paragraphPending, &stats);
     } else {
-      processBookLine(line, book, paragraphPending);
+      keepReading = processBookLine(line, book, paragraphPending, &stats);
     }
+    if (!keepReading && stats.memoryLow) {
+      parseFailed = true;
+    }
+  }
+
+  if (stats.longLineSplits > 0 || stats.malformedUtf8 > 0 || stats.nonAsciiCodepoints > 0) {
+    Serial.printf("[storage] Parse cleanup: long_lines=%u malformed_utf8=%u non_ascii=%u\n",
+                  static_cast<unsigned int>(stats.longLineSplits),
+                  static_cast<unsigned int>(stats.malformedUtf8),
+                  static_cast<unsigned int>(stats.nonAsciiCodepoints));
+  }
+
+  if (parseFailed) {
+    book.clear();
+    notifyStatus("Book too large", "Memory limit reached", "Try converter/app", 100);
+    return false;
   }
 
   if (!book.words.empty() && book.paragraphStarts.empty()) {

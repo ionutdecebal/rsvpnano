@@ -13,6 +13,8 @@ constexpr uint8_t kTca9554OutputReg = 0x01;
 constexpr uint8_t kTca9554ConfigReg = 0x03;
 bool gBatteryPowerHoldEnabled = false;
 bool gBatteryAdcPathEnabled = false;
+constexpr float kBatteryDividerRatio = 3.0f;
+constexpr float kBatteryVoltageOffset = 0.0f;
 
 bool tca9554Read(uint8_t reg, uint8_t &value) {
   Wire1.beginTransmission(TCA9554_ADDRESS);
@@ -108,9 +110,9 @@ uint8_t batteryPercentForVoltage(float voltage) {
   };
 
   constexpr Point kCurve[] = {
-      {3.30f, 0},  {3.50f, 5},  {3.60f, 10}, {3.70f, 20},
-      {3.75f, 30}, {3.80f, 40}, {3.85f, 50}, {3.90f, 60},
-      {3.95f, 70}, {4.00f, 80}, {4.10f, 90}, {4.20f, 100},
+      {3.30f, 0},  {3.50f, 5},  {3.60f, 10}, {3.65f, 20},
+      {3.70f, 30}, {3.75f, 40}, {3.79f, 50}, {3.85f, 60},
+      {3.92f, 70}, {4.00f, 80}, {4.10f, 90}, {4.20f, 100},
   };
 
   if (voltage <= kCurve[0].voltage) {
@@ -190,30 +192,42 @@ void holdBacklightOffForDeepSleep() {
 bool readBatteryStatus(BatteryStatus &status) {
   status = BatteryStatus{};
   enableBatteryAdcPathIfAvailable();
-  delay(3);
+  delay(12);
 
-  uint32_t millivoltsTotal = 0;
+  constexpr uint8_t kMaxSamples = 24;
+  uint32_t millivolts[kMaxSamples];
   uint8_t samples = 0;
-  for (uint8_t i = 0; i < 8; ++i) {
+  for (uint8_t i = 0; i < kMaxSamples + 2; ++i) {
     const uint32_t sample = analogReadMilliVolts(PIN_BATTERY_ADC);
-    if (sample > 0) {
-      millivoltsTotal += sample;
+    if (i >= 2 && sample > 0 && samples < kMaxSamples) {
+      millivolts[samples] = sample;
       ++samples;
     }
-    delayMicroseconds(250);
+    delayMicroseconds(500);
   }
 
   if (samples == 0) {
     uint32_t rawTotal = 0;
-    for (uint8_t i = 0; i < 8; ++i) {
+    constexpr uint8_t kRawSamples = 16;
+    for (uint8_t i = 0; i < kRawSamples; ++i) {
       rawTotal += analogRead(PIN_BATTERY_ADC);
-      delayMicroseconds(250);
+      delayMicroseconds(500);
     }
-    const float pinMillivolts = (static_cast<float>(rawTotal) / 8.0f) * 3300.0f / 4095.0f;
-    status.voltage = pinMillivolts * 0.003f;
+    const float pinMillivolts =
+        (static_cast<float>(rawTotal) / static_cast<float>(kRawSamples)) * 3300.0f / 4095.0f;
+    status.voltage = (pinMillivolts * kBatteryDividerRatio / 1000.0f) + kBatteryVoltageOffset;
   } else {
-    const float pinMillivolts = static_cast<float>(millivoltsTotal) / samples;
-    status.voltage = pinMillivolts * 0.003f;
+    std::sort(millivolts, millivolts + samples);
+    const uint8_t trim = samples >= 10 ? 2 : 0;
+    uint32_t trimmedTotal = 0;
+    uint8_t trimmedSamples = 0;
+    for (uint8_t i = trim; i < samples - trim; ++i) {
+      trimmedTotal += millivolts[i];
+      ++trimmedSamples;
+    }
+    const float pinMillivolts =
+        static_cast<float>(trimmedTotal) / static_cast<float>(std::max<uint8_t>(1, trimmedSamples));
+    status.voltage = (pinMillivolts * kBatteryDividerRatio / 1000.0f) + kBatteryVoltageOffset;
   }
   disableBatteryAdcPathIfAvailable();
 
