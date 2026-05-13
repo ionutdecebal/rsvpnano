@@ -3005,12 +3005,14 @@ void App::enterPowerOff(uint32_t nowMs) {
 
   display_.renderStatus("OFF", "Release PWR", "Hold PWR to start");
   delay(300);
+  display_.prepareForSleep();
 
   storage_.end();
   touch_.end();
   touchInitialized_ = false;
   Serial.flush();
 
+  BoardConfig::holdBacklightOffForDeepSleep();
   BoardConfig::releaseBatteryPowerHold();
 
   const uint32_t waitStartMs = millis();
@@ -3019,7 +3021,6 @@ void App::enterPowerOff(uint32_t nowMs) {
     delay(10);
   }
 
-  display_.prepareForSleep();
   esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BoardConfig::PIN_PWR_BUTTON), 0);
   esp_deep_sleep_start();
 }
