@@ -1,5 +1,7 @@
 .pio
 .codex
+.claude
+CLAUDE.md
 .DS_Store
 __pycache__/
 *.py[cod]
