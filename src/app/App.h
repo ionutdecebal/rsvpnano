@@ -11,6 +11,7 @@
 #include "input/ButtonHandler.h"
 #include "input/TouchHandler.h"
 #include "reader/ReadingLoop.h"
+#include "storage/SettingsFile.h"
 #include "storage/StorageManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "timer/FocusTimer.h"
@@ -320,6 +321,12 @@ class App {
   const char *touchPhaseName(TouchPhase phase) const;
   bool isFocusTimerMenuScreen(MenuScreen screen) const;
   bool scrollModeEnabled() const;
+  void markSettingsFileDirty();
+  void maybeSaveSettingsToSd(uint32_t nowMs);
+  void saveSettingsToSd();
+  SettingsData currentSettingsSnapshot();
+  SettingsData buildSettingsData();
+  void applySettingsFromSd();
   void applyUiOrientation(BoardConfig::UiOrientation orientation);
   void applyReaderUiOrientation();
   BoardConfig::UiOrientation readerUiOrientation() const;
@@ -340,6 +347,7 @@ class App {
   ButtonHandler powerButton_;
   TouchHandler touch_;
   StorageManager storage_;
+  SettingsFile settingsFile_;
   OtaUpdater otaUpdater_;
   CompanionSyncManager companionSync_;
   UsbMassStorageManager usbTransfer_;
@@ -347,6 +355,8 @@ class App {
   PausedTouchSession pausedTouch_;
   TouchIntent pausedTouchIntent_ = TouchIntent::None;
 
+  bool settingsFileDirty_ = false;
+  uint32_t settingsFileDirtyMs_ = 0;
   uint32_t bootStartedMs_ = 0;
   uint32_t lastStateLogMs_ = 0;
   uint32_t wpmFeedbackUntilMs_ = 0;

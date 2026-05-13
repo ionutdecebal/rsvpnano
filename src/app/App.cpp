@@ -536,6 +536,10 @@ void App::begin() {
 
   display_.renderProgress("SD", "Loading books", "Use SD converter for EPUB", 0);
   storageReady_ = storage_.begin();
+  if (storageReady_) {
+    applySettingsFromSd();
+  }
+  storage_.listBooks();
   const uint16_t savedWpm = preferences_.getUShort(kPrefWpm, reader_.wpm());
   reader_.setWpm(savedWpm);
 
@@ -582,6 +586,7 @@ void App::update(uint32_t nowMs) {
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
   maybeSaveReadingPosition(nowMs);
+  maybeSaveSettingsToSd(nowMs);
 
   if (batteryChanged && (state_ == AppState::Paused || state_ == AppState::Playing)) {
     renderActiveReader(nowMs);
@@ -964,6 +969,7 @@ void App::cycleBrightness() {
                 static_cast<unsigned int>(kBrightnessLevelCount),
                 static_cast<unsigned int>(percent));
   applyDisplayPreferences(millis());
+  markSettingsFileDirty();
 }
 
 void App::cycleThemeMode(uint32_t nowMs) {
@@ -981,11 +987,13 @@ void App::cycleThemeMode(uint32_t nowMs) {
   preferences_.putBool(kPrefNightMode, nightMode_);
   Serial.printf("[display] theme=%s\n", themeModeLabel().c_str());
   applyDisplayPreferences(nowMs);
+  markSettingsFileDirty();
 }
 
 void App::cycleUiLanguage(uint32_t nowMs) {
   uiLanguage_ = Localization::nextLanguage(uiLanguage_);
   preferences_.putUChar(kPrefUiLanguage, static_cast<uint8_t>(uiLanguage_));
+  markSettingsFileDirty();
   Serial.printf("[display] language=%s\n", uiLanguageLabel().c_str());
 
   if (state_ == AppState::Menu) {
@@ -1007,6 +1015,7 @@ void App::cycleUiLanguage(uint32_t nowMs) {
 void App::cycleReaderMode(uint32_t nowMs) {
   readerMode_ = nextReaderMode(readerMode_);
   preferences_.putUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_));
+  markSettingsFileDirty();
   Serial.printf("[display] reader mode=%s\n", readerModeLabel().c_str());
   invalidateContextPreviewWindow();
 
@@ -1022,6 +1031,7 @@ void App::cycleReaderMode(uint32_t nowMs) {
 void App::cycleHandednessMode(uint32_t nowMs) {
   handednessMode_ = nextHandednessMode(handednessMode_);
   preferences_.putUChar(kPrefHandedness, static_cast<uint8_t>(handednessMode_));
+  markSettingsFileDirty();
   Serial.printf("[display] handedness=%s rotation180=%u\n", handednessLabel().c_str(),
                 uiRotated180() ? 1U : 0U);
   applyHandednessSettings(nowMs);
@@ -1030,6 +1040,7 @@ void App::cycleHandednessMode(uint32_t nowMs) {
 void App::togglePhantomWords(uint32_t nowMs) {
   phantomWordsEnabled_ = !phantomWordsEnabled_;
   preferences_.putBool(kPrefPhantomWords, phantomWordsEnabled_);
+  markSettingsFileDirty();
   Serial.printf("[display] phantom words=%s\n", phantomWordsLabel().c_str());
   applyDisplayPreferences(nowMs);
 }
@@ -1037,6 +1048,7 @@ void App::togglePhantomWords(uint32_t nowMs) {
 void App::cycleReaderFontSize(uint32_t nowMs) {
   readerFontSizeIndex_ = static_cast<uint8_t>((readerFontSizeIndex_ + 1) % kReaderFontSizeCount);
   preferences_.putUChar(kPrefReaderFontSize, readerFontSizeIndex_);
+  markSettingsFileDirty();
   Serial.printf("[display] font size=%s\n", readerFontSizeLabel().c_str());
   applyDisplayPreferences(nowMs);
 }
@@ -1182,6 +1194,7 @@ bool App::handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs) {
   }
 
   preferences_.putUChar(kPrefFooterMetricMode, static_cast<uint8_t>(footerMetricMode_));
+  markSettingsFileDirty();
   resetReaderTapTracking();
   renderActiveReader(nowMs);
   const char *modeName = "percent";
@@ -1464,6 +1477,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     const int wpmDelta = (deltaY < 0) ? 1 : -1;
     reader_.adjustWpm(wpmDelta);
     preferences_.putUShort(kPrefWpm, reader_.wpm());
+    markSettingsFileDirty();
     renderWpmFeedback(nowMs);
     Serial.printf("[app] WPM=%u interval=%lu ms\n", reader_.wpm(),
                   static_cast<unsigned long>(reader_.wordIntervalMs()));
@@ -2132,6 +2146,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
   }
 
   applyPacingSettings();
+  markSettingsFileDirty();
   rebuildSettingsMenuItems();
   renderSettings();
 }
@@ -2160,12 +2175,14 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
       return;
     case kWifiSettingsAutoUpdateIndex:
       preferences_.putBool(kPrefOtaAuto, !otaAutoCheckEnabled());
+      markSettingsFileDirty();
       rebuildSettingsMenuItems();
       renderSettings();
       return;
     case kWifiSettingsForgetIndex:
       preferences_.remove(kPrefWifiSsid);
       preferences_.remove(kPrefWifiPass);
+      markSettingsFileDirty();
       display_.renderStatus("Wi-Fi", "Credentials cleared", "");
       delay(900);
       rebuildSettingsMenuItems();
@@ -2283,6 +2300,7 @@ void App::selectWifiNetworkItem(uint32_t nowMs) {
 
   preferences_.putString(kPrefWifiSsid, network.ssid);
   preferences_.putString(kPrefWifiPass, "");
+  markSettingsFileDirty();
   display_.renderStatus("Wi-Fi", "Network saved", network.ssid);
   delay(900);
   openWifiSettings();
@@ -2516,6 +2534,7 @@ void App::commitTextEntry(uint32_t nowMs) {
       const String ssid = textEntrySession_.contextValue;
       preferences_.putString(kPrefWifiSsid, ssid);
       preferences_.putString(kPrefWifiPass, textEntrySession_.value);
+      markSettingsFileDirty();
       textEntrySession_ = TextEntrySession();
       textEntryButtons_.clear();
       display_.renderStatus("Wi-Fi", "Network saved", ssid);
@@ -2532,6 +2551,7 @@ void App::commitTextEntry(uint32_t nowMs) {
         preferences_.putString(kPrefOtaOwner, owner);
         display_.renderStatus("OTA", "Owner saved", owner);
       }
+      markSettingsFileDirty();
       delay(900);
       textEntrySession_ = TextEntrySession();
       textEntryButtons_.clear();
@@ -2626,6 +2646,7 @@ void App::selectTypographyTuningItem(uint32_t nowMs) {
   }
 
   applyTypographySettings(nowMs);
+  markSettingsFileDirty();
 }
 
 void App::cycleTypographyPreviewSample(int direction) {
@@ -3308,6 +3329,9 @@ void App::enterPowerOff(uint32_t nowMs) {
   powerOffStarted_ = true;
   Serial.println("[app] powering off; hold PWR to start again");
   saveReadingPosition(true);
+  if (settingsFileDirty_) {
+    saveSettingsToSd();
+  }
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
   touchPlayHeld_ = false;
@@ -3341,6 +3365,9 @@ void App::enterPowerOff(uint32_t nowMs) {
 void App::enterSleep(uint32_t nowMs) {
   Serial.println("[app] entering light sleep; press BOOT to wake");
   saveReadingPosition(true);
+  if (settingsFileDirty_) {
+    saveSettingsToSd();
+  }
   setState(AppState::Sleeping, nowMs);
   Serial.flush();
   delay(200);
@@ -4391,4 +4418,181 @@ void App::handleStorageStatus(void *context, const char *title, const char *line
 
   static_cast<App *>(context)->renderStorageStatus(title, line1, line2, progressPercent);
   delay(0);
+}
+
+void App::markSettingsFileDirty() {
+  settingsFileDirty_ = true;
+  settingsFileDirtyMs_ = millis();
+}
+
+void App::maybeSaveSettingsToSd(uint32_t nowMs) {
+  if (!settingsFileDirty_ || !storage_.isMounted()) {
+    return;
+  }
+
+  constexpr uint32_t kDebounceMs = 2000;
+  if (nowMs - settingsFileDirtyMs_ < kDebounceMs) {
+    return;
+  }
+
+  saveSettingsToSd();
+}
+
+void App::saveSettingsToSd() {
+  if (settingsFile_.save(buildSettingsData())) {
+    settingsFileDirty_ = false;
+  }
+}
+
+SettingsData App::currentSettingsSnapshot() {
+  SettingsData data;
+  data.brightness = brightnessLevelIndex_;
+  data.darkMode = darkMode_;
+  data.nightMode = nightMode_;
+  data.uiLanguage = static_cast<uint8_t>(uiLanguage_);
+  data.readerMode = static_cast<uint8_t>(readerMode_);
+  data.handedness = static_cast<uint8_t>(handednessMode_);
+  data.phantomWords = phantomWordsEnabled_;
+  data.footerMetric = static_cast<uint8_t>(footerMetricMode_);
+  data.fontSize = readerFontSizeIndex_;
+  data.typeface = static_cast<uint8_t>(typographyConfig_.typeface);
+  data.focusHighlight = typographyConfig_.focusHighlight;
+  data.tracking = typographyConfig_.trackingPx;
+  data.anchorPercent = typographyConfig_.anchorPercent;
+  data.guideWidth = typographyConfig_.guideHalfWidth;
+  data.guideGap = typographyConfig_.guideGap;
+  data.pacingLongMs = pacingLongWordDelayMs_;
+  data.pacingComplexMs = pacingComplexWordDelayMs_;
+  data.pacingPunctuationMs = pacingPunctuationDelayMs_;
+  data.wpm = reader_.wpm();
+  data.otaAuto = otaAutoCheckEnabled();
+  data.recentSequence = preferences_.getUInt(kPrefRecentSeq, 0);
+  return data;
+}
+
+SettingsData App::buildSettingsData() {
+  SettingsData data = currentSettingsSnapshot();
+  data.wifiSsid = preferences_.getString(kPrefWifiSsid, "");
+  data.wifiPass = preferences_.getString(kPrefWifiPass, "");
+  data.otaOwner = preferences_.getString(kPrefOtaOwner, "");
+  data.currentBook = currentBookPath_;
+
+  for (size_t i = 0; i < storage_.bookCount(); ++i) {
+    const String path = storage_.bookPath(i);
+    const String posKey = bookPositionKey(path);
+    if (!preferences_.isKey(posKey.c_str())) {
+      continue;
+    }
+    SettingsData::BookPos pos;
+    pos.path = path;
+    pos.position = preferences_.getUInt(posKey.c_str(), 0);
+    pos.wordCount = preferences_.getUInt(bookWordCountKey(path).c_str(), 0);
+    pos.recentSeq = preferences_.getUInt(bookRecentKey(path).c_str(), 0);
+    data.books.push_back(std::move(pos));
+  }
+
+  return data;
+}
+
+void App::applySettingsFromSd() {
+  // Pre-populate with current values so missing JSON keys keep their NVS values.
+  SettingsData data = currentSettingsSnapshot();
+
+  if (!settingsFile_.load(data)) {
+    return;
+  }
+
+  // Apply loaded values with the same clamping used during NVS load.
+  brightnessLevelIndex_ = (data.brightness < kBrightnessLevelCount)
+                              ? data.brightness
+                              : static_cast<uint8_t>(kBrightnessLevelCount - 1);
+  darkMode_ = data.darkMode;
+  nightMode_ = data.nightMode;
+  uiLanguage_ = Localization::sanitizeLanguage(data.uiLanguage);
+  readerMode_ = readerModeFromSetting(data.readerMode);
+  handednessMode_ = handednessModeFromSetting(data.handedness);
+  readerFontSizeIndex_ = (data.fontSize < kReaderFontSizeCount) ? data.fontSize : 0;
+  switch (data.footerMetric) {
+    case static_cast<uint8_t>(FooterMetricMode::ChapterTime):
+      footerMetricMode_ = FooterMetricMode::ChapterTime;
+      break;
+    case static_cast<uint8_t>(FooterMetricMode::BookTime):
+      footerMetricMode_ = FooterMetricMode::BookTime;
+      break;
+    default:
+      footerMetricMode_ = FooterMetricMode::Percentage;
+      break;
+  }
+  pacingLongWordDelayMs_ = static_cast<uint16_t>(
+      clampIntSetting(data.pacingLongMs, kPacingDelayMinMs, kPacingDelayMaxMs));
+  pacingComplexWordDelayMs_ = static_cast<uint16_t>(
+      clampIntSetting(data.pacingComplexMs, kPacingDelayMinMs, kPacingDelayMaxMs));
+  pacingPunctuationDelayMs_ = static_cast<uint16_t>(
+      clampIntSetting(data.pacingPunctuationMs, kPacingDelayMinMs, kPacingDelayMaxMs));
+  phantomWordsEnabled_ = data.phantomWords;
+  typographyConfig_.typeface = readerTypefaceFromSetting(data.typeface);
+  typographyConfig_.focusHighlight = data.focusHighlight;
+  typographyConfig_.trackingPx = static_cast<int8_t>(
+      clampIntSetting(data.tracking, kTypographyTrackingMin, kTypographyTrackingMax));
+  typographyConfig_.anchorPercent = static_cast<uint8_t>(
+      clampIntSetting(data.anchorPercent, kTypographyAnchorMin, kTypographyAnchorMax));
+  typographyConfig_.guideHalfWidth = static_cast<uint8_t>(
+      clampIntSetting(data.guideWidth, kTypographyGuideWidthMin, kTypographyGuideWidthMax));
+  typographyConfig_.guideGap = static_cast<uint8_t>(
+      clampIntSetting(data.guideGap, kTypographyGuideGapMin, kTypographyGuideGapMax));
+  reader_.setWpm(data.wpm);
+
+  // Re-apply settings so hardware reflects the SD-loaded values.
+  applyHandednessSettings(0, false);
+  applyDisplayPreferences(0, false);
+  applyTypographySettings(0, false);
+  applyPacingSettings();
+
+  // Write all settings back to NVS for consistency.
+  preferences_.putUChar(kPrefBrightness, brightnessLevelIndex_);
+  preferences_.putBool(kPrefDarkMode, darkMode_);
+  preferences_.putBool(kPrefNightMode, nightMode_);
+  preferences_.putUChar(kPrefUiLanguage, static_cast<uint8_t>(uiLanguage_));
+  preferences_.putUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_));
+  preferences_.putUChar(kPrefHandedness, static_cast<uint8_t>(handednessMode_));
+  preferences_.putBool(kPrefPhantomWords, phantomWordsEnabled_);
+  preferences_.putUChar(kPrefFooterMetricMode, static_cast<uint8_t>(footerMetricMode_));
+  preferences_.putUChar(kPrefReaderFontSize, readerFontSizeIndex_);
+  preferences_.putUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface));
+  preferences_.putBool(kPrefTypographyFocusHighlight, typographyConfig_.focusHighlight);
+  preferences_.putChar(kPrefTypographyTracking, typographyConfig_.trackingPx);
+  preferences_.putUChar(kPrefTypographyAnchor, typographyConfig_.anchorPercent);
+  preferences_.putUChar(kPrefTypographyGuideWidth, typographyConfig_.guideHalfWidth);
+  preferences_.putUChar(kPrefTypographyGuideGap, typographyConfig_.guideGap);
+  preferences_.putUShort(kPrefPacingLongMs, pacingLongWordDelayMs_);
+  preferences_.putUShort(kPrefPacingComplexMs, pacingComplexWordDelayMs_);
+  preferences_.putUShort(kPrefPacingPunctuationMs, pacingPunctuationDelayMs_);
+  preferences_.putUShort(kPrefWpm, data.wpm);
+  if (!data.wifiSsid.isEmpty()) {
+    preferences_.putString(kPrefWifiSsid, data.wifiSsid);
+    preferences_.putString(kPrefWifiPass, data.wifiPass);
+  }
+  preferences_.putBool(kPrefOtaAuto, data.otaAuto);
+  if (!data.otaOwner.isEmpty()) {
+    preferences_.putString(kPrefOtaOwner, data.otaOwner);
+  }
+
+  // Restore per-book positions from JSON into NVS using the existing hash key scheme.
+  if (data.recentSequence > preferences_.getUInt(kPrefRecentSeq, 0)) {
+    preferences_.putUInt(kPrefRecentSeq, data.recentSequence);
+  }
+  if (!data.currentBook.isEmpty()) {
+    preferences_.putString(kPrefBookPath, data.currentBook);
+  }
+  for (const auto &b : data.books) {
+    const uint32_t nvsRecentSeq = preferences_.getUInt(bookRecentKey(b.path).c_str(), 0);
+    if (b.recentSeq >= nvsRecentSeq) {
+      preferences_.putUInt(bookPositionKey(b.path).c_str(), b.position);
+      preferences_.putUInt(bookWordCountKey(b.path).c_str(), b.wordCount);
+      preferences_.putUInt(bookRecentKey(b.path).c_str(), b.recentSeq);
+    }
+  }
+
+  Serial.printf("[settings] applied SD settings (%u book positions restored)\n",
+                static_cast<unsigned int>(data.books.size()));
 }
