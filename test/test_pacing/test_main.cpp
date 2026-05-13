@@ -391,6 +391,66 @@ void test_word_at_returns_correct_word(void) {
 }
 
 // ---------------------------------------------------------------------------
+// wordPacingBonusMsAt: WPM-independent per-word bonus used by the time-estimate cache
+// ---------------------------------------------------------------------------
+
+void test_word_pacing_bonus_at_sum_matches_expected(void) {
+  // Phrase mixes a comma pause, a sentence pause, and a long word so the bonus sum is non-zero.
+  ReadingLoop r = makeReader(300, {"This", "is,", "honestly,", "information.", "Then"});
+
+  uint32_t bonusSum = 0;
+  for (size_t i = 0; i < 5; ++i) {
+    bonusSum += r.wordPacingBonusMsAt(i);
+  }
+
+  // Per-word bonuses (base interval is 200 ms at 300 WPM):
+  //   "This"          → 0
+  //   "is,"           → comma(45% of 200) = 90
+  //   "honestly,"     → length 12% + complexity 10% + comma 45% = 67% of 200 = 134.
+  //   "information."  → length 39% + complexity 20% + sentence 135% (next "Then" uppercase) = 194%
+  //                     of 200 = 388.
+  //   "Then"          → 0.
+  // Expected = 0 + 90 + 134 + 388 + 0 = 612.
+  TEST_ASSERT_EQUAL_UINT32(612u, bonusSum);
+}
+
+void test_word_pacing_bonus_at_is_invariant_to_wpm(void) {
+  // The pacing bonus is the WPM-independent part of the per-word duration. Changing WPM must not
+  // change the bonus, which lets us cache it once per book.
+  ReadingLoop r = makeReader(300, {"This", "is,", "honestly,", "information.", "Then"});
+  uint32_t baselineBonuses[5];
+  for (size_t i = 0; i < 5; ++i) {
+    baselineBonuses[i] = r.wordPacingBonusMsAt(i);
+  }
+
+  r.setWpm(600);
+  for (size_t i = 0; i < 5; ++i) {
+    TEST_ASSERT_EQUAL_UINT32(baselineBonuses[i], r.wordPacingBonusMsAt(i));
+  }
+
+  r.setWpm(150);
+  for (size_t i = 0; i < 5; ++i) {
+    TEST_ASSERT_EQUAL_UINT32(baselineBonuses[i], r.wordPacingBonusMsAt(i));
+  }
+}
+
+void test_word_pacing_bonus_plus_interval_equals_current_duration(void) {
+  // Sanity check that base + bonus reconstructs the runtime per-word duration.
+  ReadingLoop r = makeReader(300, {"This", "is,", "fine.", "Then"});
+  for (size_t i = 0; i < 4; ++i) {
+    r.seekTo(i);
+    TEST_ASSERT_EQUAL_UINT32(r.wordIntervalMs() + r.wordPacingBonusMsAt(i),
+                             r.currentWordDurationMs());
+  }
+}
+
+void test_word_pacing_bonus_at_out_of_range_returns_zero(void) {
+  ReadingLoop r = makeReader(300, {"a", "b"});
+  TEST_ASSERT_EQUAL_UINT32(0u, r.wordPacingBonusMsAt(2));
+  TEST_ASSERT_EQUAL_UINT32(0u, r.wordPacingBonusMsAt(99));
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -454,6 +514,11 @@ int main(void) {
   RUN_TEST(test_rewind_sentence_ignores_abbreviation_periods);
 
   RUN_TEST(test_word_at_returns_correct_word);
+
+  RUN_TEST(test_word_pacing_bonus_at_sum_matches_expected);
+  RUN_TEST(test_word_pacing_bonus_at_is_invariant_to_wpm);
+  RUN_TEST(test_word_pacing_bonus_plus_interval_equals_current_duration);
+  RUN_TEST(test_word_pacing_bonus_at_out_of_range_returns_zero);
 
   return UNITY_END();
 }

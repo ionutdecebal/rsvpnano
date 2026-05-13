@@ -129,11 +129,13 @@ constexpr size_t kSettingsPacingLongWordsIndex = 1;
 constexpr size_t kSettingsPacingComplexityIndex = 2;
 constexpr size_t kSettingsPacingPunctuationIndex = 3;
 constexpr size_t kSettingsPacingPauseModeIndex = 4;
-constexpr size_t kSettingsPacingResetIndex = 5;
+constexpr size_t kSettingsPacingTimeEstimateIndex = 5;
+constexpr size_t kSettingsPacingResetIndex = 6;
 constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
 constexpr size_t kWifiSettingsForgetIndex = 4;
+constexpr size_t kWifiSettingsOtaOwnerIndex = 5;
 
 constexpr size_t kBookPickerBackIndex = 0;
 constexpr size_t kChapterPickerBackIndex = 0;
@@ -165,6 +167,7 @@ constexpr const char *kPrefPacingLongMs = "pace_lms";
 constexpr const char *kPrefPacingComplexMs = "pace_cms";
 constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
 constexpr const char *kPrefPauseMode = "pause_md";
+constexpr const char *kPrefAccurateTime = "time_est_a";
 constexpr const char *kPrefTypographyTracking = "type_trk";
 constexpr const char *kPrefTypographyAnchor = "type_anc";
 constexpr const char *kPrefTypographyGuideWidth = "type_wid";
@@ -173,6 +176,7 @@ constexpr const char *kPrefRecentSeq = "seq";
 constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
+constexpr const char *kPrefOtaOwner = "ota_owner";
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -469,6 +473,7 @@ void App::begin() {
       loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
   pacingPunctuationDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
+  accurateTimeEstimateEnabled_ = preferences_.getBool(kPrefAccurateTime, true);
   typographyConfig_ = defaultTypographyConfig();
   typographyConfig_.typeface = readerTypefaceFromSetting(
       preferences_.getUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface)));
@@ -534,6 +539,7 @@ void App::begin() {
     currentBookTitle_ = "Demo";
     reader_.begin(bootStartedMs_);
     invalidateContextPreviewWindow();
+    rebuildTimeEstimateCache();
     Serial.println("[app] using built-in demo text");
   } else {
     currentBookTitle_ = storage_.bookDisplayName(pendingBootBookIndex_);
@@ -620,6 +626,9 @@ void App::setState(AppState nextState, uint32_t nowMs) {
   }
 
   const AppState previousState = state_;
+  if (previousState == AppState::Menu && nextState != AppState::Menu) {
+    flushPendingTimeEstimateRebuild();
+  }
 
   if (nextState != AppState::Paused) {
     pausedTouch_.active = false;
@@ -2036,6 +2045,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
 
   switch (settingsSelectedIndex_) {
     case kSettingsBackIndex:
+      flushPendingTimeEstimateRebuild();
       settingsSelectedIndex_ = kSettingsHomePacingIndex;
       menuScreen_ = MenuScreen::SettingsHome;
       rebuildSettingsMenuItems();
@@ -2061,7 +2071,20 @@ void App::selectSettingsItem(uint32_t nowMs) {
           pauseMode_ == PauseMode::SentenceEnd ? PauseMode::Instant : PauseMode::SentenceEnd;
       preferences_.putUChar(kPrefPauseMode, static_cast<uint8_t>(pauseMode_));
       Serial.printf("[settings] pause mode=%s\n", pauseModeLabel().c_str());
-      break;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    case kSettingsPacingTimeEstimateIndex:
+      accurateTimeEstimateEnabled_ = !accurateTimeEstimateEnabled_;
+      preferences_.putBool(kPrefAccurateTime, accurateTimeEstimateEnabled_);
+      if (accurateTimeEstimateEnabled_) {
+        rebuildTimeEstimateCache();
+      } else {
+        invalidateTimeEstimateCache();
+      }
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
     case kSettingsPacingResetIndex:
       pacingLongWordDelayMs_ = kDefaultPacingDelayMs;
       pacingComplexWordDelayMs_ = kDefaultPacingDelayMs;
@@ -2113,6 +2136,11 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
       delay(900);
       rebuildSettingsMenuItems();
       renderSettings();
+      return;
+    case kWifiSettingsOtaOwnerIndex:
+      openTextEntry(TextEntryPurpose::OtaOwner, "OTA Source", "GitHub owner", "",
+                    preferences_.getString(kPrefOtaOwner, ""), "", false, 39,
+                    MenuScreen::WifiSettings);
       return;
     default:
       return;
@@ -2461,6 +2489,21 @@ void App::commitTextEntry(uint32_t nowMs) {
       openWifiSettings();
       return;
     }
+    case TextEntryPurpose::OtaOwner: {
+      const String owner = textEntrySession_.value;
+      if (owner.isEmpty()) {
+        preferences_.remove(kPrefOtaOwner);
+        display_.renderStatus("OTA", "Reset to default", "");
+      } else {
+        preferences_.putString(kPrefOtaOwner, owner);
+        display_.renderStatus("OTA", "Owner saved", owner);
+      }
+      delay(900);
+      textEntrySession_ = TextEntrySession();
+      textEntryButtons_.clear();
+      openWifiSettings();
+      return;
+    }
     case TextEntryPurpose::None:
     default:
       menuScreen_ = textEntrySession_.returnScreen;
@@ -2594,6 +2637,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Punctuation) + ": " +
                                  pacingDelayLabel(pacingPunctuationDelayMs_));
     settingsMenuItems_.push_back("Pause: " + pauseModeLabel());
+    settingsMenuItems_.push_back(uiText(UiText::TimeEstimate) + ": " + timeEstimateModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::ResetPacing));
   } else if (menuScreen_ == MenuScreen::WifiSettings) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
@@ -2601,6 +2645,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Choose network");
     settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
     settingsMenuItems_.push_back("Forget network");
+    settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
   }
 
   if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -2619,6 +2664,27 @@ void App::applyPacingSettings() {
                 static_cast<unsigned int>(pacingLongWordDelayMs_),
                 static_cast<unsigned int>(pacingComplexWordDelayMs_),
                 static_cast<unsigned int>(pacingPunctuationDelayMs_));
+  if (state_ == AppState::Menu && menuScreen_ == MenuScreen::SettingsPacing) {
+    pacingCacheDirty_ = true;
+  } else {
+    rebuildTimeEstimateCache();
+  }
+}
+
+void App::flushPendingTimeEstimateRebuild() {
+  if (!pacingCacheDirty_) {
+    return;
+  }
+  rebuildTimeEstimateCache();
+}
+
+String App::otaOwnerLabel() {
+  if (preferences_.isKey(kPrefOtaOwner)) {
+    return preferences_.getString(kPrefOtaOwner, "");
+  }
+  OtaUpdater::Config cfg;
+  otaUpdater_.loadConfig(cfg);
+  return cfg.githubOwner;
 }
 
 OtaUpdater::Config App::preferredOtaConfig() {
@@ -2633,6 +2699,9 @@ OtaUpdater::Config App::preferredOtaConfig() {
   }
   if (preferences_.isKey(kPrefOtaAuto)) {
     otaConfig.autoCheck = preferences_.getBool(kPrefOtaAuto, otaConfig.autoCheck);
+  }
+  if (preferences_.isKey(kPrefOtaOwner)) {
+    otaConfig.githubOwner = preferences_.getString(kPrefOtaOwner, "");
   }
 
   return otaConfig;
@@ -3153,12 +3222,14 @@ void App::enterPowerOff(uint32_t nowMs) {
 
   display_.renderStatus("OFF", "Release PWR", "Hold PWR to start");
   delay(300);
+  display_.prepareForSleep();
 
   storage_.end();
   touch_.end();
   touchInitialized_ = false;
   Serial.flush();
 
+  BoardConfig::holdBacklightOffForDeepSleep();
   BoardConfig::releaseBatteryPowerHold();
 
   const uint32_t waitStartMs = millis();
@@ -3167,7 +3238,6 @@ void App::enterPowerOff(uint32_t nowMs) {
     delay(10);
   }
 
-  display_.prepareForSleep();
   esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BoardConfig::PIN_PWR_BUTTON), 0);
   esp_deep_sleep_start();
 }
@@ -3331,6 +3401,7 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPosition
   paragraphStarts_ = std::move(book.paragraphStarts);
   reader_.setWords(std::move(book.words), nowMs);
   invalidateContextPreviewWindow();
+  rebuildTimeEstimateCache();
   currentBookIndex_ = loadedIndex;
   currentBookPath_ = loadedPath;
   currentBookTitle_ = book.title.isEmpty() ? displayNameForPath(loadedPath) : book.title;
@@ -3757,19 +3828,62 @@ String App::formatBatteryTimeRemaining(uint32_t minutes) const {
 
 uint32_t App::estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex) const {
   const size_t wordCount = reader_.wordCount();
-  if (wordCount == 0) {
+  if (wordCount == 0 || reader_.wpm() == 0) {
     return 0;
   }
 
-  startIndex = std::min(startIndex, wordCount - 1);
+  startIndex = std::min(startIndex, wordCount);
   endIndex = std::min(endIndex, wordCount);
   if (endIndex <= startIndex) {
     return 0;
   }
 
-  const size_t remainingWords = endIndex - startIndex;
-  return static_cast<uint32_t>((static_cast<uint64_t>(remainingWords) * 60000ULL) /
-                               static_cast<uint64_t>(reader_.wpm()));
+  const uint32_t baseMs = static_cast<uint32_t>(
+      (static_cast<uint64_t>(endIndex - startIndex) * 60000ULL) /
+      static_cast<uint64_t>(reader_.wpm()));
+
+  if (!accurateTimeEstimateEnabled_ || !timeEstimateCacheValid_) {
+    return baseMs;
+  }
+
+  return baseMs + wordBonusPrefixSumMs_[endIndex] - wordBonusPrefixSumMs_[startIndex];
+}
+
+void App::invalidateTimeEstimateCache() {
+  timeEstimateCacheValid_ = false;
+  std::vector<uint32_t>().swap(wordBonusPrefixSumMs_);
+}
+
+void App::rebuildTimeEstimateCache() {
+  invalidateTimeEstimateCache();
+  pacingCacheDirty_ = false;
+  if (!accurateTimeEstimateEnabled_) {
+    return;
+  }
+
+  const size_t n = reader_.wordCount();
+  if (n == 0) {
+    return;
+  }
+
+  wordBonusPrefixSumMs_.assign(n + 1, 0);
+  uint32_t running = 0;
+  const uint32_t startMs = millis();
+  for (size_t i = 0; i < n; ++i) {
+    wordBonusPrefixSumMs_[i] = running;
+    running += reader_.wordPacingBonusMsAt(i);
+  }
+  wordBonusPrefixSumMs_[n] = running;
+  timeEstimateCacheValid_ = true;
+
+  Serial.printf("[time-est] cached %u words bonus=%lums took=%lums\n",
+                static_cast<unsigned int>(n), static_cast<unsigned long>(running),
+                static_cast<unsigned long>(millis() - startMs));
+}
+
+String App::timeEstimateModeLabel() const {
+  return uiText(accurateTimeEstimateEnabled_ ? UiText::TimeEstimateAccurate
+                                             : UiText::TimeEstimateFast);
 }
 
 String App::formatReadingTimeRemaining(uint32_t remainingMs) const {

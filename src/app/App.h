@@ -91,6 +91,7 @@ class App {
   enum class TextEntryPurpose : uint8_t {
     None,
     WifiPassword,
+    OtaOwner,
   };
 
   enum class KeyboardMode : uint8_t {
@@ -214,6 +215,7 @@ class App {
   void commitTextEntry(uint32_t nowMs);
   String configuredWifiSsid();
   bool otaAutoCheckEnabled();
+  String otaOwnerLabel();
   String pacingDelayLabel(uint16_t delayMs) const;
   String firmwareUpdateMenuLabel() const;
   String themeModeLabel() const;
@@ -278,7 +280,11 @@ class App {
   String batteryTimeRemainingLabel() const;
   String formatBatteryTimeRemaining(uint32_t minutes) const;
   uint32_t estimatedReadingTimeRemainingMs(size_t startIndex, size_t endIndex) const;
+  void rebuildTimeEstimateCache();
+  void invalidateTimeEstimateCache();
+  void flushPendingTimeEstimateRebuild();
   String formatReadingTimeRemaining(uint32_t remainingMs) const;
+  String timeEstimateModeLabel() const;
   uint8_t readingProgressPercent() const;
   void renderReaderWord();
   void renderContextPreview();
@@ -367,6 +373,10 @@ class App {
   std::vector<String> chapterMenuItems_;
   std::vector<ChapterMarker> chapterMarkers_;
   std::vector<size_t> paragraphStarts_;
+  std::vector<uint32_t> wordBonusPrefixSumMs_;
+  bool timeEstimateCacheValid_ = false;
+  bool accurateTimeEstimateEnabled_ = true;
+  bool pacingCacheDirty_ = false;
   std::vector<DisplayManager::ContextWord> contextPreviewWords_;
   std::vector<WifiNetworkInfo> wifiNetworks_;
   std::vector<TextEntryButton> textEntryButtons_;

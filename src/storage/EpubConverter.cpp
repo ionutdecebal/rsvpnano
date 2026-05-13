@@ -750,6 +750,163 @@ char decodedEntityChar(const String &entity) {
   return ' ';
 }
 
+bool isUtf8Continuation(uint8_t value) { return (value & 0xC0) == 0x80; }
+
+bool decodeUtf8Codepoint(const String &text, size_t &index, uint32_t &codepoint) {
+  const uint8_t first = static_cast<uint8_t>(text[index++]);
+  if (first < 0x80) {
+    codepoint = first;
+    return true;
+  }
+
+  uint8_t continuationCount = 0;
+  uint32_t minimumValue = 0;
+  if ((first & 0xE0) == 0xC0) {
+    codepoint = first & 0x1F;
+    continuationCount = 1;
+    minimumValue = 0x80;
+  } else if ((first & 0xF0) == 0xE0) {
+    codepoint = first & 0x0F;
+    continuationCount = 2;
+    minimumValue = 0x800;
+  } else if ((first & 0xF8) == 0xF0) {
+    codepoint = first & 0x07;
+    continuationCount = 3;
+    minimumValue = 0x10000;
+  } else {
+    return false;
+  }
+
+  if (index + continuationCount > text.length()) {
+    return false;
+  }
+
+  for (uint8_t i = 0; i < continuationCount; ++i) {
+    const uint8_t next = static_cast<uint8_t>(text[index]);
+    if (!isUtf8Continuation(next)) {
+      return false;
+    }
+    ++index;
+    codepoint = (codepoint << 6) | (next & 0x3F);
+  }
+
+  if (codepoint < minimumValue || codepoint > 0x10FFFF ||
+      (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+    return false;
+  }
+
+  return true;
+}
+
+void appendDisplayApproximation(String &target, uint32_t codepoint) {
+  if (codepoint >= 32 && codepoint <= 126) {
+    target += static_cast<char>(codepoint);
+    return;
+  }
+
+  if (codepoint == 0x200B || codepoint == 0xFEFF) {
+    return;
+  }
+
+  if (codepoint == 0x00A0) {
+    target += ' ';
+    return;
+  }
+
+  if (codepoint >= 0x2000 && codepoint <= 0x200A) {
+    target += ' ';
+    return;
+  }
+
+  uint8_t storedByte = 0;
+  if (LatinText::storageByteForCodepoint(codepoint, storedByte)) {
+    target += static_cast<char>(storedByte);
+    return;
+  }
+
+  if (codepoint >= 0x3000 && codepoint <= 0x303F) {
+    return;
+  }
+
+  switch (codepoint) {
+    case 0x2010:
+    case 0x2011:
+    case 0x2012:
+    case 0x2013:
+    case 0x2014:
+    case 0x2015:
+      target += '-';
+      return;
+    case 0x2018:
+    case 0x2019:
+    case 0x201B:
+      target += '\'';
+      return;
+    case 0x201C:
+    case 0x201D:
+    case 0x201F:
+      target += '"';
+      return;
+    case 0x2026:
+      target += '.';
+      return;
+    case 0x2032:
+      target += '\'';
+      return;
+    case 0x2033:
+      target += '"';
+      return;
+    case 0x2039:
+      target += '<';
+      return;
+    case 0x203A:
+      target += '>';
+      return;
+    default:
+      return;
+  }
+}
+
+String normalizeDisplayText(const String &text) {
+  String normalized;
+  normalized.reserve(text.length());
+
+  size_t index = 0;
+  while (index < text.length()) {
+    const size_t before = index;
+    uint32_t codepoint = 0;
+    if (decodeUtf8Codepoint(text, index, codepoint)) {
+      appendDisplayApproximation(normalized, codepoint);
+      continue;
+    }
+
+    index = before + 1;
+    normalized += static_cast<char>(text[before]);
+  }
+
+  String collapsed;
+  collapsed.reserve(normalized.length());
+  bool previousSpace = true;
+  for (size_t i = 0; i < normalized.length(); ++i) {
+    const uint8_t value = LatinText::byteValue(normalized[i]);
+    if (value <= ' ' && !LatinText::isWordCharacter(value)) {
+      if (!previousSpace) {
+        collapsed += ' ';
+        previousSpace = true;
+      }
+      continue;
+    }
+
+    collapsed += static_cast<char>(value);
+    previousSpace = false;
+  }
+
+  if (!collapsed.isEmpty() && collapsed[collapsed.length() - 1] == ' ') {
+    collapsed.remove(collapsed.length() - 1, 1);
+  }
+  return collapsed;
+}
+
 void appendNormalizedChar(String &target, char c) {
   if (c == '\r' || c == '\n' || c == '\t') {
     c = ' ';
@@ -794,7 +951,7 @@ String plainTextFromXmlFragment(const String &fragment) {
   }
 
   text.trim();
-  return text;
+  return normalizeDisplayText(text);
 }
 
 bool hasReadableText(const String &token) {
@@ -841,6 +998,7 @@ bool flushWordAlignedPrefix(File &output, String &line, size_t &wordCount, size_
 }
 
 bool writeBodyLine(File &output, const String &line, size_t &wordCount, size_t maxWords) {
+  const String normalizedLine = normalizeDisplayText(line);
   String token;
   String outputLine;
 
@@ -855,12 +1013,12 @@ bool writeBodyLine(File &output, const String &line, size_t &wordCount, size_t m
     outputLine = "";
   };
 
-  for (size_t i = 0; i <= line.length(); ++i) {
+  for (size_t i = 0; i <= normalizedLine.length(); ++i) {
     if ((i & 0x7F) == 0) {
       serviceBackground();
     }
 
-    const char c = i < line.length() ? line[i] : ' ';
+    const char c = i < normalizedLine.length() ? normalizedLine[i] : ' ';
     if (!isWhitespace(c)) {
       token += c;
       continue;
@@ -947,7 +1105,7 @@ bool isBlockTag(const String &name) {
 }
 
 bool writeChapterMarker(File &output, const String &title, String &lastChapterTitle) {
-  String cleaned = title;
+  String cleaned = normalizeDisplayText(title);
   cleaned.trim();
   if (cleaned.isEmpty() || cleaned == lastChapterTitle) {
     return true;

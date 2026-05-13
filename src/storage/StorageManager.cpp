@@ -739,21 +739,17 @@ void appendDisplayApproximation(String &target, uint32_t codepoint) {
       return;
     case 0x0100:
     case 0x0102:
-    case 0x0104:
       target += 'A';
       return;
     case 0x0101:
     case 0x0103:
-    case 0x0105:
       target += 'a';
       return;
-    case 0x0106:
     case 0x0108:
     case 0x010A:
     case 0x010C:
       target += 'C';
       return;
-    case 0x0107:
     case 0x0109:
     case 0x010B:
     case 0x010D:
@@ -770,14 +766,12 @@ void appendDisplayApproximation(String &target, uint32_t codepoint) {
     case 0x0112:
     case 0x0114:
     case 0x0116:
-    case 0x0118:
     case 0x011A:
       target += 'E';
       return;
     case 0x0113:
     case 0x0115:
     case 0x0117:
-    case 0x0119:
     case 0x011B:
       target += 'e';
       return;
@@ -831,22 +825,18 @@ void appendDisplayApproximation(String &target, uint32_t codepoint) {
     case 0x013B:
     case 0x013D:
     case 0x013F:
-    case 0x0141:
       target += 'L';
       return;
     case 0x013A:
     case 0x013C:
     case 0x013E:
     case 0x0140:
-    case 0x0142:
       target += 'l';
       return;
-    case 0x0143:
     case 0x0145:
     case 0x0147:
       target += 'N';
       return;
-    case 0x0144:
     case 0x0146:
     case 0x0148:
       target += 'n';
@@ -877,13 +867,11 @@ void appendDisplayApproximation(String &target, uint32_t codepoint) {
     case 0x0159:
       target += 'r';
       return;
-    case 0x015A:
     case 0x015C:
     case 0x015E:
     case 0x0160:
       target += 'S';
       return;
-    case 0x015B:
     case 0x015D:
     case 0x015F:
     case 0x0161:
@@ -928,13 +916,9 @@ void appendDisplayApproximation(String &target, uint32_t codepoint) {
     case 0x0177:
       target += 'y';
       return;
-    case 0x0179:
-    case 0x017B:
     case 0x017D:
       target += 'Z';
       return;
-    case 0x017A:
-    case 0x017C:
     case 0x017E:
       target += 'z';
       return;
@@ -976,13 +960,13 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
       target += ' ';
       return;
     case 0xA1:
-      target += '!';
+      target += static_cast<char>(0x96);
       return;
     case 0xA2:
       target += 'c';
       return;
     case 0xA3:
-      appendText(target, "GBP");
+      target += static_cast<char>(0x82);
       return;
     case 0xA4:
       target += '$';
@@ -991,7 +975,7 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
       target += 'Y';
       return;
     case 0xA6:
-      target += '|';
+      target += static_cast<char>(0x9E);
       return;
     case 0xA7:
       target += 'S';
@@ -1014,16 +998,16 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
       target += '!';
       return;
     case 0xAE:
-      appendText(target, "(r)");
+      target += static_cast<char>(0xB4);
       return;
     case 0xAF:
-      target += '-';
+      target += static_cast<char>(0xB2);
       return;
     case 0xB0:
       appendText(target, "deg");
       return;
     case 0xB1:
-      appendText(target, "+/-");
+      target += static_cast<char>(0x97);
       return;
     case 0x80:
       appendText(target, "EUR");
@@ -1076,7 +1060,7 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
       target += '2';
       return;
     case 0xB3:
-      target += '3';
+      target += static_cast<char>(0x83);
       return;
     case 0xB4:
       target += '\'';
@@ -1085,7 +1069,7 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
       target += 'u';
       return;
     case 0xB6:
-      target += 'P';
+      target += static_cast<char>(0x9F);
       return;
     case 0xB7:
       target += '*';
@@ -1109,13 +1093,31 @@ void appendSingleByteApproximation(String &target, uint8_t value) {
       appendText(target, "1/2");
       return;
     case 0xBE:
-      appendText(target, "3/4");
+      target += static_cast<char>(0xB5);
       return;
     case 0xBF:
-      target += '?';
+      target += static_cast<char>(0xB3);
+      return;
+    case 0xC6:
+      target += static_cast<char>(0x9A);
+      return;
+    case 0xCA:
+      target += static_cast<char>(0x98);
+      return;
+    case 0xD1:
+      target += static_cast<char>(0x9C);
       return;
     case 0xD7:
       target += 'x';
+      return;
+    case 0xE6:
+      target += static_cast<char>(0x9B);
+      return;
+    case 0xEA:
+      target += static_cast<char>(0x99);
+      return;
+    case 0xF1:
+      target += static_cast<char>(0x9D);
       return;
     case 0xF7:
       target += '/';
@@ -1148,7 +1150,12 @@ String normalizeDisplayText(const String &text, ParseStats *stats = nullptr) {
       ++stats->malformedUtf8;
     }
     index = before + 1;
-    appendSingleByteApproximation(normalized, static_cast<uint8_t>(text[before]));
+    const uint8_t rawByte = static_cast<uint8_t>(text[before]);
+    if (LatinText::isWordCharacter(rawByte) || LatinText::isLowCustomSlotByte(rawByte)) {
+      normalized += static_cast<char>(rawByte);
+    } else {
+      appendSingleByteApproximation(normalized, rawByte);
+    }
   }
 
   String collapsed;
