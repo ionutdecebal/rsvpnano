@@ -41,22 +41,22 @@ enum RsvpConverter {
         "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
     ]
     private static let skipTags = ["head", "math", "nav", "script", "style", "svg"]
-    private static let asciiReplacements: [Character: String] = [
-        "\u{00a0}": " ", "\u{1680}": " ", "\u{180e}": " ", "\u{2000}": " ", "\u{2001}": " ",
-        "\u{2002}": " ", "\u{2003}": " ", "\u{2004}": " ", "\u{2005}": " ", "\u{2006}": " ",
-        "\u{2007}": " ", "\u{2008}": " ", "\u{2009}": " ", "\u{200a}": " ", "\u{2028}": " ",
-        "\u{2029}": " ", "\u{202f}": " ", "\u{205f}": " ", "\u{3000}": " ",
-        "\u{2018}": "'", "\u{2019}": "'", "\u{201a}": "'", "\u{201b}": "'", "\u{2032}": "'",
-        "\u{2035}": "'", "\u{201c}": "\"", "\u{201d}": "\"", "\u{201e}": "\"",
-        "\u{201f}": "\"", "\u{00ab}": "\"", "\u{00bb}": "\"", "\u{2039}": "'",
-        "\u{203a}": "'", "\u{2033}": "\"", "\u{2036}": "\"", "\u{300c}": "\"",
-        "\u{300d}": "\"", "\u{300e}": "\"", "\u{300f}": "\"", "\u{2010}": "-",
-        "\u{2011}": "-", "\u{2012}": "-", "\u{2013}": "-", "\u{2014}": "-",
-        "\u{2015}": "-", "\u{2043}": "-", "\u{2212}": "-", "\u{2026}": "...",
-        "\u{2022}": "*", "\u{00b7}": "*", "\u{2219}": "*", "\u{00a9}": "(c)",
-        "\u{00ae}": "(r)", "\u{2122}": "TM", "\u{fb00}": "ff", "\u{fb01}": "fi",
-        "\u{fb02}": "fl", "\u{fb03}": "ffi", "\u{fb04}": "ffl", "\u{fb05}": "st",
-        "\u{fb06}": "st", "\u{fffd}": "",
+    private static let asciiReplacements: [(Character, String)] = [
+        ("\u{00a0}", " "), ("\u{1680}", " "), ("\u{180e}", " "), ("\u{2000}", " "), ("\u{2001}", " "),
+        ("\u{2002}", " "), ("\u{2003}", " "), ("\u{2004}", " "), ("\u{2005}", " "), ("\u{2006}", " "),
+        ("\u{2007}", " "), ("\u{2008}", " "), ("\u{2009}", " "), ("\u{200a}", " "), ("\u{2028}", " "),
+        ("\u{2029}", " "), ("\u{202f}", " "), ("\u{205f}", " "), ("\u{3000}", " "),
+        ("\u{2018}", "'"), ("\u{2019}", "'"), ("\u{201a}", "'"), ("\u{201b}", "'"), ("\u{2032}", "'"),
+        ("\u{2035}", "'"), ("\u{201c}", "\""), ("\u{201d}", "\""), ("\u{201e}", "\""),
+        ("\u{201f}", "\""), ("\u{00ab}", "\""), ("\u{00bb}", "\""), ("\u{2039}", "'"),
+        ("\u{203a}", "'"), ("\u{2033}", "\""), ("\u{2036}", "\""), ("\u{300c}", "\""),
+        ("\u{300d}", "\""), ("\u{300e}", "\""), ("\u{300f}", "\""), ("\u{2010}", "-"),
+        ("\u{2011}", "-"), ("\u{2012}", "-"), ("\u{2013}", "-"), ("\u{2014}", "-"),
+        ("\u{2015}", "-"), ("\u{2043}", "-"), ("\u{2212}", "-"), ("\u{2026}", "..."),
+        ("\u{2022}", "*"), ("\u{00b7}", "*"), ("\u{2219}", "*"), ("\u{00a9}", "(c)"),
+        ("\u{00ae}", "(r)"), ("\u{2122}", "TM"), ("\u{fb00}", "ff"), ("\u{fb01}", "fi"),
+        ("\u{fb02}", "fl"), ("\u{fb03}", "ffi"), ("\u{fb04}", "ffl"), ("\u{fb05}", "st"),
+        ("\u{fb06}", "st"), ("\u{fffd}", ""),
     ]
 
     static func bookFile(data: Data, filename: String) throws -> RsvpBookFile {
@@ -309,10 +309,14 @@ enum RsvpConverter {
 
     private static func normalizedText(_ text: String) -> String {
         var value = text
-        value = String(value.map { asciiReplacements[$0] ?? String($0) }.joined())
+        value = String(value.map { asciiReplacement(for: $0) ?? String($0) }.joined())
         value = value.replacingOccurrences(of: "[\\r\\n\\t]+", with: " ", options: .regularExpression)
         value = value.precomposedStringWithCanonicalMapping
         return value.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private static func asciiReplacement(for character: Character) -> String? {
+        asciiReplacements.first { $0.0 == character }?.1
     }
 
     private static func detectUtf16WithoutBom(_ data: Data) -> String.Encoding? {

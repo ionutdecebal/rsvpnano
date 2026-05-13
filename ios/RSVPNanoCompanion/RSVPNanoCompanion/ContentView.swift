@@ -14,8 +14,6 @@ final class NanoViewModel: ObservableObject {
     @Published var hasAttemptedConnection = false
     @Published var lastConnectionError: String?
 
-    private var autoConnectTask: Task<Void, Never>?
-
     var canUpload: Bool {
         info != nil && !isBusy
     }
@@ -40,27 +38,9 @@ final class NanoViewModel: ObservableObject {
 
     func startAutoConnect() {
         refreshPendingUploads()
-        guard autoConnectTask == nil else {
-            return
-        }
-
-        autoConnectTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else {
-                    return
-                }
-                if await self.connectOnce(showBusy: false) {
-                    self.autoConnectTask = nil
-                    return
-                }
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
     }
 
     func stopAutoConnect() {
-        autoConnectTask?.cancel()
-        autoConnectTask = nil
     }
 
     func connect(showBusy: Bool = true) {
@@ -74,7 +54,7 @@ final class NanoViewModel: ObservableObject {
             await run("Refreshing") { [self] in
                 self.books = try await NanoClient(baseURLString: self.address).fetchBooks()
                 self.refreshPendingUploads()
-            self.status = "Library refreshed from the SD card."
+                self.status = "Library refreshed from the SD card."
             }
         }
     }
@@ -124,6 +104,33 @@ final class NanoViewModel: ObservableObject {
             pendingUploads = try PendingUploadStore().all()
         } catch {
             lastConnectionError = error.localizedDescription
+        }
+    }
+
+    func handleSharedInboxOpen() {
+        refreshPendingUploads()
+        guard let item = pendingUploads.first(where: { $0.needsArticleFetch }) else {
+            status = "Saved article ready to edit or sync."
+            return
+        }
+        fetchArticleText(for: item)
+    }
+
+    func fetchArticleText(for item: PendingUpload) {
+        Task {
+            isBusy = true
+            status = "Fetching article text"
+            do {
+                let article = try await ArticleFetchService.fetch(title: item.title, source: item.source)
+                try PendingUploadStore().update(item, title: article.title, body: article.text)
+                pendingUploads = try PendingUploadStore().all()
+                lastConnectionError = nil
+                status = "Fetched article text for \(article.title)."
+            } catch {
+                lastConnectionError = error.localizedDescription
+                status = "Could not fetch article text."
+            }
+            isBusy = false
         }
     }
 
@@ -183,9 +190,10 @@ final class NanoViewModel: ObservableObject {
     }
 
     private func uploadPendingItem(_ item: PendingUpload) async throws {
-        let data = try PendingUploadStore().data(for: item)
-        _ = try await NanoClient(baseURLString: self.address).uploadBook(data: data, filename: item.filename)
-        try PendingUploadStore().delete(item)
+        let store = PendingUploadStore()
+        let file = try store.bookFile(for: item)
+        _ = try await NanoClient(baseURLString: self.address).uploadBook(data: file.data, filename: file.filename)
+        try store.delete(item)
     }
 
     private func run(_ busyStatus: String, showBusy: Bool = true, operation: @escaping () async throws -> Void) async {
@@ -246,6 +254,14 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 viewModel.refreshPendingUploads()
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                viewModel.refreshPendingUploads()
+            }
+            .onOpenURL { url in
+                if url.scheme == "rsvpnano", url.host == "inbox" {
+                    viewModel.handleSharedInboxOpen()
+                }
+            }
             .onDisappear {
                 viewModel.stopAutoConnect()
             }
@@ -282,11 +298,13 @@ struct ContentView: View {
 
                     Label("Return here", systemImage: "3.circle")
                         .font(.headline)
-                    Text("The app will detect the reader automatically and show the SD card library from /books.")
+                    Text("Tap Check Again to connect and show the SD card library from /books.")
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 8)
             }
+
+            savedArticlesSection
 
             Section("SD Card") {
                 VStack(alignment: .leading, spacing: 6) {
@@ -313,7 +331,9 @@ struct ContentView: View {
 
             Section {
                 HStack {
-                    ProgressView()
+                    if viewModel.isBusy {
+                        ProgressView()
+                    }
                     Text(viewModel.status)
                         .foregroundStyle(.secondary)
                 }
@@ -334,6 +354,54 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var savedArticlesSection: some View {
+        Section("Saved Articles") {
+            if viewModel.pendingUploads.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No saved articles yet.")
+                    Text("Use Share -> RSVP Nano from Safari, Chrome, or another app, then tap Save in the share sheet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(viewModel.pendingUploads) { item in
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .foregroundStyle(.primary)
+                            Text(pendingDetailLabel(for: item))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if item.needsArticleFetch {
+                            Button {
+                                viewModel.fetchArticleText(for: item)
+                            } label: {
+                                Label("Fetch Article Text", systemImage: "doc.text.magnifyingglass")
+                            }
+                            .disabled(viewModel.isBusy)
+                        }
+                        Button {
+                            viewModel.syncPendingUpload(item)
+                        } label: {
+                            Label("Sync", systemImage: "arrow.up.doc")
+                        }
+                        .disabled(!viewModel.canUpload)
+                    }
+                }
+                .onDelete(perform: viewModel.deletePendingUploads)
+
+                Button {
+                    viewModel.syncPendingUploads()
+                } label: {
+                    Label("Sync Saved Articles", systemImage: "arrow.up.doc")
+                }
+                .disabled(!viewModel.canSyncPending)
+            }
+        }
+    }
+
     private var libraryList: some View {
         List {
             if let info = viewModel.info {
@@ -344,32 +412,7 @@ struct ContentView: View {
                 }
             }
 
-            if !viewModel.pendingUploads.isEmpty {
-                Section("Saved Articles") {
-                    ForEach(viewModel.pendingUploads) { item in
-                        Button {
-                            viewModel.syncPendingUpload(item)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title)
-                                    .foregroundStyle(.primary)
-                                Text(pendingDetailLabel(for: item))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .disabled(!viewModel.canUpload)
-                    }
-                    .onDelete(perform: viewModel.deletePendingUploads)
-
-                    Button {
-                        viewModel.syncPendingUploads()
-                    } label: {
-                        Label("Sync Saved Articles", systemImage: "arrow.up.doc")
-                    }
-                    .disabled(!viewModel.canSyncPending)
-                }
-            }
+            savedArticlesSection
 
             Section("Library") {
                 if viewModel.books.isEmpty {
@@ -500,9 +543,11 @@ struct ContentView: View {
 
     private func pendingDetailLabel(for item: PendingUpload) -> String {
         let size = ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)
+        let words = item.body.split { $0.isWhitespace }.count
+        let detail = item.needsArticleFetch ? "link saved" : (words == 1 ? "\(words) word" : "\(words) words")
         if item.source.isEmpty {
-            return size
+            return "\(detail) · \(size)"
         }
-        return "\(item.source) · \(size)"
+        return "\(detail) · \(size) · \(item.source)"
     }
 }
