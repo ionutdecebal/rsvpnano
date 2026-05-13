@@ -36,6 +36,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/fetch_release_firmware.py --repo "${{ github.repository }}"
 
+      - name: Generate build-meta.json
+        run: echo "{\"buildDate\":\"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\"}" > web/build-meta.json
+
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

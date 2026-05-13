@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Deploy Status — RSVP Nano</title>
+    <style>
+      :root {
+        --ink: #1d1711;
+        --muted: #75695c;
+        --paper: #f7efe2;
+        --panel: #fffaf1;
+        --accent: #d3542f;
+        --accent-deep: #842f20;
+        --line: #decdb7;
+        --shadow: rgba(73, 45, 24, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ink);
+        font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at 14% 16%, rgba(211, 84, 47, 0.18), transparent 30rem),
+          radial-gradient(circle at 88% 10%, rgba(132, 47, 32, 0.12), transparent 24rem),
+          linear-gradient(145deg, #fff8ed 0%, var(--paper) 46%, #eadac5 100%);
+      }
+
+      .update-box {
+        text-align: center;
+        padding: clamp(28px, 6vw, 58px);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.86);
+        box-shadow: 0 24px 60px var(--shadow);
+        backdrop-filter: blur(16px);
+        max-width: 480px;
+        width: calc(100% - 32px);
+      }
+
+      .update-label {
+        margin: 0 0 2rem;
+        color: var(--accent-deep);
+        font: 700 0.76rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .update-ago {
+        font-size: clamp(1.8rem, 4vw, 3rem);
+        line-height: 1;
+        letter-spacing: -0.04em;
+        margin-bottom: 0.5rem;
+      }
+
+      .update-time {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 2.5rem;
+      }
+
+      .update-status {
+        font: 700 0.62rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        opacity: 0.6;
+      }
+
+      .update-status .dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        margin-right: 0.5rem;
+        vertical-align: middle;
+        animation: pulse 1s ease-in-out infinite;
+      }
+
+      .update-status.fresh {
+        opacity: 1;
+        color: #2f5d32;
+      }
+
+      .update-status.fresh .dot {
+        background: #4c7a4a;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+      }
+
+      .back-link {
+        display: inline-block;
+        margin-top: 2rem;
+        color: var(--accent);
+        font: 700 0.82rem/1 ui-sans-serif, system-ui, sans-serif;
+        text-decoration: none;
+        letter-spacing: 0.04em;
+      }
+
+      .back-link:hover {
+        color: var(--accent-deep);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="update-box">
+      <div class="update-label">Last build</div>
+      <div class="update-ago" id="build-ago">—</div>
+      <div class="update-time" id="build-time"></div>
+      <div class="update-status" id="status">
+        <span class="dot"></span>
+        <span id="status-text">Waiting for fresh build…</span>
+      </div>
+      <a class="back-link" href="./">Back to RSVP Nano</a>
+    </div>
+
+    <script>
+      (function () {
+        var BUILD_META_URL = "build-meta.json";
+        var buildAgoEl = document.getElementById("build-ago");
+        var buildTimeEl = document.getElementById("build-time");
+        var statusEl = document.getElementById("status");
+        var statusTextEl = document.getElementById("status-text");
+        var built;
+
+        function ageSeconds() {
+          return Math.floor((Date.now() - built.getTime()) / 1000);
+        }
+
+        function formatAgo(s) {
+          if (s <= 1) return "just now";
+          if (s < 60) return s + " seconds ago";
+          if (s < 3600) {
+            var m = Math.floor(s / 60);
+            return m === 1 ? "1 minute ago" : m + " minutes ago";
+          }
+          if (s < 86400) {
+            var h = Math.floor(s / 3600);
+            return h === 1 ? "1 hour ago" : h + " hours ago";
+          }
+          var d = Math.floor(s / 86400);
+          return d === 1 ? "1 day ago" : d + " days ago";
+        }
+
+        function updateAgo() {
+          buildAgoEl.textContent = formatAgo(ageSeconds());
+        }
+
+        function playBell() {
+          var ctx = new AudioContext();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3);
+          gain.gain.setValueAtTime(0.4, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.8);
+          return new Promise(function (r) {
+            setTimeout(r, 900);
+          });
+        }
+
+        function handleFresh(remoteBuildDate) {
+          var remoteBuilt = new Date(remoteBuildDate);
+          buildTimeEl.textContent = remoteBuilt.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          buildAgoEl.textContent = "just now";
+          statusEl.classList.add("fresh");
+          statusTextEl.textContent = "Fresh build detected \u2014 redirecting\u2026";
+          playBell().then(function () {
+            window.location.href = "./";
+          });
+        }
+
+        function startCountdown(buildDateISO) {
+          built = new Date(buildDateISO);
+          buildTimeEl.textContent = built.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          updateAgo();
+          setInterval(updateAgo, 1000);
+
+          if (ageSeconds() <= 60) {
+            handleFresh(buildDateISO);
+          } else {
+            var poll = setInterval(function () {
+              fetch(BUILD_META_URL + "?_t=" + Date.now())
+                .then(function (res) {
+                  if (!res.ok) return;
+                  return res.json();
+                })
+                .then(function (data) {
+                  if (!data) return;
+                  var remoteAge = Math.floor(
+                    (Date.now() - new Date(data.buildDate).getTime()) / 1000,
+                  );
+                  if (remoteAge <= 60) {
+                    clearInterval(poll);
+                    handleFresh(data.buildDate);
+                  }
+                })
+                .catch(function () {});
+            }, 2000);
+          }
+        }
+
+        fetch(BUILD_META_URL + "?_t=" + Date.now())
+          .then(function (res) {
+            return res.json();
+          })
+          .then(function (data) {
+            startCountdown(data.buildDate);
+          })
+          .catch(function () {
+            buildAgoEl.textContent = "unavailable";
+            statusTextEl.textContent = "Could not load build info";
+          });
+      })();
+    </script>
+  </body>
+</html>

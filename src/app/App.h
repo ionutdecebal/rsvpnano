@@ -11,6 +11,7 @@
 #include "input/ButtonHandler.h"
 #include "input/TouchHandler.h"
 #include "reader/ReadingLoop.h"
+#include "storage/SettingsFile.h"
 #include "storage/StorageManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "timer/FocusTimer.h"
@@ -35,6 +36,13 @@ class App {
   void update(uint32_t nowMs);
 
  private:
+  struct OtaCheckTaskParams {
+    OtaUpdater::Config config;
+    volatile bool *updateAvailable;
+    String *currentVersion;
+    String *newVersion;
+  };
+
   struct PausedTouchSession {
     bool active = false;
     uint16_t startX = 0;
@@ -68,6 +76,7 @@ class App {
     BookPicker,
     ChapterPicker,
     RestartConfirm,
+    UpdateConfirm,
     FocusTimerGenres,
     FocusTimerSession,
   };
@@ -198,7 +207,8 @@ class App {
   void cycleTypographyPreviewSample(int direction);
   void rebuildSettingsMenuItems();
   void applyPacingSettings();
-  void maybeAutoCheckForUpdates(uint32_t nowMs);
+  void maybeAutoCheckForUpdates();
+  static void otaCheckTask(void *params);
   void runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, uint32_t nowMs);
   OtaUpdater::Config preferredOtaConfig();
   void scanWifiNetworks();
@@ -236,6 +246,9 @@ class App {
   void selectChapterPickerItem(uint32_t nowMs);
   void openRestartConfirm();
   void selectRestartConfirmItem(uint32_t nowMs);
+  void openUpdateConfirm(const String &currentVersion, const String &newVersion);
+  void selectUpdateConfirmItem(uint32_t nowMs);
+  void renderUpdateConfirm();
   void runSdCardCheck(uint32_t nowMs);
   void enterCompanionSync(uint32_t nowMs);
   void updateCompanionSync(uint32_t nowMs);
@@ -308,6 +321,12 @@ class App {
   const char *touchPhaseName(TouchPhase phase) const;
   bool isFocusTimerMenuScreen(MenuScreen screen) const;
   bool scrollModeEnabled() const;
+  void markSettingsFileDirty();
+  void maybeSaveSettingsToSd(uint32_t nowMs);
+  void saveSettingsToSd();
+  SettingsData currentSettingsSnapshot();
+  SettingsData buildSettingsData();
+  void applySettingsFromSd();
   void applyUiOrientation(BoardConfig::UiOrientation orientation);
   void applyReaderUiOrientation();
   BoardConfig::UiOrientation readerUiOrientation() const;
@@ -328,6 +347,7 @@ class App {
   ButtonHandler powerButton_;
   TouchHandler touch_;
   StorageManager storage_;
+  SettingsFile settingsFile_;
   OtaUpdater otaUpdater_;
   CompanionSyncManager companionSync_;
   UsbMassStorageManager usbTransfer_;
@@ -335,6 +355,8 @@ class App {
   PausedTouchSession pausedTouch_;
   TouchIntent pausedTouchIntent_ = TouchIntent::None;
 
+  bool settingsFileDirty_ = false;
+  uint32_t settingsFileDirtyMs_ = 0;
   uint32_t bootStartedMs_ = 0;
   uint32_t lastStateLogMs_ = 0;
   uint32_t wpmFeedbackUntilMs_ = 0;
@@ -355,6 +377,7 @@ class App {
   size_t bookPickerSelectedIndex_ = 0;
   size_t chapterPickerSelectedIndex_ = 0;
   size_t restartConfirmSelectedIndex_ = 0;
+  size_t updateConfirmSelectedIndex_ = 0;
   size_t focusTimerGenreSelectedIndex_ = 0;
   uint8_t brightnessLevelIndex_ = 4;
   uint8_t readerFontSizeIndex_ = 0;
@@ -365,6 +388,9 @@ class App {
   size_t typographyPreviewSampleIndex_ = 0;
   MenuScreen menuScreen_ = MenuScreen::Main;
   MenuScreen restartConfirmReturnScreen_ = MenuScreen::Main;
+  String pendingUpdateCurrentVersion_;
+  String pendingUpdateNewVersion_;
+  volatile bool pendingUpdateConfirm_ = false;
   std::vector<String> settingsMenuItems_;
   std::vector<String> focusTimerGenreMenuItems_;
   std::vector<DisplayManager::LibraryItem> wifiNetworkMenuItems_;

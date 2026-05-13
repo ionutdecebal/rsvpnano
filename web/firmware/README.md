@@ -14,6 +14,4 @@ python3 tools/export_web_firmware.py
 `rsvp-nano.bin` is the full merged image for fresh installs from the browser flasher.
 `rsvp-nano-ota.bin` is the app-only binary for GitHub Release OTA updates.
 
-The generated `.bin` files are intentionally ignored by Git. In GitHub Pages deployments, the
-site downloads these files from the latest published GitHub Release so the hosted web flasher only
-serves official release builds.
+The `.bin` files are tracked by Git and served directly by GitHub Pages.
