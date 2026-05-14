@@ -169,18 +169,24 @@ const elements = {
   clearButton: document.querySelector("#library-clear-button"),
   downloadButton: document.querySelector("#library-download-button"),
   dropzone: document.querySelector("#library-dropzone"),
+  dropzoneLarge: document.querySelector("#library-dropzone-large"),
+  dropzoneWrapper: document.querySelector("#library-dropzone-wrapper"),
   fileInput: document.querySelector("#library-file-input"),
-  folderButton: document.querySelector("#library-folder-button"),
   folderCleanButton: document.querySelector("#library-folder-clean-button"),
+  folderCleanVisible: document.querySelector("#library-folder-clean-visible"),
   folderImportButton: document.querySelector("#library-folder-import-button"),
   folderLabel: document.querySelector("#library-folder-label"),
   folderSummary: document.querySelector("#library-folder-summary"),
+  folderFileList: document.querySelector("#library-folder-files"),
+  folderFileDesc: document.querySelector("#library-folder-files-desc"),
+  folderFileSection: document.querySelector("#library-folder-files-section"),
   list: document.querySelector("#library-list"),
   empty: document.querySelector("#library-empty"),
   status: document.querySelector("#library-status"),
   summary: document.querySelector("#library-summary"),
   summaryHeader: document.querySelector("#workspace-summary-header"),
   syncButton: document.querySelector("#library-sync-button"),
+  syncDropzone: document.querySelector("#sync-dropzone"),
 };
 
 initialize();
@@ -217,10 +223,6 @@ function initialize() {
     await downloadLibraryZip();
   });
 
-  elements.folderButton.addEventListener("click", async () => {
-    await chooseBooksDirectory();
-  });
-
   elements.folderImportButton.addEventListener("click", async () => {
     await importFromSelectedDirectory();
   });
@@ -229,12 +231,39 @@ function initialize() {
     await cleanSidecarsInSelectedDirectory();
   });
 
+  elements.folderCleanVisible.addEventListener("click", async () => {
+    await cleanSidecarsInSelectedDirectory();
+  });
+
   elements.syncButton.addEventListener("click", async () => {
-    await syncReadyBooksToSelectedDirectory();
+    if (!state.directoryHandle) {
+      await chooseBooksDirectory();
+    } else {
+      await syncReadyBooksToSelectedDirectory();
+    }
+  });
+
+  elements.syncDropzone.addEventListener("click", async () => {
+    if (!state.directoryHandle) {
+      await chooseBooksDirectory();
+    } else {
+      await syncReadyBooksToSelectedDirectory();
+    }
+  });
+
+  elements.syncDropzone.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (!state.directoryHandle) {
+        await chooseBooksDirectory();
+      } else {
+        await syncReadyBooksToSelectedDirectory();
+      }
+    }
   });
 
   elements.list.addEventListener("click", async (event) => {
-    const button = event.target.closest("button[data-action]");
+    const button = event.target.closest("[data-action]");
     if (!button) {
       return;
     }
@@ -258,9 +287,13 @@ function initialize() {
       return;
     }
 
-    if (action === "reconvert") {
-      await reconvertSingleItem(item);
+    if (action === "retry") {
+      await convertDescriptorIntoItem(item);
+      renderLibrary();
+      refreshUi();
+      return;
     }
+
   });
 
   elements.dropzone.addEventListener("dragenter", (event) => {
@@ -292,8 +325,47 @@ function initialize() {
     }
   });
 
+  elements.dropzoneLarge.addEventListener("click", () => {
+    elements.fileInput.click();
+  });
+
+  elements.dropzoneLarge.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      elements.fileInput.click();
+    }
+  });
+
+  elements.dropzoneLarge.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+    state.dragDepth += 1;
+    elements.dropzoneLarge.classList.add("is-active");
+  });
+
+  elements.dropzoneLarge.addEventListener("dragover", (event) => {
+    event.preventDefault();
+  });
+
+  elements.dropzoneLarge.addEventListener("dragleave", (event) => {
+    event.preventDefault();
+    state.dragDepth = Math.max(0, state.dragDepth - 1);
+    if (state.dragDepth === 0) {
+      elements.dropzoneLarge.classList.remove("is-active");
+    }
+  });
+
+  elements.dropzoneLarge.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    state.dragDepth = 0;
+    elements.dropzoneLarge.classList.remove("is-active");
+
+    const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.size >= 0);
+    if (files.length > 0) {
+      await importFiles(files, "upload");
+    }
+  });
+
   if (!supportsDirectoryAccess()) {
-    elements.folderButton.disabled = true;
     elements.folderImportButton.disabled = true;
     elements.folderCleanButton.disabled = true;
     elements.syncButton.disabled = true;
@@ -328,7 +400,7 @@ function refreshUi() {
 
   elements.folderLabel.textContent = state.directoryHandle
     ? `/${state.directoryHandle.name}`
-    : "No /books folder selected";
+    : "";
 
   if (state.folderInventory) {
     const { sources, rsvp, sidecars, unsupported } = state.folderInventory;
@@ -342,8 +414,21 @@ function refreshUi() {
     }
     elements.folderSummary.textContent = parts.join(", ");
   } else {
-    elements.folderSummary.textContent = "Pick the SD card’s /books folder to scan it";
+    elements.folderSummary.textContent = "";
   }
+
+  const hasFolder = !!state.directoryHandle;
+
+  const sidecarFiles = hasFolder
+    ? (state.folderInventory?.sidecarNames || []).slice().sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    : [];
+
+  elements.folderFileSection.hidden = sidecarFiles.length === 0;
+  elements.folderFileDesc.textContent = `You have ${sidecarFiles.length} old ${pluralize("file", sidecarFiles.length)} that can be removed.`;
+  elements.folderFileList.innerHTML = sidecarFiles
+    .map((name) => `<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" style="vertical-align:-1px;margin-right:5px;opacity:.55"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${escapeHtml(name)}</li>`)
+    .join("");
+  elements.folderCleanVisible.disabled = state.isBusy;
 
   const noFolder = !state.directoryHandle;
   const noReadyItems = readyItems.length === 0;
@@ -351,80 +436,99 @@ function refreshUi() {
 
   elements.addButton.disabled = state.isBusy;
   elements.fileInput.disabled = state.isBusy;
-  elements.downloadButton.disabled = state.isBusy || noReadyItems;
+  elements.downloadButton.hidden = noReadyItems;
+  elements.downloadButton.disabled = state.isBusy;
   elements.clearButton.disabled = state.isBusy || noItems;
-  elements.folderButton.disabled = state.isBusy || !supportsDirectoryAccess();
   elements.folderImportButton.disabled =
     state.isBusy || !supportsDirectoryAccess() || noFolder;
   elements.folderCleanButton.disabled =
     state.isBusy || !supportsDirectoryAccess() || noFolder;
-  elements.syncButton.disabled =
-    state.isBusy || !supportsDirectoryAccess() || noFolder || noReadyItems;
+  elements.syncButton.hidden = noReadyItems && noFolder;
+  if (noFolder) {
+    elements.syncButton.textContent = "Connect SD";
+    elements.syncButton.disabled = state.isBusy || !supportsDirectoryAccess();
+  } else {
+    elements.syncButton.textContent = "Sync folder";
+    elements.syncButton.disabled = state.isBusy || noReadyItems;
+  }
 }
 
 function renderLibrary() {
   refreshItemWarnings();
-  if (state.items.length === 0) {
+  const hasItems = state.items.length > 0;
+  elements.dropzone.hidden = !hasItems;
+  elements.dropzoneLarge.hidden = hasItems;
+  elements.dropzoneWrapper.hidden = hasItems;
+
+  if (!hasItems) {
     elements.list.innerHTML = "";
-    elements.empty.hidden = false;
     return;
   }
 
   elements.empty.hidden = true;
   elements.list.innerHTML = state.items
     .map((item) => {
-      const stateToken =
-        item.status === "ready"
-          ? "ready"
-          : item.status === "error"
-            ? "error"
-            : "working";
-      const statusLabel =
-        item.status === "ready"
-          ? "Ready"
-          : item.status === "error"
-            ? "Needs attention"
-            : "Converting";
-      const authorPill = item.author ? `<span class="pill">${escapeHtml(item.author)}</span>` : "";
+      const isWorking = item.status === "working";
+      const isQueued = item.status === "queued";
+      const isError = item.status === "error";
       const warningCopy = item.warning
         ? `<p class="library-item-copy">${escapeHtml(item.warning)}</p>`
         : "";
+      const progressWidth = isWorking && item.progress != null ? Math.round(item.progress * 100) : 0;
       const detailCopy =
         item.status === "ready"
-          ? `Output <code>${escapeHtml(item.outputName)}</code> from <code>${escapeHtml(item.sourceName)}</code>.`
-          : item.status === "error"
+          ? ""
+          : isError
             ? escapeHtml(item.error || "Conversion failed.")
-            : "Reading source and building .rsvp output...";
+            : isQueued
+              ? "Next..."
+              : `<span class="spinner" aria-hidden="true"></span>Converting...`;
+      const metaCopy =
+        item.status === "ready"
+          ? (() => {
+              const parts = [
+                `${formatNumber(item.wordCount)} ${pluralize("word", item.wordCount)} · ${formatNumber(item.chapterCount)} ${pluralize("chapter", item.chapterCount)}`,
+              ];
+              if (item.author) parts.push(escapeHtml(item.author));
+              return `<p class="library-item-copy">${parts.join(" · ")}</p>`;
+            })()
+          : "";
 
       return `
-        <li class="library-item">
-          <div class="library-item-head">
-            <div class="library-item-title">
-              <strong>${escapeHtml(item.title || stripExtension(item.sourceName))}</strong>
-              <span>${escapeHtml(item.sourceName)}</span>
+        <li class="library-item" id="library-item-${item.id}">
+          <div class="library-item-left">
+            <img class="library-item-icon" src="./icons/file.svg" alt="" aria-hidden="true">
+            <div class="library-item-body">
+              <strong>${escapeHtml(item.sourceName)}</strong>
             </div>
-            <span class="pill" data-state="${stateToken}">${statusLabel}</span>
+            <div class="library-item-actions">
+              <button class="icon-button-ghost" type="button" data-action="remove" data-item-id="${item.id}" data-danger title="Remove" aria-label="Remove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
           </div>
-          <div class="library-item-meta">
-            <span class="pill">${escapeHtml(item.sourceExt.slice(1).toUpperCase())}</span>
-            <span class="pill">${formatNumber(item.wordCount)} ${pluralize("word", item.wordCount)}</span>
-            <span class="pill">${formatNumber(item.chapterCount)} ${pluralize("chapter", item.chapterCount)}</span>
-            ${authorPill}
-          </div>
-          <p class="library-item-copy">${detailCopy}</p>
-          ${warningCopy}
-          <div class="library-item-actions">
-            ${
-              item.status === "ready"
-                ? `<button class="tool-button" type="button" data-action="download" data-item-id="${item.id}">Download</button>`
-                : ""
-            }
-            <button class="tool-button" type="button" data-action="reconvert" data-item-id="${item.id}">
-              Reconvert
-            </button>
-            <button class="tool-button" type="button" data-action="remove" data-item-id="${item.id}">
-              Remove
-            </button>
+          <div class="library-item-right${item.status === "ready" || isError ? " library-item-right-clickable" : ""}"
+            id="library-item-right-${item.id}"
+            ${isWorking ? `data-state="working" style="--progress:${progressWidth}%"` : ""}
+            ${item.status === "ready" ? `data-action="download" data-item-id="${item.id}" role="button" tabindex="0" title="Download"` : ""}
+            ${isError ? `data-action="retry" data-item-id="${item.id}" role="button" tabindex="0" title="Riprova"` : ""}>
+            ${isWorking || isQueued || isError ? "" : `<img class="library-item-icon" src="./icons/book.svg" alt="" aria-hidden="true">`}
+            <div class="library-item-body">
+              ${isWorking || isQueued || isError ? "" : `<strong class="library-item-detected-title">${escapeHtml(item.title || stripExtension(item.sourceName))}</strong>`}
+              ${detailCopy ? `<p class="library-item-copy">${detailCopy}</p>` : ""}
+              ${metaCopy}
+              ${warningCopy}
+            </div>
+            ${item.status === "ready" ? `<span class="library-item-download-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg></span>` : ""}
+            ${isError ? `<span class="library-item-download-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg></span>` : ""}
           </div>
         </li>
       `;
@@ -517,7 +621,7 @@ async function ingestDescriptors(descriptors, statusTitle) {
         state.items.push(item);
       }
       item.mode = state.outputMode;
-      item.status = "working";
+      item.status = "queued";
       item.error = "";
       item.warning = "";
       targets.push(item);
@@ -528,14 +632,20 @@ async function ingestDescriptors(descriptors, statusTitle) {
 
     for (let index = 0; index < targets.length; index += 1) {
       const item = targets[index];
+      item.status = "working";
       setStatus(
         statusTitle,
         `Converting ${index + 1} of ${targets.length}: ${item.sourceName}`,
         "busy",
       );
+      renderLibrary();
       await convertDescriptorIntoItem(item);
       renderLibrary();
       refreshUi();
+      if (item.status === "ready") {
+        const right = elements.list.querySelector(`#library-item-right-${item.id}`);
+        if (right) right.classList.add("is-converting-done");
+      }
     }
 
     const readyCount = targets.filter((item) => item.status === "ready").length;
@@ -573,17 +683,29 @@ function createLibraryItem(descriptor) {
     wordCount: 0,
     chapterCount: 0,
     mode: state.outputMode,
+    progress: null,
   };
+}
+
+function updateItemProgress(item, done, total) {
+  item.progress = total > 0 ? done / total : null;
+  const right = elements.list.querySelector(`#library-item-right-${item.id}`);
+  if (right) {
+    right.style.setProperty("--progress", item.progress != null ? `${Math.round(item.progress * 100)}%` : "0%");
+  }
 }
 
 async function convertDescriptorIntoItem(item) {
   item.status = "working";
   item.error = "";
   item.warning = "";
+  item.progress = null;
 
   try {
     const file = await item.descriptor.getFile();
-    const { title, author, events } = await eventsForFile(file, state.outputMode);
+    const { title, author, events } = await eventsForFile(file, state.outputMode, (done, total) => {
+      updateItemProgress(item, done, total);
+    });
     const writer = new RsvpWriter({
       title: title || stripExtension(file.name),
       author,
@@ -603,7 +725,7 @@ async function convertDescriptorIntoItem(item) {
 
     item.title = writer.title;
     item.author = writer.author;
-    item.outputName = `${stripExtension(file.name)}.rsvp`;
+    item.outputName = buildOutputName(writer.title || stripExtension(file.name), writer.author);
     item.outputText = writer.finalize(title || stripExtension(file.name));
     item.wordCount = writer.wordCount;
     item.chapterCount = writer.chapterCount;
@@ -618,19 +740,6 @@ async function convertDescriptorIntoItem(item) {
   }
 }
 
-async function reconvertSingleItem(item) {
-  await withBusy(async () => {
-    setStatus("Re-converting book", `Building ${item.sourceName} again.`, "busy");
-    await convertDescriptorIntoItem(item);
-    renderLibrary();
-    refreshUi();
-    if (item.status === "ready") {
-      setStatus("Book refreshed", `${item.sourceName} is ready again.`, "success");
-    } else {
-      setStatus("Could not rebuild book", item.error || "Conversion failed.", "error");
-    }
-  });
-}
 
 async function chooseBooksDirectory() {
   if (!supportsDirectoryAccess()) {
@@ -699,6 +808,7 @@ async function scanSelectedDirectory(includeDescriptors) {
     sources: 0,
     rsvp: 0,
     sidecars: 0,
+    sidecarNames: [],
     unsupported: 0,
   };
   const descriptors = [];
@@ -711,6 +821,7 @@ async function scanSelectedDirectory(includeDescriptors) {
     const lowerName = entry.name.toLowerCase();
     if (SIDE_CAR_SUFFIXES.some((suffix) => lowerName.endsWith(suffix))) {
       inventory.sidecars += 1;
+      inventory.sidecarNames.push(entry.name);
       continue;
     }
     if (lowerName.endsWith(".rsvp")) {
@@ -876,10 +987,10 @@ async function loadJsZip() {
   return state.jszipPromise;
 }
 
-async function eventsForFile(file, mode) {
+async function eventsForFile(file, mode, onProgress) {
   const sourceExt = extensionForName(file.name);
   if (sourceExt === ".epub") {
-    return epubEventsAndMetadata(file, mode);
+    return epubEventsAndMetadata(file, mode, onProgress);
   }
   if (sourceExt === ".html" || sourceExt === ".htm" || sourceExt === ".xhtml") {
     const markup = await readTextFile(file);
@@ -887,12 +998,9 @@ async function eventsForFile(file, mode) {
     return { title, author: "", events };
   }
   if (sourceExt === ".txt" || sourceExt === ".md" || sourceExt === ".markdown") {
-    const text = await readTextFile(file);
-    return {
-      title: stripExtension(file.name),
-      author: "",
-      events: textEvents(text, mode),
-    };
+    const raw = await readTextFile(file);
+    const { title, author, body } = parseFrontmatter(raw, stripExtension(file.name));
+    return { title, author, events: await textEventsAsync(body, mode, onProgress) };
   }
   throw new Error(`Unsupported extension: ${sourceExt}`);
 }
@@ -978,7 +1086,7 @@ function sniffDeclaredEncoding(text) {
   return null;
 }
 
-async function epubEventsAndMetadata(file, mode) {
+async function epubEventsAndMetadata(file, mode, onProgress) {
   const JSZip = await loadJsZip();
   const zip = await JSZip.loadAsync(file);
   const opfPath = await containerRootfile(zip);
@@ -986,6 +1094,8 @@ async function epubEventsAndMetadata(file, mode) {
 
   const events = [];
   for (let index = 0; index < spinePaths.length; index += 1) {
+    onProgress?.(index, spinePaths.length);
+    await new Promise(requestAnimationFrame);
     const spinePath = spinePaths[index];
     const chapterMarkup = await readZipText(zip, spinePath);
     const chapterEvents = htmlEvents(chapterMarkup, mode);
@@ -1307,6 +1417,72 @@ function textEvents(text, mode) {
   return events;
 }
 
+async function textEventsAsync(text, mode, onProgress) {
+  const CHUNK = 200;
+  const lines = text.split(/\r?\n/);
+  const events = [];
+  const paragraphParts = [];
+
+  const flushParagraph = () => {
+    if (paragraphParts.length === 0) {
+      return;
+    }
+    const paragraph = cleanText(paragraphParts.join(" "), mode);
+    paragraphParts.length = 0;
+    if (paragraph) {
+      events.push(["text", paragraph]);
+    }
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (i > 0 && i % CHUNK === 0) {
+      onProgress?.(i, lines.length);
+      await new Promise(requestAnimationFrame);
+    }
+
+    const line = lines[i].trim();
+    const chapter = looksLikeChapter(line, mode);
+    if (chapter) {
+      flushParagraph();
+      events.push(["chapter", chapter]);
+      continue;
+    }
+
+    if (!line) {
+      flushParagraph();
+      continue;
+    }
+
+    paragraphParts.push(line);
+  }
+
+  flushParagraph();
+  return events;
+}
+
+function parseFrontmatter(text, fallbackTitle) {
+  if (!text.startsWith("---")) {
+    return { title: fallbackTitle, author: "", body: text };
+  }
+  const end = text.indexOf("\n---", 3);
+  if (end < 0) {
+    return { title: fallbackTitle, author: "", body: text };
+  }
+  const block = text.slice(3, end);
+  const body = text.slice(end + 4).replace(/^\r?\n/, "");
+  let title = fallbackTitle;
+  let author = "";
+  for (const line of block.split(/\r?\n/)) {
+    const colon = line.indexOf(":");
+    if (colon < 0) continue;
+    const key = line.slice(0, colon).trim().toLowerCase();
+    const value = line.slice(colon + 1).trim().replace(/^["']|["']$/g, "");
+    if (key === "title" && value) title = value;
+    if (key === "author" && value) author = value;
+  }
+  return { title, author, body };
+}
+
 function looksLikeChapter(line, mode) {
   const trimmed = cleanText(line, mode);
   if (!trimmed || trimmed.length > 64) {
@@ -1458,6 +1634,13 @@ function stripExtension(name) {
   const base = lastSlash >= 0 ? name.slice(lastSlash + 1) : name;
   const lastDot = base.lastIndexOf(".");
   return lastDot > 0 ? base.slice(0, lastDot) : base;
+}
+
+function buildOutputName(title, author) {
+  const slug = (s) => s.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w]+/g, "_").replace(/^_|_$/g, "");
+  const t = slug(title);
+  const a = author ? slug(author) : "";
+  return a ? `${t}__${a}.rsvp` : `${t}.rsvp`;
 }
 
 function refreshItemWarnings() {

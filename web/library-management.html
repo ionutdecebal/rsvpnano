@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RSVP Nano — Library Management</title>
+    <script type="module" src="./library.js"></script>
+    <style>
+      :root {
+        --ink: #1d1711;
+        --muted: #75695c;
+        --paper: #f7efe2;
+        --panel: #fffaf1;
+        --accent: #d3542f;
+        --accent-deep: #842f20;
+        --line: #decdb7;
+        --shadow: rgba(73, 45, 24, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at 14% 16%, rgba(211, 84, 47, 0.18), transparent 30rem),
+          radial-gradient(circle at 88% 10%, rgba(132, 47, 32, 0.12), transparent 24rem),
+          linear-gradient(145deg, #fff8ed 0%, var(--paper) 46%, #eadac5 100%);
+      }
+
+      main {
+        width: min(1040px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 52px 0 44px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(255, 250, 241, 0.86);
+        box-shadow: 0 24px 60px var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .step-card + .step-card {
+        margin-top: 28px;
+      }
+
+      .section-header-main {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .section-header-label {
+        min-width: 0;
+      }
+
+      .section-kicker {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--accent-deep);
+        font: 700 0.72rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .section-title {
+        display: block;
+        font-size: 1.18rem;
+        line-height: 1.15;
+      }
+
+      .section-summary {
+        color: var(--muted);
+        font: 700 0.78rem/1.3 ui-sans-serif, system-ui, sans-serif;
+        text-align: right;
+      }
+
+      .section-summary:empty {
+        display: none;
+      }
+
+
+      .section-body {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-top: 1px solid var(--line);
+      }
+
+      .section-body.section-body-single {
+        display: block;
+      }
+
+      .section-body-inner {
+        min-width: 0;
+        padding: 24px 28px 28px;
+      }
+
+      .workspace-shell {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .workspace-pane {
+        padding: 28px;
+      }
+
+      .workspace-pane + .workspace-pane {
+        border-left: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06));
+      }
+
+      .workspace-pane h2,
+      .workspace-pane h3 {
+        margin: 0;
+        font-size: 1.38rem;
+      }
+
+      .workspace-copy {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.5;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 18px;
+        align-items: flex-start;
+      }
+
+      .tool-button,
+      .tool-select {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        color: var(--ink);
+        font: 700 0.93rem/1.15 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .tool-button {
+        padding: 10px 14px;
+        cursor: pointer;
+        max-width: 100%;
+        white-space: nowrap;
+      }
+
+      .tool-button:hover:enabled {
+        border-color: rgba(132, 47, 32, 0.42);
+        background: rgba(255, 250, 241, 0.98);
+      }
+
+      .tool-button:disabled,
+      .tool-select:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .tool-button-primary {
+        border-color: transparent;
+        color: #fffaf1;
+        background: var(--accent);
+        box-shadow: 0 12px 26px rgba(211, 84, 47, 0.24);
+      }
+
+      .tool-button-primary:hover:enabled {
+        background: var(--accent-deep);
+      }
+
+      .tool-select {
+        min-width: 220px;
+        padding: 11px 16px;
+      }
+
+      /* ── Dropzone compact (inline button) ── */
+      .dropzone-compact {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 14px;
+        border: 1.5px dashed rgba(132, 47, 32, 0.44);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.6);
+        color: var(--ink);
+        font: 700 0.93rem/1.15 ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: border-color 150ms ease, background 150ms ease;
+      }
+
+      .dropzone-compact:hover {
+        border-color: rgba(132, 47, 32, 0.64);
+        background: rgba(255, 250, 241, 0.98);
+      }
+
+      .dropzone-compact.is-active {
+        border-color: var(--accent);
+        background: rgba(211, 84, 47, 0.07);
+      }
+
+      .dropzone-compact svg {
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+        color: var(--accent-deep);
+      }
+
+      /* ── Dropzone ── */
+      .dropzone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 40px 28px;
+        min-height: 210px;
+        border: 2px solid var(--line);
+        border-radius: 24px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.2)),
+          radial-gradient(circle at top right, rgba(211, 84, 47, 0.14), transparent 16rem);
+        overflow: hidden;
+        cursor: pointer;
+        transition:
+          border-color 150ms ease,
+          background 150ms ease,
+          transform 150ms ease,
+          box-shadow 150ms ease;
+      }
+
+      .dropzone:hover {
+        border-color: rgba(132, 47, 32, 0.54);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.32)),
+          radial-gradient(circle at top right, rgba(211, 84, 47, 0.18), transparent 16rem);
+      }
+
+      .dropzone.is-active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(211, 84, 47, 0.2);
+        transform: translateY(-1px);
+      }
+
+      .dropzone-icon {
+        width: 44px;
+        height: 44px;
+        margin-bottom: 14px;
+        color: rgba(132, 47, 32, 0.38);
+        flex-shrink: 0;
+      }
+
+      .dropzone strong {
+        display: block;
+        font-size: 1.08rem;
+      }
+
+      .dropzone p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        max-width: 30ch;
+      }
+
+      .dropzone-or {
+        margin-top: 18px;
+        color: var(--muted);
+        font: 0.82rem/1 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .pane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        text-align: left;
+      }
+
+      .pane-header h3 {
+        margin: 0;
+      }
+
+      /* ── Folder info box ── */
+      .folder-info {
+        margin-top: 16px;
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.42);
+        display: grid;
+        gap: 8px;
+      }
+
+      .folder-info-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .folder-info-icon {
+        width: 15px;
+        height: 15px;
+        color: var(--accent-deep);
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+
+      .folder-info-path {
+        font: 700 0.88rem/1.3 ui-sans-serif, system-ui, sans-serif;
+        overflow-wrap: anywhere;
+        min-width: 0;
+        color: var(--ink);
+      }
+
+      .folder-info-inventory {
+        color: var(--muted);
+        font: 0.82rem/1.4 ui-sans-serif, system-ui, sans-serif;
+        overflow-wrap: anywhere;
+        padding-left: 23px;
+      }
+
+      .sidecar-list {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0 0 0 23px;
+      }
+
+      .sidecar-list li {
+        font: 0.8rem/1.6 ui-monospace, SFMono-Regular, monospace;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+
+      /* ── Status + misc ── */
+      .workspace-status {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-left: 4px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.5);
+        color: var(--muted);
+        min-height: 58px;
+        overflow-wrap: anywhere;
+      }
+
+      .workspace-status[data-tone="busy"] {
+        border-left-color: var(--accent);
+        color: var(--accent-deep);
+        background: rgba(211, 84, 47, 0.08);
+      }
+
+      .workspace-status[data-tone="error"] {
+        border-left-color: #9c3024;
+        color: #8e241a;
+        background: rgba(156, 48, 36, 0.08);
+      }
+
+      .workspace-status[data-tone="success"] {
+        border-left-color: #4c7a4a;
+        color: #2f5d32;
+        background: rgba(76, 122, 74, 0.1);
+      }
+
+      .workspace-status strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--ink);
+        font-size: 0.96rem;
+      }
+
+      .inline-note {
+        margin-top: 16px;
+        padding: 12px 15px;
+        border-radius: 14px;
+        background: rgba(117, 105, 92, 0.1);
+        color: var(--muted);
+        font: 0.84rem/1.5 ui-sans-serif, system-ui, sans-serif;
+        overflow-wrap: anywhere;
+      }
+
+      /* ── Library list (converted books) ── */
+      .library-section {
+        border-top: 1px solid var(--line);
+      }
+
+      .library-list {
+        display: grid;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .library-item {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: center;
+        border-top: 1px solid var(--line);
+      }
+
+      .library-item:first-child {
+        border-top: 0;
+      }
+
+      .library-item-left,
+      .library-item-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 12px;
+        min-width: 0;
+        min-height: 56px;
+      }
+
+      .library-item-icon {
+        width: 20px;
+        height: 20px;
+        padding: 7px;
+        box-sizing: content-box;
+        flex-shrink: 0;
+        border-radius: 10px;
+        background: rgba(132, 47, 32, 0.08);
+      }
+
+      .library-item-body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .library-item-right {
+        border-left: 1px solid var(--line);
+        transition: background 150ms ease;
+        margin-top: 0;
+      }
+
+      .library-item-right-clickable {
+        cursor: pointer;
+      }
+
+      .library-item-right-clickable:hover {
+        background: linear-gradient(to left, rgba(211, 84, 47, 0.14), transparent 70%);
+      }
+
+      .library-item-right-clickable:active {
+        background: linear-gradient(to left, rgba(211, 84, 47, 0.24), transparent 70%);
+      }
+
+      .library-item-download-icon {
+        flex-shrink: 0;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        padding: 7px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        transition: color 150ms ease, border-color 150ms ease;
+      }
+
+      .library-item-right-clickable:hover .library-item-download-icon {
+        border-color: var(--accent);
+      }
+
+      .library-item-right-clickable:hover .library-item-download-icon {
+        color: var(--accent);
+      }
+
+      .library-item-left strong {
+        display: block;
+        font-size: 1rem;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
+
+      .library-item-left span,
+      .library-item-copy,
+      .library-empty {
+        color: var(--muted);
+      }
+
+      .library-item-left span {
+        display: block;
+        margin-top: 4px;
+        font: 0.84rem/1.3 ui-sans-serif, system-ui, sans-serif;
+        overflow-wrap: anywhere;
+      }
+
+      .library-item-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-top: 4px;
+      }
+
+      .pill {
+        padding: 0.42rem 0.72rem;
+        border-radius: 999px;
+        background: rgba(132, 47, 32, 0.08);
+        color: var(--accent-deep);
+        font: 700 0.76rem/1 ui-sans-serif, system-ui, sans-serif;
+        letter-spacing: 0.02em;
+      }
+
+      .pill[data-state="ready"] {
+        background: rgba(76, 122, 74, 0.12);
+        color: #2f5d32;
+      }
+
+      .pill[data-state="error"] {
+        background: rgba(156, 48, 36, 0.1);
+        color: #8e241a;
+      }
+
+      .pill[data-state="working"] {
+        background: rgba(211, 84, 47, 0.12);
+        color: var(--accent-deep);
+      }
+
+      .library-item-detected-title {
+        display: block;
+        font-size: 1rem;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+        margin-bottom: -2px;
+      }
+
+      .library-item-copy {
+        margin-top: 4px;
+        margin-bottom: 0;
+        font: 0.84rem/1.3 ui-sans-serif, system-ui, sans-serif;
+        overflow-wrap: anywhere;
+      }
+
+      .library-item-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .library-item-actions .tool-button {
+        padding: 8px 12px;
+        font-size: 0.84rem;
+      }
+
+      .library-empty {
+        padding: 26px 28px;
+        text-align: center;
+        font: 0.9rem/1.5 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      @media (max-width: 760px) {
+        .library-item {
+          grid-template-columns: 1fr;
+        }
+        .library-item-right {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 11px;
+        height: 11px;
+        border: 1.5px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        margin-right: 6px;
+        vertical-align: -1px;
+        flex-shrink: 0;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      code {
+        padding: 0.12em 0.35em;
+        border-radius: 0.4em;
+        background: rgba(132, 47, 32, 0.1);
+        color: var(--accent-deep);
+      }
+
+      footer {
+        margin-top: 24px;
+        color: var(--muted);
+        text-align: center;
+        font: 0.9rem/1.4 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .library-item-right[data-state="working"] {
+        background: linear-gradient(
+          to right,
+          rgba(211, 84, 47, 0.13) var(--progress, 0%),
+          transparent var(--progress, 0%)
+        );
+        transition: background 180ms ease;
+      }
+
+      @keyframes item-converting-done {
+        from { background: rgba(211, 84, 47, 0.13); }
+        to   { background: transparent; }
+      }
+
+      .library-item-right.is-converting-done {
+        animation: item-converting-done 1s ease forwards;
+      }
+
+
+      /* ── Icon buttons ── */
+      .icon-button-ghost {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: none;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: color 120ms ease, background 120ms ease;
+      }
+
+      .icon-button-ghost svg {
+        width: 17px;
+        height: 17px;
+        pointer-events: none;
+      }
+
+      .icon-button-ghost:hover:enabled {
+        color: var(--ink);
+        background: rgba(0, 0, 0, 0.05);
+      }
+
+      .icon-button-ghost:active:enabled {
+        background: rgba(0, 0, 0, 0.15);
+      }
+
+      .icon-button-ghost[data-danger]:hover:enabled {
+        color: #8e241a;
+        background: rgba(0, 0, 0, 0.05);
+      }
+
+      .icon-button-ghost[data-danger]:active:enabled {
+        background: rgba(0, 0, 0, 0.15);
+      }
+
+      .icon-button {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.78);
+        color: var(--ink);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+        position: relative;
+      }
+
+      .icon-button svg {
+        width: 17px;
+        height: 17px;
+        pointer-events: none;
+      }
+
+      .icon-button:hover:enabled {
+        border-color: rgba(132, 47, 32, 0.42);
+        background: rgba(255, 250, 241, 0.98);
+        color: var(--accent-deep);
+      }
+
+      .icon-button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .icon-button[data-danger]:hover:enabled {
+        border-color: rgba(156, 48, 36, 0.42);
+        background: rgba(156, 48, 36, 0.07);
+        color: #8e241a;
+      }
+
+      .icon-button-primary {
+        border-color: transparent;
+        background: var(--accent);
+        color: #fffaf1;
+        box-shadow: 0 8px 18px rgba(211, 84, 47, 0.22);
+      }
+
+      .icon-button-primary:hover:enabled {
+        background: var(--accent-deep);
+        color: #fffaf1;
+        border-color: transparent;
+      }
+
+      #workspace-section .workspace-pane + .workspace-pane {
+        border-left: 0;
+      }
+
+      #workspace-section .library-section {
+        border-top: 0;
+      }
+
+
+      @media (max-width: 980px) {
+        .workspace-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .workspace-pane + .workspace-pane {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+      }
+
+      @media (max-width: 760px) {
+        main {
+          width: min(100% - 20px, 560px);
+          padding-top: 18px;
+        }
+
+        .workspace-pane,
+        .section-body-inner {
+          padding: 22px;
+        }
+
+        .step-card-toggle {
+          padding: 18px 20px;
+        }
+
+        .section-summary {
+          max-width: 11rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card step-card" id="workspace-section">
+        <div style="display:flex;align-items:center;gap:14px;padding:20px 24px;">
+          <span class="section-header-main">
+            <span class="section-header-label">
+              <span class="section-kicker">Browser Conversion</span>
+              <span class="section-title">Convert and sync your books</span>
+            </span>
+          </span>
+        </div>
+        <div class="section-body section-body-single" id="workspace-content">
+          <!-- ── Header row ── -->
+          <div class="library-item" style="border-top:0;border-bottom:1px solid var(--line);">
+            <div class="library-item-left" style="padding:14px 20px;justify-content:space-between;">
+              <h3 style="margin:0;font-size:1.38rem;">Your books</h3>
+              <label class="dropzone-compact" id="library-dropzone" for="library-file-input" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 16V4m0 0-4 4m4-4 4 4"/>
+                  <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                </svg>
+                Add more books
+              </label>
+            </div>
+            <div class="library-item-right" style="padding:14px 20px;justify-content:space-between;">
+              <h3 style="margin:0;font-size:1.38rem;">Conversion</h3>
+              <div style="display:flex;gap:8px;">
+                <button class="tool-button" id="library-sync-button" type="button" disabled>
+                  Sync folder
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Dropzone ── -->
+          <div class="library-item" id="library-dropzone-wrapper" style="border-top:0;align-items:start;">
+            <div class="library-item-left" style="padding:20px 28px 28px;display:block;">
+              <input
+                id="library-file-input"
+                type="file"
+                accept=".epub,.txt,.md,.markdown,.html,.htm,.xhtml"
+                multiple
+                hidden
+              />
+
+              <div class="dropzone" id="library-dropzone-large" role="button" tabindex="0" style="border-style:dashed;">
+                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 16V4m0 0-4 4m4-4 4 4"/>
+                  <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+                </svg>
+                <strong>Drop your books here</strong>
+                <p>Convert EPUB, TXT, Markdown, HTML<br>Select a file or a folder</p>
+              </div>
+
+              <div class="workspace-status" id="library-status" data-tone="info" hidden></div>
+            </div>
+            <div class="library-item-right" style="align-self:stretch;padding:20px 28px 28px;display:block;">
+              <div class="dropzone" id="sync-dropzone" role="button" tabindex="0" style="min-height:0;position:relative;padding-bottom:48px;">
+                <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="4" width="20" height="14" rx="2"/>
+                  <path d="M12 18v4"/>
+                  <path d="M8 22h8"/>
+                  <path d="M9.5 11l2.5 2.5L14.5 9"/>
+                </svg>
+                <strong>Connect your SD card</strong>
+                <p>Pick the <code>/books</code> folder on the SD or download the zip and do it manually</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hidden elements required by library.js -->
+          <span id="library-folder-label" hidden></span>
+          <span id="library-folder-summary" hidden></span>
+          <button id="library-add-button" type="button" hidden></button>
+          <button id="library-folder-import-button" type="button" hidden></button>
+          <button id="library-folder-clean-button" type="button" hidden></button>
+          <button id="library-clear-button" type="button" hidden></button>
+          <strong id="library-summary" hidden></strong>
+
+          <!-- ── Full-width book list ── -->
+          <div class="library-section" style="border-bottom:1px solid var(--line);">
+            <ul class="library-list" id="library-list"></ul>
+            <div class="library-empty" id="library-empty" hidden>
+              Drop books on the left — converted files will appear here.
+            </div>
+          </div>
+
+          <div id="library-folder-files-section" hidden>
+            <div class="library-item" style="border-top:0;">
+              <div class="library-item-left" style="padding:20px 24px;"></div>
+              <div style="padding:16px 24px 16px 0;flex:1;min-width:0;border-left:0;">
+                <div class="folder-info" style="display:flex;flex-direction:column;align-items:stretch;">
+                  <h3 style="margin:0;font-size:1.08rem;">Clean your /books folder?</h3>
+                  <p id="library-folder-files-desc" class="library-item-copy" style="margin-top:6px;"></p>
+                  <ul class="sidecar-list" id="library-folder-files" style="padding-left:0;margin-top:12px;"></ul>
+                  <div style="margin-top:14px;align-self:flex-end;">
+                    <button class="tool-button" id="library-folder-clean-visible" type="button">
+                      Delete corrupted files
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:10px 12px 14px 24px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+            <button class="tool-button" id="library-download-button" type="button" hidden disabled>
+              Download .zip
+            </button>
+            <span class="section-summary" id="workspace-summary-header"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
