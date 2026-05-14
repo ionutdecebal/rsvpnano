@@ -1,12 +1,13 @@
 {
   "name": "RSVP Nano",
-  "version": "v0.0.3",
+  "version": "v0.0.4",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
   "features": [
-    "On-device EPUB conversion",
-    "USB SD-card transfer mode",
-    "Extended-Latin character support"
+    "Books and articles library",
+    "Device-hosted web companion",
+    "RSS feed downloads",
+    "USB SD-card transfer mode"
   ],
   "builds": [
     {

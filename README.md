@@ -1,176 +1,44 @@
 # RSVP Nano
 
-RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at a time with RSVP (Rapid Serial Visual Presentation). The firmware is built around stable anchor-letter rendering, readable typography, tunable pacing, SD card storage, and a browser-first book conversion workflow.
+RSVP Nano is an open-source ESP32-S3 reading device that shows text one word at a time using RSVP, Rapid Serial Visual Presentation. It is designed for small screens, SD card libraries, fast reading, and a simple browser-first workflow for converting and uploading books.
 
-The latest public release is `v0.0.3`. The hosted browser flasher installs the latest published GitHub Release, so features listed under **Coming Soon** are not in the public flasher build until the next release is published.
+This README is written for the current release, `v0.0.4`.
 
-## Works Now In v0.0.3
+## What You Need
 
-### Reader
+- An RSVP Nano device.
+- A USB-C data cable.
+- A microSD card.
+- Chrome or Edge on a desktop computer for browser flashing and the web converter.
+- Optional: an iPhone companion app installed from Xcode while TestFlight approval is pending.
 
-- One-word RSVP reader with stable anchor alignment.
-- Optional page-scroll reading mode using the same pacing and saved-position system.
-- Hold to read, double-tap locked autoplay, tap to stop locked autoplay, and sentence-boundary pausing.
-- Horizontal scrub preview with hold-to-scroll browsing, then tap to return to RSVP.
-- Sentence rewind from the visual left edge.
-- Swipe up/down WPM adjustment while paused.
-- Chapter and paragraph-aware navigation.
-- Saved reading position and reader settings.
+## Quick Start
 
-### Settings
+1. Flash the firmware from the browser.
+2. Format the SD card and create the library folders.
+3. Convert books or articles to `.rsvp`.
+4. Copy or upload files to the device.
+5. Pick a book or article from the device menu and start reading.
 
-- Adjustable reading mode, handedness, theme, brightness, and language.
-- Adjustable font size, typeface, phantom words, red focus highlight, tracking, anchor position, guide width, and guide gap.
-- Adjustable pacing delays for long words, word complexity, and punctuation.
-- Menu language selection for English, Spanish, French, German, Romanian, and Polish.
-- Wi-Fi setup on the device for OTA updates.
+## Flash The Firmware
 
-### Library And Conversion
-
-- SD card library under `/books`.
-- Supported reader files: `.rsvp`, `.txt`, and `.epub`.
-- Browser-side Library Workspace for importing and converting supported books.
-- Browser converter support for:
-  - `.epub`
-  - `.txt`
-  - `.md` / `.markdown`
-  - `.html` / `.htm` / `.xhtml`
-- On-device EPUB conversion fallback when a matching `.rsvp` file does not exist yet.
-- Browser cleanup for interrupted conversion sidecar files such as `.rsvp.tmp`, `.rsvp.converting`, and `.rsvp.failed`.
-
-### Firmware Install And Updates
-
-- Browser-based firmware install through ESP Web Tools.
-- Optional GitHub Release OTA updates over Wi-Fi.
-- USB mass-storage mode for copying books to the SD card in the default USB firmware build.
-
-## Flash v0.0.3 From The Browser
-
-Use the hosted web flasher:
+Use the hosted flasher:
 
 <https://ionutdecebal.github.io/rsvpnano/>
 
-Use Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts. The browser flasher uses ESP Web Tools and Web Serial, so it must be opened over HTTPS or localhost.
+Open it in Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts. The flasher uses ESP Web Tools and Web Serial, so it must run from HTTPS or localhost.
 
-The hosted flasher installs the latest published GitHub Release, not unreleased `main` commits.
+The hosted flasher installs the latest published GitHub Release. For `v0.0.4`, that means the release build includes the firmware, SD card, RSS, companion sync, web companion, and settings work described below.
 
-## Add Books In v0.0.3
+## Prepare The SD Card
 
-Create a `books` folder at the root of the SD card:
+Use a microSD card formatted as FAT32.
 
-```text
-/books
-  my-book.rsvp
-  another-book.epub
-```
+- 8 GB to 32 GB cards are the safest choice.
+- 64 GB cards can work, but they usually need to be reformatted as FAT32 with a single partition.
+- exFAT is not the recommended format for this firmware.
 
-The best workflow is to use the Library Workspace on the browser flasher page, convert books to `.rsvp`, then sync or copy the converted files into `/books`.
-
-The firmware prioritizes `.rsvp` files. If an EPUB has not been converted yet, the reader can convert it locally the first time it is opened and reuse the generated `.rsvp` file on future launches. The browser converter is still the recommended path for best compatibility.
-
-## Character Support
-
-Current text support is best for ASCII plus a curated set of accented and extended-Latin letters used in many European languages. Common book punctuation such as curly quotes, guillemets, and bracket variants is normalized into readable ASCII wrappers.
-
-The Standard serif reader font renders the wider Latin set directly. Other reader fonts and the tiny UI font fall back to the closest plain ASCII letter where possible. More complex scripts still need additional renderer and font work.
-
-## OTA Updates
-
-The firmware can check GitHub Releases over Wi-Fi and install a newer app build without erasing reader settings or saved reading progress.
-
-To enable OTA on the device:
-
-1. Open `Settings -> Wi-Fi`.
-2. Tap `Choose network`.
-3. Pick an SSID from the scanned list.
-4. Enter the password on the on-device keyboard.
-5. Optionally turn on `Auto OTA`.
-
-After that, open `Settings -> Firmware update` to manually check the latest published GitHub Release and install `rsvp-nano-ota.bin` if the release tag is newer than the firmware already on the device.
-
-[`docs/ota.conf.example`](docs/ota.conf.example) is still supported as an optional advanced override or fallback. Copy it to the SD card as `/config/ota.conf` if you want to pre-seed Wi-Fi credentials or change advanced OTA settings.
-
-## Reader Controls
-
-### Hardware Buttons
-
-- `BOOT` short press: cycle brightness.
-- `BOOT` hold: cycle theme.
-- `PWR` short press from the reader: open the menu.
-- `PWR` short press in a submenu: jump back to the main menu.
-- `PWR` short press on the main menu: return to the reader.
-- `PWR` hold: power off.
-
-### RSVP And Scroll Modes
-
-- Hold on the screen: start reading.
-- Release after a hold: pause at the end of the current sentence.
-- Double-tap while paused: lock autoplay on.
-- Tap while locked autoplay is running: stop at the end of the current sentence.
-- Tap the far-left edge: jump to the start of the current sentence, or the previous sentence if you are already at the start.
-- Swipe left: scrub backward through the text.
-- Swipe right: scrub forward through the text.
-- Swipe up while paused: increase WPM.
-- Swipe down while paused: decrease WPM.
-- Tap the bottom-right footer label: cycle between book progress percent, chapter time left, and book time left.
-
-Horizontal scrubbing in RSVP mode opens a larger preview. Tap to return to the anchored RSVP view, or hold and move vertically to browse through the surrounding text.
-
-## v0.0.3 Menu Map
-
-```text
-Main Menu
-|- Resume
-|- Chapters
-|- Library
-|- Settings
-|  |- Display
-|  |  |- Reading mode
-|  |  |- L/R Hand
-|  |  |- Theme
-|  |  |- Brightness
-|  |  `- Language
-|  |- Typography
-|  |  |- Font size
-|  |  |- Typeface
-|  |  |- Phantom words
-|  |  |- Red highlight
-|  |  |- Tracking
-|  |  |- Anchor
-|  |  |- Guide width
-|  |  |- Guide gap
-|  |  `- Reset
-|  |- Word pacing
-|  |  |- Long words
-|  |  |- Complexity
-|  |  |- Punctuation
-|  |  `- Reset pacing
-|  |- Wi-Fi
-|  `- Firmware update
-|- USB transfer
-`- Power off
-```
-
-## Coming Soon
-
-These changes are already merged after `v0.0.3` and are intended for the next release.
-
-### Device Firmware
-
-- SD card checker from the main menu.
-- Faster startup and library loading through metadata skipping and lazy loading.
-- Better support for long books and unsupported characters, with clearer error handling.
-- More reliable double-tap handling for locked autoplay.
-- Pause behavior setting: pause instantly or pause at the end of the sentence.
-- Battery display improvements, including percentage or estimated time remaining.
-- Pacing-aware time estimates for book and chapter remaining time.
-- Backlight handling improvement during standby/deep sleep.
-- Configurable OTA GitHub owner in device settings.
-- Basic Polish language fixes.
-
-### Library Changes
-
-- Separate folders for books and articles:
+Create these folders on the card:
 
 ```text
 /books/books
@@ -178,134 +46,344 @@ These changes are already merged after `v0.0.3` and are intended for the next re
 /config
 ```
 
-- Separate on-device `Books` and `Articles` pickers.
-- Legacy files directly inside `/books` are still read for compatibility.
+Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.4`.
 
-### iPhone Companion App
+If the device cannot see the SD card, the most common causes are:
 
-- New iPhone companion app in `ios/RSVPNanoCompanion`.
-- Companion sync over the reader's temporary `RSVP-Nano-xxxxxx` Wi-Fi network.
-- Library page with reader info, books, articles, upload controls, and progress percentages.
-- Article page with saved drafts, synced articles, RSS feed management, article editing, and preview before sync.
-- Settings page for changing device settings from the phone.
-- Help/FAQ page with connection, SD card, and RSS notes.
-- Safari and Chrome share flow for saving pages into the app, fetching article text, editing, and syncing later.
+- The card is exFAT instead of FAT32.
+- The card has multiple partitions.
+- The folders are missing or named differently.
+- The card was removed without ejecting it from the computer.
+- The card is slow, worn out, or unreliable.
 
-### Companion API And Settings
+The device includes an `SD card check` tool in the main menu to help diagnose card size, mount status, write access, and folder layout.
 
-- JSON device settings API:
-  - `GET /api/settings`
-  - `PATCH /api/settings`
-  - `PUT /api/settings`
-- RSS feed API:
-  - `GET /api/rss-feeds`
-  - `PUT /api/rss-feeds`
-- Books/articles API improvements for listing, uploading, deleting, and progress reporting.
-- Settings are moving toward a sturdier JSON-backed model so the phone app and future web app can edit the same device settings.
+## Convert Books And Articles
+
+The recommended conversion workflow is still the browser converter on the hosted flasher page:
+
+<https://ionutdecebal.github.io/rsvpnano/>
+
+Use the converter to turn supported files into `.rsvp`, then upload or copy the `.rsvp` files to the device.
+
+Supported converter inputs include:
+
+- `.epub`
+- `.txt`
+- `.md` / `.markdown`
+- `.html` / `.htm` / `.xhtml`
+
+The firmware can still open `.txt` files and has an on-device EPUB fallback, but the browser converter is the best path for large books, cleaner formatting, and fewer surprises.
+
+## Add Files To The Device
+
+### Option 1: Copy To The SD Card
+
+Power the device off, remove the SD card, copy files from your computer, then reinsert the card.
+
+Use this layout:
+
+```text
+/books/books/my-book.rsvp
+/books/articles/my-article.rsvp
+```
+
+### Option 2: USB Transfer Mode
+
+From the device:
+
+1. Open the main menu with the `PWR` button.
+2. Choose `USB transfer`.
+3. Copy `.rsvp` files from your computer.
+4. Eject the device from the computer.
+5. Hold `PWR` to leave USB transfer mode.
+
+Holding `PWR` is now the standard exit gesture for full-screen utility pages.
+
+### Option 3: Web Companion
+
+The device can host its own browser companion page.
+
+1. Open the main menu.
+2. Choose `Companion sync`.
+3. The device shows the Wi-Fi network name and the browser URL.
+4. Connect your phone, tablet, or computer to the `RSVP-Nano-xxxxxx` Wi-Fi network.
+5. Open the URL shown on the device, usually `http://192.168.4.1`.
+
+The web companion has pages for:
+
+- `Books`: upload book `.rsvp` files and view the book library.
+- `Articles`: write, paste, edit, preview, and upload articles.
+- `Settings`: edit device settings and save home Wi-Fi credentials.
+- `RSS`: manage RSS feed URLs.
+- `Help`: quick notes for connection, conversion, SD cards, and RSS.
+
+The web companion is the best option for Android, desktop, and anyone who does not have the iPhone app.
+
+### Option 4: iPhone Companion App
+
+The iPhone app supports companion sync, article editing, share-sheet saving, RSS feed management, device settings, and library progress.
+
+TestFlight and App Store distribution are waiting on Apple Developer account approval. Until that is approved, the app can be installed temporarily from a Mac with Xcode.
+
+See:
+
+[`ios/RSVPNanoCompanion/README.md`](ios/RSVPNanoCompanion/README.md)
+
+## Home Wi-Fi, RSS, And OTA
+
+The device can save home Wi-Fi credentials for features that need internet access, such as RSS feed checks and OTA firmware updates.
+
+You can set Wi-Fi credentials from:
+
+- The web companion `Settings` page.
+- The iPhone companion app settings page.
+- The on-device Wi-Fi settings page.
+- Advanced users can still use `/config/ota.conf`.
+
+RSS feeds are managed from the web companion or the iPhone app, then checked from the device menu with `RSS feeds`. New articles are saved into `/books/articles`.
+
+RSS support in `v0.0.4` includes:
+
+- RSS and Atom feed parsing.
+- Redirect handling for common `301`, `302`, `303`, `307`, and `308` responses.
+- Live on-device progress while feeds are checked.
+- Duplicate skipping.
+- Feed item author, creator, or website name used as the article source.
+- Larger feed downloads than earlier test builds.
+
+Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
+
+OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
+
+## Device Controls
+
+### Hardware Buttons
+
+- `PWR` short press from the reader: open the main menu.
+- `PWR` short press on the main menu: return to the reader.
+- `PWR` short press in most submenus: go back to the main menu.
+- `PWR` hold in Companion Sync, USB Transfer, and Focus Timer: exit that page.
+- `PWR` hold from the normal reader or main menu: power off.
+- `BOOT` short press: cycle brightness.
+- `BOOT` hold: cycle display theme.
+
+The goal is simple: use `PWR` as menu, back, exit, and power. Use `BOOT` for quick display changes.
+
+### Reader Controls
+
+- Hold the screen: start reading.
+- Release after a hold: pause.
+- Double tap while paused: start locked continuous play.
+- Tap while locked continuous play is running: pause.
+- Tap the far-left edge: rewind to the start of the current sentence, or the previous sentence if you are already at the start.
+- Swipe left or right while paused: scrub through nearby text.
+- Tap after scrubbing: return to RSVP view.
+- Hold and move vertically in the scrub preview: browse through surrounding text.
+- Swipe up while paused: increase WPM.
+- Swipe down while paused: decrease WPM.
+- Tap the bottom-right footer label: switch between progress, chapter time remaining, book time remaining, and battery display modes.
+
+Pause behavior is configurable. In `Settings -> Word pacing`, choose whether taps pause instantly or at the end of the sentence.
+
+### Main Menu
+
+Open the main menu with `PWR`.
+
+```text
+Resume
+Chapters
+Books
+Articles
+Focus Timer
+Settings
+SD card check
+RSS feeds
+Companion sync
+USB transfer
+Power off
+```
+
+Swipe up or down to move through the menu. Tap to select. Press `PWR` to go back.
+
+### Books And Articles
+
+`Books` shows files from `/books/books`.
+
+`Articles` shows files from `/books/articles`.
+
+Both pages show readable titles, progress, and saved position where available. Select an item to load it into the reader.
+
+### Chapters
+
+The `Chapters` page lists chapter markers from the current book when available. Select a chapter to jump to it. Press `PWR` to return to the main menu.
+
+### Settings
+
+Settings are grouped by how people actually use the device.
+
+`Display` includes:
+
+- Reading mode.
+- Left/right handed layout.
+- Display theme.
+- Brightness.
+- Footer and battery label behavior.
+- Language.
+
+`Typography` includes:
+
+- Font size.
+- Typeface.
+- Phantom words.
+- Red focus highlight.
+- Tracking.
+- Anchor position.
+- Guide width.
+- Guide gap.
+- Typography preview and reset.
+
+`Word pacing` includes:
+
+- Long-word delay.
+- Complexity delay.
+- Punctuation delay.
+- RSVP or scroll reading behavior.
+- Instant pause or sentence-end pause.
+- Pacing reset.
+
+`Wi-Fi` includes network setup for RSS and OTA.
+
+`Firmware update` checks GitHub Releases and installs newer firmware when available.
+
+### Companion Sync
+
+Use this page to connect the iPhone app or the web companion.
+
+1. Open `Companion sync`.
+2. Connect to the Wi-Fi network shown on the device.
+3. Open the URL shown on the device.
+4. Use the web companion or iPhone app.
+5. Hold `PWR` to exit.
+
+When Companion Sync exits, the device reloads settings and refreshes the library.
+
+### USB Transfer
+
+Use this page to copy files over USB without removing the SD card.
+
+1. Open `USB transfer`.
+2. Copy files from your computer.
+3. Eject the device from the computer.
+4. Hold `PWR` to exit.
+
+Always eject before leaving USB transfer mode where possible.
 
 ### RSS Feeds
 
-- RSS feed list managed from the iPhone app, including offline editing and sync status.
-- Device-side RSS checking over saved Wi-Fi.
-- Live on-device progress while feeds are checked.
-- Articles saved into `/books/articles`.
-- Redirect handling for common 301, 302, 303, 307, and 308 responses.
-- RSS and Atom parsing for common feed formats.
-- Feed item author, `dc:creator`, or website used as the article author.
-- Current limits: some feeds block embedded clients, some feeds are too large, and some sites require better article extraction than the firmware can do alone.
+Use the web companion or iPhone app to manage feed URLs. Then run `RSS feeds` from the device menu.
 
-### Web And Distribution
+The device shows live progress as it checks feeds. Saved articles appear in `Articles`.
 
-- Cleaner firmware installer UI.
-- Linux Chromium/Snap USB permission note.
-- Public iPhone app distribution still needs to be worked out.
-- A device-hosted companion web app is planned for Android and desktop users.
-- Bluetooth-first, Wi-Fi-second pairing is planned to make Wi-Fi password entry less painful.
-- Larger-book architecture and wider script/font support are planned for a later release.
+### Focus Timer
+
+The Focus Timer uses the device orientation to guide work and break blocks.
+
+1. Open `Focus Timer`.
+2. Choose a timer category.
+3. Place or flip the device as prompted.
+4. Follow the on-screen timer.
+5. Hold `PWR` to exit the timer page.
+
+Touch-and-hold during an active timer cancels the current timer block.
+
+### SD Card Check
+
+Run `SD card check` if books or articles do not appear. It checks whether the card mounts, whether it can write, and whether the expected library folders exist.
+
+## Character Support
+
+`v0.0.4` improves support for long books and unsupported characters. Common punctuation is normalized, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
+
+The current renderer is best for English and European Latin-script languages. Complex scripts still need additional font and shaping work.
+
+## iPhone App Status
+
+The iPhone companion app is working, but public distribution is waiting on Apple Developer account approval.
+
+Current app features include:
+
+- Library view for books and articles.
+- Article drafts, editing, preview, and sync.
+- Safari and Chrome share flow.
+- Fetch article title and text where available.
+- Device settings editor.
+- RSS feed management.
+- Help and FAQ pages.
+
+Temporary install instructions are in:
+
+[`ios/RSVPNanoCompanion/README.md`](ios/RSVPNanoCompanion/README.md)
+
+## Android App
+
+The web companion works today from Android browsers.
+
+A future native Android app is planned. Help from Android developers would be very welcome, especially around sharing URLs/articles into the app, local draft storage, and syncing with the device companion API.
 
 ## Build From Source
 
-Install PlatformIO Core, then run:
+Firmware builds with PlatformIO:
 
-```sh
+```bash
 pio run
+```
+
+Upload to a connected device:
+
+```bash
 pio run -t upload
+```
+
+Monitor serial output:
+
+```bash
 pio device monitor
 ```
 
-The default environment is `waveshare_esp32s3_usb_msc`, which includes the reader and USB transfer mode. Serial monitor runs at `115200`.
+The iPhone app lives in:
 
-To export the browser-flasher image and OTA binary:
-
-```sh
-python3 tools/export_web_firmware.py
+```text
+ios/RSVPNanoCompanion
 ```
 
-That command writes:
+Open the Xcode project from that folder when installing the app locally.
+
+To export browser-flasher and OTA firmware assets for a release:
+
+```bash
+python3 tools/export_web_firmware.py --version v0.0.4
+```
+
+That writes:
 
 ```text
 web/firmware/rsvp-nano.bin
 web/firmware/rsvp-nano-ota.bin
+web/firmware/manifest.json
 ```
 
-For OTA releases:
+## Project Status
 
-1. Build from a clean commit or tag.
-2. Run `python3 tools/export_web_firmware.py`.
-3. Create a GitHub Release in `ionutdecebal/rsvpnano`.
-4. Upload both `web/firmware/rsvp-nano.bin` and `web/firmware/rsvp-nano-ota.bin`.
+`v0.0.4` is the first release that brings the firmware, SD card workflow, RSS feeds, iPhone companion work, and web companion work together into one release-ready experience.
 
-The hosted browser flasher and OTA updater both use the latest published GitHub Release assets.
+The next areas of work are:
 
-## Hardware
-
-The current firmware targets the [Waveshare ESP32-S3-Touch-LCD-3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=153227):
-
-- ESP32-S3 with 16 MB flash and OPI PSRAM.
-- AXS15231B-based 172 x 640 LCD panel used in landscape as 640 x 172.
-- SD card connected through `SD_MMC`.
-- Touch, battery, and board power control pins defined in `src/board/BoardConfig.h`.
-
-If you are adapting the project to different hardware, start with `src/board/BoardConfig.h`, then review the display, touch, power, and SD wiring code.
-
-## Running Tests
-
-The pacing algorithm has a host-side unit test suite that runs without hardware using PlatformIO's native environment.
-
-```sh
-pio test -e native_test
-```
-
-Tests live in `test/test_pacing/` and cover word duration calculation, WPM clamping, and seek/scrub behavior.
-
-## Desktop Converter Fallback
-
-The browser converter is the normal path. The desktop helper is still available for offline or batch conversion:
-
-- Windows: `Convert books.bat`
-- macOS: `Convert books.command`
-- Linux: `convert_books_linux.sh` or `python3 convert_books.py`
-
-Copy the helper files from `tools/sd_card_converter` to the SD card root and run the launcher for your platform. The desktop converter scans `/books` and creates `.rsvp` files beside supported sources.
-
-## RSVP File Format
-
-`.rsvp` files are plain text. The reader understands a small set of directives:
-
-```text
-@rsvp 1
-@title The Book Title
-@author Author Name
-@source /books/source.epub
-@chapter Chapter 1
-@para
-```
-
-Normal text lines after the directives are split into words by the firmware.
-
-## Contributing
-
-Issues, experiments, forks, and pull requests are welcome. If you change hardware mappings, build environments, the companion API, or the flashing flow, please update the relevant docs alongside the code.
+- TestFlight and unlisted App Store distribution after Apple Developer approval.
+- Better Android support, ideally with a native app.
+- More capable article extraction for sites that do not expose full RSS content.
+- A fuller browser-hosted companion experience for desktop and Android users.
+- More font and script support.
 
 ## License
 

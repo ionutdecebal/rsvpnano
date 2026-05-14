@@ -42,6 +42,8 @@ constexpr const char *kPrefTypographyTracking = "type_trk";
 constexpr const char *kPrefTypographyAnchor = "type_anc";
 constexpr const char *kPrefTypographyGuideWidth = "type_wid";
 constexpr const char *kPrefTypographyGuideGap = "type_gap";
+constexpr const char *kPrefWifiSsid = "wifi_ssid";
+constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr uint16_t kDefaultWpm = 300;
 constexpr uint16_t kMinWpm = 100;
 constexpr uint16_t kMaxWpm = 1000;
@@ -68,6 +70,165 @@ constexpr uint8_t kDefaultTypographyGuideWidth = 30;
 constexpr uint8_t kMinTypographyGuideGap = 2;
 constexpr uint8_t kMaxTypographyGuideGap = 8;
 constexpr uint8_t kDefaultTypographyGuideGap = 5;
+
+const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RSVP Nano Companion</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1110;--fg:#f5f1e8;--muted:#a7aaa0;--line:#2d3430;--card:#151b18;--accent:#78d5b1;--accentInk:#07110e;--accent2:#ff9b73;--soft:#1d2924}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#18241f 0,#0c1110 38%);color:var(--fg);font:15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:2;background:rgba(12,17,16,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:14px 16px 10px}
+h1{font-size:1.15rem;margin:0 0 10px}.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+button,.button{border:1px solid var(--line);border-radius:8px;background:#111714;color:var(--fg);padding:9px 11px;font:inherit}
+button.primary,.button.primary{background:var(--accent);border-color:var(--accent);color:var(--accentInk);font-weight:700}button.danger{color:var(--accent2)}
+.tabs button{white-space:nowrap;padding:8px 6px}.tabs button.active{background:var(--fg);color:var(--bg)}
+main{max-width:980px;margin:0 auto;padding:16px}.page{display:none}.page.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
+h2{font-size:1.05rem;margin:0 0 10px}h3{font-size:.95rem;margin:0 0 8px}.muted{color:var(--muted)}.status{padding:10px 12px;border-radius:8px;background:var(--soft);margin-bottom:12px}
+label{display:block;font-weight:650;margin:10px 0 5px}input,textarea,select{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;padding:9px}
+textarea{min-height:180px;resize:vertical}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.row button{flex:0 0 auto}
+.item{border-top:1px solid var(--line);padding:10px 0}.item:first-child{border-top:0}.item-title{font-weight:700}.item-meta{color:var(--muted);font-size:.9rem}
+ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4px}
+</style>
+</head>
+<body>
+<header>
+<h1>RSVP Nano Companion</h1>
+<nav class="tabs">
+<button data-tab="books" class="active">Books</button>
+<button data-tab="articles">Articles</button>
+<button data-tab="settings">Settings</button>
+<button data-tab="rss">RSS</button>
+<button data-tab="help">Help</button>
+</nav>
+</header>
+<main>
+<div id="status" class="status">Connecting to reader...</div>
+
+<section id="books" class="page active">
+<div class="grid">
+<div class="card"><h2>Upload Book</h2>
+<p class="muted">For best EPUB/HTML/Markdown conversion, use the hosted web converter first, then upload the finished <code>.rsvp</code> file here wirelessly.</p>
+<label>Book file</label><input id="bookFileInput" type="file" accept=".rsvp,.txt,.epub">
+<p><button class="primary" id="uploadBookButton">Upload book</button></p>
+</div>
+<div class="card"><h2>Reader</h2><div id="infoBox" class="muted">No reader info yet.</div><p><button id="refreshBooksButton">Refresh books</button></p></div>
+</div>
+<div class="card"><h2>Books</h2><div id="booksList" class="muted">Loading...</div></div>
+</section>
+
+<section id="articles" class="page">
+<div class="grid">
+<div class="card"><h2>New Article</h2>
+<label>Title</label><input id="articleTitle" placeholder="Article title">
+<label>Author or source</label><input id="articleAuthor" placeholder="Website or author">
+<label>Body</label><textarea id="articleBody" placeholder="Paste article text here"></textarea>
+<div class="row"><button id="saveDraftButton">Save draft</button><button class="primary" id="syncArticleButton">Sync article</button></div>
+</div>
+<div class="card"><h2>Upload Article File</h2>
+<p class="muted">Use this for prepared article <code>.rsvp</code> files or short text files.</p>
+<label>Article file</label><input id="articleFileInput" type="file" accept=".rsvp,.txt,.epub">
+<p><button class="primary" id="uploadArticleButton">Upload article</button></p>
+</div>
+</div>
+<div class="card"><h2>Articles</h2><div id="articlesList" class="muted">Loading...</div><p><button id="refreshArticlesButton">Refresh articles</button></p></div>
+</section>
+
+<section id="settings" class="page">
+<div class="grid">
+<div class="card"><h2>Word Pacing</h2>
+<label>Reading mode</label><select id="readerMode"><option value="rsvp">RSVP</option><option value="scroll">Scroll</option></select>
+<label>Pause behaviour</label><select id="pauseMode"><option value="sentence_end">End of sentence</option><option value="instant">Instant</option></select>
+<label>Base speed <span id="wpmValue"></span></label><input id="wpm" type="range" min="100" max="1000" step="25">
+<label>Long words <span id="longWordMsValue"></span></label><input id="longWordMs" type="range" min="0" max="600" step="50">
+<label>Complexity <span id="complexWordMsValue"></span></label><input id="complexWordMs" type="range" min="0" max="600" step="50">
+<label>Punctuation <span id="punctuationMsValue"></span></label><input id="punctuationMs" type="range" min="0" max="600" step="50">
+</div>
+<div class="card"><h2>Display</h2>
+<label>Display mode</label><select id="displayMode"><option value="dark">Dark</option><option value="light">Light</option><option value="night">Night</option></select>
+<label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="4">
+<label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
+<label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapter_time">Chapter time</option><option value="book_time">Book time</option></select>
+<label>Battery label</label><select id="batteryLabel"><option value="percent">Percentage</option><option value="time_remaining">Time remaining</option></select>
+</div>
+<div class="card"><h2>Typography</h2>
+<label>Typeface</label><select id="typeface"><option value="standard">Standard</option><option value="open_dyslexic">OpenDyslexic</option><option value="atkinson">Atkinson</option></select>
+<label>Font size <span id="fontSizeValue"></span></label><input id="fontSizeIndex" type="range" min="0" max="2">
+<label>Tracking <span id="trackingValue"></span></label><input id="tracking" type="range" min="-2" max="3">
+<label>Anchor <span id="anchorValue"></span></label><input id="anchorPercent" type="range" min="30" max="40">
+<label>Guide width <span id="guideWidthValue"></span></label><input id="guideWidth" type="range" min="12" max="30" step="2">
+<label>Guide gap <span id="guideGapValue"></span></label><input id="guideGap" type="range" min="2" max="8">
+<label><input id="focusHighlight" type="checkbox" style="width:auto"> Focus highlight</label>
+<label><input id="phantomWords" type="checkbox" style="width:auto"> Phantom words</label>
+</div>
+<div class="card"><h2>Home Wi-Fi</h2>
+<p class="muted">Save Wi-Fi here for RSS and OTA. The reader does not send the saved password back to this page.</p>
+<label>SSID</label><input id="wifiSsid" autocomplete="off" placeholder="Network name">
+<label>Password</label><input id="wifiPassword" type="password" autocomplete="new-password" placeholder="Leave blank for open networks">
+<div class="row"><button class="primary" id="saveWifiButton">Save Wi-Fi</button><button class="danger" id="forgetWifiButton">Forget</button></div>
+<p id="wifiCurrent" class="muted">No saved Wi-Fi loaded yet.</p>
+</div>
+</div>
+<p><button class="primary" id="saveSettingsButton">Save settings</button></p>
+</section>
+
+<section id="rss" class="page">
+<div class="card"><h2>RSS Feeds</h2><p class="muted">Add one feed URL per line. Feeds are saved to <code>/config/rss.conf</code>; run RSS feeds from the reader menu to download articles.</p>
+<textarea id="rssFeeds" placeholder="https://example.com/feed/"></textarea>
+<p><button class="primary" id="saveRssButton">Save feeds</button> <button id="reloadRssButton">Reload</button></p>
+</div>
+</section>
+
+<section id="help" class="page">
+<div class="card"><h2>How to use this web companion</h2>
+<ul>
+<li>Open Companion sync on the reader, join the <code>RSVP-Nano</code> Wi-Fi network, then open this page.</li>
+<li>Use Books for prepared book files and Articles for article drafts, article uploads, and synced articles.</li>
+<li>For best book conversion, use the hosted web converter/flasher first. This page is the wireless upload and settings companion, not the full conversion engine.</li>
+<li><code>.txt</code> and <code>.epub</code> uploads are accepted, but EPUB conversion is handled on the device when opened.</li>
+<li>Use Wi-Fi to save your home network for RSS and OTA. You can still use the on-device Wi-Fi keyboard if you prefer the standalone path.</li>
+<li>Use <code>/books/books</code> for books and <code>/books/articles</code> for articles. Legacy files in <code>/books</code> still show up.</li>
+</ul>
+</div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let settings=null;
+function status(msg){$('status').textContent=msg}
+async function api(path,opts){const r=await fetch(path,opts);const t=await r.text();let j={};try{j=t?JSON.parse(t):{}}catch(e){throw new Error(t||'Bad response')}if(!r.ok||j.ok===false)throw new Error(j.error||r.statusText);return j}
+function bytes(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(1)+' MB'}
+function safeName(s){return (s||'article').replace(/[^a-z0-9._ -]+/gi,'-').replace(/\s+/g,' ').trim().slice(0,72)||'article'}
+function escRsvp(s){return (s||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim()}
+function articleFile(){const title=$('articleTitle').value.trim()||'Untitled Article';const author=$('articleAuthor').value.trim();const body=escRsvp($('articleBody').value);let out='@rsvp 1\n@title '+title+'\n';if(author)out+='@author '+author+'\n';out+='@para\n'+body+'\n';return {name:safeName(title)+'.rsvp',blob:new Blob([out],{type:'text/plain'})}}
+function html(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function renderList(id,items){$(id).innerHTML=items.length?items.map(b=>`<div class="item"><div class="item-title">${html(b.title||b.name)}</div><div class="item-meta">${html([b.author,b.name,bytes(b.bytes),b.progressPercent!=null?b.progressPercent+'% read':null].filter(Boolean).join(' - '))}</div><p><button class="danger" data-delete="${html(encodeURIComponent(b.name))}">Delete</button></p></div>`).join(''):'<span class="muted">Nothing here yet.</span>';document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>delBook(decodeURIComponent(b.dataset.delete)))}
+async function refresh(){try{const info=await api('/api/info');$('infoBox').innerHTML=`${info.name}<br><span class="muted">${info.mode} - ${info.networkSsid||''}</span><br>Pairing code: <strong>${info.pairingCode}</strong>`;const data=await api('/api/books');renderList('booksList',data.books.filter(b=>b.category!=='article'&&!String(b.name).startsWith('articles/')));renderList('articlesList',data.books.filter(b=>b.category==='article'||String(b.name).startsWith('articles/')));status('Connected to RSVP Nano.')}catch(e){status('Connection problem: '+e.message)}}
+async function delBook(name){if(!confirm('Delete '+name+'?'))return;try{await api('/api/books?name='+encodeURIComponent(name),{method:'DELETE'});await refresh();status('Deleted '+name)}catch(e){status('Delete failed: '+e.message)}}
+async function uploadBlob(blob,name,category){const fd=new FormData();fd.append('file',blob,name);await api('/api/books?name='+encodeURIComponent(name)+'&category='+encodeURIComponent(category),{method:'POST',body:fd})}
+async function uploadPicked(inputId,category){const f=$(inputId).files[0];if(!f){status('Choose a file first.');return}try{await uploadBlob(f,f.name,category);$(inputId).value='';await refresh();status('Uploaded '+f.name)}catch(e){status('Upload failed: '+e.message)}}
+async function syncArticle(){const f=articleFile();if(!$('articleBody').value.trim()){status('Paste article text first.');return}try{await uploadBlob(f.blob,f.name,'article');localStorage.removeItem('rsvpArticleDraft');await refresh();status('Synced '+f.name)}catch(e){status('Article sync failed: '+e.message)}}
+function saveDraft(){localStorage.setItem('rsvpArticleDraft',JSON.stringify({title:$('articleTitle').value,author:$('articleAuthor').value,body:$('articleBody').value}));status('Draft saved in this browser.')}
+function loadDraft(){try{const d=JSON.parse(localStorage.getItem('rsvpArticleDraft')||'{}');$('articleTitle').value=d.title||'';$('articleAuthor').value=d.author||'';$('articleBody').value=d.body||''}catch(e){}}
+function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
+function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
+function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
+async function loadSettings(){try{settings=await api('/api/settings');setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',settings.reading.wpm);setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('displayMode',settings.display.nightMode?'night':settings.display.darkMode?'dark':'light');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){const mode=val('displayMode');const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{darkMode:mode==='dark',nightMode:mode==='night',brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
+async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/wifi',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
+async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/wifi',{method:'DELETE'});$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
+async function loadRss(){try{const r=await api('/api/rss-feeds');$('rssFeeds').value=(r.feeds||[]).join('\n');status('RSS feeds loaded.')}catch(e){status('RSS load failed: '+e.message)}}
+async function saveRss(){const feeds=$('rssFeeds').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);try{await api('/api/rss-feeds',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({feeds})});status('RSS feeds saved.')}catch(e){status('RSS save failed: '+e.message)}}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');if(b.dataset.tab==='settings'){loadSettings();loadWifi()}if(b.dataset.tab==='rss')loadRss()});
+['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>$(id).oninput=updateLabels);
+$('refreshBooksButton').onclick=refresh;$('refreshArticlesButton').onclick=refresh;$('uploadBookButton').onclick=()=>uploadPicked('bookFileInput','book');$('uploadArticleButton').onclick=()=>uploadPicked('articleFileInput','article');$('syncArticleButton').onclick=syncArticle;$('saveDraftButton').onclick=saveDraft;$('saveSettingsButton').onclick=saveSettings;$('saveWifiButton').onclick=saveWifi;$('forgetWifiButton').onclick=forgetWifi;$('saveRssButton').onclick=saveRss;$('reloadRssButton').onclick=loadRss;
+loadDraft();refresh();
+</script>
+</body>
+</html>)HTML";
 
 bool isSafeFilenameChar(char c) {
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
@@ -380,8 +541,8 @@ bool CompanionSyncManager::begin(const Config &config) {
   }
 
   active_ = true;
-  statusLine1_ = "Sync ready";
-  statusLine2_ = networkSsid_;
+  statusLine1_ = networkSsid_;
+  statusLine2_ = baseUrl();
   Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), baseUrl().c_str(),
                 pairingCode_.c_str());
   return true;
@@ -452,6 +613,12 @@ void CompanionSyncManager::handleSettingsStatic() {
   }
 }
 
+void CompanionSyncManager::handleWifiStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleWifi();
+  }
+}
+
 void CompanionSyncManager::handleRssFeedsStatic() {
   if (instance_ != nullptr) {
     instance_->handleRssFeeds();
@@ -507,6 +674,9 @@ bool CompanionSyncManager::startServer() {
   server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
+  server_.on("/api/wifi", HTTP_GET, handleWifiStatic);
+  server_.on("/api/wifi", HTTP_PUT, handleWifiStatic);
+  server_.on("/api/wifi", HTTP_DELETE, handleWifiStatic);
   server_.on("/api/rss-feeds", HTTP_GET, handleRssFeedsStatic);
   server_.on("/api/rss-feeds", HTTP_PUT, handleRssFeedsStatic);
   server_.onNotFound(handleNotFoundStatic);
@@ -540,26 +710,8 @@ void CompanionSyncManager::handleInfo() {
 }
 
 void CompanionSyncManager::handleRoot() {
-  String body;
-  body.reserve(980);
-  body += "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
-  body += "<title>RSVP Nano Sync</title>";
-  body += "<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:32px;line-height:1.45}";
-  body += "code{background:#f2f2f2;padding:2px 5px;border-radius:4px}</style></head><body>";
-  body += "<h1>RSVP Nano Sync</h1>";
-  body += "<p>Status: <strong>" + statusLine1_ + "</strong></p>";
-  if (!statusLine2_.isEmpty()) {
-    body += "<p><code>" + statusLine2_ + "</code></p>";
-  }
-  body += "<p>API endpoints:</p><ul>";
-  body += "<li><a href=\"/api/info\">/api/info</a></li>";
-  body += "<li><a href=\"/api/books\">/api/books</a></li>";
-  body += "<li><a href=\"/api/settings\">/api/settings</a></li>";
-  body += "<li><a href=\"/api/rss-feeds\">/api/rss-feeds</a></li>";
-  body += "</ul>";
-  body += "<p>Pairing code: <strong>" + pairingCode_ + "</strong></p>";
-  body += "</body></html>";
-  server_.send(200, "text/html", body);
+  server_.sendHeader("Cache-Control", "no-store, max-age=0");
+  server_.send_P(200, "text/html", kWebCompanionHtml);
 }
 
 void CompanionSyncManager::handleBooksList() {
@@ -636,6 +788,33 @@ void CompanionSyncManager::handleSettings() {
   }
 
   server_.send(200, "application/json", settingsJson());
+}
+
+void CompanionSyncManager::handleWifi() {
+  if (server_.method() == HTTP_GET) {
+    server_.send(200, "application/json", wifiJson());
+    return;
+  }
+
+  if (server_.method() == HTTP_DELETE) {
+    preferences_.remove(kPrefWifiSsid);
+    preferences_.remove(kPrefWifiPass);
+    statusLine1_ = "Wi-Fi cleared";
+    statusLine2_ = "";
+    server_.send(200, "application/json", wifiJson());
+    return;
+  }
+
+  String error;
+  if (!applyWifiJson(server_.arg("plain"), error)) {
+    server_.send(400, "application/json",
+                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+    return;
+  }
+
+  statusLine1_ = "Wi-Fi saved";
+  statusLine2_ = preferences_.getString(kPrefWifiSsid, "");
+  server_.send(200, "application/json", wifiJson());
 }
 
 void CompanionSyncManager::handleRssFeeds() {
@@ -1074,6 +1253,46 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
     preferences_.putUChar(kPrefTypographyGuideGap, static_cast<uint8_t>(intValue));
   }
 
+  return true;
+}
+
+String CompanionSyncManager::wifiJson() {
+  const String ssid = preferences_.getString(kPrefWifiSsid, "");
+  return String("{\"ok\":true,\"configured\":") + (ssid.isEmpty() ? "false" : "true") +
+         ",\"ssid\":\"" + jsonEscape(ssid) + "\",\"passwordSet\":" +
+         (preferences_.getString(kPrefWifiPass, "").isEmpty() ? "false" : "true") + "}";
+}
+
+bool CompanionSyncManager::applyWifiJson(const String &body, String &error) {
+  if (body.length() > 512) {
+    error = "Wi-Fi payload too large";
+    return false;
+  }
+
+  String ssid;
+  if (!readJsonString(body, "ssid", ssid)) {
+    error = "Missing Wi-Fi SSID";
+    return false;
+  }
+  ssid.trim();
+  if (ssid.isEmpty()) {
+    error = "Wi-Fi SSID is required";
+    return false;
+  }
+  if (ssid.length() > 32) {
+    error = "Wi-Fi SSID is too long";
+    return false;
+  }
+
+  String password;
+  readJsonString(body, "password", password);
+  if (password.length() > 64) {
+    error = "Wi-Fi password is too long";
+    return false;
+  }
+
+  preferences_.putString(kPrefWifiSsid, ssid);
+  preferences_.putString(kPrefWifiPass, password);
   return true;
 }
 

@@ -59,6 +59,18 @@ struct NanoRssFeeds: Codable {
     var feeds: [String]
 }
 
+struct NanoWifiSettings: Codable {
+    var ok: Bool
+    var configured: Bool
+    var ssid: String
+    var passwordSet: Bool
+}
+
+struct NanoWifiUpdate: Encodable {
+    var ssid: String
+    var password: String
+}
+
 struct NanoSettings: Codable {
     var ok: Bool
     var version: Int

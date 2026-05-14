@@ -69,6 +69,51 @@ struct NanoClient {
         return try JSONDecoder().decode(NanoSettings.self, from: data)
     }
 
+    func fetchWifiSettings() async throws -> NanoWifiSettings {
+        let url = try endpoint("/api/wifi")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response)
+        return try JSONDecoder().decode(NanoWifiSettings.self, from: data)
+    }
+
+    func updateWifi(ssid: String, password: String) async throws -> NanoWifiSettings {
+        var request = URLRequest(url: try endpoint("/api/wifi"))
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(NanoWifiUpdate(ssid: ssid, password: password))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NanoClientError.invalidResponse
+        }
+        if !(200..<300).contains(http.statusCode) {
+            if let decoded = try? JSONDecoder().decode(NanoUploadResponse.self, from: data),
+               let error = decoded.error {
+                throw NanoClientError.deviceRejected(error)
+            }
+            throw NanoClientError.invalidResponse
+        }
+        return try JSONDecoder().decode(NanoWifiSettings.self, from: data)
+    }
+
+    func forgetWifi() async throws -> NanoWifiSettings {
+        var request = URLRequest(url: try endpoint("/api/wifi"))
+        request.httpMethod = "DELETE"
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw NanoClientError.invalidResponse
+        }
+        if !(200..<300).contains(http.statusCode) {
+            if let decoded = try? JSONDecoder().decode(NanoUploadResponse.self, from: data),
+               let error = decoded.error {
+                throw NanoClientError.deviceRejected(error)
+            }
+            throw NanoClientError.invalidResponse
+        }
+        return try JSONDecoder().decode(NanoWifiSettings.self, from: data)
+    }
+
     func fetchRssFeeds() async throws -> NanoRssFeeds {
         let url = try endpoint("/api/rss-feeds")
         let (data, response) = try await URLSession.shared.data(from: url)

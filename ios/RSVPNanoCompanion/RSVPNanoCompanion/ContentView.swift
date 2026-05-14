@@ -9,6 +9,9 @@ final class NanoViewModel: ObservableObject {
     @Published var info: NanoInfo?
     @Published var books: [NanoBook] = []
     @Published var deviceSettings: NanoSettings?
+    @Published var wifiSettings: NanoWifiSettings?
+    @Published var wifiSsidDraft = ""
+    @Published var wifiPasswordDraft = ""
     @Published var rssFeeds: [String] = []
     @Published var syncedRssFeeds: [String] = []
     @Published var rssFeedDraft = ""
@@ -72,6 +75,9 @@ final class NanoViewModel: ObservableObject {
                     return
                 }
                 self.deviceSettings = try? await client.fetchSettings()
+                if let wifi = try? await client.fetchWifiSettings() {
+                    self.applyWifiSettings(wifi)
+                }
                 if let deviceFeeds = try? await client.fetchRssFeeds().feeds {
                     self.mergeRssFeedsFromDevice(deviceFeeds)
                 }
@@ -84,7 +90,11 @@ final class NanoViewModel: ObservableObject {
     func refreshSettings() {
         Task {
             await run("Reading settings") { [self] in
-                self.deviceSettings = try await NanoClient(baseURLString: self.address).fetchSettings()
+                let client = NanoClient(baseURLString: self.address)
+                self.deviceSettings = try await client.fetchSettings()
+                if let wifi = try? await client.fetchWifiSettings() {
+                    self.applyWifiSettings(wifi)
+                }
                 self.status = "Device settings refreshed."
             }
         }
@@ -97,6 +107,41 @@ final class NanoViewModel: ObservableObject {
                 next.reading.accurateTimeEstimate = true
                 self.deviceSettings = try await NanoClient(baseURLString: self.address).updateSettings(next)
                 self.status = "Device settings saved. Exit sync on the reader to apply all changes."
+            }
+        }
+    }
+
+    func refreshWifiSettings() {
+        Task {
+            await run("Reading Wi-Fi settings") { [self] in
+                self.applyWifiSettings(try await NanoClient(baseURLString: self.address).fetchWifiSettings())
+                self.status = "Wi-Fi settings refreshed."
+            }
+        }
+    }
+
+    func saveWifiSettings() {
+        let ssid = wifiSsidDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ssid.isEmpty else {
+            lastConnectionError = "Enter a Wi-Fi network name first."
+            status = "Wi-Fi was not saved."
+            return
+        }
+        Task {
+            await run("Saving Wi-Fi") { [self] in
+                let wifi = try await NanoClient(baseURLString: self.address)
+                    .updateWifi(ssid: ssid, password: self.wifiPasswordDraft)
+                self.applyWifiSettings(wifi)
+                self.status = "Wi-Fi saved for RSS and OTA."
+            }
+        }
+    }
+
+    func forgetWifiSettings() {
+        Task {
+            await run("Clearing Wi-Fi") { [self] in
+                self.applyWifiSettings(try await NanoClient(baseURLString: self.address).forgetWifi())
+                self.status = "Wi-Fi credentials cleared."
             }
         }
     }
@@ -296,12 +341,18 @@ final class NanoViewModel: ObservableObject {
                 self.books = []
                 self.lastConnectionError = "Library read failed: \(error.localizedDescription)"
                 self.deviceSettings = try? await client.fetchSettings()
+                if let wifi = try? await client.fetchWifiSettings() {
+                    self.applyWifiSettings(wifi)
+                }
                 self.mergeRssFeedsFromDevice((try? await client.fetchRssFeeds().feeds) ?? [])
                 self.refreshPendingUploads()
                 self.status = "Connected to \(self.info?.name ?? "RSVP Nano"), but the library could not be read."
                 return
             }
             self.deviceSettings = try? await client.fetchSettings()
+            if let wifi = try? await client.fetchWifiSettings() {
+                self.applyWifiSettings(wifi)
+            }
             self.mergeRssFeedsFromDevice((try? await client.fetchRssFeeds().feeds) ?? [])
             self.refreshPendingUploads()
             self.lastConnectionError = nil
@@ -353,6 +404,12 @@ final class NanoViewModel: ObservableObject {
         syncedRssFeeds = normalizedRssFeeds(deviceFeeds)
         rssFeeds = normalizedRssFeeds(rssFeedStore.load() + syncedRssFeeds)
         rssFeedStore.save(rssFeeds)
+    }
+
+    private func applyWifiSettings(_ wifi: NanoWifiSettings) {
+        wifiSettings = wifi
+        wifiSsidDraft = wifi.ssid
+        wifiPasswordDraft = ""
     }
 
     private func normalizedRssFeeds(_ feeds: [String]) -> [String] {
@@ -1006,6 +1063,7 @@ struct ContentView: View {
             } else {
                 wordPacingSettingsSection
                 displaySettingsSection
+                wifiSettingsSection
                 typographySettingsSection
 
                 Section {
@@ -1021,6 +1079,58 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    private var wifiSettingsSection: some View {
+        Section {
+            if let wifi = viewModel.wifiSettings {
+                LabeledContent("Saved Network", value: wifi.configured ? wifi.ssid : "Not set")
+                if wifi.passwordSet {
+                    Text("A password is saved on the reader. The app cannot read it back.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            TextField("Network name", text: $viewModel.wifiSsidDraft)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            SecureField("Password", text: $viewModel.wifiPasswordDraft)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            HStack(spacing: 10) {
+                Button {
+                    viewModel.saveWifiSettings()
+                } label: {
+                    Label("Save Wi-Fi", systemImage: "wifi")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isBusy || viewModel.wifiSsidDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button(role: .destructive) {
+                    viewModel.forgetWifiSettings()
+                } label: {
+                    Label("Forget", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isBusy || viewModel.wifiSettings?.configured != true)
+            }
+
+            Button {
+                viewModel.refreshWifiSettings()
+            } label: {
+                Label("Refresh Wi-Fi", systemImage: "arrow.clockwise")
+            }
+            .disabled(viewModel.isBusy)
+        } header: {
+            Text("Wi-Fi")
+        } footer: {
+            Text("Used for RSS and OTA. You can still configure Wi-Fi directly on the reader if you want the standalone path.")
         }
     }
 
