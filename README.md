@@ -1,102 +1,82 @@
 # RSVP Nano
 
-RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at a time with RSVP (Rapid Serial Visual Presentation). The firmware is built around stable anchor-letter rendering, readable typography, tunable pacing, SD card storage, and a web-first book conversion workflow.
+RSVP Nano is an open-source ESP32-S3 reading device for showing text one word at a time with RSVP (Rapid Serial Visual Presentation). The firmware is built around stable anchor-letter rendering, readable typography, tunable pacing, SD card storage, and a browser-first book conversion workflow.
 
-## Highlights
+The latest public release is `v0.0.3`. The hosted browser flasher installs the latest published GitHub Release, so features listed under **Coming Soon** are not in the public flasher build until the next release is published.
+
+## Works Now In v0.0.3
+
+### Reader
 
 - One-word RSVP reader with stable anchor alignment.
-- Optional page-scroll reading mode that keeps the same pacing/book-position mechanics without the RSVP anchor.
-- Hold to read, double-tap to lock autoplay, tap to stop locked autoplay, and pause on sentence boundaries.
-- Horizontal scrub preview with hold-to-scroll text browsing, then tap to return to RSVP.
-- Adjustable typeface, font size, typography, anchor guides, pacing, and phantom words.
-- Menu language selection for English, Spanish, French, German, Romanian, and Polish.
+- Optional page-scroll reading mode using the same pacing and saved-position system.
+- Hold to read, double-tap locked autoplay, tap to stop locked autoplay, and sentence-boundary pausing.
+- Horizontal scrub preview with hold-to-scroll browsing, then tap to return to RSVP.
+- Sentence rewind from the visual left edge.
+- Swipe up/down WPM adjustment while paused.
 - Chapter and paragraph-aware navigation.
+- Saved reading position and reader settings.
+
+### Settings
+
+- Adjustable reading mode, handedness, theme, brightness, and language.
+- Adjustable font size, typeface, phantom words, red focus highlight, tracking, anchor position, guide width, and guide gap.
+- Adjustable pacing delays for long words, word complexity, and punctuation.
+- Menu language selection for English, Spanish, French, German, Romanian, and Polish.
+- Wi-Fi setup on the device for OTA updates.
+
+### Library And Conversion
+
 - SD card library under `/books`.
-- Web-first book conversion and SD-card library sync from the browser flasher.
-- Optional GitHub Release OTA updates over Wi-Fi with on-device network setup and touch keyboard entry.
-- USB mass-storage mode for copying books to the SD card.
-- Browser-based firmware installation plus in-browser library conversion, sidecar cleanup, and SD-card sync.
+- Supported reader files: `.rsvp`, `.txt`, and `.epub`.
+- Browser-side Library Workspace for importing and converting supported books.
+- Browser converter support for:
+  - `.epub`
+  - `.txt`
+  - `.md` / `.markdown`
+  - `.html` / `.htm` / `.xhtml`
+- On-device EPUB conversion fallback when a matching `.rsvp` file does not exist yet.
+- Browser cleanup for interrupted conversion sidecar files such as `.rsvp.tmp`, `.rsvp.converting`, and `.rsvp.failed`.
 
-## Getting Started
+### Firmware Install And Updates
 
-### Flash From The Browser
+- Browser-based firmware install through ESP Web Tools.
+- Optional GitHub Release OTA updates over Wi-Fi.
+- USB mass-storage mode for copying books to the SD card in the default USB firmware build.
 
-The easiest way to install the firmware is the web flasher:
+## Flash v0.0.3 From The Browser
+
+Use the hosted web flasher:
 
 <https://ionutdecebal.github.io/rsvpnano/>
 
-Use Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts.
-The hosted flasher installs the latest published GitHub Release rather than unreleased `main`
-commits.
+Use Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts. The browser flasher uses ESP Web Tools and Web Serial, so it must be opened over HTTPS or localhost.
 
-The browser flasher uses ESP Web Tools and Web Serial, so it must be opened over HTTPS or localhost.
-It also includes a browser-side Library Workspace for importing supported books, converting them
-into `.rsvp`, downloading a `.zip` of the results, cleaning interrupted sidecar files, and syncing
-the converted outputs back into the SD card's `/books` folder.
+The hosted flasher installs the latest published GitHub Release, not unreleased `main` commits.
 
-On the device, you can switch the menu language in `Settings -> Display -> Language`.
-You can also switch between anchored RSVP and the page scroller in `Settings -> Display ->
-Reading mode`.
-While paused in RSVP mode, swipe left or right to open the larger scrub preview, hold and move
-your finger vertically to browse smoothly through the text, and tap to return to the anchored
-word view.
+## Add Books In v0.0.3
 
-The browser workflow currently accepts:
-
-- `.epub`
-- `.txt`
-- `.md` / `.markdown`
-- `.html` / `.htm` / `.xhtml`
-
-The browser page automatically writes `.rsvp` output that preserves common accented, Baltic,
-Sami, and other extended-Latin letters while staying compatible with the current firmware.
-It is currently the best-supported conversion path and the recommended way to prepare books.
-
-### Add Books
-
-The easiest workflow is to use the Library Workspace on the browser flasher page, then sync the
-converted files directly into the SD card's `/books` folder.
-
-If you want to manage files manually, create a `books` folder at the root of the SD card:
+Create a `books` folder at the root of the SD card:
 
 ```text
 /books
-  my-book.epub
-  another-book.rsvp
+  my-book.rsvp
+  another-book.epub
 ```
 
-The device library scans `/books` for `.rsvp`, `.txt`, and `.epub` files, but the recommended
-workflow is to put browser-converted `.rsvp` files there whenever possible.
+The best workflow is to use the Library Workspace on the browser flasher page, convert books to `.rsvp`, then sync or copy the converted files into `/books`.
 
-Current text support is best for ASCII plus a curated set of accented and extended-Latin letters
-used in many European languages. That includes the usual Germanic and Nordic letters plus common
-extras such as `OE`/`oe` ligatures, Polish `L`-slash style letters, Romanian comma-accent letters,
-several Central European and Turkish forms, the Czech and Hungarian letters used outside Latin-1,
-and the Baltic/Sami letters used in Latvian, Lithuanian, and Sami text. Common book punctuation
-such as curly quotes, guillemets, and bracket variants is normalized into readable ASCII wrappers.
-The Standard serif reader font renders that wider Latin set directly. In the other reader fonts
-and in the tiny UI font, unsupported letters currently fall back to the closest plain ASCII letter
-in the selected font instead of switching fonts.
-More complex scripts still need additional renderer and font work.
+The firmware prioritizes `.rsvp` files. If an EPUB has not been converted yet, the reader can convert it locally the first time it is opened and reuse the generated `.rsvp` file on future launches. The browser converter is still the recommended path for best compatibility.
 
-The firmware prioritizes `.rsvp` files. If a matching `.rsvp` file does not exist yet, an EPUB
-can still be converted locally the first time it is opened, and the converted `.rsvp` file is then
-reused on future launches. That on-device path is best treated as a fallback; the browser converter
-currently has the best compatibility and library-management flow.
+## Character Support
 
-If a conversion is interrupted, you may see sidecar files such as:
+Current text support is best for ASCII plus a curated set of accented and extended-Latin letters used in many European languages. Common book punctuation such as curly quotes, guillemets, and bracket variants is normalized into readable ASCII wrappers.
 
-```text
-.rsvp.tmp
-.rsvp.converting
-.rsvp.failed
-```
+The Standard serif reader font renders the wider Latin set directly. Other reader fonts and the tiny UI font fall back to the closest plain ASCII letter where possible. More complex scripts still need additional renderer and font work.
 
-### OTA Updates
+## OTA Updates
 
-The firmware can optionally check GitHub Releases over Wi-Fi and install a newer app build without
-erasing your reader settings or saved reading progress. Settings and progress are stored in ESP32
-`Preferences`, so a normal OTA update keeps them intact.
+The firmware can check GitHub Releases over Wi-Fi and install a newer app build without erasing reader settings or saved reading progress.
 
 To enable OTA on the device:
 
@@ -106,108 +86,51 @@ To enable OTA on the device:
 4. Enter the password on the on-device keyboard.
 5. Optionally turn on `Auto OTA`.
 
-After that, open `Settings -> Firmware update` to manually check the latest published GitHub
-Release and install `rsvp-nano-ota.bin` if the release tag is newer than the firmware already on
-the device.
+After that, open `Settings -> Firmware update` to manually check the latest published GitHub Release and install `rsvp-nano-ota.bin` if the release tag is newer than the firmware already on the device.
 
-The selected Wi-Fi network and password are stored in ESP32 `Preferences`, so normal OTA updates
-keep them alongside your reader settings and saved book progress.
+[`docs/ota.conf.example`](docs/ota.conf.example) is still supported as an optional advanced override or fallback. Copy it to the SD card as `/config/ota.conf` if you want to pre-seed Wi-Fi credentials or change advanced OTA settings.
 
-[`docs/ota.conf.example`](docs/ota.conf.example) is still supported as an optional advanced
-override or fallback. You can copy it to the SD card as `/config/ota.conf` if you want to
-pre-seed Wi-Fi credentials or change the default repo/asset settings.
-
-Optional keys let you override the default repo or asset name:
-
-- `github_owner`
-- `github_repo`
-- `asset_name`
-- `auto_check`
-
-## User Guide
-
-Most reader settings and your current reading position are saved automatically.
+## Reader Controls
 
 ### Hardware Buttons
 
 - `BOOT` short press: cycle brightness.
-- `BOOT` hold: cycle theme (`Dark -> Light -> Night -> Dark`).
-- `PWR` short press: open the menu from the reader.
-- `PWR` short press while in a submenu: jump back to the main menu.
-- `PWR` short press while on the main menu: return to the reader.
-- `PWR` hold: power the device off.
+- `BOOT` hold: cycle theme.
+- `PWR` short press from the reader: open the menu.
+- `PWR` short press in a submenu: jump back to the main menu.
+- `PWR` short press on the main menu: return to the reader.
+- `PWR` hold: power off.
 
-### Reader Shortcuts
+### RSVP And Scroll Modes
 
+- Hold on the screen: start reading.
+- Release after a hold: pause at the end of the current sentence.
+- Double-tap while paused: lock autoplay on.
+- Tap while locked autoplay is running: stop at the end of the current sentence.
+- Tap the far-left edge: jump to the start of the current sentence, or the previous sentence if you are already at the start.
+- Swipe left: scrub backward through the text.
+- Swipe right: scrub forward through the text.
+- Swipe up while paused: increase WPM.
+- Swipe down while paused: decrease WPM.
 - Tap the bottom-right footer label: cycle between book progress percent, chapter time left, and book time left.
 
-#### RSVP Mode
+Horizontal scrubbing in RSVP mode opens a larger preview. Tap to return to the anchored RSVP view, or hold and move vertically to browse through the surrounding text.
 
-- Hold on the screen: start reading.
-- Release after a hold: pause at the end of the current sentence.
-- Double-tap while paused: lock autoplay on.
-- Tap while locked autoplay is running: stop at the end of the current sentence.
-- Tap the far-left edge: jump to the start of the current sentence, or the previous sentence if you are already at the start. While playing, it rewinds immediately and pauses.
-- Swipe left: scrub backward through the text.
-- Swipe right: scrub forward through the text.
-- Swipe up while paused: increase WPM.
-- Swipe down while paused: decrease WPM.
-
-Horizontal scrubbing in RSVP mode opens a larger preview. In that preview:
-
-- Tap: return to the anchored RSVP view.
-- Hold, then move your finger in the top half of the screen: scroll upward.
-- Hold, then move your finger in the bottom half of the screen: scroll downward.
-- Moving farther from the center increases browse speed.
-
-#### Page Scroll Mode
-
-- Hold on the screen: start reading.
-- Release after a hold: pause at the end of the current sentence.
-- Double-tap while paused: lock autoplay on.
-- Tap while locked autoplay is running: stop at the end of the current sentence.
-- Tap the far-left edge: jump to the start of the current sentence, or the previous sentence if you are already at the start. While playing, it rewinds immediately and pauses.
-- Swipe left: scrub backward through the text.
-- Swipe right: scrub forward through the text.
-- Swipe up while paused: increase WPM.
-- Swipe down while paused: decrease WPM.
-
-Page scroll mode keeps the same pacing and saved-position behavior as RSVP mode, but it shows a
-larger scrolling text view instead of the anchored word display.
-
-### Menu Navigation
-
-- Open the menu with the `PWR` button.
-- Swipe up or down to move the selection.
-- Tap to activate the highlighted item.
-- In the typography tuning screen, swipe left or right to change the preview sample word.
-- In the typography tuning screen, tap the selected control to cycle or toggle that setting.
-
-### Menu Map
+## v0.0.3 Menu Map
 
 ```text
 Main Menu
 |- Resume
 |- Chapters
-|  |- Back
-|  |- Start of Book or chapter list
-|  `- Restart Book
-|     |- No, keep place
-|     `- Yes, restart
 |- Library
-|  |- Back
-|  `- Book list
 |- Settings
-|  |- Back
 |  |- Display
-|  |  |- Back
 |  |  |- Reading mode
 |  |  |- L/R Hand
 |  |  |- Theme
 |  |  |- Brightness
 |  |  `- Language
 |  |- Typography
-|  |  |- Back
 |  |  |- Font size
 |  |  |- Typeface
 |  |  |- Phantom words
@@ -218,117 +141,87 @@ Main Menu
 |  |  |- Guide gap
 |  |  `- Reset
 |  |- Word pacing
-|     |- Back
-|     |- Long words
-|     |- Complexity
-|     |- Punctuation
-|     `- Reset pacing
+|  |  |- Long words
+|  |  |- Complexity
+|  |  |- Punctuation
+|  |  `- Reset pacing
 |  |- Wi-Fi
-|     |- Back
-|     |- Network
-|     |- Choose network
-|     |- Auto OTA
-|     `- Forget network
 |  `- Firmware update
-|- SD card check
-|- Companion sync
-|- USB transfer (default USB build)
+|- USB transfer
 `- Power off
 ```
 
-### Settings Reference
+## Coming Soon
 
-#### Display
+These changes are already merged after `v0.0.3` and are intended for the next release.
 
-- `Reading mode`: switch between anchored RSVP and page scroll.
-- `L/R Hand`: flip the device orientation for left-hand use while keeping sentence rewind on the visual left edge.
-- `Theme`: cycle `Dark`, `Light`, and `Night`.
-- `Brightness`: cycle the backlight level.
-- `Language`: cycle `English`, `Espanol`, `Francais`, `Deutsch`, `Romana`, and `Polski`.
+### Device Firmware
 
-#### Typography
+- SD card checker from the main menu.
+- Faster startup and library loading through metadata skipping and lazy loading.
+- Better support for long books and unsupported characters, with clearer error handling.
+- More reliable double-tap handling for locked autoplay.
+- Pause behavior setting: pause instantly or pause at the end of the sentence.
+- Battery display improvements, including percentage or estimated time remaining.
+- Pacing-aware time estimates for book and chapter remaining time.
+- Backlight handling improvement during standby/deep sleep.
+- Configurable OTA GitHub owner in device settings.
+- Basic Polish language fixes.
 
-- `Font size`: cycle `Large`, `Medium`, and `Small`.
-- `Typeface`: cycle `Standard`, `Atkinson`, and `OpenDyslexic`.
-- `Phantom words`: show or hide the surrounding helper words in RSVP mode.
-- `Red highlight`: turn the focus-letter highlight on or off in RSVP mode.
-- `Tracking`: adjust letter spacing.
-- `Anchor`: move the RSVP focus position horizontally.
-- `Guide width`: change the width of the anchor guides.
-- `Guide gap`: change the gap between the anchor guides.
-- `Reset`: restore the typography settings to their defaults.
+### Library Changes
 
-#### Word Pacing
+- Separate folders for books and articles:
 
-- `Long words`: add extra delay to longer words.
-- `Complexity`: add extra delay to more complex words.
-- `Punctuation`: add extra delay around sentence rhythm and punctuation.
-- `Reset pacing`: restore pacing delays to their defaults.
-
-#### Wi-Fi
-
-- `Network`: shows the currently saved SSID and also acts as a shortcut into a fresh scan.
-- `Choose network`: scan nearby SSIDs and open the on-device keyboard for secure networks.
-- `Auto OTA`: check `releases/latest` during boot when Wi-Fi credentials are available.
-- `Forget network`: clear the stored Wi-Fi credentials from `Preferences`.
-
-#### Firmware Update
-
-- `Firmware update`: use the saved Wi-Fi credentials, check the latest GitHub Release, and install
-  `rsvp-nano-ota.bin` when a newer release is available.
-
-### USB Transfer
-
-On the default USB-enabled firmware build, open `USB transfer` from the main menu to expose the SD
-card over USB. When you are done copying books:
-
-1. Eject the device from your computer.
-2. Hold `BOOT` to leave USB transfer mode.
-3. Wait for the device to remount the SD card and return to the reader.
-
-### SD Card Check
-
-Open `SD card check` from the main menu to run a quick on-device diagnostic. It tries to mount the
-card, reports the card type and size when available, checks for the `/books` folder, counts readable
-book files, counts unsupported files in `/books`, and writes then deletes a tiny `.sdcheck.tmp`
-probe file to catch common write failures.
-
-The checker is intentionally conservative. It can point to likely causes such as a missing `/books`
-folder, unsupported file extensions, mount failure, or write failure, but it cannot repair a card,
-reformat it, inspect every filesystem detail, prove a card is genuine, or perfectly distinguish
-exFAT from a damaged filesystem or marginal card. If mounting fails, the best first checks are FAT32
-formatting, single partition layout, full card seating, and trying a known-good card.
-
-### Companion Sync
-
-`Companion sync` is an early Wi-Fi bridge for the future iPhone app. Open it from the main menu to
-start a small HTTP upload server and a temporary `RSVP-Nano-xxxxxx` access point. The reader shows
-the Wi-Fi network name to join; the companion app checks `192.168.4.1` automatically after the
-iPhone is on that network.
-
-Current test endpoints:
-
-```sh
-curl http://192.168.4.1/api/info
-curl http://192.168.4.1/api/books
-curl -F "file=@book.rsvp" "http://192.168.4.1/api/books?name=book.rsvp"
-curl -X DELETE "http://192.168.4.1/api/books?name=book.rsvp"
+```text
+/books/books
+/books/articles
+/config
 ```
 
-The `/api/books` response includes `title` and `author` for `.rsvp` files that declare `@title`
-or `@author`; the filename remains available as `name`. Books with saved reading state also include
-`progressPercent`, using the same per-book position data shown in the on-device library.
+- Separate on-device `Books` and `Articles` pickers.
+- Legacy files directly inside `/books` are still read for compatibility.
 
-The iPhone app can convert EPUB, plain text, Markdown, HTML/XHTML, pasted text, and shared text/URLs
-into `.rsvp` before upload. Its converter mirrors the browser workspace's EPUB spine handling,
-metadata extraction, text encoding sniffing, punctuation normalization, chapter detection, and
-reader-friendly line wrapping. If an EPUB is not supported by the first native iOS conversion pass,
-the app can still upload the `.epub` source and let the reader convert it on open. The share
-extension saves converted articles into a pending inbox, so articles can be captured while browsing
-and synced later when the iPhone is connected to the reader Wi-Fi.
+### iPhone Companion App
 
-Uploaded files are written to `/books` as `.tmp` files first, then renamed into place when the
-upload completes. Hold `BOOT` to leave sync mode and refresh the library.
+- New iPhone companion app in `ios/RSVPNanoCompanion`.
+- Companion sync over the reader's temporary `RSVP-Nano-xxxxxx` Wi-Fi network.
+- Library page with reader info, books, articles, upload controls, and progress percentages.
+- Article page with saved drafts, synced articles, RSS feed management, article editing, and preview before sync.
+- Settings page for changing device settings from the phone.
+- Help/FAQ page with connection, SD card, and RSS notes.
+- Safari and Chrome share flow for saving pages into the app, fetching article text, editing, and syncing later.
+
+### Companion API And Settings
+
+- JSON device settings API:
+  - `GET /api/settings`
+  - `PATCH /api/settings`
+  - `PUT /api/settings`
+- RSS feed API:
+  - `GET /api/rss-feeds`
+  - `PUT /api/rss-feeds`
+- Books/articles API improvements for listing, uploading, deleting, and progress reporting.
+- Settings are moving toward a sturdier JSON-backed model so the phone app and future web app can edit the same device settings.
+
+### RSS Feeds
+
+- RSS feed list managed from the iPhone app, including offline editing and sync status.
+- Device-side RSS checking over saved Wi-Fi.
+- Live on-device progress while feeds are checked.
+- Articles saved into `/books/articles`.
+- Redirect handling for common 301, 302, 303, 307, and 308 responses.
+- RSS and Atom parsing for common feed formats.
+- Feed item author, `dc:creator`, or website used as the article author.
+- Current limits: some feeds block embedded clients, some feeds are too large, and some sites require better article extraction than the firmware can do alone.
+
+### Web And Distribution
+
+- Cleaner firmware installer UI.
+- Linux Chromium/Snap USB permission note.
+- Public iPhone app distribution still needs to be worked out.
+- A device-hosted companion web app is planned for Android and desktop users.
+- Bluetooth-first, Wi-Fi-second pairing is planned to make Wi-Fi password entry less painful.
+- Larger-book architecture and wider script/font support are planned for a later release.
 
 ## Build From Source
 
@@ -340,11 +233,9 @@ pio run -t upload
 pio device monitor
 ```
 
-The default environment is `waveshare_esp32s3_usb_msc`, which includes the reader and USB transfer mode.
+The default environment is `waveshare_esp32s3_usb_msc`, which includes the reader and USB transfer mode. Serial monitor runs at `115200`.
 
-Serial monitor runs at `115200`.
-
-To export the browser-flasher image and the OTA binary:
+To export the browser-flasher image and OTA binary:
 
 ```sh
 python3 tools/export_web_firmware.py
@@ -357,26 +248,18 @@ web/firmware/rsvp-nano.bin
 web/firmware/rsvp-nano-ota.bin
 ```
 
-`rsvp-nano.bin` is the merged browser-flasher image.
-`rsvp-nano-ota.bin` is the app-only OTA image.
-
 For OTA releases:
 
-1. Build from a clean commit or tag. Tagged builds are recommended so the firmware version matches
-   the release tag.
+1. Build from a clean commit or tag.
 2. Run `python3 tools/export_web_firmware.py`.
 3. Create a GitHub Release in `ionutdecebal/rsvpnano`.
-4. Upload both `web/firmware/rsvp-nano.bin` and `web/firmware/rsvp-nano-ota.bin` to that release.
+4. Upload both `web/firmware/rsvp-nano.bin` and `web/firmware/rsvp-nano-ota.bin`.
 
-The device checks `releases/latest`, compares the release tag to its built-in firmware version,
-and only downloads the OTA asset when the release tag is newer.
-
-GitHub Pages also pulls the latest published release assets for the hosted web flasher, so browser
-installs and OTA installs stay on the same official release line.
+The hosted browser flasher and OTA updater both use the latest published GitHub Release assets.
 
 ## Hardware
 
-The current firmware configuration targets the [Waveshare ESP32-S3-Touch-LCD-3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=153227). This is an affiliate link, so if you click it to find the hardware and buy the board, it helps support the project:
+The current firmware targets the [Waveshare ESP32-S3-Touch-LCD-3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=153227):
 
 - ESP32-S3 with 16 MB flash and OPI PSRAM.
 - AXS15231B-based 172 x 640 LCD panel used in landscape as 640 x 172.
@@ -393,31 +276,17 @@ The pacing algorithm has a host-side unit test suite that runs without hardware 
 pio test -e native_test
 ```
 
-Tests live in `test/test_pacing/` and cover word duration calculation (length tiers, syllable complexity, punctuation pauses, abbreviation detection, pacing scale), WPM clamping, and seek/scrub behaviour. A minimal `Arduino.h` shim in `test/support/` lets `ReadingLoop.cpp` compile on the host without the ESP32 SDK.
+Tests live in `test/test_pacing/` and cover word duration calculation, WPM clamping, and seek/scrub behavior.
 
 ## Desktop Converter Fallback
 
-You do not need the desktop converter for the normal workflow. The browser flasher page is the
-recommended conversion path and can already convert supported books locally and sync them into the
-SD card.
-
-The desktop helper is still available if you want an offline, script-driven, or batch-conversion
-fallback on a computer. To use it, copy the helper files from `tools/sd_card_converter` to the SD
-card root and run the launcher for your platform:
+The browser converter is the normal path. The desktop helper is still available for offline or batch conversion:
 
 - Windows: `Convert books.bat`
 - macOS: `Convert books.command`
 - Linux: `convert_books_linux.sh` or `python3 convert_books.py`
 
-The desktop converter scans `/books` and creates `.rsvp` files beside supported sources.
-The Linux path has been used during development. The macOS and Windows launchers are included, but they have not been tested yet.
-
-Supported input formats:
-
-- `.epub`
-- `.txt`
-- `.md` / `.markdown`
-- `.html` / `.htm` / `.xhtml`
+Copy the helper files from `tools/sd_card_converter` to the SD card root and run the launcher for your platform. The desktop converter scans `/books` and creates `.rsvp` files beside supported sources.
 
 ## RSVP File Format
 
@@ -436,13 +305,10 @@ Normal text lines after the directives are split into words by the firmware.
 
 ## Contributing
 
-Issues, experiments, forks, and pull requests are welcome. If you change hardware mappings, build environments, or the flashing flow, please update the relevant docs alongside the code.
+Issues, experiments, forks, and pull requests are welcome. If you change hardware mappings, build environments, the companion API, or the flashing flow, please update the relevant docs alongside the code.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-The embedded OpenDyslexic and Atkinson Hyperlegible typeface assets are derived from the upstream
-projects and are included under the SIL Open Font License. See
-[third_party/opendyslexic/OFL.txt](third_party/opendyslexic/OFL.txt) and
-[third_party/atkinson-hyperlegible/OFL.txt](third_party/atkinson-hyperlegible/OFL.txt).
+The embedded OpenDyslexic and Atkinson Hyperlegible typeface assets are derived from the upstream projects and are included under the SIL Open Font License. See [third_party/opendyslexic/OFL.txt](third_party/opendyslexic/OFL.txt) and [third_party/atkinson-hyperlegible/OFL.txt](third_party/atkinson-hyperlegible/OFL.txt).
