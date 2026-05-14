@@ -807,6 +807,19 @@ void App::handlePowerButton(uint32_t nowMs) {
     return;
   }
 
+  if (powerButtonLongPressHandled_ && powerButton_.isHeld()) {
+    return;
+  }
+
+  if (state_ == AppState::Menu && isFocusTimerMenuScreen(menuScreen_) &&
+      powerButton_.isHeld() && nowMs - powerButton_.lastEdgeMs() >= kUsbTransferExitHoldMs) {
+    powerButtonLongPressHandled_ = true;
+    resetFocusTimer();
+    menuScreen_ = MenuScreen::Main;
+    renderMainMenu();
+    return;
+  }
+
   if (powerButton_.isHeld() && nowMs - powerButton_.lastEdgeMs() >= kPowerOffHoldMs) {
     powerButtonLongPressHandled_ = true;
     enterPowerOff(nowMs);
@@ -3264,7 +3277,8 @@ void App::enterCompanionSync(uint32_t nowMs) {
 void App::updateCompanionSync(uint32_t nowMs) {
   companionSync_.update();
 
-  if (button_.isHeld() && nowMs - button_.lastEdgeMs() >= kUsbTransferExitHoldMs) {
+  if (powerButton_.isHeld() && nowMs - powerButton_.lastEdgeMs() >= kUsbTransferExitHoldMs) {
+    powerButtonLongPressHandled_ = true;
     exitCompanionSync(nowMs);
     return;
   }
@@ -3324,7 +3338,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
   const uint64_t sizeMb = usbTransfer_.cardSizeBytes() / (1024ULL * 1024ULL);
   Serial.printf("[app] USB transfer active (%llu MB). Eject from computer when finished.\n",
                 sizeMb);
-  display_.renderStatus("USB", "Copy books now", "Eject then hold BOOT");
+  display_.renderStatus("USB", "Copy books now", "Eject then hold PWR");
 }
 
 void App::updateUsbTransfer(uint32_t nowMs) {
@@ -3332,14 +3346,18 @@ void App::updateUsbTransfer(uint32_t nowMs) {
     return;
   }
 
-  const bool bootExitRequested =
-      button_.isHeld() && nowMs - button_.lastEdgeMs() >= kUsbTransferExitHoldMs;
-  if (!usbTransfer_.ejected() && !bootExitRequested) {
+  const bool powerExitRequested =
+      powerButton_.isHeld() && nowMs - powerButton_.lastEdgeMs() >= kUsbTransferExitHoldMs;
+  if (!usbTransfer_.ejected() && !powerExitRequested) {
     return;
   }
 
-  if (bootExitRequested && !usbTransfer_.ejected()) {
-    Serial.println("[app] leaving USB transfer by BOOT hold; make sure host was ejected first");
+  if (powerExitRequested && !usbTransfer_.ejected()) {
+    Serial.println("[app] leaving USB transfer by PWR hold; make sure host was ejected first");
+  }
+
+  if (powerExitRequested) {
+    powerButtonLongPressHandled_ = true;
   }
 
   exitUsbTransfer(nowMs);

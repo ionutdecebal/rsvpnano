@@ -24,10 +24,12 @@ EXPORTS = {
 }
 
 
-def run(command: list[str]) -> None:
+def run(command: list[str], version: str | None = None) -> None:
     print("+", " ".join(command))
     env = os.environ.copy()
     env.setdefault("PLATFORMIO_SETTING_ENABLE_TELEMETRY", "No")
+    if version:
+        env["RSVP_FIRMWARE_VERSION"] = version
     subprocess.run(command, cwd=ROOT, check=True, env=env)
 
 
@@ -133,7 +135,7 @@ def main() -> int:
 
     for env, export in EXPORTS.items():
         if not args.skip_build:
-            run([pio, "run", "-e", env])
+            run([pio, "run", "-e", env], args.version)
 
         output = WEB_FIRMWARE_DIR / export["binary"]
         print(f"Exporting {export['label']} -> {output}")
