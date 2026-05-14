@@ -228,6 +228,12 @@ void logApp(const char *message) {
   Serial.printf("[app] %s\n", message);
 }
 
+bool hasRsvpExtension(const String &path) {
+  String lowered = path;
+  lowered.toLowerCase();
+  return lowered.endsWith(".rsvp");
+}
+
 String displayNameForPath(const String &path) {
   const int separator = path.lastIndexOf('/');
   String name = separator >= 0 ? path.substring(separator + 1) : path;
@@ -735,6 +741,16 @@ void App::updateReader(uint32_t nowMs) {
   }
 
   const bool changed = reader_.update(nowMs, !pauseAtSentenceEndRequested_);
+
+  // Auto-advance to next chapter part when reaching end of current part
+  if (changed && reader_.atEnd() && usingSplitBook_ &&
+      currentPartIndex_ + 1 < splitManifest_.parts.size()) {
+    saveReadingPosition(true);
+    loadChapterPart(currentPartIndex_ + 1, nowMs, 0);
+    Serial.printf("[app] auto-advanced to split part %u\n",
+                  static_cast<unsigned int>(currentPartIndex_ + 1));
+  }
+
   if (scrollModeEnabled()) {
     if (changed || nowMs - lastScrollAnimationRenderMs_ >= kScrollAnimationFrameMs) {
       renderScrollReader(nowMs);
@@ -3217,6 +3233,17 @@ void App::selectChapterPickerItem(uint32_t nowMs) {
     return;
   }
 
+  if (usingSplitBook_ && chapterIndex < splitManifest_.parts.size()) {
+    loadChapterPart(chapterIndex, nowMs, 0);
+    menuScreen_ = MenuScreen::Main;
+    setState(AppState::Paused, nowMs);
+    saveReadingPosition(true);
+    Serial.printf("[chapter-picker] loaded split part %u: %s\n",
+                  static_cast<unsigned int>(chapterIndex),
+                  splitManifest_.parts[chapterIndex].title.c_str());
+    return;
+  }
+
   reader_.seekTo(chapterMarkers_[chapterIndex].wordIndex);
   menuScreen_ = MenuScreen::Main;
   setState(AppState::Paused, nowMs);
@@ -3537,6 +3564,9 @@ void App::loadPendingBootBook(uint32_t nowMs) {
   }
 
   usingStorageBook_ = false;
+  usingSplitBook_ = false;
+  splitManifest_.clear();
+  splitDir_ = "";
   chapterMarkers_.clear();
   paragraphStarts_.clear();
   currentBookPath_ = "";
@@ -3552,15 +3582,19 @@ void App::saveReadingPosition(bool force) {
     return;
   }
 
-  const size_t wordIndex = reader_.currentIndex();
+  const size_t localWordIndex = reader_.currentIndex();
+  const size_t wordIndex =
+      usingSplitBook_ ? (currentPartGlobalWordOffset_ + localWordIndex) : localWordIndex;
   if (!force && wordIndex == lastSavedWordIndex_) {
     return;
   }
 
   preferences_.putString(kPrefBookPath, currentBookPath_);
   preferences_.putUInt(bookPositionKey(currentBookPath_).c_str(), static_cast<uint32_t>(wordIndex));
+  const size_t totalWords =
+      usingSplitBook_ ? splitManifest_.totalWords() : reader_.wordCount();
   preferences_.putUInt(bookWordCountKey(currentBookPath_).c_str(),
-                       static_cast<uint32_t>(reader_.wordCount()));
+                       static_cast<uint32_t>(totalWords));
   preferences_.putUInt(kPrefLegacyWordIndex, static_cast<uint32_t>(wordIndex));
   preferences_.putUShort(kPrefWpm, reader_.wpm());
   markBookRecent(currentBookPath_);
@@ -3570,12 +3604,30 @@ void App::saveReadingPosition(bool force) {
 }
 
 bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback) {
+  // Try split path first
+  const String bookPath = storage_.bookPath(index);
+  if (!bookPath.isEmpty() && storage_.hasSplitCache(bookPath)) {
+    if (loadBookFromSplit(bookPath, index, nowMs, allowLegacyPositionFallback)) {
+      return true;
+    }
+  }
+
   BookContent book;
   String loadedPath;
   size_t loadedIndex = index;
   if (!storage_.loadBookContent(index, book, &loadedPath, &loadedIndex)) {
     return false;
   }
+
+  // If we loaded successfully and the book has chapters, trigger split for next time
+  if (book.chapters.size() > 1 && hasRsvpExtension(loadedPath)) {
+    const String splitDir = storage_.splitDirForBook(loadedPath);
+    storage_.ensureBookSplit(loadedPath, splitDir);
+  }
+
+  usingSplitBook_ = false;
+  splitManifest_.clear();
+  splitDir_ = "";
 
   chapterMarkers_ = std::move(book.chapters);
   paragraphStarts_ = std::move(book.paragraphStarts);
@@ -3608,6 +3660,89 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPosition
                 static_cast<unsigned int>(storage_.bookCount()), loadedPath.c_str(),
                 static_cast<unsigned int>(chapterMarkers_.size()),
                 static_cast<unsigned int>(paragraphStarts_.size()));
+  return true;
+}
+
+bool App::loadBookFromSplit(const String &bookPath, size_t bookIndex, uint32_t nowMs,
+                            bool allowLegacyPositionFallback) {
+  const String splitDir = storage_.splitDirForBook(bookPath);
+  BookManifest manifest;
+  if (!storage_.readManifest(splitDir, manifest)) {
+    return false;
+  }
+
+  // Determine which part to load based on saved position
+  size_t targetPart = 0;
+  size_t localWordOffset = 0;
+  const uint32_t savedWordIndex = savedWordIndexForBook(bookPath, allowLegacyPositionFallback);
+  if (savedWordIndex != kNoSavedWordIndex) {
+    targetPart = manifest.partIndexForGlobalWord(savedWordIndex);
+    localWordOffset = savedWordIndex - manifest.globalWordIndexForPart(targetPart);
+  }
+
+  // Store manifest and split state
+  splitManifest_ = std::move(manifest);
+  splitDir_ = splitDir;
+  currentBookIndex_ = bookIndex;
+  currentBookPath_ = bookPath;
+  currentBookTitle_ =
+      splitManifest_.title.isEmpty() ? displayNameForPath(bookPath) : splitManifest_.title;
+  usingSplitBook_ = true;
+  usingStorageBook_ = true;
+
+  // Build chapter markers from manifest (with global word indices)
+  chapterMarkers_.clear();
+  for (size_t i = 0; i < splitManifest_.parts.size(); ++i) {
+    ChapterMarker marker;
+    marker.title = splitManifest_.parts[i].title;
+    marker.wordIndex = splitManifest_.globalWordIndexForPart(i);
+    chapterMarkers_.push_back(std::move(marker));
+  }
+
+  preferences_.putString(kPrefBookPath, currentBookPath_);
+  preferences_.putUInt(bookWordCountKey(currentBookPath_).c_str(),
+                       static_cast<uint32_t>(splitManifest_.totalWords()));
+  markBookRecent(currentBookPath_);
+
+  // Load the target part
+  if (!loadChapterPart(targetPart, nowMs, localWordOffset)) {
+    usingSplitBook_ = false;
+    return false;
+  }
+
+  lastProgressSaveMs_ = nowMs;
+  Serial.printf("[app] loaded split book[%u/%u]: %s part %u/%u (%u words, offset %u)\n",
+                static_cast<unsigned int>(bookIndex + 1),
+                static_cast<unsigned int>(storage_.bookCount()), bookPath.c_str(),
+                static_cast<unsigned int>(targetPart + 1),
+                static_cast<unsigned int>(splitManifest_.parts.size()),
+                static_cast<unsigned int>(reader_.wordCount()),
+                static_cast<unsigned int>(localWordOffset));
+  return true;
+}
+
+bool App::loadChapterPart(size_t partIndex, uint32_t nowMs, size_t localWordOffset) {
+  if (splitDir_.isEmpty() || partIndex >= splitManifest_.parts.size()) {
+    return false;
+  }
+
+  BookContent book;
+  if (!storage_.loadBookPart(splitDir_, partIndex, book)) {
+    return false;
+  }
+
+  currentPartIndex_ = partIndex;
+  currentPartGlobalWordOffset_ = splitManifest_.globalWordIndexForPart(partIndex);
+  paragraphStarts_ = std::move(book.paragraphStarts);
+  reader_.setWords(std::move(book.words), nowMs);
+  invalidateContextPreviewWindow();
+  rebuildTimeEstimateCache();
+  lastSavedWordIndex_ = static_cast<size_t>(-1);
+
+  if (localWordOffset > 0 && localWordOffset < reader_.wordCount()) {
+    reader_.seekTo(localWordOffset);
+  }
+
   return true;
 }
 
@@ -3673,8 +3808,13 @@ bool App::bookProgressPercent(size_t bookIndex, uint8_t &percent) {
   size_t wordCount = 0;
 
   if (usingStorageBook_ && bookIndex == currentBookIndex_) {
-    wordIndex = reader_.currentIndex();
-    wordCount = reader_.wordCount();
+    if (usingSplitBook_) {
+      wordIndex = currentPartGlobalWordOffset_ + reader_.currentIndex();
+      wordCount = splitManifest_.totalWords();
+    } else {
+      wordIndex = reader_.currentIndex();
+      wordCount = reader_.wordCount();
+    }
   } else {
     const String path = storage_.bookPath(bookIndex);
     const String positionKey = bookPositionKey(path);

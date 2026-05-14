@@ -31,6 +31,11 @@ class StorageManager {
   bool loadFirstBookWords(std::vector<String> &words, String *loadedPath = nullptr);
   bool loadBookContent(size_t index, BookContent &book, String *loadedPath = nullptr,
                        size_t *loadedIndex = nullptr);
+  bool loadBookPart(const String &splitDir, size_t partIndex, BookContent &book);
+  bool readManifest(const String &splitDir, BookManifest &manifest);
+  String splitDirForBook(const String &bookPath) const;
+  bool hasSplitCache(const String &bookPath) const;
+  bool ensureBookSplit(const String &rsvpPath, const String &splitDir);
   size_t bookCount() const;
   String bookPath(size_t index) const;
   bool bookIsArticle(size_t index) const;
