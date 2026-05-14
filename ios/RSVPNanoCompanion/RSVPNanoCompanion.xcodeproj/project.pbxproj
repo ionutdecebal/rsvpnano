@@ -25,7 +25,6 @@
 		0A1000160000000000000001 /* PendingUploadStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000140000000000000001 /* PendingUploadStore.swift */; };
 		0A1000170000000000000001 /* ArticleFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000150000000000000001 /* ArticleFormatter.swift */; };
 		0A1000180000000000000001 /* ArticleFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000150000000000000001 /* ArticleFormatter.swift */; };
-		0A1000190000000000000001 /* RSVPSharePreprocessor.js in Resources */ = {isa = PBXBuildFile; fileRef = 0A2000180000000000000001 /* RSVPSharePreprocessor.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,7 +69,6 @@
 		0A2000150000000000000001 /* ArticleFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleFormatter.swift; sourceTree = "<group>"; };
 		0A2000160000000000000001 /* RSVPNanoCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RSVPNanoCompanion.entitlements; sourceTree = "<group>"; };
 		0A2000170000000000000001 /* RSVPNanoShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RSVPNanoShareExtension.entitlements; sourceTree = "<group>"; };
-		0A2000180000000000000001 /* RSVPSharePreprocessor.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = RSVPSharePreprocessor.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,7 +130,6 @@
 			isa = PBXGroup;
 			children = (
 				0A2000110000000000000001 /* ShareViewController.swift */,
-				0A2000180000000000000001 /* RSVPSharePreprocessor.js */,
 				0A2000170000000000000001 /* RSVPNanoShareExtension.entitlements */,
 				0A2000120000000000000001 /* Info.plist */,
 			);
@@ -227,7 +224,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0A1000190000000000000001 /* RSVPSharePreprocessor.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

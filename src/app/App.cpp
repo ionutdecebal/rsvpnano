@@ -64,10 +64,12 @@ namespace {
 enum MenuItem : size_t {
   MenuResume,
   MenuChapters,
-  MenuChangeBook,
+  MenuBooks,
+  MenuArticles,
   MenuFocusTimer,
   MenuSettings,
   MenuSdCardCheck,
+  MenuRssFeeds,
   MenuCompanionSync,
 #if RSVP_USB_TRANSFER_ENABLED
   MenuUsbTransfer,
@@ -115,22 +117,24 @@ enum RestartConfirmItem : size_t {
 
 constexpr size_t kRestartConfirmHeaderRows = 1;
 constexpr size_t kSettingsBackIndex = 0;
-constexpr size_t kSettingsHomeDisplayIndex = 1;
-constexpr size_t kSettingsHomeTypographyIndex = 2;
-constexpr size_t kSettingsHomePacingIndex = 3;
+constexpr size_t kSettingsHomePacingIndex = 1;
+constexpr size_t kSettingsHomeDisplayIndex = 2;
+constexpr size_t kSettingsHomeTypographyIndex = 3;
 constexpr size_t kSettingsHomeWifiIndex = 4;
 constexpr size_t kSettingsHomeUpdateIndex = 5;
-constexpr size_t kSettingsDisplayReadingModeIndex = 1;
-constexpr size_t kSettingsDisplayHandednessIndex = 2;
-constexpr size_t kSettingsDisplayThemeIndex = 3;
-constexpr size_t kSettingsDisplayBrightnessIndex = 4;
-constexpr size_t kSettingsDisplayLanguageIndex = 5;
-constexpr size_t kSettingsPacingLongWordsIndex = 1;
-constexpr size_t kSettingsPacingComplexityIndex = 2;
-constexpr size_t kSettingsPacingPunctuationIndex = 3;
-constexpr size_t kSettingsPacingPauseModeIndex = 4;
-constexpr size_t kSettingsPacingTimeEstimateIndex = 5;
-constexpr size_t kSettingsPacingResetIndex = 6;
+constexpr size_t kSettingsDisplayThemeIndex = 1;
+constexpr size_t kSettingsDisplayBrightnessIndex = 2;
+constexpr size_t kSettingsDisplayHandednessIndex = 3;
+constexpr size_t kSettingsDisplayFooterIndex = 4;
+constexpr size_t kSettingsDisplayBatteryIndex = 5;
+constexpr size_t kSettingsDisplayLanguageIndex = 6;
+constexpr size_t kSettingsPacingReadingModeIndex = 1;
+constexpr size_t kSettingsPacingPauseModeIndex = 2;
+constexpr size_t kSettingsPacingWpmIndex = 3;
+constexpr size_t kSettingsPacingLongWordsIndex = 4;
+constexpr size_t kSettingsPacingComplexityIndex = 5;
+constexpr size_t kSettingsPacingPunctuationIndex = 6;
+constexpr size_t kSettingsPacingResetIndex = 7;
 constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
@@ -185,6 +189,9 @@ constexpr uint16_t kPacingDelayMinMs = 0;
 constexpr uint16_t kPacingDelayMaxMs = 600;
 constexpr uint16_t kPacingDelayStepMs = 50;
 constexpr uint16_t kDefaultPacingDelayMs = 200;
+constexpr uint16_t kSettingsWpmMin = 100;
+constexpr uint16_t kSettingsWpmMax = 1000;
+constexpr uint16_t kSettingsWpmStep = 25;
 constexpr int8_t kTypographyTrackingMin = -2;
 constexpr int8_t kTypographyTrackingMax = 3;
 constexpr uint8_t kTypographyAnchorMin = 30;
@@ -473,7 +480,7 @@ void App::begin() {
       loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
   pacingPunctuationDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
-  accurateTimeEstimateEnabled_ = preferences_.getBool(kPrefAccurateTime, true);
+  accurateTimeEstimateEnabled_ = true;
   typographyConfig_ = defaultTypographyConfig();
   typographyConfig_.typeface = readerTypefaceFromSetting(
       preferences_.getUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface)));
@@ -904,6 +911,97 @@ void App::applyHandednessSettings(uint32_t nowMs, bool rerender) {
   }
 
   applyTypographySettings(nowMs);
+}
+
+void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
+  brightnessLevelIndex_ = preferences_.getUChar(kPrefBrightness, brightnessLevelIndex_);
+  if (brightnessLevelIndex_ >= kBrightnessLevelCount) {
+    brightnessLevelIndex_ = kBrightnessLevelCount - 1;
+  }
+  phantomWordsEnabled_ = preferences_.getBool(kPrefPhantomWords, phantomWordsEnabled_);
+  uiLanguage_ =
+      Localization::sanitizeLanguage(preferences_.getUChar(
+          kPrefUiLanguage, static_cast<uint8_t>(uiLanguage_)));
+  readerMode_ = readerModeFromSetting(
+      preferences_.getUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_)));
+  handednessMode_ = handednessModeFromSetting(
+      preferences_.getUChar(kPrefHandedness, static_cast<uint8_t>(handednessMode_)));
+  readerFontSizeIndex_ = preferences_.getUChar(kPrefReaderFontSize, readerFontSizeIndex_);
+  if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
+    readerFontSizeIndex_ = 0;
+  }
+
+  switch (preferences_.getUChar(kPrefFooterMetricMode,
+                                static_cast<uint8_t>(footerMetricMode_))) {
+    case static_cast<uint8_t>(FooterMetricMode::ChapterTime):
+      footerMetricMode_ = FooterMetricMode::ChapterTime;
+      break;
+    case static_cast<uint8_t>(FooterMetricMode::BookTime):
+      footerMetricMode_ = FooterMetricMode::BookTime;
+      break;
+    case static_cast<uint8_t>(FooterMetricMode::Percentage):
+    default:
+      footerMetricMode_ = FooterMetricMode::Percentage;
+      break;
+  }
+
+  switch (preferences_.getUChar(kPrefBatteryLabelMode,
+                                static_cast<uint8_t>(batteryLabelMode_))) {
+    case static_cast<uint8_t>(BatteryLabelMode::TimeRemaining):
+      batteryLabelMode_ = BatteryLabelMode::TimeRemaining;
+      break;
+    case static_cast<uint8_t>(BatteryLabelMode::Percent):
+    default:
+      batteryLabelMode_ = BatteryLabelMode::Percent;
+      break;
+  }
+
+  switch (preferences_.getUChar(kPrefPauseMode, static_cast<uint8_t>(pauseMode_))) {
+    case static_cast<uint8_t>(PauseMode::Instant):
+      pauseMode_ = PauseMode::Instant;
+      break;
+    case static_cast<uint8_t>(PauseMode::SentenceEnd):
+    default:
+      pauseMode_ = PauseMode::SentenceEnd;
+      break;
+  }
+
+  pacingLongWordDelayMs_ =
+      loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
+  pacingComplexWordDelayMs_ =
+      loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
+  pacingPunctuationDelayMs_ =
+      loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
+  accurateTimeEstimateEnabled_ = true;
+
+  typographyConfig_ = defaultTypographyConfig();
+  typographyConfig_.typeface = readerTypefaceFromSetting(
+      preferences_.getUChar(kPrefReaderTypeface, static_cast<uint8_t>(typographyConfig_.typeface)));
+  typographyConfig_.focusHighlight =
+      preferences_.getBool(kPrefTypographyFocusHighlight, typographyConfig_.focusHighlight);
+  typographyConfig_.trackingPx = static_cast<int8_t>(clampIntSetting(
+      preferences_.getChar(kPrefTypographyTracking, typographyConfig_.trackingPx),
+      kTypographyTrackingMin, kTypographyTrackingMax));
+  typographyConfig_.anchorPercent = static_cast<uint8_t>(clampIntSetting(
+      preferences_.getUChar(kPrefTypographyAnchor, typographyConfig_.anchorPercent),
+      kTypographyAnchorMin, kTypographyAnchorMax));
+  typographyConfig_.guideHalfWidth = static_cast<uint8_t>(clampIntSetting(
+      preferences_.getUChar(kPrefTypographyGuideWidth, typographyConfig_.guideHalfWidth),
+      kTypographyGuideWidthMin, kTypographyGuideWidthMax));
+  typographyConfig_.guideGap = static_cast<uint8_t>(clampIntSetting(
+      preferences_.getUChar(kPrefTypographyGuideGap, typographyConfig_.guideGap),
+      kTypographyGuideGapMin, kTypographyGuideGapMax));
+  darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
+  nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
+
+  reader_.setWpm(preferences_.getUShort(kPrefWpm, reader_.wpm()));
+  applyReaderUiOrientation();
+  applyDisplayPreferences(nowMs, false);
+  applyTypographySettings(nowMs, false);
+  applyPacingSettings();
+  if (rerender) {
+    renderActiveReader(nowMs);
+  }
 }
 
 void App::applyTypographySettings(uint32_t nowMs, bool rerender) {
@@ -1857,8 +1955,11 @@ void App::moveMenuSelection(int direction) {
       case MenuChapters:
         selectedLabel = uiText(UiText::Chapters);
         break;
-      case MenuChangeBook:
-        selectedLabel = uiText(UiText::Library);
+      case MenuBooks:
+        selectedLabel = "Books";
+        break;
+      case MenuArticles:
+        selectedLabel = "Articles";
         break;
       case MenuFocusTimer:
         selectedLabel = "Focus Timer";
@@ -1868,6 +1969,9 @@ void App::moveMenuSelection(int direction) {
         break;
       case MenuSdCardCheck:
         selectedLabel = "SD card check";
+        break;
+      case MenuRssFeeds:
+        selectedLabel = "RSS feeds";
         break;
       case MenuCompanionSync:
         selectedLabel = "Companion sync";
@@ -1934,6 +2038,9 @@ void App::selectMenuItem(uint32_t nowMs) {
     case MenuSdCardCheck:
       runSdCardCheck(nowMs);
       return;
+    case MenuRssFeeds:
+      runRssFeedCheck(nowMs);
+      return;
 #if RSVP_USB_TRANSFER_ENABLED
     case MenuUsbTransfer:
       enterUsbTransfer(nowMs);
@@ -1942,8 +2049,11 @@ void App::selectMenuItem(uint32_t nowMs) {
     case MenuChapters:
       openChapterPicker();
       return;
-    case MenuChangeBook:
-      openBookPicker();
+    case MenuBooks:
+      openBookPicker(false);
+      return;
+    case MenuArticles:
+      openBookPicker(true);
       return;
     case MenuFocusTimer:
       openFocusTimer();
@@ -1980,7 +2090,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
         renderMainMenu();
         return;
       case kSettingsHomeDisplayIndex:
-        settingsSelectedIndex_ = kSettingsDisplayReadingModeIndex;
+        settingsSelectedIndex_ = kSettingsDisplayThemeIndex;
         menuScreen_ = MenuScreen::SettingsDisplay;
         rebuildSettingsMenuItems();
         renderSettings();
@@ -1989,7 +2099,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
         openTypographyTuning();
         return;
       case kSettingsHomePacingIndex:
-        settingsSelectedIndex_ = kSettingsPacingLongWordsIndex;
+        settingsSelectedIndex_ = kSettingsPacingReadingModeIndex;
         menuScreen_ = MenuScreen::SettingsPacing;
         rebuildSettingsMenuItems();
         renderSettings();
@@ -2019,17 +2129,40 @@ void App::selectSettingsItem(uint32_t nowMs) {
         rebuildSettingsMenuItems();
         renderSettings();
         return;
-      case kSettingsDisplayReadingModeIndex:
-        cycleReaderMode(nowMs);
-        return;
-      case kSettingsDisplayHandednessIndex:
-        cycleHandednessMode(nowMs);
-        return;
       case kSettingsDisplayThemeIndex:
         cycleThemeMode(nowMs);
         return;
       case kSettingsDisplayBrightnessIndex:
         cycleBrightness();
+        return;
+      case kSettingsDisplayHandednessIndex:
+        cycleHandednessMode(nowMs);
+        return;
+      case kSettingsDisplayFooterIndex:
+        switch (footerMetricMode_) {
+          case FooterMetricMode::Percentage:
+            footerMetricMode_ = FooterMetricMode::ChapterTime;
+            break;
+          case FooterMetricMode::ChapterTime:
+            footerMetricMode_ = FooterMetricMode::BookTime;
+            break;
+          case FooterMetricMode::BookTime:
+            footerMetricMode_ = FooterMetricMode::Percentage;
+            break;
+        }
+        preferences_.putUChar(kPrefFooterMetricMode, static_cast<uint8_t>(footerMetricMode_));
+        rebuildSettingsMenuItems();
+        renderSettings();
+        return;
+      case kSettingsDisplayBatteryIndex:
+        batteryLabelMode_ = batteryLabelMode_ == BatteryLabelMode::Percent
+                                ? BatteryLabelMode::TimeRemaining
+                                : BatteryLabelMode::Percent;
+        preferences_.putUChar(kPrefBatteryLabelMode, static_cast<uint8_t>(batteryLabelMode_));
+        batteryLabel_ = currentBatteryLabel();
+        display_.setBatteryLabel(batteryLabel_);
+        rebuildSettingsMenuItems();
+        renderSettings();
         return;
       case kSettingsDisplayLanguageIndex:
         cycleUiLanguage(nowMs);
@@ -2051,6 +2184,26 @@ void App::selectSettingsItem(uint32_t nowMs) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
+    case kSettingsPacingReadingModeIndex:
+      cycleReaderMode(nowMs);
+      return;
+    case kSettingsPacingPauseModeIndex:
+      pauseMode_ =
+          pauseMode_ == PauseMode::SentenceEnd ? PauseMode::Instant : PauseMode::SentenceEnd;
+      preferences_.putUChar(kPrefPauseMode, static_cast<uint8_t>(pauseMode_));
+      Serial.printf("[settings] pause mode=%s\n", pauseModeLabel().c_str());
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    case kSettingsPacingWpmIndex:
+      reader_.setWpm(static_cast<uint16_t>(
+          nextCyclicSetting(reader_.wpm(), kSettingsWpmMin, kSettingsWpmMax, kSettingsWpmStep)));
+      preferences_.putUShort(kPrefWpm, reader_.wpm());
+      invalidateTimeEstimateCache();
+      pacingCacheDirty_ = true;
+      Serial.printf("[settings] WPM=%u interval=%lu ms\n", reader_.wpm(),
+                    static_cast<unsigned long>(reader_.wordIntervalMs()));
+      break;
     case kSettingsPacingLongWordsIndex:
       pacingLongWordDelayMs_ = static_cast<uint16_t>(nextCyclicSetting(
           pacingLongWordDelayMs_, kPacingDelayMinMs, kPacingDelayMaxMs, kPacingDelayStepMs));
@@ -2066,25 +2219,6 @@ void App::selectSettingsItem(uint32_t nowMs) {
           pacingPunctuationDelayMs_, kPacingDelayMinMs, kPacingDelayMaxMs, kPacingDelayStepMs));
       preferences_.putUShort(kPrefPacingPunctuationMs, pacingPunctuationDelayMs_);
       break;
-    case kSettingsPacingPauseModeIndex:
-      pauseMode_ =
-          pauseMode_ == PauseMode::SentenceEnd ? PauseMode::Instant : PauseMode::SentenceEnd;
-      preferences_.putUChar(kPrefPauseMode, static_cast<uint8_t>(pauseMode_));
-      Serial.printf("[settings] pause mode=%s\n", pauseModeLabel().c_str());
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
-    case kSettingsPacingTimeEstimateIndex:
-      accurateTimeEstimateEnabled_ = !accurateTimeEstimateEnabled_;
-      preferences_.putBool(kPrefAccurateTime, accurateTimeEstimateEnabled_);
-      if (accurateTimeEstimateEnabled_) {
-        rebuildTimeEstimateCache();
-      } else {
-        invalidateTimeEstimateCache();
-      }
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
     case kSettingsPacingResetIndex:
       pacingLongWordDelayMs_ = kDefaultPacingDelayMs;
       pacingComplexWordDelayMs_ = kDefaultPacingDelayMs;
@@ -2615,29 +2749,31 @@ void App::rebuildSettingsMenuItems() {
   settingsMenuItems_.reserve(SettingsItemCount);
   if (menuScreen_ == MenuScreen::SettingsHome) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
+    settingsMenuItems_.push_back(uiText(UiText::WordPacing));
     settingsMenuItems_.push_back(uiText(UiText::Display));
     settingsMenuItems_.push_back(uiText(UiText::TypographyTune));
-    settingsMenuItems_.push_back(uiText(UiText::WordPacing));
     settingsMenuItems_.push_back("Wi-Fi");
     settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
-    settingsMenuItems_.push_back(uiText(UiText::ReadingMode) + ": " + readerModeLabel());
-    settingsMenuItems_.push_back("L/R Hand: " + handednessLabel());
-    settingsMenuItems_.push_back(uiText(UiText::Theme) + ": " + themeModeLabel());
+    settingsMenuItems_.push_back("Display mode: " + themeModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::Brightness) + ": " +
                                  String(currentBrightnessPercent()) + "%");
+    settingsMenuItems_.push_back("Reader hand: " + handednessLabel());
+    settingsMenuItems_.push_back("Footer label: " + footerMetricModeLabel());
+    settingsMenuItems_.push_back("Battery label: " + batteryLabelModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::Language) + ": " + uiLanguageLabel());
   } else if (menuScreen_ == MenuScreen::SettingsPacing) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
+    settingsMenuItems_.push_back("Reading mode: " + readerModeLabel());
+    settingsMenuItems_.push_back("Pause behaviour: " + pauseModeLabel());
+    settingsMenuItems_.push_back("Base speed: " + String(reader_.wpm()) + " WPM");
     settingsMenuItems_.push_back(uiText(UiText::LongWords) + ": " +
                                  pacingDelayLabel(pacingLongWordDelayMs_));
     settingsMenuItems_.push_back(uiText(UiText::Complexity) + ": " +
                                  pacingDelayLabel(pacingComplexWordDelayMs_));
     settingsMenuItems_.push_back(uiText(UiText::Punctuation) + ": " +
                                  pacingDelayLabel(pacingPunctuationDelayMs_));
-    settingsMenuItems_.push_back("Pause: " + pauseModeLabel());
-    settingsMenuItems_.push_back(uiText(UiText::TimeEstimate) + ": " + timeEstimateModeLabel());
     settingsMenuItems_.push_back(uiText(UiText::ResetPacing));
   } else if (menuScreen_ == MenuScreen::WifiSettings) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
@@ -2776,6 +2912,26 @@ void App::runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, ui
   renderSettings();
 }
 
+void App::runRssFeedCheck(uint32_t nowMs) {
+  (void)nowMs;
+  saveReadingPosition(true);
+
+  display_.renderStatus("RSS", "Checking feeds", "Please wait");
+  const RssFeedManager::Result result =
+      rssFeedManager_.checkFeeds(preferredOtaConfig(), preferences_, &App::handleStorageStatus, this);
+
+  Serial.printf("[rss] feeds=%u saved=%u skipped=%u summary=%s detail=%s\n",
+                static_cast<unsigned int>(result.feedsChecked),
+                static_cast<unsigned int>(result.articlesSaved),
+                static_cast<unsigned int>(result.articlesSkipped), result.summary.c_str(),
+                result.detail.c_str());
+
+  storage_.refreshBooks(false);
+  display_.renderStatus("RSS", result.summary, result.detail);
+  delay(1800);
+  renderMainMenu();
+}
+
 String App::pacingDelayLabel(uint16_t delayMs) const { return String(delayMs) + " ms"; }
 
 String App::firmwareUpdateMenuLabel() const { return "Firmware update"; }
@@ -2901,7 +3057,7 @@ String App::typographyTuningValueLabel() const {
   }
 }
 
-void App::openBookPicker() {
+void App::openBookPicker(bool articlesOnly) {
   storage_.refreshBooks();
   bookMenuItems_.clear();
   bookPickerBookIndices_.clear();
@@ -2911,6 +3067,9 @@ void App::openBookPicker() {
   std::vector<size_t> sortedBookIndices;
   sortedBookIndices.reserve(count);
   for (size_t i = 0; i < count; ++i) {
+    if (storage_.bookIsArticle(i) != articlesOnly) {
+      continue;
+    }
     sortedBookIndices.push_back(i);
   }
 
@@ -2945,8 +3104,8 @@ void App::openBookPicker() {
     bookMenuItems_.push_back(libraryItemForBook(bookIndex));
   }
 
-  if (count == 0) {
-    Serial.println("[book-picker] No SD books available");
+  if (sortedBookIndices.empty()) {
+    Serial.printf("[book-picker] No SD %s available\n", articlesOnly ? "articles" : "books");
   }
 
   menuScreen_ = MenuScreen::BookPicker;
@@ -3120,6 +3279,9 @@ void App::exitCompanionSync(uint32_t nowMs) {
   Serial.println("[app] leaving companion sync mode");
   display_.renderStatus("Sync", "Stopping", "");
   companionSync_.end();
+  preferences_.end();
+  preferences_.begin(kPrefsNamespace, false);
+  reloadRuntimePreferences(nowMs, false);
   storage_.refreshBooks();
   menuScreen_ = MenuScreen::Main;
   setState(AppState::Paused, nowMs);
@@ -3560,10 +3722,12 @@ void App::renderMainMenu() {
   items.reserve(MenuItemCount);
   items.push_back(uiText(UiText::Resume));
   items.push_back(uiText(UiText::Chapters));
-  items.push_back(uiText(UiText::Library));
+  items.push_back("Books");
+  items.push_back("Articles");
   items.push_back("Focus Timer");
   items.push_back(uiText(UiText::Settings));
   items.push_back("SD card check");
+  items.push_back("RSS feeds");
   items.push_back("Companion sync");
 #if RSVP_USB_TRANSFER_ENABLED
   items.push_back(uiText(UiText::UsbTransfer));
@@ -3796,6 +3960,22 @@ String App::currentBatteryLabel() const {
   }
 
   return String(static_cast<unsigned int>(batteryDisplayedPercent_)) + "%";
+}
+
+String App::footerMetricModeLabel() const {
+  switch (footerMetricMode_) {
+    case FooterMetricMode::ChapterTime:
+      return "Chapter time";
+    case FooterMetricMode::BookTime:
+      return "Book time";
+    case FooterMetricMode::Percentage:
+    default:
+      return "Percent read";
+  }
+}
+
+String App::batteryLabelModeLabel() const {
+  return batteryLabelMode_ == BatteryLabelMode::TimeRemaining ? "Time remaining" : "Percentage";
 }
 
 String App::batteryTimeRemainingLabel() const {

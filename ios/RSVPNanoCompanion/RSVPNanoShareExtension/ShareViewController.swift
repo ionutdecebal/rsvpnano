@@ -2,140 +2,164 @@ import UIKit
 import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
-    private let titleLabel = UILabel()
-    private let detailLabel = UILabel()
-    private let doneButton = UIButton(type: .system)
+    private static let maxSharedTextCharacters = 300_000
+
+    private let titleField = UITextField()
+    private let sourceLabel = UILabel()
+    private let textView = UITextView()
+    private let statusLabel = UILabel()
+    private let saveButton = UIButton(type: .system)
+    private let cancelButton = UIButton(type: .system)
+
+    private var sharedSource = ""
+    private var shouldOpenAppAfterSave = false
+    private var hasSaved = false
     private var isFinished = false
+    private var sourceIsURL = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
         configureView()
         Task {
-            await sendSharedContent()
+            await loadSharedContent()
         }
     }
 
     private func configureView() {
         view.backgroundColor = .systemBackground
 
-        titleLabel.text = "RSVP Nano"
-        titleLabel.font = .preferredFont(forTextStyle: .title2)
-        titleLabel.adjustsFontForContentSizeCategory = true
+        let headingLabel = UILabel()
+        headingLabel.text = "RSVP Nano"
+        headingLabel.font = .preferredFont(forTextStyle: .title2)
+        headingLabel.adjustsFontForContentSizeCategory = true
 
-        detailLabel.text = "Preparing shared content..."
-        detailLabel.font = .preferredFont(forTextStyle: .body)
-        detailLabel.textColor = .secondaryLabel
-        detailLabel.numberOfLines = 0
-        detailLabel.adjustsFontForContentSizeCategory = true
+        titleField.placeholder = "Article title"
+        titleField.borderStyle = .roundedRect
+        titleField.clearButtonMode = .whileEditing
+        titleField.font = .preferredFont(forTextStyle: .body)
+        titleField.adjustsFontForContentSizeCategory = true
 
-        doneButton.setTitle("Done", for: .normal)
-        doneButton.addTarget(self, action: #selector(done), for: .touchUpInside)
+        sourceLabel.font = .preferredFont(forTextStyle: .caption1)
+        sourceLabel.textColor = .secondaryLabel
+        sourceLabel.numberOfLines = 2
+        sourceLabel.adjustsFontForContentSizeCategory = true
 
-        let stack = UIStackView(arrangedSubviews: [titleLabel, detailLabel, doneButton])
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.layer.borderColor = UIColor.separator.cgColor
+        textView.layer.borderWidth = 1
+        textView.layer.cornerRadius = 8
+        textView.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8)
+        textView.isEditable = true
+
+        statusLabel.text = "Loading shared content..."
+        statusLabel.font = .preferredFont(forTextStyle: .footnote)
+        statusLabel.textColor = .secondaryLabel
+        statusLabel.numberOfLines = 0
+        statusLabel.adjustsFontForContentSizeCategory = true
+
+        cancelButton.setTitle("Cancel", for: .normal)
+        cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
+
+        saveButton.setTitle("Save", for: .normal)
+        saveButton.titleLabel?.font = .preferredFont(forTextStyle: .headline)
+        saveButton.addTarget(self, action: #selector(save), for: .touchUpInside)
+        saveButton.isEnabled = false
+
+        let buttonStack = UIStackView(arrangedSubviews: [cancelButton, saveButton])
+        buttonStack.axis = .horizontal
+        buttonStack.distribution = .equalSpacing
+
+        let stack = UIStackView(arrangedSubviews: [
+            headingLabel,
+            titleField,
+            sourceLabel,
+            textView,
+            statusLabel,
+            buttonStack,
+        ])
         stack.axis = .vertical
-        stack.alignment = .fill
-        stack.spacing = 18
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
+
         view.addSubview(stack)
 
         NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: view.layoutMarginsGuide.topAnchor, constant: 12),
             stack.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
-            stack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            stack.bottomAnchor.constraint(equalTo: view.layoutMarginsGuide.bottomAnchor, constant: -12),
+            textView.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
         ])
     }
 
-    private func sendSharedContent() async {
+    private func loadSharedContent() async {
         do {
             let shared = try await sharedInput()
-            updateDetail("Formatting \(shared.title)...")
-            let article = ArticleFormatter.article(title: shared.title, source: shared.source, htmlOrText: shared.text)
-            let file = try RsvpConverter.rsvpFile(
-                title: article.title,
-                author: "",
-                source: article.source,
-                events: ArticleFormatter.events(from: article)
-            )
-            _ = try PendingUploadStore().save(file, source: article.source)
-            updateDetail("Saved \(file.title). Connect to RSVP Nano to sync it.")
+            await MainActor.run {
+                sharedSource = shared.source
+                sourceIsURL = shared.isURL
+                shouldOpenAppAfterSave = shared.shouldOpenAppAfterSave
+                titleField.text = shared.title
+                sourceLabel.text = shared.source
+                textView.text = shared.text
+                statusLabel.text = "\(shared.diagnostic) · \(wordCount(in: shared.text)) words. Edit before saving."
+                saveButton.isEnabled = true
+            }
         } catch {
-            updateDetail(error.localizedDescription)
-        }
-    }
-
-    private func sharedInput() async throws -> SharedInput {
-        let providers = extensionContext?.inputItems
-            .compactMap { $0 as? NSExtensionItem }
-            .flatMap { $0.attachments ?? [] } ?? []
-
-        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier) }),
-           let page = try await loadSafariPage(from: provider) {
-            let selected = page.selection.trimmingCharacters(in: .whitespacesAndNewlines)
-            return SharedInput(
-                title: page.title.isEmpty ? fallbackTitle(for: page.url) : page.title,
-                source: page.url.absoluteString,
-                text: selected.isEmpty ? page.html : selected
-            )
-        }
-
-        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) }),
-           let url = try await loadURL(from: provider) {
-            return try await inputFromURL(url)
-        }
-
-        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }),
-           let text = try await loadText(from: provider) {
-            let title = RsvpConverter.titleFromText(text, fallback: "Shared Text")
-            return SharedInput(title: title, source: "Shared text", text: text)
-        }
-
-        throw ShareError.noContent
-    }
-
-    private func inputFromURL(_ url: URL) async throws -> SharedInput {
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
-            let title = RsvpConverter.titleFromText(text, fallback: fallbackTitle(for: url))
-            return SharedInput(title: title, source: url.absoluteString, text: text)
-        } catch {
-            return SharedInput(title: fallbackTitle(for: url), source: url.absoluteString, text: url.absoluteString)
-        }
-    }
-
-    private func loadSafariPage(from provider: NSItemProvider) async throws -> SafariPage? {
-        try await withCheckedThrowingContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.propertyList.identifier, options: nil) { item, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-
-                let dictionary: [String: Any]?
-                if let item = item as? [String: Any] {
-                    dictionary = item
-                } else if let item = item as? NSDictionary {
-                    dictionary = item as? [String: Any]
-                } else {
-                    dictionary = nil
-                }
-
-                let results = dictionary?[NSExtensionJavaScriptPreprocessingResultsKey] as? [String: Any]
-                let urlString = results?["URL"] as? String ?? ""
-                let url = URL(string: urlString) ?? URL(string: "https://example.com")!
-                continuation.resume(returning: SafariPage(
-                    url: url,
-                    title: results?["title"] as? String ?? "",
-                    selection: results?["selection"] as? String ?? "",
-                    html: results?["HTML"] as? String ?? ""
-                ))
+            await MainActor.run {
+                statusLabel.text = error.localizedDescription
+                saveButton.isEnabled = false
             }
         }
     }
 
-    private func loadURL(from provider: NSItemProvider) async throws -> URL? {
+    private func sharedInput() async throws -> SharedInput {
+        let items = extensionContext?.inputItems.compactMap { $0 as? NSExtensionItem } ?? []
+        let providers = items.flatMap { $0.attachments ?? [] }
+        let itemTitle = items.compactMap { $0.attributedTitle?.string }.firstNonEmpty ?? ""
+        let itemText = items.compactMap { $0.attributedContentText?.string }.firstNonEmpty ?? ""
+
+        if let provider = providers.first(where: { urlTypeIdentifier(from: $0) != nil }),
+           let typeIdentifier = urlTypeIdentifier(from: provider),
+           let url = try await loadURL(from: provider, typeIdentifier: typeIdentifier) {
+            return SharedInput(
+                title: urlDraftTitle(itemTitle: itemTitle, url: url),
+                source: url.absoluteString,
+                text: "",
+                isURL: true,
+                diagnostic: "URL only. Save to fetch in the app.",
+                shouldOpenAppAfterSave: true
+            )
+        }
+
+        if !itemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let title = [itemTitle, RsvpConverter.titleFromText(itemText, fallback: "Shared Text")].firstNonEmpty ?? "Shared Text"
+            return SharedInput(title: title, source: "Shared text", text: Self.clipped(itemText), isURL: false, diagnostic: "Host text")
+        }
+
+        if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }),
+           let text = try await loadText(from: provider),
+           !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let title = [itemTitle, RsvpConverter.titleFromText(text, fallback: "Shared Text")].firstNonEmpty ?? "Shared Text"
+            return SharedInput(title: title, source: "Shared text", text: text, isURL: false, diagnostic: "Plain text")
+        }
+
+        throw ShareError.noContent(providerTypes: providerTypeSummary(providers))
+    }
+
+    private func urlTypeIdentifier(from provider: NSItemProvider) -> String? {
+        for identifier in [UTType.url.identifier, "public.url", "public.file-url"] {
+            if provider.hasItemConformingToTypeIdentifier(identifier) {
+                return identifier
+            }
+        }
+        return nil
+    }
+
+    private func loadURL(from provider: NSItemProvider, typeIdentifier: String) async throws -> URL? {
         try await withCheckedThrowingContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, error in
+            provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { item, error in
                 if let error {
                     continuation.resume(throwing: error)
                     return
@@ -161,9 +185,9 @@ final class ShareViewController: UIViewController {
                     return
                 }
                 if let text = item as? String {
-                    continuation.resume(returning: text)
+                    continuation.resume(returning: Self.clipped(text))
                 } else if let data = item as? Data {
-                    continuation.resume(returning: String(data: data, encoding: .utf8))
+                    continuation.resume(returning: String(data: data, encoding: .utf8).map(Self.clipped))
                 } else {
                     continuation.resume(returning: nil)
                 }
@@ -178,18 +202,103 @@ final class ShareViewController: UIViewController {
         return url.deletingPathExtension().lastPathComponent.isEmpty ? "Shared Article" : url.deletingPathExtension().lastPathComponent
     }
 
-    private func updateDetail(_ value: String) {
-        Task { @MainActor in
-            detailLabel.text = value
+    private func urlDraftTitle(itemTitle: String, url: URL) -> String {
+        let cleanedTitle = itemTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = url.absoluteString
+        let host = url.host ?? ""
+        if !cleanedTitle.isEmpty,
+           cleanedTitle != host,
+           cleanedTitle != "www.\(host)",
+           !source.contains(cleanedTitle) {
+            return cleanedTitle
+        }
+        return source
+    }
+
+    private static func clipped(_ value: String) -> String {
+        if value.count <= maxSharedTextCharacters {
+            return value
+        }
+        return String(value.prefix(maxSharedTextCharacters))
+    }
+
+    private func wordCount(in value: String) -> Int {
+        value.split { $0.isWhitespace }.count
+    }
+
+    private func providerTypeSummary(_ providers: [NSItemProvider]) -> String {
+        let identifiers = providers.flatMap(\.registeredTypeIdentifiers)
+        guard !identifiers.isEmpty else {
+            return "none"
+        }
+        return identifiers.prefix(6).joined(separator: ", ")
+    }
+
+    @objc private func save() {
+        if hasSaved {
+            finish()
+            return
+        }
+
+        let title = titleField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty, sourceIsURL {
+            text = sharedSource
+        }
+        guard !text.isEmpty else {
+            statusLabel.text = "Add some text before saving."
+            return
+        }
+
+        saveButton.isEnabled = false
+        statusLabel.text = "Saving..."
+
+        Task {
+            do {
+                let store = PendingUploadStore()
+                let savedItem = try store.saveDraft(title: title, source: sharedSource, body: text)
+                let savedCount = try store.all().count
+                let inboxPath = try store.rootURL.lastPathComponent
+                await MainActor.run {
+                    hasSaved = true
+                    titleField.isEnabled = false
+                    textView.isEditable = false
+                    saveButton.isEnabled = true
+                    saveButton.setTitle("Done", for: .normal)
+                    cancelButton.isHidden = true
+                    statusLabel.text = "Saved \(savedItem.title) to \(inboxPath): \(ByteCountFormatter.string(fromByteCount: Int64(savedItem.bytes), countStyle: .file)). Inbox now has \(savedCount)."
+                    if shouldOpenAppAfterSave {
+                        openContainingApp()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    statusLabel.text = error.localizedDescription
+                    saveButton.isEnabled = true
+                }
+            }
         }
     }
 
-    @objc private func done() {
+    @objc private func cancel() {
+        finish()
+    }
+
+    private func finish() {
         guard !isFinished else {
             return
         }
         isFinished = true
         extensionContext?.completeRequest(returningItems: nil)
+    }
+
+    private func openContainingApp() {
+        guard let url = URL(string: "rsvpnano://inbox") else {
+            return
+        }
+        extensionContext?.open(url) { [weak self] _ in
+            self?.finish()
+        }
     }
 }
 
@@ -197,19 +306,24 @@ private struct SharedInput {
     let title: String
     let source: String
     let text: String
-}
-
-private struct SafariPage {
-    let url: URL
-    let title: String
-    let selection: String
-    let html: String
+    let isURL: Bool
+    let diagnostic: String
+    var shouldOpenAppAfterSave = false
 }
 
 private enum ShareError: LocalizedError {
-    case noContent
+    case noContent(providerTypes: String)
 
     var errorDescription: String? {
-        "No text or URL was shared."
+        switch self {
+        case .noContent(let providerTypes):
+            return "No text or URL was shared. Types: \(providerTypes)"
+        }
+    }
+}
+
+private extension Array where Element == String {
+    var firstNonEmpty: String? {
+        first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 }

@@ -25,6 +25,8 @@ namespace {
 
 constexpr const char *kMountPoint = "/sdcard";
 constexpr const char *kBooksPath = "/books";
+constexpr const char *kBookFilesPath = "/books/books";
+constexpr const char *kArticleFilesPath = "/books/articles";
 constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
 constexpr size_t kMaxChapterTitleChars = 64;
 constexpr size_t kMaxBookLineChars = 4096;
@@ -300,32 +302,41 @@ struct DirectoryEntryInfo {
   size_t bytes = 0;
 };
 
-std::vector<DirectoryEntryInfo> inventoryBookDirectory() {
-  std::vector<DirectoryEntryInfo> entries;
-
-  File dir = SD_MMC.open(kBooksPath);
+void appendLibraryDirectoryEntries(const char *directoryPath, std::vector<DirectoryEntryInfo> &entries) {
+  File dir = SD_MMC.open(directoryPath);
   if (!dir || !dir.isDirectory()) {
     if (dir) {
       dir.close();
     }
-    return entries;
+    return;
   }
 
   File entry = dir.openNextFile();
   while (entry) {
     if (!entry.isDirectory()) {
-      DirectoryEntryInfo info;
-      info.path = normalizeBookPath(String(entry.name()));
-      info.loweredPath = info.path;
-      info.loweredPath.toLowerCase();
-      info.bytes = static_cast<size_t>(entry.size());
-      entries.push_back(info);
+      const String name = displayNameForPath(String(entry.name()));
+      if (!name.isEmpty()) {
+        DirectoryEntryInfo info;
+        info.path = String(directoryPath) + "/" + name;
+        info.loweredPath = info.path;
+        info.loweredPath.toLowerCase();
+        info.bytes = static_cast<size_t>(entry.size());
+        entries.push_back(info);
+      }
     }
     entry.close();
     entry = dir.openNextFile();
   }
 
   dir.close();
+}
+
+std::vector<DirectoryEntryInfo> inventoryBookDirectory() {
+  std::vector<DirectoryEntryInfo> entries;
+
+  appendLibraryDirectoryEntries(kBooksPath, entries);
+  appendLibraryDirectoryEntries(kBookFilesPath, entries);
+  appendLibraryDirectoryEntries(kArticleFilesPath, entries);
   return entries;
 }
 
@@ -399,27 +410,16 @@ std::vector<String> collectBookPaths() {
 
 size_t countUnsupportedBookFiles() {
   size_t unsupported = 0;
-  File dir = SD_MMC.open(kBooksPath);
-  if (!dir || !dir.isDirectory()) {
-    if (dir) {
-      dir.close();
+
+  const std::vector<DirectoryEntryInfo> entries = inventoryBookDirectory();
+  for (const DirectoryEntryInfo &entry : entries) {
+    const String &path = entry.path;
+    const bool hidden = isHiddenOrSidecarPath(path);
+    if (!hidden && !hasRsvpExtension(path) && !hasTextExtension(path) && !hasEpubExtension(path)) {
+      ++unsupported;
     }
-    return 0;
   }
 
-  File entry = dir.openNextFile();
-  while (entry) {
-    if (!entry.isDirectory()) {
-      const String path = normalizeBookPath(String(entry.name()));
-      const bool hidden = isHiddenOrSidecarPath(path);
-      if (!hidden && !hasRsvpExtension(path) && !hasTextExtension(path) && !hasEpubExtension(path)) {
-        ++unsupported;
-      }
-    }
-    entry.close();
-    entry = dir.openNextFile();
-  }
-  dir.close();
   return unsupported;
 }
 
@@ -1579,7 +1579,7 @@ void StorageManager::listBooks() {
     return;
   }
 
-  Serial.println("[storage] Listing /books (.rsvp/.txt/.epub pending conversion):");
+  Serial.println("[storage] Listing /books, /books/books, /books/articles (.rsvp/.txt/.epub pending conversion):");
   for (const String &path : bookPaths_) {
     File entry = SD_MMC.open(path);
     if (!entry || entry.isDirectory()) {
@@ -1589,7 +1589,7 @@ void StorageManager::listBooks() {
       continue;
     }
 
-    Serial.printf("  %s (%lu bytes)\n", displayNameForPath(path).c_str(),
+    Serial.printf("  %s (%lu bytes)\n", path.c_str(),
                   static_cast<unsigned long>(entry.size()));
     entry.close();
   }
@@ -1610,6 +1610,11 @@ String StorageManager::bookPath(size_t index) const {
     return "";
   }
   return bookPaths_[index];
+}
+
+bool StorageManager::bookIsArticle(size_t index) const {
+  const String path = bookPath(index);
+  return path.startsWith(String(kArticleFilesPath) + "/");
 }
 
 String StorageManager::bookDisplayName(size_t index) const {

@@ -8,21 +8,51 @@ struct PendingUpload: Codable, Identifiable {
     let id: UUID
     let title: String
     let source: String
-    let filename: String
+    let body: String
     let createdAt: Date
-    let bytes: Int
+
+    var bytes: Int {
+        Data(body.utf8).count
+    }
+
+    var needsArticleFetch: Bool {
+        guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()) else {
+            return false
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines) == source.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    init(id: UUID = UUID(), title: String, source: String, body: String, createdAt: Date = Date()) {
+        self.id = id
+        self.title = title
+        self.source = source
+        self.body = body
+        self.createdAt = createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        source = try container.decode(String.self, forKey: .source)
+        body = try container.decodeIfPresent(String.self, forKey: .body) ?? ""
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+    }
 }
 
 enum PendingUploadStoreError: LocalizedError {
     case sharedContainerUnavailable
-    case missingFile
+    case emptyDraft
+    case saveVerificationFailed
 
     var errorDescription: String? {
         switch self {
         case .sharedContainerUnavailable:
-            return "The shared article inbox is not available."
-        case .missingFile:
-            return "The saved article file is missing."
+            return "The shared article inbox is not available. Check that App Groups are enabled for the app and share extension."
+        case .emptyDraft:
+            return "Add some text before saving."
+        case .saveVerificationFailed:
+            return "The article was written but could not be verified in the shared inbox."
         }
     }
 }
@@ -30,7 +60,7 @@ enum PendingUploadStoreError: LocalizedError {
 struct PendingUploadStore {
     private let fileManager = FileManager.default
 
-    private var rootURL: URL {
+    var rootURL: URL {
         get throws {
             guard let url = fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedInbox.appGroupIdentifier) else {
                 throw PendingUploadStoreError.sharedContainerUnavailable
@@ -43,7 +73,7 @@ struct PendingUploadStore {
 
     private var indexURL: URL {
         get throws {
-            try rootURL.appendingPathComponent("index.json")
+            try rootURL.appendingPathComponent("drafts.json")
         }
     }
 
@@ -57,51 +87,64 @@ struct PendingUploadStore {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    func save(_ file: RsvpBookFile, source: String) throws -> PendingUpload {
-        let item = PendingUpload(
-            id: UUID(),
-            title: file.title,
-            source: source,
-            filename: file.filename,
-            createdAt: Date(),
-            bytes: file.data.count
-        )
+    func saveDraft(title: String, source: String, body: String) throws -> PendingUpload {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedBody.isEmpty else {
+            throw PendingUploadStoreError.emptyDraft
+        }
 
-        let dataURL = try fileURL(for: item)
-        try file.data.write(to: dataURL, options: .atomic)
+        let item = PendingUpload(
+            title: cleanedTitle.isEmpty ? "Shared Article" : cleanedTitle,
+            source: source.trimmingCharacters(in: .whitespacesAndNewlines),
+            body: cleanedBody
+        )
 
         var items = try all()
         items.insert(item, at: 0)
         try write(items)
+        guard try all().contains(where: { $0.id == item.id }) else {
+            throw PendingUploadStoreError.saveVerificationFailed
+        }
         return item
     }
 
-    func data(for item: PendingUpload) throws -> Data {
-        let url = try fileURL(for: item)
-        guard fileManager.fileExists(atPath: url.path) else {
-            throw PendingUploadStoreError.missingFile
+    func bookFile(for item: PendingUpload) throws -> RsvpBookFile {
+        let article = ArticleFormatter.article(title: item.title, source: item.source, htmlOrText: item.body)
+        return try RsvpConverter.rsvpFile(
+            title: article.title,
+            author: "",
+            source: article.source,
+            events: ArticleFormatter.events(from: article)
+        )
+    }
+
+    func update(_ item: PendingUpload, title: String, body: String) throws {
+        let cleanedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedBody.isEmpty else {
+            throw PendingUploadStoreError.emptyDraft
         }
-        return try Data(contentsOf: url)
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updated = PendingUpload(
+            id: item.id,
+            title: cleanedTitle.isEmpty ? item.title : cleanedTitle,
+            source: item.source,
+            body: cleanedBody,
+            createdAt: item.createdAt
+        )
+        try write(all().map { $0.id == item.id ? updated : $0 })
     }
 
     func delete(_ item: PendingUpload) throws {
-        let items = try all().filter { $0.id != item.id }
-        let url = try fileURL(for: item)
-        if fileManager.fileExists(atPath: url.path) {
-            try fileManager.removeItem(at: url)
-        }
-        try write(items)
+        try write(all().filter { $0.id != item.id })
     }
 
     func delete(at offsets: IndexSet) throws {
         let items = try all()
-        for index in offsets where index < items.count {
-            try delete(items[index])
-        }
-    }
-
-    private func fileURL(for item: PendingUpload) throws -> URL {
-        try rootURL.appendingPathComponent("\(item.id.uuidString)-\(item.filename)")
+        let ids = Set(offsets.compactMap { index in
+            index < items.count ? items[index].id : nil
+        })
+        try write(items.filter { !ids.contains($0.id) })
     }
 
     private func write(_ items: [PendingUpload]) throws {

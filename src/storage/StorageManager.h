@@ -33,6 +33,7 @@ class StorageManager {
                        size_t *loadedIndex = nullptr);
   size_t bookCount() const;
   String bookPath(size_t index) const;
+  bool bookIsArticle(size_t index) const;
   String bookDisplayName(size_t index) const;
   String bookAuthorName(size_t index) const;
   bool loadBookWords(size_t index, std::vector<String> &words, String *loadedPath = nullptr,
