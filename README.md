@@ -144,6 +144,7 @@ Main Menu
 |  |  |- Long words
 |  |  |- Complexity
 |  |  |- Punctuation
+|  |  |- Time Estimate
 |  |  `- Reset pacing
 |  |- Wi-Fi
 |  `- Firmware update
