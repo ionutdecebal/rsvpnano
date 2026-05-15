@@ -1994,75 +1994,75 @@ bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
   }
 
   try {
-  while (keepReading && file.available()) {
-    const size_t bytesRead = file.read(buf, kBufSize);
-    if (bytesRead == 0) {
-      break;
-    }
-    totalBytesRead += bytesRead;
-    if (totalBytesRead >= nextHeapLogBytes) {
-      Serial.printf("[storage] parse progress bytes=%lu/%lu words=%u free8=%lu largest8=%lu\n",
-                    static_cast<unsigned long>(totalBytesRead),
-                    static_cast<unsigned long>(fileBytes),
-                    static_cast<unsigned int>(book.words.size()),
-                    static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-                    static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-      Serial.flush();
-      nextHeapLogBytes += 256 * 1024;
-    }
-    yield();
-
-    for (size_t i = 0; i < bytesRead && keepReading; ++i) {
-      const char c = static_cast<char>(buf[i]);
-
-      if (c == '\r') {
-        continue;
+    while (keepReading && file.available()) {
+      const size_t bytesRead = file.read(buf, kBufSize);
+      if (bytesRead == 0) {
+        break;
       }
+      totalBytesRead += bytesRead;
+      if (totalBytesRead >= nextHeapLogBytes) {
+        Serial.printf("[storage] parse progress bytes=%lu/%lu words=%u free8=%lu largest8=%lu\n",
+                      static_cast<unsigned long>(totalBytesRead),
+                      static_cast<unsigned long>(fileBytes),
+                      static_cast<unsigned int>(book.words.size()),
+                      static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                      static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+        Serial.flush();
+        nextHeapLogBytes += 256 * 1024;
+      }
+      yield();
 
-      if (c == '\n') {
-        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending, &stats)
-                                 : processBookLine(line, book, paragraphPending, &stats);
-        if (!keepReading && hasBookWordLimit()) {
-          Serial.printf("[storage] Reached %lu word limit, truncating book\n",
-                        static_cast<unsigned long>(kMaxBookWords));
-        } else if (!keepReading && stats.memoryLow) {
-          parseFailed = true;
-          Serial.printf("[storage] Book load stopped: low memory free8=%lu largest8=%lu\n",
-                        static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-                        static_cast<unsigned long>(
-                            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+      for (size_t i = 0; i < bytesRead && keepReading; ++i) {
+        const char c = static_cast<char>(buf[i]);
+
+        if (c == '\r') {
+          continue;
         }
-        line = "";
-        continue;
-      }
 
-      line += c;
-      if (line.length() >= kMaxBookLineChars) {
-        keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending, &stats)
-                                 : processBookLine(line, book, paragraphPending, &stats);
-        ++stats.longLineSplits;
-        if (!keepReading && stats.memoryLow) {
-          parseFailed = true;
-          Serial.printf("[storage] Book load stopped: low memory free8=%lu largest8=%lu\n",
-                        static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-                        static_cast<unsigned long>(
-                            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+        if (c == '\n') {
+          keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending, &stats)
+                                   : processBookLine(line, book, paragraphPending, &stats);
+          if (!keepReading && hasBookWordLimit()) {
+            Serial.printf("[storage] Reached %lu word limit, truncating book\n",
+                          static_cast<unsigned long>(kMaxBookWords));
+          } else if (!keepReading && stats.memoryLow) {
+            parseFailed = true;
+            Serial.printf("[storage] Book load stopped: low memory free8=%lu largest8=%lu\n",
+                          static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                          static_cast<unsigned long>(
+                              heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+          }
+          line = "";
+          continue;
         }
-        line = "";
+
+        line += c;
+        if (line.length() >= kMaxBookLineChars) {
+          keepReading = rsvpFormat ? processRsvpLine(line, book, paragraphPending, &stats)
+                                   : processBookLine(line, book, paragraphPending, &stats);
+          ++stats.longLineSplits;
+          if (!keepReading && stats.memoryLow) {
+            parseFailed = true;
+            Serial.printf("[storage] Book load stopped: low memory free8=%lu largest8=%lu\n",
+                          static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                          static_cast<unsigned long>(
+                              heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+          }
+          line = "";
+        }
       }
     }
-  }
 
-  if (!line.isEmpty() && keepReading && !reachedBookWordLimit(book.words.size())) {
-    if (rsvpFormat) {
-      keepReading = processRsvpLine(line, book, paragraphPending, &stats);
-    } else {
-      keepReading = processBookLine(line, book, paragraphPending, &stats);
+    if (!line.isEmpty() && keepReading && !reachedBookWordLimit(book.words.size())) {
+      if (rsvpFormat) {
+        keepReading = processRsvpLine(line, book, paragraphPending, &stats);
+      } else {
+        keepReading = processBookLine(line, book, paragraphPending, &stats);
+      }
+      if (!keepReading && stats.memoryLow) {
+        parseFailed = true;
+      }
     }
-    if (!keepReading && stats.memoryLow) {
-      parseFailed = true;
-    }
-  }
   } catch (const std::bad_alloc &) {
     Serial.printf("[storage] parse bad_alloc words=%u bytes=%lu free8=%lu largest8=%lu\n",
                   static_cast<unsigned int>(book.words.size()),
