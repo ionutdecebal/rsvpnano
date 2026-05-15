@@ -328,7 +328,7 @@ function refreshUi() {
 
   elements.folderLabel.textContent = state.directoryHandle
     ? `/${state.directoryHandle.name}`
-    : "No /books folder selected";
+    : "No /books/books folder selected";
 
   if (state.folderInventory) {
     const { sources, rsvp, sidecars, unsupported } = state.folderInventory;
@@ -342,7 +342,7 @@ function refreshUi() {
     }
     elements.folderSummary.textContent = parts.join(", ");
   } else {
-    elements.folderSummary.textContent = "Pick the SD card’s /books folder to scan it";
+    elements.folderSummary.textContent = "Pick the SD card’s /books/books folder to scan it";
   }
 
   const noFolder = !state.directoryHandle;
@@ -549,7 +549,7 @@ async function ingestDescriptors(descriptors, statusTitle) {
     } else {
       setStatus(
         "Conversion complete",
-        `${readyCount} ${pluralize("book", readyCount)} are ready to download or sync into /books.`,
+        `${readyCount} ${pluralize("book", readyCount)} are ready to download or sync into /books/books.`,
         "success",
       );
     }
@@ -645,13 +645,13 @@ async function chooseBooksDirectory() {
     if (directoryHandle.name.toLowerCase() === "books") {
       setStatus(
         "Books folder selected",
-        "The page can now scan, clean, and sync files directly inside /books.",
+        "The page can now scan, clean, and sync files directly inside /books/books.",
         "success",
       );
     } else {
       setStatus(
         "Folder selected",
-        `You picked /${directoryHandle.name}. For best results, point this at the SD card’s /books folder.`,
+        `You picked /${directoryHandle.name}. For best results, point this at the SD card’s /books/books folder.`,
         "info",
       );
     }
