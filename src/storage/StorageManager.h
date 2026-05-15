@@ -28,7 +28,6 @@ class StorageManager {
   void end();
   void listBooks();
   void refreshBooks(bool includeMetadata = true);
-  bool loadFirstBookWords(std::vector<String> &words, String *loadedPath = nullptr);
   bool loadBookContent(size_t index, BookContent &book, String *loadedPath = nullptr,
                        size_t *loadedIndex = nullptr);
   size_t bookCount() const;
@@ -36,8 +35,6 @@ class StorageManager {
   bool bookIsArticle(size_t index) const;
   String bookDisplayName(size_t index) const;
   String bookAuthorName(size_t index) const;
-  bool loadBookWords(size_t index, std::vector<String> &words, String *loadedPath = nullptr,
-                     size_t *loadedIndex = nullptr);
   DiagnosticResult diagnoseSdCard();
 
  private:

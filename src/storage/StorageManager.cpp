@@ -1182,7 +1182,7 @@ String normalizeDisplayText(const String &text, ParseStats *stats = nullptr) {
   return collapsed;
 }
 
-bool pushCleanWord(String token, std::vector<String> &words, ParseStats *stats) {
+bool pushCleanWord(String token, WordTable &words, ParseStats *stats) {
   trimAsciiWhitespace(token);
 
   if (token.length() >= 3 && static_cast<uint8_t>(token[0]) == 0xEF &&
@@ -1212,7 +1212,7 @@ bool pushCleanWord(String token, std::vector<String> &words, ParseStats *stats) 
     return false;
   }
 
-  words.push_back(token);
+  words.append(token);
   return true;
 }
 
@@ -1290,7 +1290,7 @@ String directiveValue(const String &line, const char *directive) {
   return normalizeDisplayText(value);
 }
 
-bool appendLineWords(const String &line, std::vector<String> &words, ParseStats *stats) {
+bool appendLineWords(const String &line, WordTable &words, ParseStats *stats) {
   const String normalizedLine = normalizeDisplayText(line, stats);
   String currentWord;
   currentWord.reserve(32);
@@ -1600,10 +1600,6 @@ void StorageManager::refreshBooks(bool includeMetadata) {
   refreshBookPaths(includeMetadata);
 }
 
-bool StorageManager::loadFirstBookWords(std::vector<String> &words, String *loadedPath) {
-  return loadBookWords(0, words, loadedPath);
-}
-
 size_t StorageManager::bookCount() const { return bookPaths_.size(); }
 
 String StorageManager::bookPath(size_t index) const {
@@ -1800,18 +1796,6 @@ bool StorageManager::loadBookContent(size_t index, BookContent &book, String *lo
   return false;
 }
 
-bool StorageManager::loadBookWords(size_t index, std::vector<String> &words, String *loadedPath,
-                                   size_t *loadedIndex) {
-  BookContent book;
-  if (!loadBookContent(index, book, loadedPath, loadedIndex)) {
-    words.clear();
-    return false;
-  }
-
-  words = std::move(book.words);
-  return true;
-}
-
 StorageManager::DiagnosticResult StorageManager::diagnoseSdCard() {
   DiagnosticResult result;
   notifyStatus("SD check", "Mounting card", "", 5);
@@ -1990,11 +1974,18 @@ bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
 
   try {
     if (initialReserve > 0) {
-      book.words.reserve(initialReserve);
+      book.words.reserveWords(initialReserve);
+    }
+    // Text byte buffer: bound by total file size (parse strips whitespace and
+    // some chars, so we always end up shorter, but this is the upper bound
+    // and lets us do a single contiguous PSRAM allocation early.
+    if (fileBytes > 0) {
+      book.words.reserveBytes(fileBytes);
     }
   } catch (const std::bad_alloc &) {
-    Serial.printf("[storage] reserve(%u) failed free8=%lu largest8=%lu\n",
+    Serial.printf("[storage] reserve(words=%u,bytes=%lu) failed free8=%lu largest8=%lu\n",
                   static_cast<unsigned int>(initialReserve),
+                  static_cast<unsigned long>(fileBytes),
                   static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
                   static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
     book.clear();

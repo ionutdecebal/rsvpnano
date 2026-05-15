@@ -1,5 +1,7 @@
 #include <unity.h>
 
+#include <initializer_list>
+
 #include "reader/ReadingLoop.h"
 #include "text/LatinText.h"
 
@@ -7,16 +9,20 @@
 // Helpers
 // ---------------------------------------------------------------------------
 
-static ReadingLoop makeReader(uint16_t wpm, std::vector<String> words) {
+static ReadingLoop makeReader(uint16_t wpm, std::initializer_list<const char *> words) {
   ReadingLoop r;
   r.setWpm(wpm);
-  r.setWords(std::move(words), 0);
+  WordTable table;
+  for (const char *w : words) {
+    table.append(w, w ? std::strlen(w) : 0);
+  }
+  r.setWords(std::move(table), 0);
   return r;
 }
 
 // Duration of the first word when the second word is the contextual next.
 static uint32_t duration(uint16_t wpm, const char *word, const char *next) {
-  ReadingLoop r = makeReader(wpm, {String(word), String(next)});
+  ReadingLoop r = makeReader(wpm, {word, next});
   return r.currentWordDurationMs();
 }
 
