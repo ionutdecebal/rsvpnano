@@ -1,11 +1,13 @@
 #include "app/App.h"
 
+#include <esp_heap_caps.h>
 #include <esp_sleep.h>
 #include <esp_log.h>
 #include <WiFi.h>
 #include <algorithm>
 #include <cstdio>
 #include <iterator>
+#include <new>
 #include <utility>
 #include <vector>
 
@@ -3573,6 +3575,13 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPosition
   BookContent book;
   String loadedPath;
   size_t loadedIndex = index;
+  Serial.printf("[app] before load index=%u free8=%lu largest8=%lu freeSPI=%lu largestSPI=%lu\n",
+                static_cast<unsigned int>(index),
+                static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)),
+                static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)),
+                static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)));
+  Serial.flush();
   if (!storage_.loadBookContent(index, book, &loadedPath, &loadedIndex)) {
     return false;
   }
@@ -4064,7 +4073,17 @@ void App::rebuildTimeEstimateCache() {
     return;
   }
 
-  wordBonusPrefixSumMs_.assign(n + 1, 0);
+  try {
+    wordBonusPrefixSumMs_.assign(n + 1, 0);
+  } catch (const std::bad_alloc &) {
+    Serial.printf("[time-est] cache alloc failed for %u words free8=%lu largest8=%lu\n",
+                  static_cast<unsigned int>(n),
+                  static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                  static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+    std::vector<uint32_t>().swap(wordBonusPrefixSumMs_);
+    timeEstimateCacheValid_ = false;
+    return;
+  }
   uint32_t running = 0;
   const uint32_t startMs = millis();
   for (size_t i = 0; i < n; ++i) {

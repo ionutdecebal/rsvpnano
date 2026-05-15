@@ -7,6 +7,7 @@
 #include <cstring>
 #include <driver/sdmmc_types.h>
 #include <esp_heap_caps.h>
+#include <new>
 #include <utility>
 
 #include "board/BoardConfig.h"
@@ -30,7 +31,7 @@ constexpr const char *kArticleFilesPath = "/books/articles";
 constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
 constexpr size_t kMaxChapterTitleChars = 64;
 constexpr size_t kMaxBookLineChars = 4096;
-constexpr size_t kInitialWordReserveMax = 50000;
+constexpr size_t kInitialWordReserveMax = 800000;
 constexpr size_t kParseMemoryCheckWordInterval = 512;
 constexpr size_t kParseMinFreeHeapBytes = 32 * 1024;
 constexpr size_t kParseMinLargestHeapBlockBytes = 8 * 1024;
@@ -1964,11 +1965,17 @@ void StorageManager::clearBookCache() {
 
 bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
   book.clear();
-  const size_t initialReserve =
-      std::min(kInitialWordReserveMax, static_cast<size_t>(file.size() / 8));
-  if (initialReserve > 0) {
-    book.words.reserve(initialReserve);
-  }
+  const size_t fileBytes = file.size();
+  Serial.printf("[storage] parseFile start size=%lu rsvp=%d free8=%lu largest8=%lu\n",
+                static_cast<unsigned long>(fileBytes), rsvpFormat ? 1 : 0,
+                static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+  Serial.flush();
+  // Estimate words generously (~5 bytes/word for ASCII text) and reserve up-front
+  // so the vector never has to do a contiguous re-allocation mid-parse. Doubling
+  // re-allocations fragment PSRAM and fail well before total free is exhausted.
+  const size_t estimatedWords = static_cast<size_t>(fileBytes / 5);
+  const size_t initialReserve = std::min(kInitialWordReserveMax, estimatedWords);
   String line;
   line.reserve(256);
   bool paragraphPending = true;
@@ -1978,11 +1985,39 @@ bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
 
   constexpr size_t kBufSize = 4096;
   static uint8_t buf[kBufSize];
+  size_t totalBytesRead = 0;
+  size_t nextHeapLogBytes = 256 * 1024;
 
+  try {
+    if (initialReserve > 0) {
+      book.words.reserve(initialReserve);
+    }
+  } catch (const std::bad_alloc &) {
+    Serial.printf("[storage] reserve(%u) failed free8=%lu largest8=%lu\n",
+                  static_cast<unsigned int>(initialReserve),
+                  static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                  static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+    book.clear();
+    notifyStatus("Book too large", "Memory reserve failed", "Try converter/app", 100);
+    return false;
+  }
+
+  try {
   while (keepReading && file.available()) {
     const size_t bytesRead = file.read(buf, kBufSize);
     if (bytesRead == 0) {
       break;
+    }
+    totalBytesRead += bytesRead;
+    if (totalBytesRead >= nextHeapLogBytes) {
+      Serial.printf("[storage] parse progress bytes=%lu/%lu words=%u free8=%lu largest8=%lu\n",
+                    static_cast<unsigned long>(totalBytesRead),
+                    static_cast<unsigned long>(fileBytes),
+                    static_cast<unsigned int>(book.words.size()),
+                    static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                    static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+      Serial.flush();
+      nextHeapLogBytes += 256 * 1024;
     }
     yield();
 
@@ -2036,6 +2071,16 @@ bool StorageManager::parseFile(File &file, BookContent &book, bool rsvpFormat) {
     if (!keepReading && stats.memoryLow) {
       parseFailed = true;
     }
+  }
+  } catch (const std::bad_alloc &) {
+    Serial.printf("[storage] parse bad_alloc words=%u bytes=%lu free8=%lu largest8=%lu\n",
+                  static_cast<unsigned int>(book.words.size()),
+                  static_cast<unsigned long>(totalBytesRead),
+                  static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+                  static_cast<unsigned long>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+    book.clear();
+    notifyStatus("Book too large", "Out of memory while parsing", "Try converter/app", 100);
+    return false;
   }
 
   if (stats.longLineSplits > 0 || stats.malformedUtf8 > 0 || stats.nonAsciiCodepoints > 0) {
