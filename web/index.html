@@ -794,7 +794,7 @@
               <span class="section-title">Prepare SD Card</span>
             </span>
           </span>
-          <span class="section-summary">Sync into <code>/books</code></span>
+          <span class="section-summary">Sync books into <code>/books/books</code></span>
           <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
@@ -803,17 +803,18 @@
           <div class="section-body-inner">
             <p>
               The recommended path is to convert supported source books in the browser, then place
-              the generated <code>.rsvp</code> files in the SD card&rsquo;s <code>/books</code> folder.
+              the generated <code>.rsvp</code> files in the SD card&rsquo;s <code>/books/books</code> folder.
             </p>
             <ol>
               <li>Insert the SD card into the reader.</li>
               <li>Open <code>USB transfer</code> on the device, or remove the card and use a card reader.</li>
-              <li>Pick the SD card&rsquo;s <code>/books</code> folder in the workspace below, then import, clean sidecars, and sync.</li>
+              <li>Pick the SD card&rsquo;s <code>/books/books</code> folder in the workspace below, then import, clean sidecars, and sync.</li>
             </ol>
             <p class="inline-note">
               The firmware can read <code>.rsvp</code>, <code>.txt</code>, and <code>.epub</code>
-              files from <code>/books</code>, but browser-converted <code>.rsvp</code> files are
-              the best-supported format.
+              files from <code>/books/books</code>, <code>/books/articles</code>, and legacy files
+              directly under <code>/books</code>, but browser-converted <code>.rsvp</code> files are
+              the best-supported book format.
             </p>
           </div>
           <div class="section-body-inner">
@@ -824,15 +825,15 @@
                 <p class="meta-card-copy">
                   On the default USB-enabled firmware, open <code>USB transfer</code> from the main
                   menu to expose the SD card over USB. When you finish copying files, eject the
-                  device from your computer, then hold <code>BOOT</code> to leave transfer mode.
+                  device from your computer, then hold <code>PWR</code> to leave transfer mode.
                 </p>
               </div>
               <div class="meta-card">
                 <span>Folder Layout</span>
-                <strong>Keep book files under <code>/books</code></strong>
+                <strong>Keep book files under <code>/books/books</code></strong>
                 <p class="meta-card-copy">
-                  The workspace below can sync directly into that folder and the device library will
-                  scan it automatically after the SD card remounts.
+                  The workspace below can sync directly into the books folder. Put saved articles in
+                  <code>/books/articles</code> so they appear on the device&rsquo;s Articles page.
                 </p>
               </div>
               <div class="meta-card">
@@ -874,7 +875,7 @@
             <div class="workspace-pane">
               <p class="workspace-copy">
                 Bring books into the browser, convert them into <code>.rsvp</code>, and sync the
-                results back into the SD card&rsquo;s <code>/books</code> folder without leaving this page.
+                results back into the SD card&rsquo;s <code>/books/books</code> folder without leaving this page.
               </p>
 
               <div class="toolbar">
@@ -882,7 +883,7 @@
                   Add Books
                 </button>
                 <button class="tool-button" id="library-folder-button" type="button">
-                  Choose /books Folder
+                  Choose /books/books Folder
                 </button>
                 <button class="tool-button" id="library-folder-import-button" type="button">
                   Import From Folder
@@ -927,7 +928,7 @@
                 </div>
                 <div class="meta-card">
                   <span>Selected Folder</span>
-                  <strong id="library-folder-label">No /books folder selected</strong>
+                  <strong id="library-folder-label">No /books/books folder selected</strong>
                 </div>
                 <div class="meta-card">
                   <span>Library Summary</span>
@@ -935,18 +936,18 @@
                 </div>
                 <div class="meta-card">
                   <span>Folder Inventory</span>
-                  <strong id="library-folder-summary">Pick the SD card&rsquo;s /books folder to scan it</strong>
+                  <strong id="library-folder-summary">Pick the SD card&rsquo;s /books/books folder to scan it</strong>
                 </div>
               </div>
 
               <p class="inline-note">
                 Everything is converted locally in your browser. Pick the SD card&rsquo;s
-                <code>/books</code> folder if you want one-click import, cleanup, and sync.
+                <code>/books/books</code> folder if you want one-click import, cleanup, and sync.
               </p>
 
               <div class="workspace-status" id="library-status" data-tone="info">
                 <strong>Ready to build a library</strong>
-                Add files from your computer or pick the SD card&rsquo;s <code>/books</code> folder to bring
+                Add files from your computer or pick the SD card&rsquo;s <code>/books/books</code> folder to bring
                 supported source books into the workspace.
               </div>
             </div>
