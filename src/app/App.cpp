@@ -745,10 +745,12 @@ void App::updateReader(uint32_t nowMs) {
   // Auto-advance to next chapter part when reaching end of current part
   if (changed && reader_.atEnd() && usingSplitBook_ &&
       currentPartIndex_ + 1 < splitManifest_.parts.size()) {
-    saveReadingPosition(true);
-    loadChapterPart(currentPartIndex_ + 1, nowMs, 0);
-    Serial.printf("[app] auto-advanced to split part %u\n",
-                  static_cast<unsigned int>(currentPartIndex_ + 1));
+    const size_t nextPart = currentPartIndex_ + 1;
+    if (loadChapterPart(nextPart, nowMs, 0)) {
+      saveReadingPosition(true);
+      Serial.printf("[app] auto-advanced to split part %u\n",
+                    static_cast<unsigned int>(nextPart));
+    }
   }
 
   if (scrollModeEnabled()) {
@@ -4063,9 +4065,11 @@ size_t App::currentChapterIndex() const {
   }
 
   size_t currentChapter = 0;
-  const size_t currentIndex = reader_.currentIndex();
+  const size_t globalIndex = usingSplitBook_
+      ? (currentPartGlobalWordOffset_ + reader_.currentIndex())
+      : reader_.currentIndex();
   for (size_t i = 0; i < chapterMarkers_.size(); ++i) {
-    if (chapterMarkers_[i].wordIndex <= currentIndex) {
+    if (chapterMarkers_[i].wordIndex <= globalIndex) {
       currentChapter = i;
     }
   }
@@ -4092,8 +4096,13 @@ String App::currentFooterMetricLabel() const {
     return "0%";
   }
 
-  const size_t currentIndex = std::min(reader_.currentIndex(), wordCount - 1);
-  size_t endIndex = wordCount;
+  const size_t localCurrentIndex = std::min(reader_.currentIndex(), wordCount - 1);
+  const size_t currentIndex = usingSplitBook_
+      ? (currentPartGlobalWordOffset_ + localCurrentIndex)
+      : localCurrentIndex;
+  const size_t totalWords =
+      usingSplitBook_ ? splitManifest_.totalWords() : wordCount;
+  size_t endIndex = totalWords;
 
   if (footerMetricMode_ == FooterMetricMode::ChapterTime) {
     const size_t chapterIndex = currentChapterIndex();
