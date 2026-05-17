@@ -4,10 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROPERTIES_FILE="$ROOT_DIR/gradle/wrapper/gradle-wrapper.properties"
 
-if command -v gradle >/dev/null 2>&1; then
-  exec gradle -p "$ROOT_DIR" "$@"
-fi
-
 if [[ ! -f "$PROPERTIES_FILE" ]]; then
   echo "Missing $PROPERTIES_FILE" >&2
   exit 1
