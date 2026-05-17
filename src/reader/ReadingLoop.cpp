@@ -565,7 +565,7 @@ void ReadingLoop::begin(uint32_t nowMs) {
   setCurrentWordFromIndex();
 }
 
-void ReadingLoop::setWords(std::vector<String> words, uint32_t nowMs) {
+void ReadingLoop::setWords(WordTable words, uint32_t nowMs) {
   loadedWords_ = std::move(words);
   currentIndex_ = 0;
   lastAdvanceMs_ = nowMs;
@@ -607,7 +607,7 @@ uint32_t ReadingLoop::currentWordDurationMs() const {
   const size_t nextIndex = currentIndex_ + 1;
   if (!loadedWords_.empty()) {
     if (nextIndex < loadedWords_.size()) {
-      nextWordStartsLowercase = startsWithLowercaseLetter(loadedWords_[nextIndex]);
+      nextWordStartsLowercase = startsWithLowercaseLetter(loadedWords_.word(nextIndex));
     }
   } else if (nextIndex < kDemoWordCount) {
     nextWordStartsLowercase = startsWithLowercaseLetter(String(kDemoWords[nextIndex]));
@@ -787,7 +787,7 @@ size_t ReadingLoop::wordCount() const {
 
 String ReadingLoop::wordAt(size_t index) const {
   if (!loadedWords_.empty()) {
-    return loadedWords_[index];
+    return loadedWords_.word(index);
   }
   return String(kDemoWords[index]);
 }
