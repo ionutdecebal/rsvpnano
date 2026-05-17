@@ -5,10 +5,6 @@ enum SharedInbox {
     static let appGroupIdentifier = "group.com.rsvpnano.companion"
 }
 
-extension shared.NanoInfo {
-    // Shared NanoInfo now has name, mode, baseUrl, networkSsid, pairingCode, uploadPath
-}
-
 extension shared.NanoBook: Identifiable {
     var displayTitle: String {
         title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? title! : filename
@@ -62,12 +58,8 @@ struct PendingUpload: Identifiable {
     }
 }
 
-// Typealiases to maintain compatibility in the Swift codebase while using shared types
+// Keep Swift UI code concise while shared remains the source of truth.
 typealias NanoInfo = shared.NanoInfo
 typealias NanoBook = shared.NanoBook
-typealias NanoUploadResponse = shared.NanoUploadResponse
-typealias NanoRssFeeds = shared.NanoRssFeeds
 typealias NanoWifiSettings = shared.NanoWifiSettings
-typealias NanoWifiUpdate = shared.NanoWifiUpdate
 typealias NanoSettings = shared.NanoSettings
-typealias RsvpBookFile = shared.RsvpBookFile
