@@ -1,0 +1,39 @@
+name: CI - Android (shared)
+
+on:
+  push:
+    paths:
+      - 'shared/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - '.github/workflows/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Run Gradle assemble and tests (shared)
+        run: ./gradlew :shared:assemble :shared:check --no-daemon
+      - name: Upload shared artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-artifacts
+          path: shared/build/libs

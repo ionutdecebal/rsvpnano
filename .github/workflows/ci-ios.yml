@@ -1,0 +1,30 @@
+name: CI - iOS (shared)
+
+on:
+  push:
+    paths:
+      - 'shared/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'shared/**'
+      - '.github/workflows/**'
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run Gradle assemble and tests (shared)
+        run: ./gradlew :shared:assemble :shared:check --no-daemon
+      - name: Upload shared artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-xcframework
+          path: shared/build
