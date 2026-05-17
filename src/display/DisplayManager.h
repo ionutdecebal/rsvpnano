@@ -147,6 +147,7 @@ class DisplayManager {
                                    int width, int xOffset);
   void drawBatteryBadge();
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
+  void drawPreviousSentenceHint();
   void drawFooter(const String &chapterLabel, const String &statusLabel);
   void drawRsvpAnchorGuide(int anchorX, int textY, int textHeight);
   void drawWordAt(const String &word, int x, int y, uint16_t color);

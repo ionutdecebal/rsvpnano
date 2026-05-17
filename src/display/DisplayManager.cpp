@@ -300,6 +300,7 @@ constexpr TinyGlyph kTinyGlyphs[] = {
     {':', {0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00}},
     {';', {0x00, 0x0C, 0x0C, 0x00, 0x06, 0x04, 0x08}},
     {'?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04}},
+    {'<', {0x01, 0x02, 0x04, 0x08, 0x04, 0x02, 0x01}},
     {'>', {0x10, 0x08, 0x04, 0x02, 0x04, 0x08, 0x10}},
     {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
     {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
@@ -1528,6 +1529,10 @@ void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight) {
   drawTinyTextAt(batteryLabel_, x, y, footerColor(), kTinyScale);
 }
 
+void DisplayManager::drawPreviousSentenceHint() {
+  drawTinyTextAt("<<", kFooterMarginX, kFooterMarginBottom, footerColor(), kTinyScale);
+}
+
 void DisplayManager::drawFooter(const String &chapterLabel, const String &statusLabel) {
   const String status = statusLabel.isEmpty() ? "0%" : statusLabel;
   const int y = kDisplayHeight - kTinyGlyphHeight * kTinyScale - kFooterMarginBottom;
@@ -1888,6 +1893,7 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
     if (showFooter) {
       drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
                                                            : footerStatusLabel);
+      drawPreviousSentenceHint();
     }
     drawBatteryBadge();
     flushScaledFrame(scale, virtualWidth, virtualHeight);
@@ -1927,6 +1933,7 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
   if (showFooter) {
     drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
                                                          : footerStatusLabel);
+    drawPreviousSentenceHint();
   }
   drawBatteryBadge();
   flushScaledFrame(scale, virtualWidth, virtualHeight);
@@ -2288,6 +2295,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
     if (showFooter) {
       drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
                                                            : footerStatusLabel);
+      drawPreviousSentenceHint();
     }
     drawBatteryBadge();
     flushScaledFrame(scale, virtualWidth, virtualHeight);
@@ -2330,6 +2338,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
   if (showFooter) {
     drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
                                                          : footerStatusLabel);
+    drawPreviousSentenceHint();
   }
   drawBatteryBadge();
   flushScaledFrame(scale, virtualWidth, virtualHeight);

@@ -35,6 +35,7 @@ constexpr uint16_t kAxisBiasPx = 12;
 constexpr uint16_t kTapSlopPx = 26;
 constexpr uint16_t kReaderDoubleTapSlopPx = 92;
 constexpr uint16_t kPreviousSentenceTapWidthPx = 96;
+constexpr uint16_t kPreviousSentenceTapHeightPx = 60;
 constexpr uint16_t kFooterMetricTapWidthPx = 220;
 constexpr uint16_t kFooterMetricTapHeightPx = 32;
 constexpr uint16_t kBatteryBadgeTapWidthPx = 160;
@@ -1225,14 +1226,21 @@ bool App::isBatteryBadgeTap(uint16_t x, uint16_t y) const {
          y <= kBatteryBadgeTapHeightPx;
 }
 
-bool App::isPreviousSentenceTap(uint16_t x) const { return x < kPreviousSentenceTapWidthPx; }
+bool App::isPreviousSentenceTap(uint16_t x, uint16_t y) const {
+  return x < kPreviousSentenceTapWidthPx && y < kPreviousSentenceTapHeightPx;
+}
 
 bool App::readerFooterVisible() const {
   return scrollModeEnabled() || state_ != AppState::Playing || contextViewVisible_ ||
          wpmFeedbackVisible_;
 }
 
-void App::rewindReaderSentence(uint32_t nowMs) {
+bool App::handlePreviousSentenceTap(uint16_t x, uint16_t y, uint32_t nowMs) {
+  const bool previewBrowseMode = contextViewVisible_ && !scrollModeEnabled();
+  if (previewBrowseMode || !isPreviousSentenceTap(x, y)) {
+    return false;
+  }
+
   resetReaderTapTracking();
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
@@ -1248,6 +1256,7 @@ void App::rewindReaderSentence(uint32_t nowMs) {
 
   Serial.printf("[app] sentence rewind index=%u word=%s\n",
                 static_cast<unsigned int>(reader_.currentIndex()), reader_.currentWord().c_str());
+  return true;
 }
 
 bool App::handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs) {
@@ -1480,8 +1489,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
         if (handleFooterMetricTap(event.x, event.y, nowMs)) {
           return;
         }
-        if (isPreviousSentenceTap(event.x)) {
-          rewindReaderSentence(nowMs);
+        if (handlePreviousSentenceTap(event.x, event.y, nowMs)) {
           return;
         }
         if (playLocked_ || pauseAtSentenceEndRequested_) {
@@ -1568,8 +1576,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     if (tapLike && handleFooterMetricTap(event.x, event.y, nowMs)) {
       return;
     }
-    if (tapLike && !previewBrowseMode && isPreviousSentenceTap(event.x)) {
-      rewindReaderSentence(nowMs);
+    if (tapLike && handlePreviousSentenceTap(event.x, event.y, nowMs)) {
       return;
     }
     if (tapLike && previewBrowseMode) {

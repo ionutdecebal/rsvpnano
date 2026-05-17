@@ -167,15 +167,15 @@ class App {
   void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleBatteryBadgeTap(uint16_t x, uint16_t y, uint32_t nowMs);
+  bool handlePreviousSentenceTap(uint16_t x, uint16_t y, uint32_t nowMs);
   void requestReaderPauseAtSentenceEnd(uint32_t nowMs);
   void finalizeReaderPause(uint32_t nowMs);
   bool shouldFinalizeReaderPause(uint32_t nowMs) const;
   void resetReaderTapTracking();
   bool isFooterMetricTap(uint16_t x, uint16_t y) const;
   bool isBatteryBadgeTap(uint16_t x, uint16_t y) const;
-  bool isPreviousSentenceTap(uint16_t x) const;
+  bool isPreviousSentenceTap(uint16_t x, uint16_t y) const;
   bool readerFooterVisible() const;
-  void rewindReaderSentence(uint32_t nowMs);
   int scrubStepsForDrag(int deltaX) const;
   void applyScrubTarget(int targetSteps, uint32_t nowMs);
   int browseScrollRatePermille(uint16_t y) const;
