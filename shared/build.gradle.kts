@@ -1,11 +1,11 @@
 plugins {
     kotlin("multiplatform") version "1.9.20"
     kotlin("plugin.serialization") version "1.9.20"
-    id("com.android.library") version "8.1.2" apply false
+    id("com.android.library") version "8.1.2"
 }
 
 kotlin {
-    android()
+    androidTarget()
     iosX64()
     iosArm64()
     iosSimulatorArm64()
@@ -28,5 +28,14 @@ kotlin {
                 implementation("io.ktor:ktor-client-cio:2.3.4")
             }
         }
+    }
+}
+
+android {
+    namespace = "com.rsvpnano.shared"
+    compileSdk = 34
+
+    defaultConfig {
+        minSdk = 24
     }
 }

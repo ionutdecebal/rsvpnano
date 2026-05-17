@@ -30,7 +30,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Run Gradle assemble and tests (shared)
-        run: ./gradlew :shared:assemble :shared:check --no-daemon
+        run: bash ./gradlew :shared:assemble :shared:check --no-daemon
       - name: Upload shared artifacts
         if: success()
         uses: actions/upload-artifact@v4
