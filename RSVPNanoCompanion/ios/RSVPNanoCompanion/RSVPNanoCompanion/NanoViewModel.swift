@@ -104,8 +104,7 @@ final class NanoViewModel: ObservableObject {
     func saveSettings(_ settings: NanoSettings) {
         Task {
             await run("Saving settings") { [self] in
-                var next = settings
-                next.reading.accurateTimeEstimate = true
+                let next = settings.withAccurateTimeEstimate(value: true)
                 self.deviceSettings = try await deviceSyncService.saveSettings(baseUrl: self.address, settings: next)
                 self.status = "Device settings saved. Exit sync on the reader to apply all changes."
             }

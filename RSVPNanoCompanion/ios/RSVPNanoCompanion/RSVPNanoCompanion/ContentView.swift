@@ -804,9 +804,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.reading.wpm ?? settings.reading.wpm },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.reading.wpm = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withWpm(value: Int32(value)))
             }
         )
     }
@@ -815,9 +814,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.reading.pauseMode ?? settings.reading.pauseMode },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.reading.pauseMode = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withPauseMode(value: value))
             }
         )
     }
@@ -826,9 +824,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.reading.readerMode ?? settings.reading.readerMode },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.reading.readerMode = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withReaderMode(value: value))
             }
         )
     }
@@ -837,9 +834,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.reading.pacing.longWordMs ?? settings.reading.pacing.longWordMs },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.reading.pacing.longWordMs = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withPacingLongWordMs(value: Int32(value)))
             }
         )
     }
@@ -848,9 +844,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.reading.pacing.complexWordMs ?? settings.reading.pacing.complexWordMs },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.reading.pacing.complexWordMs = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withPacingComplexWordMs(value: Int32(value)))
             }
         )
     }
@@ -859,9 +854,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.reading.pacing.punctuationMs ?? settings.reading.pacing.punctuationMs },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.reading.pacing.punctuationMs = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withPacingPunctuationMs(value: Int32(value)))
             }
         )
     }
@@ -870,9 +864,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.display.brightnessIndex ?? settings.display.brightnessIndex },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.brightnessIndex = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withBrightnessIndex(value: Int32(value)))
             }
         )
     }
@@ -881,9 +874,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.display.handedness ?? settings.display.handedness },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.handedness = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withHandedness(value: value))
             }
         )
     }
@@ -892,9 +884,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.display.footerMetric ?? settings.display.footerMetric },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.footerMetric = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withFooterMetric(value: value))
             }
         )
     }
@@ -903,9 +894,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.display.batteryLabel ?? settings.display.batteryLabel },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.batteryLabel = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withBatteryLabel(value: value))
             }
         )
     }
@@ -920,10 +910,13 @@ struct ContentView: View {
                 return display.darkMode ? "dark" : "light"
             },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.darkMode = value == "dark" || value == "night"
-                next.display.nightMode = value == "night"
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(
+                    current.withAppearance(
+                        darkMode: value == "dark" || value == "night",
+                        nightMode: value == "night"
+                    )
+                )
             }
         )
     }
@@ -932,9 +925,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.display.phantomWords ?? settings.display.phantomWords },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.phantomWords = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withPhantomWords(value: value))
             }
         )
     }
@@ -943,9 +935,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.display.fontSizeIndex ?? settings.display.fontSizeIndex },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.display.fontSizeIndex = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withFontSizeIndex(value: Int32(value)))
             }
         )
     }
@@ -954,9 +945,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.typography.typeface ?? settings.typography.typeface },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.typography.typeface = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withTypeface(value: value))
             }
         )
     }
@@ -965,9 +955,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.typography.focusHighlight ?? settings.typography.focusHighlight },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.typography.focusHighlight = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withFocusHighlight(value: value))
             }
         )
     }
@@ -976,9 +965,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.typography.tracking ?? settings.typography.tracking },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.typography.tracking = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withTracking(value: Int32(value)))
             }
         )
     }
@@ -987,9 +975,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.typography.anchorPercent ?? settings.typography.anchorPercent },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.typography.anchorPercent = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withAnchorPercent(value: Int32(value)))
             }
         )
     }
@@ -998,9 +985,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.typography.guideWidth ?? settings.typography.guideWidth },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.typography.guideWidth = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withGuideWidth(value: Int32(value)))
             }
         )
     }
@@ -1009,9 +995,8 @@ struct ContentView: View {
         Binding(
             get: { viewModel.deviceSettings?.typography.guideGap ?? settings.typography.guideGap },
             set: { value in
-                guard var next = viewModel.deviceSettings else { return }
-                next.typography.guideGap = value
-                viewModel.saveSettings(next)
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withGuideGap(value: Int32(value)))
             }
         )
     }
