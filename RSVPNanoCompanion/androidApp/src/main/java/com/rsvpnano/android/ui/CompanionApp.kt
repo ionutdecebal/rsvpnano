@@ -1,5 +1,10 @@
 package com.rsvpnano.android.ui
 
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,12 +27,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.app.createAndroidArticleFetchClient
 import com.rsvpnano.app.createAndroidDeviceSyncService
 import com.rsvpnano.app.createAndroidNanoClient
+import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.PendingUpload
 import java.time.Instant
@@ -50,6 +57,7 @@ private data class CompanionUiState(
 
 @Composable
 fun CompanionApp(sharedApp: RsvpSharedApp) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val deviceSyncService: NanoDeviceSyncService = remember { createAndroidDeviceSyncService() }
     val articleFetchClient = remember { createAndroidArticleFetchClient() }
@@ -268,6 +276,41 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
         }
     }
 
+    fun uploadSelectedFile(uri: Uri) {
+        scope.launch {
+            if (!uiState.isConnected) {
+                uiState = uiState.copy(status = "Connect to the reader before uploading files.")
+                return@launch
+            }
+            val displayName = context.displayNameFor(uri) ?: "selected-book"
+            uiState = uiState.copy(status = "Uploading $displayName...")
+            runCatching {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("Could not read selected file.")
+                val file = RsvpConverter.bookFile(data = bytes, filename = displayName)
+                deviceSyncService.uploadBook(
+                    baseUrl = uiState.address,
+                    filename = file.filename,
+                    data = file.data,
+                    category = "book",
+                )
+                deviceSyncService.refreshBooks(uiState.address)
+            }.onSuccess { books ->
+                uiState = uiState.copy(books = books, status = "Uploaded $displayName.")
+            }.onFailure { error ->
+                uiState = uiState.copy(status = error.message ?: "File upload failed.")
+            }
+        }
+    }
+
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            uploadSelectedFile(uri)
+        }
+    }
+
     fun fetchMissingArticles() {
         scope.launch {
             val missing = uiState.drafts.filter(sharedApp.facade::needsArticleFetch)
@@ -315,6 +358,20 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                 }
                 Button(onClick = { refresh() }) {
                     Text(text = "Refresh local")
+                }
+                Button(
+                    onClick = {
+                        filePicker.launch(
+                            arrayOf(
+                                "application/epub+zip",
+                                "text/*",
+                                "text/html",
+                                "application/octet-stream",
+                            ),
+                        )
+                    },
+                ) {
+                    Text(text = "Upload file")
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -452,4 +509,16 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
             }
         }
     }
+}
+
+private fun Context.displayNameFor(uri: Uri): String? {
+    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index >= 0) {
+                return cursor.getString(index)
+            }
+        }
+    }
+    return uri.lastPathSegment?.substringAfterLast('/')
 }

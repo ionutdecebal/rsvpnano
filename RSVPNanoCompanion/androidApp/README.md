@@ -26,8 +26,8 @@ RSVPNanoCompanion/androidApp/build/outputs/apk/debug/
 3. Run on an emulator or Android device.
 
 The current shell loads local shared storage for saved articles and RSS feeds, connects to the
-reader through the shared device sync service, lists/deletes device books, creates/deletes saved
-article drafts, edits saved article drafts, syncs ready text article drafts, fetches URL-only
+reader through the shared device sync service, uploads/lists/deletes device books, creates/deletes
+saved article drafts, edits saved article drafts, syncs ready text article drafts, fetches URL-only
 article drafts through shared article formatting, and can add/sync RSS feeds.
 
 Device API sync uses the shared `NanoClient`/sync interfaces and should stay thin in the Compose
