@@ -41,6 +41,10 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
 10. Documentation & CI:
   - Document build steps, Xcode integration, and Android Gradle setup in `RSVPNanoCompanion/ios/README.md` and `RSVPNanoCompanion/android/README.md`.
    - Add CI jobs to build `shared` for Android and iOS and run `commonTest`.
+11. UI/UX design and styling for both iOS and Android:
+  - Define a shared product-level design direction for navigation, information hierarchy, states, and interaction patterns while keeping SwiftUI and Compose implementations native.
+  - Style both apps beyond the current shell: typography, spacing, color system, component states, empty/loading/error views, device connection flow, library management, saved article workflows, RSS management, and settings screens.
+  - Polish platform-specific ergonomics for phone-sized layouts, accessibility, visual consistency, and final user-facing fit and finish before considering the apps complete.
 
 **Relevant files**
 - [RSVPNanoCompanion/ios/RSVPNanoCompanion/ContentView.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/ContentView.swift) — main UI + `NanoViewModel` to adapt to shared `SyncManager`.
