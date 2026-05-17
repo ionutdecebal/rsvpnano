@@ -1,46 +1,35 @@
 import Foundation
+import shared
 
-struct NanoInfo: Decodable {
-    let name: String
-    let mode: String
-    let baseUrl: String
-    let networkSsid: String?
-    let pairingCode: String
-    let uploadPath: String
+enum SharedInbox {
+    static let appGroupIdentifier = "group.com.rsvpnano.companion"
 }
 
-struct NanoBooksResponse: Decodable {
-    let books: [NanoBook]
+extension shared.NanoInfo {
+    // Shared NanoInfo now has name, mode, baseUrl, networkSsid, pairingCode, uploadPath
 }
 
-struct NanoBook: Decodable, Identifiable {
-    let name: String
-    let title: String?
-    let author: String?
-    let bytes: Int
-    let progressPercent: Int?
-    let category: String?
-
-    var id: String { name }
+extension shared.NanoBook: Identifiable {
+    public var id: String { apiName }
 
     var displayTitle: String {
         title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? title! : filename
     }
 
     var filename: String {
-        name.split(separator: "/").last.map(String.init) ?? name
+        apiName.split(separator: "/").last.map(String.init) ?? apiName
     }
 
     var detailLabel: String {
         let cleanedAuthor = author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let pathLabel = displayTitle == filename ? nil : name
+        let pathLabel = displayTitle == filename ? nil : apiName
         return [cleanedAuthor.isEmpty ? nil : cleanedAuthor, pathLabel, byteLabel]
             .compactMap { $0 }
             .joined(separator: " · ")
     }
 
     var isArticle: Bool {
-        category == "article" || name.lowercased().hasPrefix("articles/")
+        category == "article" || apiName.lowercased().hasPrefix("articles/")
     }
 
     var byteLabel: String {
@@ -48,84 +37,40 @@ struct NanoBook: Decodable, Identifiable {
     }
 }
 
-struct NanoUploadResponse: Decodable {
-    let ok: Bool
-    let path: String?
-    let error: String?
-}
+struct PendingUpload: Identifiable {
+    let id: UUID
+    let title: String
+    let source: String
+    let body: String
+    let createdAt: Date
 
-struct NanoRssFeeds: Codable {
-    var ok: Bool
-    var feeds: [String]
-}
-
-struct NanoWifiSettings: Codable {
-    var ok: Bool
-    var configured: Bool
-    var ssid: String
-    var passwordSet: Bool
-}
-
-struct NanoWifiUpdate: Encodable {
-    var ssid: String
-    var password: String
-}
-
-struct NanoSettings: Codable {
-    var ok: Bool
-    var version: Int
-    var reading: Reading
-    var display: Display
-    var typography: Typography
-    var limits: Limits?
-
-    struct Reading: Codable {
-        var wpm: Int
-        var readerMode: String
-        var pauseMode: String
-        var accurateTimeEstimate: Bool
-        var pacing: Pacing
+    var bytes: Int {
+        Data(body.utf8).count
     }
 
-    struct Pacing: Codable {
-        var longWordMs: Int
-        var complexWordMs: Int
-        var punctuationMs: Int
+    var needsArticleFetch: Bool {
+        guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()) else {
+            return false
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines) == source.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    struct Display: Codable {
-        var brightnessIndex: Int
-        var darkMode: Bool
-        var nightMode: Bool
-        var handedness: String
-        var footerMetric: String
-        var batteryLabel: String
-        var language: Int
-        var phantomWords: Bool
-        var fontSizeIndex: Int
-    }
-
-    struct Typography: Codable {
-        var typeface: String
-        var focusHighlight: Bool
-        var tracking: Int
-        var anchorPercent: Int
-        var guideWidth: Int
-        var guideGap: Int
-    }
-
-    struct Limits: Codable {
-        var wpm: RangeLimit?
-        var brightnessIndex: RangeLimit?
-        var pacingMs: RangeLimit?
-        var tracking: RangeLimit?
-        var anchorPercent: RangeLimit?
-        var guideWidth: RangeLimit?
-        var guideGap: RangeLimit?
-    }
-
-    struct RangeLimit: Codable {
-        var min: Int
-        var max: Int
+    init(id: UUID = UUID(), title: String, source: String, body: String, createdAt: Date = Date()) {
+        self.id = id
+        self.title = title
+        self.source = source
+        self.body = body
+        self.createdAt = createdAt
     }
 }
+
+// Typealiases to maintain compatibility in the Swift codebase while using shared types
+typealias NanoInfo = shared.NanoInfo
+typealias NanoBook = shared.NanoBook
+typealias NanoUploadResponse = shared.NanoUploadResponse
+typealias NanoRssFeeds = shared.NanoRssFeeds
+typealias NanoWifiSettings = shared.NanoWifiSettings
+typealias NanoWifiUpdate = shared.NanoWifiUpdate
+typealias NanoSettings = shared.NanoSettings
+typealias NanoBooksResponse = shared.NanoBooksResponse
+typealias RsvpBookFile = shared.RsvpBookFile

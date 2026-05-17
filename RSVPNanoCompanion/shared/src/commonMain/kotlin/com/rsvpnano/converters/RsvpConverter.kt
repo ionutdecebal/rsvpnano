@@ -13,7 +13,7 @@ object RsvpConverter {
         }
 
         val rawText = RsvpTextUtils.decodeText(data) ?: throw RsvpConversionError.unreadableText
-        val (title, events) = if (looksLikeHTML(rawText)) {
+        val (title, events) = if (RsvpTextUtils.looksLikeHTML(rawText)) {
             RsvpTextUtils.titleFromText(rawText, fallback = filenameWithoutExtension(filename)) to RsvpTextUtils.htmlEvents(rawText)
         } else {
             filenameWithoutExtension(filename) to RsvpTextUtils.textEvents(rawText)
@@ -22,7 +22,12 @@ object RsvpConverter {
     }
 
     fun rsvpFile(title: String, source: String, text: String): RsvpBookFile {
-        return rsvpFile(title = title, author = "", source = source, events = RsvpTextUtils.textEvents(text))
+        val events = if (RsvpTextUtils.looksLikeHTML(text)) {
+            RsvpTextUtils.htmlEvents(text)
+        } else {
+            RsvpTextUtils.textEvents(text)
+        }
+        return rsvpFile(title = title, author = "", source = source, events = events)
     }
 
     fun rsvpFile(title: String, author: String, source: String, events: List<RsvpEvent>): RsvpBookFile {
@@ -54,11 +59,5 @@ object RsvpConverter {
     fun filenameWithoutExtension(filename: String): String {
         val index = filename.lastIndexOf('.')
         return if (index > 0) filename.substring(0, index) else filename
-    }
-
-    private fun looksLikeHTML(value: String): Boolean {
-        val lowered = value.lowercase()
-        return lowered.contains("<html") || lowered.contains("<body") || lowered.contains("<p") ||
-            lowered.contains("<article") || lowered.contains("<br")
     }
 }

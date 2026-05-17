@@ -31,11 +31,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.RsvpSharedApp
-import com.rsvpnano.app.createAndroidArticleFetchClient
-import com.rsvpnano.app.createAndroidDeviceSyncService
-import com.rsvpnano.app.createAndroidNanoClient
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import java.time.Instant
 import java.util.UUID
@@ -45,7 +44,13 @@ private data class CompanionUiState(
     val drafts: List<PendingUpload> = emptyList(),
     val rssFeeds: List<String> = emptyList(),
     val books: List<NanoBook> = emptyList(),
+    val settings: NanoSettings? = null,
+    val wifiSettings: NanoWifiSettings? = null,
     val address: String = "http://192.168.4.1",
+    val settingsWpmDraft: String = "",
+    val settingsBrightnessDraft: String = "",
+    val wifiSsidDraft: String = "",
+    val wifiPasswordDraft: String = "",
     val draftTitle: String = "",
     val draftSourceUrl: String = "",
     val draftBody: String = "",
@@ -59,9 +64,7 @@ private data class CompanionUiState(
 fun CompanionApp(sharedApp: RsvpSharedApp) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val deviceSyncService: NanoDeviceSyncService = remember { createAndroidDeviceSyncService() }
-    val articleFetchClient = remember { createAndroidArticleFetchClient() }
-    val nanoClient = remember { createAndroidNanoClient() }
+    val deviceSyncService: NanoDeviceSyncService = sharedApp.deviceSyncService
     var uiState by remember { mutableStateOf(CompanionUiState(status = "Loading shared data...")) }
 
     fun refresh() {
@@ -87,6 +90,12 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                     )
                     uiState = uiState.copy(
                         books = snapshot.books,
+                        settings = snapshot.settings,
+                        wifiSettings = snapshot.wifiSettings,
+                        settingsWpmDraft = snapshot.settings?.reading?.wpm?.toString().orEmpty(),
+                        settingsBrightnessDraft = snapshot.settings?.display?.brightnessIndex?.toString().orEmpty(),
+                        wifiSsidDraft = snapshot.wifiSettings?.ssid.orEmpty(),
+                        wifiPasswordDraft = "",
                         rssFeeds = mergedFeeds,
                         isConnected = snapshot.info != null,
                         status = "Connected to $deviceName. Loaded ${snapshot.books.size} books.",
@@ -94,6 +103,88 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                 }
                 .onFailure { error ->
                     uiState = uiState.copy(isConnected = false, status = error.message ?: "Connection failed.")
+                }
+        }
+    }
+
+    fun saveDeviceSettings() {
+        scope.launch {
+            val currentSettings = uiState.settings
+            if (!uiState.isConnected || currentSettings == null) {
+                uiState = uiState.copy(status = "Connect to the reader before saving settings.")
+                return@launch
+            }
+            val wpm = uiState.settingsWpmDraft.toIntOrNull()
+            val brightness = uiState.settingsBrightnessDraft.toIntOrNull()
+            if (wpm == null || brightness == null) {
+                uiState = uiState.copy(status = "WPM and brightness must be whole numbers.")
+                return@launch
+            }
+            val settings = currentSettings.copy(
+                reading = currentSettings.reading.copy(wpm = wpm),
+                display = currentSettings.display.copy(brightnessIndex = brightness),
+            )
+            uiState = uiState.copy(status = "Saving reader settings...")
+            runCatching { deviceSyncService.saveSettings(uiState.address, settings) }
+                .onSuccess { saved ->
+                    uiState = uiState.copy(
+                        settings = saved,
+                        settingsWpmDraft = saved.reading.wpm.toString(),
+                        settingsBrightnessDraft = saved.display.brightnessIndex.toString(),
+                        status = "Reader settings saved.",
+                    )
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(status = error.message ?: "Settings save failed.")
+                }
+        }
+    }
+
+    fun saveWifiSettings() {
+        scope.launch {
+            if (!uiState.isConnected) {
+                uiState = uiState.copy(status = "Connect to the reader before saving Wi-Fi.")
+                return@launch
+            }
+            val ssid = uiState.wifiSsidDraft.trim()
+            if (ssid.isEmpty()) {
+                uiState = uiState.copy(status = "Wi-Fi SSID is required.")
+                return@launch
+            }
+            uiState = uiState.copy(status = "Saving Wi-Fi settings...")
+            runCatching { deviceSyncService.saveWifiSettings(uiState.address, ssid, uiState.wifiPasswordDraft) }
+                .onSuccess { wifi ->
+                    uiState = uiState.copy(
+                        wifiSettings = wifi,
+                        wifiSsidDraft = wifi.ssid,
+                        wifiPasswordDraft = "",
+                        status = "Wi-Fi settings saved.",
+                    )
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(status = error.message ?: "Wi-Fi save failed.")
+                }
+        }
+    }
+
+    fun clearWifiSettings() {
+        scope.launch {
+            if (!uiState.isConnected) {
+                uiState = uiState.copy(status = "Connect to the reader before clearing Wi-Fi.")
+                return@launch
+            }
+            uiState = uiState.copy(status = "Clearing Wi-Fi settings...")
+            runCatching { deviceSyncService.clearWifiSettings(uiState.address) }
+                .onSuccess { wifi ->
+                    uiState = uiState.copy(
+                        wifiSettings = wifi,
+                        wifiSsidDraft = wifi.ssid,
+                        wifiPasswordDraft = "",
+                        status = "Wi-Fi settings cleared.",
+                    )
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(status = error.message ?: "Wi-Fi clear failed.")
                 }
         }
     }
@@ -236,10 +327,14 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                 uiState = uiState.copy(status = "No text drafts are ready to sync.")
                 return@launch
             }
+            val client = sharedApp.nanoClient ?: run {
+                uiState = uiState.copy(status = "NanoClient not available.")
+                return@launch
+            }
             uiState = uiState.copy(status = "Syncing saved articles...")
             runCatching {
                 val remaining = sharedApp.facade.syncPendingUploads(
-                    client = nanoClient,
+                    client = client,
                     baseUrl = uiState.address,
                     items = readyDrafts,
                 )
@@ -263,13 +358,18 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                 uiState = uiState.copy(status = "Connect to the reader before deleting books.")
                 return@launch
             }
-            val filename = book.id ?: book.title
-            uiState = uiState.copy(status = "Deleting ${book.title}...")
+            val filename = book.apiName
+            val title = book.displayTitle
+            if (filename.isBlank()) {
+                uiState = uiState.copy(status = "Cannot delete a book without a device filename.")
+                return@launch
+            }
+            uiState = uiState.copy(status = "Deleting $title...")
             runCatching {
                 deviceSyncService.deleteBook(uiState.address, filename)
                 deviceSyncService.refreshBooks(uiState.address)
             }.onSuccess { books ->
-                uiState = uiState.copy(books = books, status = "Deleted ${book.title}.")
+                uiState = uiState.copy(books = books, status = "Deleted $title.")
             }.onFailure { error ->
                 uiState = uiState.copy(status = error.message ?: "Book delete failed.")
             }
@@ -321,7 +421,7 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
             uiState = uiState.copy(status = "Fetching ${missing.size} saved links...")
             runCatching {
                 missing.forEach { draft ->
-                    val article = articleFetchClient.fetch(title = draft.title, source = draft.sourceUrl.orEmpty())
+                    val article = sharedApp.facade.fetchArticle(title = draft.title, source = draft.sourceUrl.orEmpty())
                     sharedApp.facade.updateDraft(draft, article.title, article.text)
                 }
                 sharedApp.facade.loadDrafts()
@@ -383,10 +483,83 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                     } else {
                         items(uiState.books) { book ->
                             Column {
-                                Text(text = book.title)
+                                Text(text = book.displayTitle)
                                 Button(onClick = { deleteDeviceBook(book) }) {
                                     Text(text = "Delete from reader")
                                 }
+                            }
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = "Reader Settings", style = MaterialTheme.typography.titleMedium)
+                    }
+                    item {
+                        if (uiState.settings == null) {
+                            Text(text = if (uiState.isConnected) "Reader settings unavailable." else "Connect to load settings.")
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = uiState.settingsWpmDraft,
+                                    onValueChange = { uiState = uiState.copy(settingsWpmDraft = it) },
+                                    label = { Text("Words per minute") },
+                                    singleLine = true,
+                                )
+                                OutlinedTextField(
+                                    value = uiState.settingsBrightnessDraft,
+                                    onValueChange = { uiState = uiState.copy(settingsBrightnessDraft = it) },
+                                    label = { Text("Brightness index") },
+                                    singleLine = true,
+                                )
+                                Button(onClick = { saveDeviceSettings() }) {
+                                    Text(text = "Save reader settings")
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = "Wi-Fi", style = MaterialTheme.typography.titleMedium)
+                    }
+                    item {
+                        val wifiStatus = uiState.wifiSettings?.let { wifi ->
+                            if (wifi.configured) {
+                                "Configured for ${wifi.ssid}"
+                            } else {
+                                "Not configured"
+                            }
+                        } ?: if (uiState.isConnected) {
+                            "Wi-Fi settings unavailable."
+                        } else {
+                            "Connect to load Wi-Fi settings."
+                        }
+                        Text(text = wifiStatus)
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = uiState.wifiSsidDraft,
+                            onValueChange = { uiState = uiState.copy(wifiSsidDraft = it) },
+                            label = { Text("Wi-Fi SSID") },
+                            singleLine = true,
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = uiState.wifiPasswordDraft,
+                            onValueChange = { uiState = uiState.copy(wifiPasswordDraft = it) },
+                            label = { Text("Wi-Fi password") },
+                            singleLine = true,
+                        )
+                    }
+                    item {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { saveWifiSettings() }) {
+                                Text(text = "Save Wi-Fi")
+                            }
+                            Button(onClick = { clearWifiSettings() }) {
+                                Text(text = "Forget Wi-Fi")
                             }
                         }
                     }

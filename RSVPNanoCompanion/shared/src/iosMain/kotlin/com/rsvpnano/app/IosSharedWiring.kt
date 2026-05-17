@@ -21,9 +21,13 @@ private const val DefaultAppGroupIdentifier = "group.com.rsvpnano.companion"
 fun createIosSharedDependencies(
     appGroupIdentifier: String = DefaultAppGroupIdentifier,
 ): RsvpSharedDependencies {
+    val httpClient = createIosHttpClient()
+    val nanoClient = NanoKtorClient(httpClient = httpClient)
     return RsvpSharedDependencies(
         pendingUploadStorage = FilePendingUploadStorage(appGroupIdentifier = appGroupIdentifier),
         rssFeedStorage = FileRssFeedStorage(appGroupIdentifier = appGroupIdentifier),
+        articleFetchClient = ArticleFetchClient(httpClient = httpClient),
+        nanoClient = nanoClient,
     )
 }
 
@@ -40,9 +44,7 @@ fun createIosSharedApp(
 }
 
 fun createIosNanoClient(): NanoClient {
-    return NanoKtorClient(
-        httpClient = createIosHttpClient()
-    )
+    return NanoKtorClient(httpClient = createIosHttpClient())
 }
 
 fun createIosDeviceSyncService(): NanoDeviceSyncService {

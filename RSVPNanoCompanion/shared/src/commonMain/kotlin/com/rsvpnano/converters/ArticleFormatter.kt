@@ -4,7 +4,7 @@ object ArticleFormatter {
     fun article(title: String, source: String, htmlOrText: String): SharedArticle {
         val resolvedTitle = articleTitle(title = title, source = source, htmlOrText = htmlOrText)
 
-        return if (looksLikeHTML(htmlOrText)) {
+        return if (RsvpTextUtils.looksLikeHTML(htmlOrText)) {
             val focused = focusedHTML(from = htmlOrText)
             SharedArticle(
                 title = resolvedTitle,
@@ -21,7 +21,7 @@ object ArticleFormatter {
     }
 
     fun events(article: SharedArticle): List<RsvpEvent> {
-        return if (looksLikeHTML(article.text)) {
+        return if (RsvpTextUtils.looksLikeHTML(article.text)) {
             RsvpTextUtils.htmlEvents(article.text)
         } else {
             RsvpTextUtils.textEvents(article.text)
@@ -40,12 +40,6 @@ object ArticleFormatter {
         return cleaned
     }
 
-    private fun looksLikeHTML(value: String): Boolean {
-        val lowered = value.lowercase()
-        return lowered.contains("<html") || lowered.contains("<body") || lowered.contains("<article") ||
-            lowered.contains("<main") || lowered.contains("<p")
-    }
-
     private fun fallbackTitle(from: String): String {
         val host = from.substringAfter("//", missingDelimiterValue = "")
             .substringBefore("/")
@@ -59,7 +53,7 @@ object ArticleFormatter {
             return cleanedTitle
         }
 
-        if (looksLikeHTML(htmlOrText)) {
+        if (RsvpTextUtils.looksLikeHTML(htmlOrText)) {
             htmlTitle(from = htmlOrText)?.let { return it }
         }
 
@@ -75,25 +69,15 @@ object ArticleFormatter {
     }
 
     private fun htmlTitle(from: String): String? {
-        val title = firstElementContent(value = from, tag = "title") ?: return null
-        val cleaned = RsvpTextUtils.cleanedLine(RsvpTextUtils.readableText(title))
+        val title = firstElementContent(value = from, tag = "title")
+        val content = title ?: return null
+        val cleaned = RsvpTextUtils.cleanedLine(RsvpTextUtils.readableText(content))
         return cleaned.takeIf { it.isNotEmpty() }?.take(120)
     }
 
     private fun firstElementContent(value: String, tag: String): String? {
-        val openStart = value.indexOf("<$tag", ignoreCase = true)
-        if (openStart < 0) {
-            return null
-        }
-        val openEnd = value.indexOf('>', startIndex = openStart)
-        if (openEnd < 0) {
-            return null
-        }
-        val close = value.indexOf("</$tag>", startIndex = openEnd + 1, ignoreCase = true)
-        if (close < 0) {
-            return null
-        }
-        return value.substring(openEnd + 1, close)
+        val regex = Regex("<$tag\\b[^>]*>(.*?)</$tag>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        return regex.find(value)?.groupValues?.getOrNull(1)
     }
 
     private fun removingBlocks(from: String, tags: List<String>): String {

@@ -4,12 +4,20 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class NanoBook(
+    val name: String = "",
     val id: String? = null,
-    val title: String,
+    val title: String? = null,
     val author: String? = null,
+    val bytes: Int = 0,
     val progressPercent: Int? = null,
     val category: String? = null
-)
+) {
+    val apiName: String
+        get() = name.ifBlank { id.orEmpty() }
+
+    val displayTitle: String
+        get() = title?.takeIf { it.isNotBlank() } ?: apiName.substringAfterLast('/').ifBlank { "Untitled" }
+}
 
 @Serializable
 data class NanoBooksResponse(
@@ -31,7 +39,8 @@ data class NanoInfo(
     val mode: String? = null,
     val baseUrl: String? = null,
     val networkSsid: String? = null,
-    val pairingCode: String? = null
+    val pairingCode: String? = null,
+    val uploadPath: String? = null
 )
 
 @Serializable
@@ -63,66 +72,66 @@ data class NanoWifiUpdate(
 
 @Serializable
 data class NanoSettings(
-    val ok: Boolean,
-    val version: Int,
-    val reading: Reading,
-    val display: Display,
-    val typography: Typography,
-    val limits: Limits? = null,
+    var ok: Boolean,
+    var version: Int,
+    var reading: Reading,
+    var display: Display,
+    var typography: Typography,
+    var limits: Limits? = null,
 ) {
     @Serializable
     data class Reading(
-        val wpm: Int,
-        val readerMode: String,
-        val pauseMode: String,
-        val accurateTimeEstimate: Boolean,
-        val pacing: Pacing,
+        var wpm: Int,
+        var readerMode: String,
+        var pauseMode: String,
+        var accurateTimeEstimate: Boolean,
+        var pacing: Pacing,
     )
 
     @Serializable
     data class Pacing(
-        val longWordMs: Int,
-        val complexWordMs: Int,
-        val punctuationMs: Int,
+        var longWordMs: Int,
+        var complexWordMs: Int,
+        var punctuationMs: Int,
     )
 
     @Serializable
     data class Display(
-        val brightnessIndex: Int,
-        val darkMode: Boolean,
-        val nightMode: Boolean,
-        val handedness: String,
-        val footerMetric: String,
-        val batteryLabel: String,
-        val language: Int,
-        val phantomWords: Boolean,
-        val fontSizeIndex: Int,
+        var brightnessIndex: Int,
+        var darkMode: Boolean,
+        var nightMode: Boolean,
+        var handedness: String,
+        var footerMetric: String,
+        var batteryLabel: String,
+        var language: Int,
+        var phantomWords: Boolean,
+        var fontSizeIndex: Int,
     )
 
     @Serializable
     data class Typography(
-        val typeface: String,
-        val focusHighlight: Boolean,
-        val tracking: Int,
-        val anchorPercent: Int,
-        val guideWidth: Int,
-        val guideGap: Int,
+        var typeface: String,
+        var focusHighlight: Boolean,
+        var tracking: Int,
+        var anchorPercent: Int,
+        var guideWidth: Int,
+        var guideGap: Int,
     )
 
     @Serializable
     data class Limits(
-        val wpm: RangeLimit? = null,
-        val brightnessIndex: RangeLimit? = null,
-        val pacingMs: RangeLimit? = null,
-        val tracking: RangeLimit? = null,
-        val anchorPercent: RangeLimit? = null,
-        val guideWidth: RangeLimit? = null,
-        val guideGap: RangeLimit? = null,
+        var wpm: RangeLimit? = null,
+        var brightnessIndex: RangeLimit? = null,
+        var pacingMs: RangeLimit? = null,
+        var tracking: RangeLimit? = null,
+        var anchorPercent: RangeLimit? = null,
+        var guideWidth: RangeLimit? = null,
+        var guideGap: RangeLimit? = null,
     )
 
     @Serializable
     data class RangeLimit(
-        val min: Int,
-        val max: Int,
+        var min: Int,
+        var max: Int,
     )
 }

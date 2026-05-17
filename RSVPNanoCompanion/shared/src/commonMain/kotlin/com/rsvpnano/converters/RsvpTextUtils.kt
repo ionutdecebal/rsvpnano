@@ -234,20 +234,42 @@ internal object RsvpTextUtils {
         return text.lineSequence().map(::cleanedLine).filter { it.isNotEmpty() }.toList()
     }
 
-    private fun normalizeText(text: String): String {
-        val ascii = buildString(text.length) {
-            text.forEach { char ->
-                append(asciiReplacements[char] ?: char)
-            }
-        }
-        val normalizedWhitespace = ascii.replace(Regex("[\\r\\n\\t]+"), " ")
-        return normalizedWhitespace.replace(Regex("\\s+"), " ")
-    }
-
-    private fun looksLikeHTML(value: String): Boolean {
+    fun looksLikeHTML(value: String): Boolean {
         val lowered = value.lowercase()
         return lowered.contains("<html") || lowered.contains("<body") || lowered.contains("<p") ||
-            lowered.contains("<article") || lowered.contains("<br")
+            lowered.contains("<article") || lowered.contains("<main") || lowered.contains("<br") ||
+            lowered.contains("<!doctype")
+    }
+
+    private fun normalizeText(text: String): String {
+        val sb = StringBuilder(text.length)
+        var lastWasWhitespace = false
+
+        text.forEach { char ->
+            val mapped = asciiReplacements[char]
+            if (mapped != null) {
+                mapped.forEach { mappedChar ->
+                    if (mappedChar.isWhitespace()) {
+                        if (!lastWasWhitespace) {
+                            sb.append(' ')
+                            lastWasWhitespace = true
+                        }
+                    } else {
+                        sb.append(mappedChar)
+                        lastWasWhitespace = false
+                    }
+                }
+            } else if (char.isWhitespace()) {
+                if (!lastWasWhitespace) {
+                    sb.append(' ')
+                    lastWasWhitespace = true
+                }
+            } else {
+                sb.append(char)
+                lastWasWhitespace = false
+            }
+        }
+        return sb.toString().trim()
     }
 
     private fun firstMatch(value: String, regex: Regex): String? = regex.find(value)?.groupValues?.getOrNull(1)

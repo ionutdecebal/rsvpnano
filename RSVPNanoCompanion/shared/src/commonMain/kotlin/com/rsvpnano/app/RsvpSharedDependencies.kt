@@ -1,5 +1,6 @@
 package com.rsvpnano.app
 
+import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.api.NanoClient
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.persistence.PendingUploadRepository
@@ -16,6 +17,8 @@ import com.rsvpnano.persistence.RssFeedStorage
 data class RsvpSharedDependencies(
     val pendingUploadStorage: PendingUploadStorage,
     val rssFeedStorage: RssFeedStorage,
+    val articleFetchClient: ArticleFetchClient? = null,
+    val nanoClient: NanoClient? = null,
 ) {
     fun createApp(): RsvpSharedApp {
         return RsvpSharedApp(this)
@@ -25,11 +28,17 @@ data class RsvpSharedDependencies(
         return RsvpSharedFacade(
             pendingUploadStore = PendingUploadJsonStore(pendingUploadStorage),
             rssFeedStore = JsonRssFeedStore(rssFeedStorage),
+            articleFetchClient = articleFetchClient,
         )
     }
 
     fun createPendingUploadRepository(): PendingUploadRepository {
         return PendingUploadRepository(PendingUploadJsonStore(pendingUploadStorage))
+    }
+
+    fun createDeviceSyncService(): NanoDeviceSyncService {
+        val client = nanoClient ?: throw IllegalStateException("NanoClient not provided to dependencies")
+        return NanoDeviceSyncService(client)
     }
 
     fun createDeviceSyncService(client: NanoClient): NanoDeviceSyncService {

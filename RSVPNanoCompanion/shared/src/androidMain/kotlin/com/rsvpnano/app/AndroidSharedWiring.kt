@@ -21,9 +21,13 @@ private const val RssFeedsRelativePath = "rss/feeds.json"
 fun createAndroidSharedDependencies(
     appFilesDir: File,
 ): RsvpSharedDependencies {
+    val httpClient = createAndroidHttpClient()
+    val nanoClient = NanoKtorClient(httpClient = httpClient)
     return RsvpSharedDependencies(
         pendingUploadStorage = FilePendingUploadStorage(File(appFilesDir, PendingUploadRelativePath)),
         rssFeedStorage = FileRssFeedStorage(File(appFilesDir, RssFeedsRelativePath)),
+        articleFetchClient = ArticleFetchClient(httpClient = httpClient),
+        nanoClient = nanoClient,
     )
 }
 
@@ -40,9 +44,7 @@ fun createAndroidSharedApp(
 }
 
 fun createAndroidNanoClient(): NanoClient {
-    return NanoKtorClient(
-        httpClient = createAndroidHttpClient()
-    )
+    return NanoKtorClient(httpClient = createAndroidHttpClient())
 }
 
 fun createAndroidDeviceSyncService(): NanoDeviceSyncService {

@@ -13,6 +13,9 @@ class RsvpSharedApp internal constructor(
     val facade: RsvpSharedFacade = dependencies.createFacade(),
     val pendingUploadRepository: PendingUploadRepository = dependencies.createPendingUploadRepository(),
 ) {
+    val deviceSyncService: NanoDeviceSyncService by lazy { dependencies.createDeviceSyncService() }
+    val nanoClient: NanoClient? get() = dependencies.nanoClient
+
     fun createDeviceSyncService(client: NanoClient): NanoDeviceSyncService {
         return dependencies.createDeviceSyncService(client)
     }

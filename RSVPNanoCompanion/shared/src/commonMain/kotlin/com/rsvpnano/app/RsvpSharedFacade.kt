@@ -1,5 +1,8 @@
 package com.rsvpnano.app
 
+import com.rsvpnano.api.ArticleFetchClient
+import com.rsvpnano.api.ArticleFetchError
+import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
@@ -21,9 +24,15 @@ class RsvpSharedFacade(
     private val rssFeedStore: RssFeedStore,
     private val articleService: PendingUploadArticleService = PendingUploadArticleService(),
     private val syncCoordinator: SyncCoordinator = SyncCoordinator(rssFeedStore),
+    private val articleFetchClient: ArticleFetchClient? = null,
 ) {
     private val pendingUploadRepository: PendingUploadRepository = PendingUploadRepository(pendingUploadStore, articleService)
     private val uploadSyncService: PendingUploadSyncService = PendingUploadSyncService(pendingUploadRepository, articleService)
+
+    suspend fun fetchArticle(title: String, source: String): SharedArticle {
+        val client = articleFetchClient ?: throw IllegalStateException("ArticleFetchClient not provided to facade")
+        return client.fetch(title, source)
+    }
 
     suspend fun loadDrafts(): List<PendingUpload> = pendingUploadRepository.loadAll()
 

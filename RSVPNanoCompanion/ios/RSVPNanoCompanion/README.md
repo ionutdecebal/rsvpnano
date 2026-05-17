@@ -49,7 +49,7 @@ com.yourname.rsvpnano.share
 ```text
 RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion.entitlements
 RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoShareExtension/RSVPNanoShareExtension.entitlements
-RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion/PendingUploadStore.swift
+RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
 ```
 
 For example:
