@@ -50,7 +50,7 @@ kotlin {
 android {
 	namespace = "com.rsvpnano.shared"
 
-	compileSdk = 35
+	compileSdk = 34
 
 	defaultConfig {
 		minSdk = 24
