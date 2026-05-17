@@ -49,10 +49,12 @@ struct TextImportView: View {
 
     private func importText() {
         do {
-            let fallbackTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? shared.RsvpConverter.shared.titleFromText(text: text, fallback: "Untitled")
-                : title
-            let file = try shared.RsvpConverter.shared.rsvpFile(title: fallbackTitle, source: source, text: text)
+            let file = try shared.ImportPreparation.shared.rsvpFileForText(
+                title: title,
+                source: source,
+                text: text,
+                fallbackTitle: "Untitled"
+            )
             onImport(file)
         } catch {
             errorMessage = error.localizedDescription

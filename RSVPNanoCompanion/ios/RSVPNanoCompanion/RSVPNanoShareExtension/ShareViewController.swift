@@ -137,14 +137,22 @@ final class ShareViewController: UIViewController {
         }
 
         if !itemText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let title = [itemTitle, sharedTitleFromText(itemText, fallback: "Shared Text")].firstNonEmpty ?? "Shared Text"
+            let title = shared.ImportPreparation.shared.titleForText(
+                preferredTitle: itemTitle,
+                text: itemText,
+                fallback: "Shared Text"
+            )
             return SharedInput(title: title, source: "Shared text", text: Self.clipped(itemText), isURL: false, diagnostic: "Host text")
         }
 
         if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }),
            let text = try await loadText(from: provider),
            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let title = [itemTitle, sharedTitleFromText(text, fallback: "Shared Text")].firstNonEmpty ?? "Shared Text"
+            let title = shared.ImportPreparation.shared.titleForText(
+                preferredTitle: itemTitle,
+                text: text,
+                fallback: "Shared Text"
+            )
             return SharedInput(title: title, source: "Shared text", text: text, isURL: false, diagnostic: "Plain text")
         }
 
@@ -206,20 +214,11 @@ final class ShareViewController: UIViewController {
     }
 
     private func urlDraftTitle(itemTitle: String, url: URL) -> String {
-        let cleanedTitle = itemTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let source = url.absoluteString
-        let host = url.host ?? ""
-        if !cleanedTitle.isEmpty,
-           cleanedTitle != host,
-           cleanedTitle != "www.\(host)",
-           !source.contains(cleanedTitle) {
-            return cleanedTitle
-        }
-        return source
-    }
-
-    private func sharedTitleFromText(_ text: String, fallback: String) -> String {
-        shared.RsvpConverter.shared.titleFromText(text: text, fallback: fallback)
+        shared.ImportPreparation.shared.titleForSharedUrl(
+            preferredTitle: itemTitle,
+            source: url.absoluteString,
+            host: url.host ?? ""
+        )
     }
 
     private static func clipped(_ value: String) -> String {
