@@ -249,6 +249,25 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
         }
     }
 
+    fun deleteDeviceBook(book: NanoBook) {
+        scope.launch {
+            if (!uiState.isConnected) {
+                uiState = uiState.copy(status = "Connect to the reader before deleting books.")
+                return@launch
+            }
+            val filename = book.id ?: book.title
+            uiState = uiState.copy(status = "Deleting ${book.title}...")
+            runCatching {
+                deviceSyncService.deleteBook(uiState.address, filename)
+                deviceSyncService.refreshBooks(uiState.address)
+            }.onSuccess { books ->
+                uiState = uiState.copy(books = books, status = "Deleted ${book.title}.")
+            }.onFailure { error ->
+                uiState = uiState.copy(status = error.message ?: "Book delete failed.")
+            }
+        }
+    }
+
     fun fetchMissingArticles() {
         scope.launch {
             val missing = uiState.drafts.filter(sharedApp.facade::needsArticleFetch)
@@ -306,7 +325,12 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
                         item { Text(text = if (uiState.isConnected) "No books on device." else "Connect to load books.") }
                     } else {
                         items(uiState.books) { book ->
-                            Text(text = book.title)
+                            Column {
+                                Text(text = book.title)
+                                Button(onClick = { deleteDeviceBook(book) }) {
+                                    Text(text = "Delete from reader")
+                                }
+                            }
                         }
                     }
 

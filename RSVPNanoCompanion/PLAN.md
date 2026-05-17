@@ -30,7 +30,7 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
    - Replace calls in `ContentView.swift`/`NanoViewModel` to call shared `SyncManager`/`NanoClient` via Swift coroutines bridge (use `@objc`/Kotlin/Native generated interop). Keep Swift-only models thin and keep persistence in shared.
    - Keep Share extension Swift-only but call shared converters for formatting.
 8. Implement Android app shell (Compose) that mirrors SwiftUI flows and calls `shared` APIs.
-   - Current Android shell uses shared storage, shared Ktor device sync, device book listing, saved article create/edit/delete, ready text article sync, URL-only article fetching, and RSS add/sync.
+   - Current Android shell uses shared storage, shared Ktor device sync, device book listing/deletion, saved article create/edit/delete, ready text article sync, URL-only article fetching, and RSS add/sync.
    - Remaining Android gap: manual device smoke testing on hardware/emulator and UI polish.
 9. Testing and parity verification:
    - Add `commonTest` unit tests for converters and models.
