@@ -21,5 +21,6 @@ class RsvpSharedDependenciesRepositoryTest {
         )
 
         assertNotNull(dependencies.createPendingUploadRepository())
+        assertNotNull(dependencies.createApp().pendingUploadRepository)
     }
 }

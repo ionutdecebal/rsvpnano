@@ -21,5 +21,6 @@ class RsvpSharedDependenciesTest {
         )
 
         assertNotNull(dependencies.createFacade())
+        assertNotNull(dependencies.createApp().facade)
     }
 }

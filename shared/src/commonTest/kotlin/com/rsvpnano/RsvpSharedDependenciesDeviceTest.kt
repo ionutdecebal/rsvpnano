@@ -28,6 +28,7 @@ class RsvpSharedDependenciesDeviceTest {
         )
 
         assertNotNull(dependencies.createDeviceSyncService(FakeClient()))
+        assertNotNull(dependencies.createApp().createDeviceSyncService(FakeClient()))
     }
 
     private class FakeClient : NanoClient {
