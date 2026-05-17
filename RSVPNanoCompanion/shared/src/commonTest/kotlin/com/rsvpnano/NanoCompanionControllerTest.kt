@@ -54,6 +54,43 @@ class NanoCompanionControllerTest {
         assertEquals(listOf(NanoBook(id = "Example.rsvp", title = "Example")), snapshot.books)
     }
 
+    @Test
+    fun saveRssFeedsCanStayLocalOnly() = runBlocking {
+        val rssStore = InMemoryRssStore()
+        val client = RecordingNanoClient()
+        val controller = controller(InMemoryPendingStore(), rssStore, client)
+
+        val snapshot = controller.saveRssFeeds(
+            baseUrl = "http://device.local",
+            feeds = listOf(" https://example.com/feed ", "https://example.com/feed"),
+            syncToDevice = false,
+        )
+
+        assertEquals(listOf("https://example.com/feed"), snapshot.rssFeeds)
+        assertEquals(emptyList(), snapshot.syncedRssFeeds)
+        assertEquals(false, snapshot.didSyncDevice)
+        assertEquals(null, client.savedFeeds)
+    }
+
+    @Test
+    fun saveRssFeedsSyncsDeviceAndPersistsMergedFeeds() = runBlocking {
+        val rssStore = InMemoryRssStore()
+        val client = RecordingNanoClient()
+        val controller = controller(InMemoryPendingStore(), rssStore, client)
+
+        val snapshot = controller.saveRssFeeds(
+            baseUrl = "http://device.local",
+            feeds = listOf("https://local.example/feed"),
+            syncToDevice = true,
+        )
+
+        assertEquals(listOf("https://local.example/feed"), client.savedFeeds)
+        assertEquals(listOf("https://local.example/feed"), snapshot.syncedRssFeeds)
+        assertEquals(listOf("https://local.example/feed"), snapshot.rssFeeds)
+        assertEquals(true, snapshot.didSyncDevice)
+        assertEquals(snapshot.rssFeeds, rssStore.items)
+    }
+
     private fun controller(
         pendingStore: PendingUploadStore,
         rssStore: RssFeedStore,
@@ -82,6 +119,7 @@ class NanoCompanionControllerTest {
         private val deviceFeeds: List<String> = emptyList(),
     ) : NanoClient {
         var uploadedFilename: String? = null
+        var savedFeeds: List<String>? = null
 
         override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
 
@@ -104,8 +142,10 @@ class NanoCompanionControllerTest {
         override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds =
             NanoRssFeeds(ok = true, feeds = deviceFeeds)
 
-        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds =
-            NanoRssFeeds(ok = true, feeds = feeds)
+        override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds {
+            savedFeeds = feeds
+            return NanoRssFeeds(ok = true, feeds = feeds)
+        }
 
         override suspend fun uploadBook(
             baseUrl: String,

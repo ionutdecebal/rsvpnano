@@ -59,6 +59,41 @@ class NanoCompanionController(
         )
     }
 
+    suspend fun saveRssFeeds(
+        baseUrl: String,
+        feeds: List<String>,
+        syncToDevice: Boolean,
+    ): CompanionRssSnapshot {
+        val normalized = facade.saveRssFeeds(feeds)
+        if (!syncToDevice) {
+            return CompanionRssSnapshot(
+                rssFeeds = normalized,
+                syncedRssFeeds = emptyList(),
+                didSyncDevice = false,
+            )
+        }
+
+        val deviceFeeds = deviceSyncService.saveRssFeeds(baseUrl, normalized).feeds
+        val syncedFeeds = facade.mergeRssFeeds(localFeeds = emptyList(), deviceFeeds = deviceFeeds)
+        val mergedFeeds = saveMergedRssFeeds(normalized, syncedFeeds)
+        return CompanionRssSnapshot(
+            rssFeeds = mergedFeeds,
+            syncedRssFeeds = syncedFeeds,
+            didSyncDevice = true,
+        )
+    }
+
+    suspend fun refreshRssFeeds(baseUrl: String, localRssFeeds: List<String>): CompanionRssSnapshot {
+        val deviceFeeds = deviceSyncService.refreshRssFeeds(baseUrl).feeds
+        val syncedFeeds = facade.mergeRssFeeds(localFeeds = emptyList(), deviceFeeds = deviceFeeds)
+        val mergedFeeds = saveMergedRssFeeds(localRssFeeds, syncedFeeds)
+        return CompanionRssSnapshot(
+            rssFeeds = mergedFeeds,
+            syncedRssFeeds = syncedFeeds,
+            didSyncDevice = false,
+        )
+    }
+
     private suspend fun saveMergedRssFeeds(localFeeds: List<String>, deviceFeeds: List<String>): List<String> {
         return facade.saveRssFeeds(
             facade.mergeRssFeeds(
@@ -93,4 +128,10 @@ data class CompanionPendingSyncSnapshot(
     val drafts: List<PendingUpload>,
     val books: List<NanoBook>,
     val syncedCount: Int,
+)
+
+data class CompanionRssSnapshot(
+    val rssFeeds: List<String>,
+    val syncedRssFeeds: List<String>,
+    val didSyncDevice: Boolean,
 )

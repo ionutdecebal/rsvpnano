@@ -204,7 +204,11 @@ class CompanionViewModel(
                 setStatus("RSS feed URLs must start with http:// or https://.")
                 return@launch
             }
-            val feeds = sharedApp.facade.saveRssFeeds(state.rssFeeds + feed)
+            val feeds = companionController.saveRssFeeds(
+                baseUrl = state.address,
+                feeds = state.rssFeeds + feed,
+                syncToDevice = false,
+            ).rssFeeds
             updateState {
                 it.copy(
                     rssFeeds = feeds,
@@ -312,13 +316,13 @@ class CompanionViewModel(
             }
             setStatus("Syncing RSS feeds...")
             runCatching {
-                val normalized = sharedApp.facade.saveRssFeeds(state.rssFeeds)
-                deviceSyncService.saveRssFeeds(state.address, normalized).feeds
-            }.onSuccess { deviceFeeds ->
-                val merged = sharedApp.facade.saveRssFeeds(
-                    sharedApp.facade.mergeRssFeeds(current.rssFeeds, deviceFeeds)
+                companionController.saveRssFeeds(
+                    baseUrl = state.address,
+                    feeds = state.rssFeeds,
+                    syncToDevice = true,
                 )
-                updateState { it.copy(rssFeeds = merged, status = "RSS feeds synced to the reader.") }
+            }.onSuccess { rss ->
+                updateState { it.copy(rssFeeds = rss.rssFeeds, status = "RSS feeds synced to the reader.") }
             }.onFailure { error ->
                 setStatus(error.message ?: "RSS sync failed.")
             }

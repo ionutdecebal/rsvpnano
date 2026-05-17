@@ -151,7 +151,12 @@ final class NanoViewModel: ObservableObject {
     func refreshRssFeeds() {
         Task {
             await run("Reading RSS feeds") { [self] in
-                self.mergeRssFeedsFromDevice(try await deviceSyncService.refreshRssFeeds(baseUrl: self.address).feeds)
+                let snapshot = try await companionController.refreshRssFeeds(
+                    baseUrl: self.address,
+                    localRssFeeds: self.rssFeeds
+                )
+                self.rssFeeds = snapshot.rssFeeds
+                self.syncedRssFeeds = snapshot.syncedRssFeeds
                 self.status = "RSS feeds loaded from the SD card."
             }
         }
@@ -185,24 +190,17 @@ final class NanoViewModel: ObservableObject {
     }
 
     private func saveRssFeeds(_ feeds: [String], status successStatus: String) async {
-        let cleanedFeeds = try await sharedFacade.saveRssFeeds(localFeeds: feeds)
-
-        rssFeeds = cleanedFeeds
-        if !isConnected {
-            status = successStatus
-            return
-        }
-
-        Task {
-            await run("Saving RSS feeds") { [self] in
-                let deviceFeeds = try await deviceSyncService.saveRssFeeds(baseUrl: self.address, feeds: cleanedFeeds).feeds
-                let normalizedDeviceFeeds = self.sharedFacade.mergeRssFeeds(localFeeds: [], deviceFeeds: deviceFeeds)
-                self.syncedRssFeeds = normalizedDeviceFeeds
-                let merged = self.sharedFacade.mergeRssFeeds(localFeeds: cleanedFeeds, deviceFeeds: normalizedDeviceFeeds)
-                self.rssFeeds = merged
-                self.persistRssFeeds(merged)
-                self.status = successStatus
+        await run("Saving RSS feeds", showBusy: isConnected) { [self] in
+            let snapshot = try await companionController.saveRssFeeds(
+                baseUrl: self.address,
+                feeds: feeds,
+                syncToDevice: self.isConnected
+            )
+            self.rssFeeds = snapshot.rssFeeds
+            if snapshot.didSyncDevice {
+                self.syncedRssFeeds = snapshot.syncedRssFeeds
             }
+            self.status = successStatus
         }
     }
 
@@ -413,19 +411,6 @@ final class NanoViewModel: ObservableObject {
         let wordLabel = file.wordCount == 1 ? "word" : "words"
         let chapterLabel = file.chapterCount == 1 ? "chapter" : "chapters"
         return "Uploaded \(file.title) into /books/books: \(file.wordCount) \(wordLabel), \(file.chapterCount) \(chapterLabel)."
-    }
-
-    private func mergeRssFeedsFromDevice(_ deviceFeeds: [String]) {
-        syncedRssFeeds = sharedFacade.mergeRssFeeds(localFeeds: [], deviceFeeds: deviceFeeds)
-        let merged = sharedFacade.mergeRssFeeds(localFeeds: rssFeeds, deviceFeeds: syncedRssFeeds)
-        rssFeeds = merged
-        persistRssFeeds(merged)
-    }
-
-    private func persistRssFeeds(_ feeds: [String]) {
-        Task {
-            _ = try? await sharedFacade.saveRssFeeds(localFeeds: feeds)
-        }
     }
 
     private func applyWifiSettings(_ wifi: NanoWifiSettings) {
