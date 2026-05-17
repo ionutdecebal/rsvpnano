@@ -253,6 +253,9 @@ class App {
   void loadPendingBootBook(uint32_t nowMs);
   void saveReadingPosition(bool force = false);
   bool loadBookAtIndex(size_t index, uint32_t nowMs, bool allowLegacyPositionFallback = false);
+  bool loadBookFromSplit(const String &bookPath, size_t bookIndex, uint32_t nowMs,
+                         bool allowLegacyPositionFallback);
+  bool loadChapterPart(size_t partIndex, uint32_t nowMs, size_t localWordOffset = 0);
   String bookPositionKey(const String &bookPath) const;
   String bookWordCountKey(const String &bookPath) const;
   String bookRecentKey(const String &bookPath) const;
@@ -379,6 +382,11 @@ class App {
   std::vector<String> chapterMenuItems_;
   std::vector<ChapterMarker> chapterMarkers_;
   std::vector<size_t> paragraphStarts_;
+  BookManifest splitManifest_;
+  String splitDir_;
+  size_t currentPartIndex_ = 0;
+  size_t currentPartGlobalWordOffset_ = 0;
+  bool usingSplitBook_ = false;
   std::vector<uint32_t> wordBonusPrefixSumMs_;
   bool timeEstimateCacheValid_ = false;
   bool accurateTimeEstimateEnabled_ = true;

@@ -30,6 +30,8 @@ constexpr const char *kArticleFilesPath = "/books/articles";
 constexpr size_t kMaxBookWords = static_cast<size_t>(RSVP_MAX_BOOK_WORDS);
 constexpr size_t kMaxChapterTitleChars = 64;
 constexpr size_t kMaxBookLineChars = 4096;
+constexpr const char *kSplitVersion = "split-v1";
+constexpr const char *kManifestFilename = "manifest.rsvp";
 constexpr size_t kInitialWordReserveMax = 50000;
 constexpr size_t kParseMemoryCheckWordInterval = 512;
 constexpr size_t kParseMinFreeHeapBytes = 32 * 1024;
@@ -1709,6 +1711,322 @@ bool StorageManager::ensureEpubConverted(const String &epubPath, String &rsvpPat
                 static_cast<unsigned long>(elapsedMs), rsvpPath.c_str());
   notifyStatus("Preparing book", displayNameForPath(rsvpPath).c_str(), "Conversion complete",
                100);
+  return true;
+}
+
+String StorageManager::splitDirForBook(const String &bookPath) const {
+  String name = displayNameWithoutExtension(bookPath);
+  const int lastSlash = bookPath.lastIndexOf('/');
+  String dir = (lastSlash > 0) ? bookPath.substring(0, lastSlash) : String(kBooksPath);
+  return dir + "/_" + name;
+}
+
+bool StorageManager::hasSplitCache(const String &bookPath) const {
+  const String splitDir = splitDirForBook(bookPath);
+  const String manifestPath = splitDir + "/" + kManifestFilename;
+  File file = SD_MMC.open(manifestPath);
+  const bool exists = file && !file.isDirectory() && file.size() > 0;
+  if (file) {
+    file.close();
+  }
+  return exists;
+}
+
+bool StorageManager::readManifest(const String &splitDir, BookManifest &manifest) {
+  manifest.clear();
+  const String manifestPath = splitDir + "/" + kManifestFilename;
+  File file = SD_MMC.open(manifestPath);
+  if (!file || file.isDirectory()) {
+    if (file) {
+      file.close();
+    }
+    return false;
+  }
+
+  String line;
+  line.reserve(256);
+
+  constexpr size_t kBufSize = 1024;
+  uint8_t buf[kBufSize];
+
+  while (file.available()) {
+    const size_t bytesRead = file.read(buf, kBufSize);
+    if (bytesRead == 0) {
+      break;
+    }
+    for (size_t i = 0; i < bytesRead; ++i) {
+      const char c = static_cast<char>(buf[i]);
+      if (c == '\r') {
+        continue;
+      }
+      if (c == '\n') {
+        if (line.startsWith("@title:")) {
+          manifest.title = line.substring(7);
+          trimAsciiWhitespace(manifest.title);
+        } else if (line.startsWith("@author:")) {
+          manifest.author = line.substring(8);
+          trimAsciiWhitespace(manifest.author);
+        } else if (line.startsWith("@version:")) {
+          manifest.version = line.substring(9);
+          trimAsciiWhitespace(manifest.version);
+        } else if (line.startsWith("@part:")) {
+          String value = line.substring(6);
+          trimAsciiWhitespace(value);
+          // Format: index|filename|title|wordCount
+          const int sep1 = value.indexOf('|');
+          const int sep2 = (sep1 >= 0) ? value.indexOf('|', sep1 + 1) : -1;
+          const int sep3 = (sep2 >= 0) ? value.indexOf('|', sep2 + 1) : -1;
+          if (sep1 > 0 && sep2 > sep1 && sep3 > sep2) {
+            BookPartInfo part;
+            part.filename = value.substring(sep1 + 1, sep2);
+            part.title = value.substring(sep2 + 1, sep3);
+            part.wordCount = static_cast<size_t>(value.substring(sep3 + 1).toInt());
+            manifest.parts.push_back(std::move(part));
+          }
+        }
+        line = "";
+        continue;
+      }
+      line += c;
+    }
+  }
+
+  file.close();
+
+  if (manifest.version != kSplitVersion) {
+    Serial.printf("[storage] Split cache version mismatch: %s (expected %s)\n",
+                  manifest.version.c_str(), kSplitVersion);
+    manifest.clear();
+    return false;
+  }
+
+  Serial.printf("[storage] Read manifest: %u parts, %lu total words from %s\n",
+                static_cast<unsigned int>(manifest.parts.size()),
+                static_cast<unsigned long>(manifest.totalWords()), splitDir.c_str());
+  return !manifest.parts.empty();
+}
+
+bool StorageManager::loadBookPart(const String &splitDir, size_t partIndex, BookContent &book) {
+  BookManifest manifest;
+  if (!readManifest(splitDir, manifest)) {
+    return false;
+  }
+  if (partIndex >= manifest.parts.size()) {
+    Serial.printf("[storage] Part index %u out of range (%u parts)\n",
+                  static_cast<unsigned int>(partIndex),
+                  static_cast<unsigned int>(manifest.parts.size()));
+    return false;
+  }
+
+  const String partPath = splitDir + "/" + manifest.parts[partIndex].filename;
+  File file = SD_MMC.open(partPath);
+  if (!file || file.isDirectory()) {
+    if (file) {
+      file.close();
+    }
+    Serial.printf("[storage] Failed to open part file: %s\n", partPath.c_str());
+    return false;
+  }
+
+  const uint32_t startMs = millis();
+  const bool parsed = parseFile(file, book, true);
+  const uint32_t elapsedMs = millis() - startMs;
+  file.close();
+
+  if (parsed) {
+    if (book.title.isEmpty()) {
+      book.title = manifest.title;
+    }
+    if (book.author.isEmpty()) {
+      book.author = manifest.author;
+    }
+    Serial.printf("[storage] Loaded part %u (%u words) in %lu ms: %s\n",
+                  static_cast<unsigned int>(partIndex),
+                  static_cast<unsigned int>(book.words.size()),
+                  static_cast<unsigned long>(elapsedMs), partPath.c_str());
+  }
+  return parsed;
+}
+
+bool StorageManager::ensureBookSplit(const String &rsvpPath, const String &splitDir) {
+  const String manifestPath = splitDir + "/" + kManifestFilename;
+
+  // Check if cache already exists and is current
+  {
+    BookManifest existing;
+    if (readManifest(splitDir, existing)) {
+      Serial.printf("[storage] Split cache hit: %s\n", splitDir.c_str());
+      return true;
+    }
+  }
+
+  Serial.printf("[storage] Splitting book: %s -> %s\n", rsvpPath.c_str(), splitDir.c_str());
+  notifyStatus("Preparing book", displayNameForPath(rsvpPath).c_str(), "Splitting chapters", 0);
+
+  File sourceFile = SD_MMC.open(rsvpPath);
+  if (!sourceFile || sourceFile.isDirectory()) {
+    if (sourceFile) {
+      sourceFile.close();
+    }
+    return false;
+  }
+
+  // Create split directory
+  if (!SD_MMC.mkdir(splitDir)) {
+    Serial.printf("[storage] Failed to create split directory: %s\n", splitDir.c_str());
+    sourceFile.close();
+    return false;
+  }
+
+  // Read the source file and split by @chapter directives
+  struct PartAccumulator {
+    String title;
+    String content;
+    size_t wordCount = 0;
+  };
+
+  std::vector<PartAccumulator> parts;
+  PartAccumulator currentPart;
+  currentPart.title = "Start";
+
+  String bookTitle;
+  String bookAuthor;
+  String line;
+  line.reserve(256);
+  bool inHeader = true;
+
+  constexpr size_t kBufSize = 4096;
+  static uint8_t buf[kBufSize];
+  const size_t fileSize = sourceFile.size();
+  size_t bytesProcessed = 0;
+
+  while (sourceFile.available()) {
+    const size_t bytesRead = sourceFile.read(buf, kBufSize);
+    if (bytesRead == 0) {
+      break;
+    }
+    bytesProcessed += bytesRead;
+    yield();
+
+    for (size_t i = 0; i < bytesRead; ++i) {
+      const char c = static_cast<char>(buf[i]);
+      if (c == '\r') {
+        continue;
+      }
+      if (c != '\n') {
+        line += c;
+        continue;
+      }
+
+      // Process line
+      String trimmed = line;
+      trimAsciiWhitespace(trimmed);
+
+      if (trimmed.startsWith("@title:")) {
+        bookTitle = trimmed.substring(7);
+        trimAsciiWhitespace(bookTitle);
+        currentPart.content += line + "\n";
+      } else if (trimmed.startsWith("@author:")) {
+        bookAuthor = trimmed.substring(8);
+        trimAsciiWhitespace(bookAuthor);
+        currentPart.content += line + "\n";
+      } else if (trimmed.startsWith("@chapter")) {
+        inHeader = false;
+        // Save current part if it has content
+        if (currentPart.wordCount > 0 || !currentPart.content.isEmpty()) {
+          parts.push_back(std::move(currentPart));
+          currentPart = PartAccumulator();
+        }
+        String chTitle = trimmed.substring(trimmed.indexOf(':') + 1);
+        trimAsciiWhitespace(chTitle);
+        if (chTitle.isEmpty()) {
+          chTitle = "Chapter";
+        }
+        currentPart.title = chTitle;
+        currentPart.content += line + "\n";
+      } else {
+        currentPart.content += line + "\n";
+        // Count words (rough: split on whitespace)
+        if (!trimmed.isEmpty() && !trimmed.startsWith("@")) {
+          for (size_t j = 0; j < trimmed.length(); ++j) {
+            if (trimmed[j] == ' ' || trimmed[j] == '\t') {
+              ++currentPart.wordCount;
+            }
+          }
+          if (trimmed.length() > 0) {
+            ++currentPart.wordCount;
+          }
+        }
+      }
+
+      line = "";
+    }
+
+    if (fileSize > 0) {
+      const int progress = static_cast<int>((bytesProcessed * 50) / fileSize);
+      notifyStatus("Preparing book", displayNameForPath(rsvpPath).c_str(), "Reading chapters",
+                   progress);
+    }
+  }
+
+  // Handle remaining content in line buffer
+  if (!line.isEmpty()) {
+    currentPart.content += line + "\n";
+  }
+
+  // Push last part
+  if (currentPart.wordCount > 0 || !currentPart.content.isEmpty()) {
+    parts.push_back(std::move(currentPart));
+  }
+
+  sourceFile.close();
+
+  if (parts.empty()) {
+    Serial.println("[storage] No parts found during split");
+    return false;
+  }
+
+  // Write part files
+  String manifestContent;
+  manifestContent += "@title: " + bookTitle + "\n";
+  manifestContent += "@author: " + bookAuthor + "\n";
+  manifestContent += "@version: " + String(kSplitVersion) + "\n";
+  manifestContent += "@parts: " + String(static_cast<unsigned int>(parts.size())) + "\n";
+
+  for (size_t i = 0; i < parts.size(); ++i) {
+    char filename[20];
+    std::snprintf(filename, sizeof(filename), "part%03u.rsvp", static_cast<unsigned int>(i + 1));
+    const String partPath = splitDir + "/" + filename;
+
+    File partFile = SD_MMC.open(partPath, FILE_WRITE);
+    if (!partFile) {
+      Serial.printf("[storage] Failed to write part file: %s\n", partPath.c_str());
+      return false;
+    }
+    partFile.print(parts[i].content);
+    partFile.close();
+
+    manifestContent += "@part: " + String(static_cast<unsigned int>(i + 1)) + "|" + filename +
+                       "|" + parts[i].title + "|" +
+                       String(static_cast<unsigned int>(parts[i].wordCount)) + "\n";
+
+    const int progress = 50 + static_cast<int>(((i + 1) * 50) / parts.size());
+    notifyStatus("Preparing book", displayNameForPath(rsvpPath).c_str(), "Writing chapters",
+                 progress);
+  }
+
+  // Write manifest
+  File manifestFile = SD_MMC.open(manifestPath, FILE_WRITE);
+  if (!manifestFile) {
+    Serial.printf("[storage] Failed to write manifest: %s\n", manifestPath.c_str());
+    return false;
+  }
+  manifestFile.print(manifestContent);
+  manifestFile.close();
+
+  Serial.printf("[storage] Split complete: %u parts written to %s\n",
+                static_cast<unsigned int>(parts.size()), splitDir.c_str());
+  notifyStatus("Preparing book", displayNameForPath(rsvpPath).c_str(), "Split complete", 100);
   return true;
 }
 
