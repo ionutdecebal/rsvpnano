@@ -1,6 +1,7 @@
 package com.rsvpnano.persistence
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
@@ -28,7 +29,8 @@ class FileRssFeedStorage(
 
     override suspend fun writeText(value: String) {
         val url = fileURL() ?: return
-        val data = value.dataUsingEncoding(NSUTF8StringEncoding) ?: return
+        val nsValue = value as NSString
+        val data: NSData = nsValue.dataUsingEncoding(NSUTF8StringEncoding) ?: return
         data.writeToURL(url, atomically = true)
     }
 }

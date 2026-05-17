@@ -29,7 +29,8 @@ class FilePendingUploadStorage(
 
     override suspend fun writeText(value: String) {
         val url = fileURL() ?: return
-        val data = value.dataUsingEncoding(NSUTF8StringEncoding) ?: return
+        val nsValue = value as NSString
+        val data: NSData = nsValue.dataUsingEncoding(NSUTF8StringEncoding) ?: return
         data.writeToURL(url, atomically = true)
     }
 }
