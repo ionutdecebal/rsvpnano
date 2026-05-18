@@ -16,6 +16,7 @@ import com.rsvpnano.sync.PendingUploadSyncService
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class PendingUploadSyncServiceTest {
     @Test
@@ -43,8 +44,58 @@ class PendingUploadSyncServiceTest {
         }
     }
 
+    @Test
+    fun syncOneKeepsDraftWhenUploadFails() {
+        val draft = pendingUpload(id = "1", title = "Failed")
+        val storage = InMemoryPendingStore(listOf(draft))
+        val repository = PendingUploadRepository(storage, PendingUploadArticleService())
+        val service = PendingUploadSyncService(repository, PendingUploadArticleService())
+        val client = RecordingNanoClient(failingFilenames = setOf("Failed.rsvp"))
+
+        runBlocking {
+            assertFailsWith<IllegalStateException> {
+                service.syncOne(client, "http://device.local", draft)
+            }
+
+            assertEquals(listOf(draft), storage.items)
+            assertEquals(listOf("Failed.rsvp"), client.uploadedFilenames)
+        }
+    }
+
+    @Test
+    fun syncAllRemovesSuccessfulDraftsAndKeepsFailedAndUnattemptedDrafts() {
+        val first = pendingUpload(id = "1", title = "First")
+        val failing = pendingUpload(id = "2", title = "Failing")
+        val unattempted = pendingUpload(id = "3", title = "Unattempted")
+        val storage = InMemoryPendingStore(listOf(first, failing, unattempted))
+        val repository = PendingUploadRepository(storage, PendingUploadArticleService())
+        val service = PendingUploadSyncService(repository, PendingUploadArticleService())
+        val client = RecordingNanoClient(failingFilenames = setOf("Failing.rsvp"))
+
+        runBlocking {
+            assertFailsWith<IllegalStateException> {
+                service.syncAll(
+                    client = client,
+                    baseUrl = "http://device.local",
+                    items = listOf(first, failing, unattempted),
+                )
+            }
+
+            assertEquals(listOf(failing, unattempted), storage.items)
+            assertEquals(listOf("First.rsvp", "Failing.rsvp"), client.uploadedFilenames)
+        }
+    }
+
     private class RecordingNanoClient : NanoClient {
+        constructor()
+
+        constructor(failingFilenames: Set<String>) {
+            this.failingFilenames = failingFilenames
+        }
+
         var uploadedFilename: String? = null
+        var failingFilenames: Set<String> = emptySet()
+        val uploadedFilenames: MutableList<String> = mutableListOf()
 
         override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
 
@@ -70,6 +121,10 @@ class PendingUploadSyncServiceTest {
 
         override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?): NanoUploadResponse {
             uploadedFilename = name
+            uploadedFilenames += name
+            if (name in failingFilenames) {
+                throw IllegalStateException("Upload failed for $name")
+            }
             return NanoUploadResponse(ok = true, path = "/books/$name")
         }
 
@@ -122,4 +177,12 @@ class PendingUploadSyncServiceTest {
             items = items.filterNot { it.id == id }
         }
     }
+
+    private fun pendingUpload(id: String, title: String): PendingUpload = PendingUpload(
+        id = id,
+        title = title,
+        sourceUrl = "https://example.com/$id",
+        body = "Body for $title",
+        createdAt = "2026-05-17T10:00:00Z",
+    )
 }

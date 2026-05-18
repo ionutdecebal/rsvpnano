@@ -114,7 +114,7 @@ The goal is confidence that Kotlin output matches the legacy behavior and remain
   - [x] URL title/host cleanup.
   - [x] Text title inference.
   - [x] Source URL handling.
-- [ ] Add tests for pending upload sync behavior after partial failures.
+- [x] Add tests for pending upload sync behavior after partial failures.
 - [x] Add tests for RSS merge/de-duplication behavior.
 - [ ] Store parity fixtures in a deterministic repo path, preferably under `shared/src/commonTest/resources` or `docs/test-vectors`.
 - [ ] Have CI upload parity diffs/artifacts when tests fail.
