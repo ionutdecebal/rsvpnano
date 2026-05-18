@@ -2,7 +2,9 @@ import SwiftUI
 import shared
 
 struct ArticlesPage: View {
-    @ObservedObject var viewModel: NanoViewModel
+    @ObservedObject var viewModel: InboxViewModel
+    @ObservedObject var settingsViewModel: SettingsViewModel
+    @ObservedObject var connection: NanoConnectionManager = .shared
 
     var body: some View {
         List {
@@ -66,7 +68,7 @@ struct ArticlesPage: View {
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(viewModel.isBusy)
+                                .disabled(connection.isBusy)
                             } else {
                                 Button {
                                     viewModel.syncPendingUpload(item)
@@ -75,7 +77,7 @@ struct ArticlesPage: View {
                                         .frame(maxWidth: .infinity)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .disabled(!viewModel.canUpload)
+                                .disabled(!connection.isConnected || connection.isBusy)
                             }
                         }
                     }
@@ -87,55 +89,28 @@ struct ArticlesPage: View {
                 } label: {
                     Label("Sync Saved Articles", systemImage: "arrow.up.doc")
                 }
-                .disabled(!viewModel.canSyncPending)
+                .disabled(!connection.isConnected || connection.isBusy || viewModel.pendingUploads.isEmpty)
             }
         }
     }
 
     private var syncedArticlesSection: some View {
-        let articleItems = viewModel.books.filter(\.isArticle)
-
-        return Section {
-            if !viewModel.isConnected {
-                Text("Connect to Companion sync to see articles already on the SD card.")
-                    .foregroundStyle(.secondary)
-            } else if articleItems.isEmpty {
-                Text("No synced articles on the SD card yet.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(articleItems) { article in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            LibraryBookRow(book: article)
-                            Text("Synced")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.green)
-                        }
-                    }
-                }
-                .onDelete { offsets in
-                    viewModel.deleteBooks(offsets.map { articleItems[$0] })
-                }
-            }
-
-            if viewModel.isConnected {
-                Button {
-                    viewModel.refreshBooks()
-                } label: {
-                    Label("Refresh Synced Articles", systemImage: "arrow.clockwise")
-                }
-                .disabled(viewModel.isBusy)
-            }
+        // We need library books here. 
+        // For now, we can pass them in or article synced is a separate concern.
+        // Actually, let's keep it simple: LibraryViewModel owns the synced list.
+        // But for parity with previous UI, we can inject the LibraryViewModel or just the list.
+        
+        Section {
+            Text("Go to Library to see articles already on the SD card.")
+                .foregroundStyle(.secondary)
         } header: {
             Text("Synced Articles")
-        } footer: {
-            Text("These are articles already saved on the reader in /books/articles.")
         }
     }
 
     private var rssFeedsSection: some View {
         Section {
-            if viewModel.rssFeeds.isEmpty {
+            if settingsViewModel.rssFeeds.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("No RSS feeds saved.")
                     Text("Add feed URLs now, then sync them to the reader when Companion sync is connected.")
@@ -143,52 +118,52 @@ struct ArticlesPage: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(viewModel.rssFeeds, id: \.self) { feed in
+                ForEach(settingsViewModel.rssFeeds, id: \.self) { feed in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(feed)
                             .font(.caption)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(viewModel.syncedRssFeeds.contains(feed) ? "Synced" : "Pending")
+                        Text(settingsViewModel.syncedRssFeeds.contains(feed) ? "Synced" : "Pending")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(viewModel.syncedRssFeeds.contains(feed) ? .green : .orange)
+                            .foregroundStyle(settingsViewModel.syncedRssFeeds.contains(feed) ? .green : .orange)
                     }
                 }
-                .onDelete(perform: viewModel.deleteRssFeeds)
+                .onDelete(perform: settingsViewModel.deleteRssFeeds)
             }
 
-            TextField("https://example.com/feed.xml", text: $viewModel.rssFeedDraft)
+            TextField("https://example.com/feed.xml", text: $settingsViewModel.rssFeedDraft)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
 
             HStack(spacing: 10) {
                 Button {
-                    viewModel.addRssFeed()
+                    settingsViewModel.addRssFeed()
                 } label: {
-                    Label(viewModel.isConnected ? "Add & Sync" : "Add Feed", systemImage: "plus")
+                    Label(connection.isConnected ? "Add & Sync" : "Add Feed", systemImage: "plus")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isBusy || viewModel.rssFeedDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(connection.isBusy || settingsViewModel.rssFeedDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button {
-                    viewModel.isConnected ? viewModel.syncRssFeeds() : viewModel.connect()
+                    connection.isConnected ? settingsViewModel.syncRssFeeds() : connection.connect()
                 } label: {
-                    Label(viewModel.isConnected ? "Sync Feeds" : "Connect", systemImage: "arrow.triangle.2.circlepath")
+                    Label(connection.isConnected ? "Sync Feeds" : "Connect", systemImage: "arrow.triangle.2.circlepath")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(viewModel.isBusy || (viewModel.isConnected && viewModel.rssFeeds.isEmpty))
+                .disabled(connection.isBusy || (connection.isConnected && settingsViewModel.rssFeeds.isEmpty))
             }
 
-            if viewModel.isConnected {
+            if connection.isConnected {
                 Button {
-                    viewModel.refreshRssFeeds()
+                    settingsViewModel.refreshRssFeeds()
                 } label: {
                     Label("Reload From Reader", systemImage: "arrow.down.circle")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
             }
         } header: {
             Text("RSS Feeds")

@@ -1,140 +1,98 @@
 import SwiftUI
-import UIKit
-
-private enum CompanionPage: String, CaseIterable, Identifiable {
-    case library = "Library"
-    case articles = "Articles"
-    case settings = "Settings"
-    case help = "Help"
-
-    var id: String { rawValue }
-
-    var systemImage: String {
-        switch self {
-        case .library:
-            return "books.vertical"
-        case .articles:
-            return "doc.text"
-        case .settings:
-            return "slider.horizontal.3"
-        case .help:
-            return "questionmark.circle"
-        }
-    }
-}
+import shared
 
 struct ContentView: View {
-    @StateObject private var viewModel = NanoViewModel()
+    @StateObject private var connection = NanoConnectionManager.shared
+    @StateObject private var libraryViewModel = LibraryViewModel()
+    @StateObject private var settingsViewModel = SettingsViewModel()
+    @StateObject private var inboxViewModel = InboxViewModel()
+    
     @State private var selectedPage: CompanionPage = .library
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                pageSelector
+                switch selectedPage {
+                case .library:
+                    LibraryPage(
+                        viewModel: libraryViewModel,
+                        openWifiSettings: openWifiSettings
+                    )
+                case .articles:
+                    ArticlesPage(
+                        viewModel: inboxViewModel,
+                        settingsViewModel: settingsViewModel
+                    )
+                case .settings:
+                    SettingsPage(
+                        viewModel: settingsViewModel
+                    )
+                case .help:
+                    HelpPage()
+                }
+
                 Divider()
-                selectedPageContent
+                customTabBar
             }
             .navigationTitle(selectedPage.rawValue)
-            .toolbar {
-                if selectedPage == .articles || (selectedPage == .library && viewModel.isConnected) {
-                    EditButton()
+            .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $libraryViewModel.showingPicker) {
+                BookDocumentPicker { file in
+                    libraryViewModel.upload(file)
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            statusBar
-        }
-        .sheet(isPresented: $viewModel.showingPicker) {
-            BookDocumentPicker { file in
-                viewModel.showingPicker = false
-                viewModel.upload(file)
-            } onCancel: {
-                viewModel.showingPicker = false
-            }
-        }
-        .sheet(isPresented: $viewModel.showingTextImport) {
-            TextImportView { file in
-                viewModel.showingTextImport = false
-                viewModel.upload(file)
-            } onCancel: {
-                viewModel.showingTextImport = false
-            }
-        }
-        .sheet(item: $viewModel.editingArticle) { item in
-            ArticleEditorView(item: item) { title, body in
-                viewModel.savePendingUpload(item, title: title, body: body)
-            } onCancel: {
-                viewModel.editingArticle = nil
-            }
-        }
-        .task {
-            await viewModel.startAutoConnect()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            Task { await viewModel.refreshPendingUploads() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            Task {
-                await viewModel.refreshPendingUploads()
-                if !viewModel.isConnected {
-                    viewModel.connect(showBusy: false)
+            .sheet(isPresented: $libraryViewModel.showingTextImport) {
+                TextImportView { title, text in
+                    libraryViewModel.upload(
+                        shared.ImportPreparation.shared.rsvpFileForText(
+                            title: title,
+                            source: "Manual entry",
+                            text: text,
+                            fallbackTitle: "Imported Text"
+                        )
+                    )
                 }
             }
-        }
-        .onOpenURL { url in
-            if url.scheme == "rsvpnano", url.host == "inbox" {
-                viewModel.handleSharedInboxOpen()
+            .sheet(item: $inboxViewModel.editingArticle) { item in
+                ArticleEditorView(item: item) { title, body in
+                    inboxViewModel.savePendingUpload(item, title: title, body: body)
+                } onCancel: {
+                    inboxViewModel.editingArticle = nil
+                }
             }
-        }
-        .onDisappear {
-            viewModel.stopAutoConnect()
+            .onAppear {
+                Task {
+                    await connection.connectOnce(showBusy: false)
+                }
+            }
+            .onOpenURL { url in
+                if url.scheme == "rsvpnano", url.host == "inbox" {
+                    selectedPage = .articles
+                    inboxViewModel.handleSharedInboxOpen()
+                }
+            }
         }
     }
 
-    private var pageSelector: some View {
-        Picker("Page", selection: $selectedPage) {
+    private var customTabBar: some View {
+        HStack {
             ForEach(CompanionPage.allCases) { page in
-                Label(page.rawValue, systemImage: page.systemImage)
-                    .tag(page)
+                Spacer()
+                Button {
+                    selectedPage = page
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: page.iconName)
+                            .font(.system(size: 20))
+                        Text(page.rawValue)
+                            .font(.caption2)
+                    }
+                    .foregroundColor(selectedPage == page ? .accentColor : .secondary)
+                    .frame(maxWidth: .infinity)
+                }
+                Spacer()
             }
         }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.bar)
-    }
-
-    @ViewBuilder
-    private var selectedPageContent: some View {
-        switch selectedPage {
-        case .library:
-            LibraryPage(
-                viewModel: viewModel,
-                openWifiSettings: openWifiSettings
-            )
-        case .articles:
-            ArticlesPage(viewModel: viewModel)
-        case .settings:
-            SettingsPage(viewModel: viewModel)
-        case .help:
-            HelpPage()
-        }
-    }
-
-    private var statusBar: some View {
-        HStack(spacing: 8) {
-            if viewModel.isBusy {
-                ProgressView()
-                    .scaleEffect(0.75)
-            }
-            Text(viewModel.status)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .background(.bar)
     }
@@ -144,5 +102,23 @@ struct ContentView: View {
             return
         }
         UIApplication.shared.open(url)
+    }
+}
+
+private enum CompanionPage: String, CaseIterable, Identifiable {
+    case library = "Library"
+    case articles = "Articles"
+    case settings = "Settings"
+    case help = "Help"
+
+    var id: String { rawValue }
+
+    var iconName: String {
+        switch self {
+        case .library: return "books.vertical"
+        case .articles: return "doc.text"
+        case .settings: return "slider.horizontal.3"
+        case .help: return "questionmark.circle"
+        }
     }
 }

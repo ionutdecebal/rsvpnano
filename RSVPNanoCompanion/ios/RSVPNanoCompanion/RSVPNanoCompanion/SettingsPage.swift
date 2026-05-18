@@ -2,7 +2,8 @@ import SwiftUI
 import shared
 
 struct SettingsPage: View {
-    @ObservedObject var viewModel: NanoViewModel
+    @ObservedObject var viewModel: SettingsViewModel
+    @ObservedObject var connection: NanoConnectionManager = .shared
 
     var body: some View {
         List {
@@ -20,7 +21,7 @@ struct SettingsPage: View {
                     } label: {
                         Label("Refresh Settings", systemImage: "arrow.clockwise")
                     }
-                    .disabled(viewModel.isBusy)
+                    .disabled(connection.isBusy)
 
                     Text("Changes are saved to the reader. Exit sync on the device to apply every setting on-screen.")
                         .font(.caption)
@@ -37,7 +38,7 @@ struct SettingsPage: View {
             } label: {
                 Label("Load Settings", systemImage: "slider.horizontal.3")
             }
-            .disabled(viewModel.info == nil || viewModel.isBusy)
+            .disabled(!connection.isConnected || connection.isBusy)
         }
     }
 
@@ -52,7 +53,7 @@ struct SettingsPage: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Pause Behaviour")
@@ -62,27 +63,27 @@ struct SettingsPage: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: wpmBinding(for: settings), in: 100...1000, step: 25) {
                     LabeledContent("Base Speed", value: "\(settings.reading.wpm) WPM")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: pacingLongBinding(for: settings), in: 0...600, step: 50) {
                     LabeledContent("Long Words", value: "\(settings.reading.pacing.longWordMs) ms")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: pacingComplexBinding(for: settings), in: 0...600, step: 50) {
                     LabeledContent("Complexity", value: "\(settings.reading.pacing.complexWordMs) ms")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: pacingPunctuationBinding(for: settings), in: 0...600, step: 50) {
                     LabeledContent("Punctuation", value: "\(settings.reading.pacing.punctuationMs) ms")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
             }
         }
     }
@@ -99,12 +100,12 @@ struct SettingsPage: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: brightnessBinding(for: settings), in: 0...4) {
                     LabeledContent("Brightness", value: "\(settings.display.brightnessIndex + 1) / 5")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Reader Hand")
@@ -114,7 +115,7 @@ struct SettingsPage: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Footer Label")
@@ -124,7 +125,7 @@ struct SettingsPage: View {
                         Text("Book Time").tag("book_time")
                     }
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Battery Label")
@@ -134,7 +135,7 @@ struct SettingsPage: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
             }
         }
     }
@@ -166,7 +167,7 @@ struct SettingsPage: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isBusy || viewModel.wifiSsidDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(connection.isBusy || viewModel.wifiSsidDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button(role: .destructive) {
                     viewModel.forgetWifiSettings()
@@ -175,7 +176,7 @@ struct SettingsPage: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(viewModel.isBusy || viewModel.wifiSettings?.configured != true)
+                .disabled(connection.isBusy || viewModel.wifiSettings?.configured != true)
             }
 
             Button {
@@ -183,7 +184,7 @@ struct SettingsPage: View {
             } label: {
                 Label("Refresh Wi-Fi", systemImage: "arrow.clockwise")
             }
-            .disabled(viewModel.isBusy)
+            .disabled(connection.isBusy)
         } header: {
             Text("Wi-Fi")
         } footer: {
@@ -199,38 +200,38 @@ struct SettingsPage: View {
                     Text("Atkinson").tag("atkinson")
                     Text("OpenDyslexic").tag("open_dyslexic")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Toggle("Focus Highlight", isOn: focusHighlightBinding(for: settings))
-                    .disabled(viewModel.isBusy)
+                    .disabled(connection.isBusy)
 
                 Toggle("Phantom Words", isOn: phantomWordsBinding(for: settings))
-                    .disabled(viewModel.isBusy)
+                    .disabled(connection.isBusy)
 
                 Stepper(value: fontSizeBinding(for: settings), in: 0...2) {
                     LabeledContent("Font Size", value: "\(settings.display.fontSizeIndex + 1) / 3")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: trackingBinding(for: settings), in: -2...3) {
                     LabeledContent("Tracking", value: "\(settings.typography.tracking)")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: anchorBinding(for: settings), in: 30...40) {
                     LabeledContent("Anchor", value: "\(settings.typography.anchorPercent)%")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: guideWidthBinding(for: settings), in: 12...30, step: 2) {
                     LabeledContent("Guide Width", value: "\(settings.typography.guideWidth)")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
 
                 Stepper(value: guideGapBinding(for: settings), in: 2...8) {
                     LabeledContent("Guide Gap", value: "\(settings.typography.guideGap)")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
             }
         }
     }

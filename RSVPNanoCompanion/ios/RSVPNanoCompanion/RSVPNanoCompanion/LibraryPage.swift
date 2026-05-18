@@ -3,15 +3,17 @@ import UIKit
 import shared
 
 struct LibraryPage: View {
-    @ObservedObject var viewModel: NanoViewModel
+    @ObservedObject var viewModel: LibraryViewModel
+    @ObservedObject var connection: NanoConnectionManager = .shared
     var openWifiSettings: () -> Void
 
     var body: some View {
-        if viewModel.isConnected {
+        if connection.isConnected {
             libraryList
         } else {
             ConnectionInstructionsView(
                 viewModel: viewModel,
+                connection: connection,
                 openWifiSettings: openWifiSettings
             )
         }
@@ -19,7 +21,7 @@ struct LibraryPage: View {
 
     private var libraryList: some View {
         List {
-            if let info = viewModel.info {
+            if let info = connection.info {
                 Section("Reader") {
                     LabeledContent("Name", value: info.name)
                     LabeledContent("Wi-Fi", value: info.networkSsid ?? "Connected")
@@ -75,28 +77,29 @@ struct LibraryPage: View {
                 } label: {
                     Label("Upload File", systemImage: "doc.badge.plus")
                 }
-                .disabled(!viewModel.canUpload)
+                .disabled(!connection.isConnected || connection.isBusy)
 
                 Button {
                     viewModel.showingTextImport = true
                 } label: {
                     Label("New Text", systemImage: "text.badge.plus")
                 }
-                .disabled(!viewModel.canUpload)
+                .disabled(!connection.isConnected || connection.isBusy)
 
                 Button {
                     viewModel.refreshBooks()
                 } label: {
                     Label("Refresh Library", systemImage: "arrow.clockwise")
                 }
-                .disabled(viewModel.info == nil || viewModel.isBusy)
+                .disabled(!connection.isConnected || connection.isBusy)
             }
         }
     }
 }
 
 private struct ConnectionInstructionsView: View {
-    @ObservedObject var viewModel: NanoViewModel
+    @ObservedObject var viewModel: LibraryViewModel
+    @ObservedObject var connection: NanoConnectionManager
     var openWifiSettings: () -> Void
 
     var body: some View {
@@ -127,11 +130,11 @@ private struct ConnectionInstructionsView: View {
                 }
 
                 Button {
-                    viewModel.connectDefault()
+                    connection.connectDefault()
                 } label: {
                     Label("Check Now", systemImage: "network")
                 }
-                .disabled(viewModel.isBusy)
+                .disabled(connection.isBusy)
             }
 
             Section("Fallback") {
@@ -147,40 +150,40 @@ private struct ConnectionInstructionsView: View {
                 }
 
                 Button {
-                    viewModel.showManualAddressEntry()
+                    connection.showManualAddressEntry()
                 } label: {
                     Label("Enter IP Address", systemImage: "number")
                 }
 
-                if viewModel.showAddressEntry {
+                if connection.showAddressEntry {
                     Text("RSVP Nano was not found at http://192.168.4.1. If the reader shows a different address, enter it here.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    TextField("Reader address or IP", text: $viewModel.address)
+                    TextField("Reader address or IP", text: $connection.address)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
 
                     Button {
-                        viewModel.connect()
+                        connection.connect()
                     } label: {
                         Label("Connect to This Address", systemImage: "network")
                     }
-                    .disabled(viewModel.isBusy)
+                    .disabled(connection.isBusy)
                 }
             }
 
             Section {
                 HStack {
-                    if viewModel.isBusy {
+                    if connection.isBusy {
                         ProgressView()
                     }
-                    Text(viewModel.status)
+                    Text(connection.status)
                         .foregroundStyle(.secondary)
                 }
 
-                if viewModel.hasAttemptedConnection, let error = viewModel.lastConnectionError {
+                if connection.hasAttemptedConnection, let error = connection.lastConnectionError {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(.secondary)
