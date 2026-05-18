@@ -62,6 +62,20 @@ class RsvpParityTest {
     }
 
     @Test
+    fun textToRsvpMatchesGoldenVector() {
+        val file = RsvpConverter.rsvpFile(
+            title = "Basic Text Vector",
+            source = "basic-text-input.txt",
+            text = BASIC_TEXT_INPUT,
+        )
+
+        assertEquals("Basic Text Vector.rsvp", file.filename)
+        assertEquals(6, file.wordCount)
+        assertEquals(2, file.chapterCount)
+        assertEquals(BASIC_TEXT_EXPECTED_RSVP, file.data.decodeToString())
+    }
+
+    @Test
     fun epubConversionIsStillExplicitlyUnsupported() {
         assertFailsWith<RsvpConversionError> {
             RsvpConverter.bookFile(byteArrayOf(), "sample.epub")
@@ -83,5 +97,32 @@ class RsvpParityTest {
 
         assertEquals("Story Title", article.title)
         assertEquals("Hello reader.", article.text)
+    }
+
+    private companion object {
+        // Mirrors docs/test-vectors/basic-text-input.txt. Keep commonTest free of JVM-only file APIs.
+        private val BASIC_TEXT_INPUT = """
+            Chapter 1
+
+            Hello reader.
+
+            # Chapter 2
+            @directive-looking text stays readable.
+        """.trimIndent()
+
+        // Mirrors docs/test-vectors/basic-text-expected.rsvp.
+        private val BASIC_TEXT_EXPECTED_RSVP = """
+            @rsvp 1
+            @title Basic Text Vector
+            @source basic-text-input.txt
+
+            @chapter Chapter 1
+            Hello reader.
+
+            @chapter Chapter 2
+
+            @para
+            @@directive-looking text stays readable.
+        """.trimIndent() + "\n"
     }
 }
