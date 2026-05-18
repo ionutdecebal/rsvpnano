@@ -48,6 +48,10 @@ data class RsvpSharedDependencies(
         )
     }
 
+    fun createRssFeedService(): RssFeedService {
+        return RssFeedService(JsonRssFeedStore(rssFeedStorage))
+    }
+
     fun createDeviceSyncService(): NanoDeviceSyncService {
         val client = nanoClient ?: throw IllegalStateException("NanoClient not provided to dependencies")
         return NanoDeviceSyncService(client)
@@ -58,13 +62,13 @@ data class RsvpSharedDependencies(
     }
 
     fun createCompanionController(
-        facade: RsvpSharedFacade = createFacade(),
         draftService: PendingDraftService = createPendingDraftService(),
+        rssFeedService: RssFeedService = createRssFeedService(),
     ): NanoCompanionController {
         val client = nanoClient ?: throw IllegalStateException("NanoClient not provided to dependencies")
         return NanoCompanionController(
-            facade = facade,
             draftService = draftService,
+            rssFeedService = rssFeedService,
             deviceSyncService = NanoDeviceSyncService(client),
             client = client,
         )

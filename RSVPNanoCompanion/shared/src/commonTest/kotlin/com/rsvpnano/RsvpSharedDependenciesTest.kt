@@ -22,7 +22,9 @@ class RsvpSharedDependenciesTest {
 
         assertNotNull(dependencies.createFacade())
         assertNotNull(dependencies.createPendingDraftService())
+        assertNotNull(dependencies.createRssFeedService())
         assertNotNull(dependencies.createApp().facade)
         assertNotNull(dependencies.createApp().pendingDraftService)
+        assertNotNull(dependencies.createApp().rssFeedService)
     }
 }

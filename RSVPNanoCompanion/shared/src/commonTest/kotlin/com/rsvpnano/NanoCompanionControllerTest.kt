@@ -4,7 +4,7 @@ import com.rsvpnano.api.NanoClient
 import com.rsvpnano.app.NanoCompanionController
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.PendingDraftService
-import com.rsvpnano.app.RsvpSharedFacade
+import com.rsvpnano.app.RssFeedService
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoInfo
@@ -206,15 +206,11 @@ class NanoCompanionControllerTest {
         rssStore: RssFeedStore,
         client: NanoClient,
     ): NanoCompanionController {
-        val facade = RsvpSharedFacade(
-            pendingUploadStore = pendingStore,
-            rssFeedStore = rssStore,
-        )
         return NanoCompanionController(
-            facade = facade,
             draftService = PendingDraftService(
                 repository = PendingUploadRepository(pendingStore),
             ),
+            rssFeedService = RssFeedService(rssStore),
             deviceSyncService = NanoDeviceSyncService(client),
             client = client,
         )

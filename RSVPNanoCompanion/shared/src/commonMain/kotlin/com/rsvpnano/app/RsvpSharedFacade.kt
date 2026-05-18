@@ -28,6 +28,7 @@ class RsvpSharedFacade(
         articleService = articleService,
         articleFetchClient = articleFetchClient,
     )
+    private val rssFeedService: RssFeedService = RssFeedService(syncCoordinator)
 
     suspend fun fetchArticle(title: String, source: String): SharedArticle = draftService.fetchArticle(title, source)
 
@@ -49,12 +50,12 @@ class RsvpSharedFacade(
         draftService.deleteDrafts(ids)
     }
 
-    suspend fun loadRssFeeds(): List<String> = syncCoordinator.loadRssFeeds()
+    suspend fun loadRssFeeds(): List<String> = rssFeedService.loadRssFeeds()
 
-    suspend fun saveRssFeeds(localFeeds: List<String>): List<String> = syncCoordinator.saveRssFeeds(localFeeds)
+    suspend fun saveRssFeeds(localFeeds: List<String>): List<String> = rssFeedService.saveRssFeeds(localFeeds)
 
     fun mergeRssFeeds(localFeeds: List<String>, deviceFeeds: List<String>): List<String> =
-        syncCoordinator.mergeRssFeeds(localFeeds, deviceFeeds)
+        rssFeedService.mergeRssFeeds(localFeeds, deviceFeeds)
 
     fun needsArticleFetch(item: PendingUpload): Boolean = draftService.needsArticleFetch(item)
 
