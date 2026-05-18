@@ -31,35 +31,31 @@ extension shared.NanoBook: Identifiable {
     }
 }
 
-struct PendingUpload: Identifiable {
-    let id: UUID
-    let title: String
-    let source: String
-    let body: String
-    let createdAt: Date
-
+extension shared.PendingUpload: Identifiable {
     var bytes: Int {
         Data(body.utf8).count
     }
 
-    var needsArticleFetch: Bool {
-        guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()) else {
-            return false
-        }
-        return body.trimmingCharacters(in: .whitespacesAndNewlines) == source.trimmingCharacters(in: .whitespacesAndNewlines)
+    var byteLabel: String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
-    init(id: UUID = UUID(), title: String, source: String, body: String, createdAt: Date = Date()) {
-        self.id = id
-        self.title = title
-        self.source = source
-        self.body = body
-        self.createdAt = createdAt
+    var displayDate: String {
+        shared.SharedAppUtils.shared.formatCreatedAt(iso8601: createdAt)
+    }
+
+    var needsArticleFetch: Bool {
+        guard let sourceUrl = sourceUrl,
+              ["http", "https"].contains(URL(string: sourceUrl)?.scheme?.lowercased()) else {
+            return false
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines) == sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 // Keep Swift UI code concise while shared remains the source of truth.
 typealias NanoInfo = shared.NanoInfo
 typealias NanoBook = shared.NanoBook
+typealias PendingUpload = shared.PendingUpload
 typealias NanoWifiSettings = shared.NanoWifiSettings
 typealias NanoSettings = shared.NanoSettings

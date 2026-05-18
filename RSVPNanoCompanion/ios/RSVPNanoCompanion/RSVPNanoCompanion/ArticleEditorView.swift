@@ -31,9 +31,9 @@ struct ArticleEditorView: View {
                     TextField("Article title", text: $title)
                 }
 
-                if !item.source.isEmpty {
+                if let sourceUrl = item.sourceUrl, !sourceUrl.isEmpty {
                     Section("Source") {
-                        Text(item.source)
+                        Text(sourceUrl)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)

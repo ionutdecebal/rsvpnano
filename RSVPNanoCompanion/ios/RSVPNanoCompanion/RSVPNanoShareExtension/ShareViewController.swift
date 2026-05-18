@@ -5,7 +5,6 @@ import shared
 final class ShareViewController: UIViewController {
     private static let maxSharedTextCharacters = 300_000
     private let companionController = IosSharedWiringKt.createIosCompanionController(appGroupIdentifier: SharedInbox.appGroupIdentifier)
-    private let sharedDateFormatter = ISO8601DateFormatter()
 
     private let titleField = UITextField()
     private let sourceLabel = UILabel()
@@ -247,11 +246,16 @@ final class ShareViewController: UIViewController {
         }
 
         let title = titleField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        var text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty, sourceIsURL {
-            text = sharedSource
-        }
-        guard !text.isEmpty else {
+        let text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = sharedSource.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let pending = shared.ImportPreparation.shared.prepareSharedImport(
+            id: UUID().uuidString,
+            title: title,
+            text: text,
+            source: source,
+            createdAt: shared.SharedAppUtils.shared.nowIso8601()
+        ) else {
             statusLabel.text = "Add some text before saving."
             return
         }
@@ -261,28 +265,6 @@ final class ShareViewController: UIViewController {
 
         Task {
             do {
-                sharedDateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let createdAt = sharedDateFormatter.string(from: Date())
-                let source = sharedSource.trimmingCharacters(in: .whitespacesAndNewlines)
-                let pending: shared.PendingUpload
-                if sourceIsURL {
-                    pending = shared.ImportPreparation.shared.pendingUploadForUrl(
-                        id: UUID().uuidString,
-                        title: title,
-                        source: source,
-                        host: URL(string: source)?.host ?? "",
-                        createdAt: createdAt
-                    )
-                } else {
-                    pending = shared.ImportPreparation.shared.pendingUploadForText(
-                        id: UUID().uuidString,
-                        title: title,
-                        source: source,
-                        text: text,
-                        createdAt: createdAt,
-                        fallbackTitle: "Shared Article"
-                    )
-                }
                 let snapshot = try await companionController.saveDraft(item: pending)
                 let savedCount = snapshot.drafts.count
                 let bytes = Data(text.utf8).count

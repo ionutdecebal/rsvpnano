@@ -4,12 +4,9 @@ import shared
 
 @MainActor
 final class NanoViewModel: ObservableObject {
-    private static let defaultDeviceAddress = "http://192.168.4.1"
     private let companionController = IosSharedWiringKt.createIosCompanionController(appGroupIdentifier: SharedInbox.appGroupIdentifier)
-    private let sharedDateFormatter = ISO8601DateFormatter()
-    private let sharedFallbackDateFormatter = ISO8601DateFormatter()
 
-    @Published var address = NanoViewModel.defaultDeviceAddress
+    @Published var address = shared.SharedAppUtils.shared.DEFAULT_DEVICE_ADDRESS
     @Published var info: NanoInfo?
     @Published var books: [NanoBook] = []
     @Published var deviceSettings: NanoSettings?
@@ -41,23 +38,10 @@ final class NanoViewModel: ObservableObject {
         isConnected && !isBusy && !pendingUploads.isEmpty
     }
 
-    var librarySummary: String {
-        let articleCount = books.filter(\.isArticle).count
-        let bookCount = books.count - articleCount
-        let bookLabel = bookCount == 1 ? "book" : "books"
-        let articleLabel = articleCount == 1 ? "article" : "articles"
-        let knownProgressCount = books.filter { $0.progressPercent != nil }.count
-        let base = "\(bookCount) \(bookLabel) · \(articleCount) \(articleLabel)"
-        if knownProgressCount > 0 {
-            return "\(base) · \(knownProgressCount) with saved progress"
-        }
-        return base
-    }
-
     func startAutoConnect() async {
         do {
             let local = try await companionController.refreshLocal()
-            pendingUploads = local.drafts.map(pendingUpload(from:))
+            pendingUploads = local.drafts
             rssFeeds = local.rssFeeds
             _ = await connectOnce(showBusy: false)
         } catch {
@@ -77,7 +61,7 @@ final class NanoViewModel: ObservableObject {
     }
 
     func connectDefault(showBusy: Bool = true) {
-        address = Self.defaultDeviceAddress
+        address = shared.SharedAppUtils.shared.DEFAULT_DEVICE_ADDRESS
         connect(showBusy: showBusy)
     }
 
@@ -97,7 +81,7 @@ final class NanoViewModel: ObservableObject {
                 }
                 self.syncedRssFeeds = snapshot.syncedRssFeeds
                 self.rssFeeds = snapshot.rssFeeds
-                self.pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+                self.pendingUploads = snapshot.drafts
                 self.status = "Library refreshed from the SD card."
             }
         }
@@ -287,7 +271,7 @@ final class NanoViewModel: ObservableObject {
     func refreshPendingUploads() async {
         do {
             let snapshot = try await companionController.refreshDrafts()
-            pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+            pendingUploads = snapshot.drafts
         } catch {
             lastConnectionError = error.localizedDescription
             pendingUploads = []
@@ -297,7 +281,7 @@ final class NanoViewModel: ObservableObject {
     func handleSharedInboxOpen() {
         Task {
             await refreshPendingUploads()
-            guard let item = pendingUploads.first(where: { $0.needsArticleFetch }) else {
+            guard let item = pendingUploads.first(where: { companionController.needsArticleFetch(item: $0) }) else {
                 status = "Saved article ready to edit or sync."
                 return
             }
@@ -310,8 +294,8 @@ final class NanoViewModel: ObservableObject {
             isBusy = true
             status = "Fetching article text"
             do {
-                let snapshot = try await companionController.fetchArticle(item: sharedPendingUpload(from: item))
-                pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+                let snapshot = try await companionController.fetchArticle(item: item)
+                pendingUploads = snapshot.drafts
                 lastConnectionError = nil
                 status = "Fetched article text for \(snapshot.article.title)."
             } catch {
@@ -326,11 +310,11 @@ final class NanoViewModel: ObservableObject {
         Task {
             do {
                 let snapshot = try await companionController.updateDraft(
-                    item: sharedPendingUpload(from: item),
+                    item: item,
                     title: title,
                     body: body
                 )
-                pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+                pendingUploads = snapshot.drafts
                 editingArticle = nil
                 lastConnectionError = nil
                 status = "Saved \(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.title : title)."
@@ -350,9 +334,9 @@ final class NanoViewModel: ObservableObject {
             ) { [self] in
                 let snapshot = try await companionController.syncPendingUploads(
                     baseUrl: self.address,
-                    items: items.map(sharedPendingUpload(from:))
+                    items: items
                 )
-                self.pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+                self.pendingUploads = snapshot.drafts
                 self.books = snapshot.books
                 self.status = items.count == 1 ? "Synced \(items[0].title)." : "Synced saved articles."
             }
@@ -364,9 +348,9 @@ final class NanoViewModel: ObservableObject {
             await run("Syncing \(item.title)", requiresConnection: true) { [self] in
                 let snapshot = try await companionController.syncPendingUploads(
                     baseUrl: self.address,
-                    items: [self.sharedPendingUpload(from: item)]
+                    items: [item]
                 )
-                self.pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+                self.pendingUploads = snapshot.drafts
                 self.books = snapshot.books
                 self.status = "Synced \(item.title)."
             }
@@ -377,10 +361,10 @@ final class NanoViewModel: ObservableObject {
         Task {
             do {
                 let ids = offsets.compactMap { index in
-                    index < pendingUploads.count ? pendingUploads[index].id.uuidString : nil
+                    index < pendingUploads.count ? pendingUploads[index].id : nil
                 }
                 let snapshot = try await companionController.deleteDrafts(ids: ids)
-                pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+                pendingUploads = snapshot.drafts
             } catch {
                 lastConnectionError = error.localizedDescription
             }
@@ -423,9 +407,9 @@ final class NanoViewModel: ObservableObject {
             lastConnectionError = error.localizedDescription
             if requiresConnection {
                 markDisconnected("Reader disconnected. Reconnect to RSVP Nano before continuing.")
-            } else if !isConnected && normalizedAddress(address) == Self.defaultDeviceAddress {
+            } else if !isConnected && normalizedAddress(address) == shared.SharedAppUtils.shared.DEFAULT_DEVICE_ADDRESS {
                 showAddressEntry = true
-                status = "Could not find RSVP Nano at \(Self.defaultDeviceAddress). Check the Nano Wi-Fi, or enter the address shown on the reader."
+                status = "Could not find RSVP Nano at \(shared.SharedAppUtils.shared.DEFAULT_DEVICE_ADDRESS). Check the Nano Wi-Fi, or enter the address shown on the reader."
             } else {
                 status = isConnected ? "Connected, but the last request failed." : "Still waiting for RSVP Nano Wi-Fi."
             }
@@ -446,10 +430,10 @@ final class NanoViewModel: ObservableObject {
         }
         self.rssFeeds = snapshot.rssFeeds
         self.syncedRssFeeds = snapshot.syncedRssFeeds
-        self.pendingUploads = snapshot.drafts.map(pendingUpload(from:))
+        self.pendingUploads = snapshot.drafts
         self.lastConnectionError = nil
         self.showAddressEntry = false
-        self.status = "Connected to \(self.info?.name ?? "RSVP Nano"). Reading /books."
+        self.status = "Connected to \(self.info?.name ?? "RSVP Nano"). \(device.summaryText)"
     }
 
     private func markDisconnected(_ message: String) {
@@ -458,7 +442,7 @@ final class NanoViewModel: ObservableObject {
         deviceSettings = nil
         wifiSettings = nil
         lastConnectionError = message
-        showAddressEntry = normalizedAddress(address) == Self.defaultDeviceAddress
+        showAddressEntry = normalizedAddress(address) == shared.SharedAppUtils.shared.DEFAULT_DEVICE_ADDRESS
         status = message
     }
 
@@ -478,43 +462,7 @@ final class NanoViewModel: ObservableObject {
     }
 
     private func normalizedAddress(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return Self.defaultDeviceAddress
-        }
-        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
-            return trimmed
-        }
-        return "http://\(trimmed)"
-    }
-
-    private func sharedPendingUpload(from item: PendingUpload) -> shared.PendingUpload {
-        let source = item.source.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sourceUrl = source.isEmpty ? nil : source
-        sharedDateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let createdAt = sharedDateFormatter.string(from: item.createdAt)
-        return shared.PendingUpload(
-            id: item.id.uuidString,
-            title: item.title,
-            sourceUrl: sourceUrl,
-            body: item.body,
-            createdAt: createdAt
-        )
-    }
-
-    private func pendingUpload(from item: shared.PendingUpload) -> PendingUpload {
-        sharedDateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        sharedFallbackDateFormatter.formatOptions = [.withInternetDateTime]
-        let createdAt = sharedDateFormatter.date(from: item.createdAt)
-            ?? sharedFallbackDateFormatter.date(from: item.createdAt)
-            ?? Date()
-        return PendingUpload(
-            id: UUID(uuidString: item.id) ?? UUID(),
-            title: item.title,
-            source: item.sourceUrl ?? "",
-            body: item.body,
-            createdAt: createdAt
-        )
+        return shared.SharedAppUtils.shared.normalizedAddress(value: value)
     }
 
     private func kotlinByteArray(from data: Data) -> KotlinByteArray {

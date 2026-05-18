@@ -44,7 +44,7 @@ struct ArticlesPage: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.title)
                                 .foregroundStyle(.primary)
-                            Text(pendingDetailLabel(for: item))
+                            Text("\(item.displayDate) · \(pendingDetailLabel(for: item))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -201,9 +201,9 @@ struct ArticlesPage: View {
         let size = ByteCountFormatter.string(fromByteCount: Int64(item.bytes), countStyle: .file)
         let words = item.body.split { $0.isWhitespace }.count
         let detail = item.needsArticleFetch ? "link saved" : (words == 1 ? "\(words) word" : "\(words) words")
-        if item.source.isEmpty {
+        guard let sourceUrl = item.sourceUrl, !sourceUrl.isEmpty else {
             return "\(detail) · \(size)"
         }
-        return "\(detail) · \(size) · \(item.source)"
+        return "\(detail) · \(size) · \(sourceUrl)"
     }
 }
