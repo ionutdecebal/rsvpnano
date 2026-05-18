@@ -112,6 +112,34 @@ class NanoCompanionController(
         return CompanionBooksSnapshot(books = deviceSyncService.refreshBooks(baseUrl))
     }
 
+    suspend fun refreshSettings(baseUrl: String): CompanionSettingsSnapshot {
+        return CompanionSettingsSnapshot(
+            settings = deviceSyncService.refreshSettings(baseUrl),
+            wifiSettings = runCatching { deviceSyncService.refreshWifiSettings(baseUrl) }.getOrNull(),
+        )
+    }
+
+    suspend fun saveSettings(baseUrl: String, settings: NanoSettings): CompanionSettingsSnapshot {
+        return CompanionSettingsSnapshot(
+            settings = deviceSyncService.saveSettings(baseUrl, settings),
+            wifiSettings = null,
+        )
+    }
+
+    suspend fun refreshWifiSettings(baseUrl: String): CompanionWifiSnapshot {
+        return CompanionWifiSnapshot(wifiSettings = deviceSyncService.refreshWifiSettings(baseUrl))
+    }
+
+    suspend fun saveWifiSettings(baseUrl: String, ssid: String, password: String): CompanionWifiSnapshot {
+        return CompanionWifiSnapshot(
+            wifiSettings = deviceSyncService.saveWifiSettings(baseUrl, ssid, password),
+        )
+    }
+
+    suspend fun clearWifiSettings(baseUrl: String): CompanionWifiSnapshot {
+        return CompanionWifiSnapshot(wifiSettings = deviceSyncService.clearWifiSettings(baseUrl))
+    }
+
     private suspend fun saveMergedRssFeeds(localFeeds: List<String>, deviceFeeds: List<String>): List<String> {
         return facade.saveRssFeeds(
             facade.mergeRssFeeds(
@@ -156,4 +184,13 @@ data class CompanionRssSnapshot(
 
 data class CompanionBooksSnapshot(
     val books: List<NanoBook>,
+)
+
+data class CompanionSettingsSnapshot(
+    val settings: NanoSettings,
+    val wifiSettings: NanoWifiSettings?,
+)
+
+data class CompanionWifiSnapshot(
+    val wifiSettings: NanoWifiSettings,
 )

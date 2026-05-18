@@ -130,8 +130,9 @@ class CompanionViewModel(
                 display = currentSettings.display.copy(brightnessIndex = brightness),
             )
             setStatus("Saving reader settings...")
-            runCatching { deviceSyncService.saveSettings(state.address, settings) }
-                .onSuccess { saved ->
+            runCatching { companionController.saveSettings(state.address, settings) }
+                .onSuccess { snapshot ->
+                    val saved = snapshot.settings
                     updateState {
                         it.copy(
                             settings = saved,
@@ -158,8 +159,9 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Saving Wi-Fi settings...")
-            runCatching { deviceSyncService.saveWifiSettings(state.address, ssid, state.wifiPasswordDraft) }
-                .onSuccess { wifi ->
+            runCatching { companionController.saveWifiSettings(state.address, ssid, state.wifiPasswordDraft) }
+                .onSuccess { snapshot ->
+                    val wifi = snapshot.wifiSettings
                     updateState {
                         it.copy(
                             wifiSettings = wifi,
@@ -181,8 +183,9 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Clearing Wi-Fi settings...")
-            runCatching { deviceSyncService.clearWifiSettings(state.address) }
-                .onSuccess { wifi ->
+            runCatching { companionController.clearWifiSettings(state.address) }
+                .onSuccess { snapshot ->
+                    val wifi = snapshot.wifiSettings
                     updateState {
                         it.copy(
                             wifiSettings = wifi,

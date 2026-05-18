@@ -95,8 +95,9 @@ final class NanoViewModel: ObservableObject {
     func refreshSettings() {
         Task {
             await run("Reading settings") { [self] in
-                self.deviceSettings = try await deviceSyncService.refreshSettings(baseUrl: self.address)
-                if let wifi = try? await deviceSyncService.refreshWifiSettings(baseUrl: self.address) {
+                let snapshot = try await companionController.refreshSettings(baseUrl: self.address)
+                self.deviceSettings = snapshot.settings
+                if let wifi = snapshot.wifiSettings {
                     self.applyWifiSettings(wifi)
                 }
                 self.status = "Device settings refreshed."
@@ -108,7 +109,7 @@ final class NanoViewModel: ObservableObject {
         Task {
             await run("Saving settings") { [self] in
                 let next = settings.withAccurateTimeEstimate(value: true)
-                self.deviceSettings = try await deviceSyncService.saveSettings(baseUrl: self.address, settings: next)
+                self.deviceSettings = try await companionController.saveSettings(baseUrl: self.address, settings: next).settings
                 self.status = "Device settings saved. Exit sync on the reader to apply all changes."
             }
         }
@@ -117,7 +118,7 @@ final class NanoViewModel: ObservableObject {
     func refreshWifiSettings() {
         Task {
             await run("Reading Wi-Fi settings") { [self] in
-                self.applyWifiSettings(try await deviceSyncService.refreshWifiSettings(baseUrl: self.address))
+                self.applyWifiSettings(try await companionController.refreshWifiSettings(baseUrl: self.address).wifiSettings)
                 self.status = "Wi-Fi settings refreshed."
             }
         }
@@ -132,7 +133,11 @@ final class NanoViewModel: ObservableObject {
         }
         Task {
             await run("Saving Wi-Fi") { [self] in
-                let wifi = try await deviceSyncService.saveWifiSettings(baseUrl: self.address, ssid: ssid, password: self.wifiPasswordDraft)
+                let wifi = try await companionController.saveWifiSettings(
+                    baseUrl: self.address,
+                    ssid: ssid,
+                    password: self.wifiPasswordDraft
+                ).wifiSettings
                 self.applyWifiSettings(wifi)
                 self.status = "Wi-Fi saved for RSS and OTA."
             }
@@ -142,7 +147,7 @@ final class NanoViewModel: ObservableObject {
     func forgetWifiSettings() {
         Task {
             await run("Clearing Wi-Fi") { [self] in
-                self.applyWifiSettings(try await deviceSyncService.clearWifiSettings(baseUrl: self.address))
+                self.applyWifiSettings(try await companionController.clearWifiSettings(baseUrl: self.address).wifiSettings)
                 self.status = "Wi-Fi credentials cleared."
             }
         }

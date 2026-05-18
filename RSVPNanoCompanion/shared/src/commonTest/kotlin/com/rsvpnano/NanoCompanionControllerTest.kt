@@ -133,6 +133,39 @@ class NanoCompanionControllerTest {
         assertEquals(emptyList(), snapshot.books)
     }
 
+    @Test
+    fun saveSettingsPersistsDeviceSettings() = runBlocking {
+        val client = RecordingNanoClient()
+        val controller = controller(InMemoryPendingStore(), InMemoryRssStore(), client)
+        val settings = sampleSettings().withWpm(320).withBrightnessIndex(3)
+
+        val snapshot = controller.saveSettings(
+            baseUrl = "http://device.local",
+            settings = settings,
+        )
+
+        assertEquals(settings, client.savedSettings)
+        assertEquals(settings, snapshot.settings)
+        assertEquals(null, snapshot.wifiSettings)
+    }
+
+    @Test
+    fun wifiMutationsReturnUpdatedWifiSnapshot() = runBlocking {
+        val client = RecordingNanoClient()
+        val controller = controller(InMemoryPendingStore(), InMemoryRssStore(), client)
+
+        val saved = controller.saveWifiSettings(
+            baseUrl = "http://device.local",
+            ssid = "Home",
+            password = "secret",
+        )
+        val cleared = controller.clearWifiSettings(baseUrl = "http://device.local")
+
+        assertEquals("Home" to "secret", client.savedWifi)
+        assertEquals(NanoWifiSettings(ok = true, configured = true, ssid = "Home", passwordSet = true), saved.wifiSettings)
+        assertEquals(NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false), cleared.wifiSettings)
+    }
+
     private fun controller(
         pendingStore: PendingUploadStore,
         rssStore: RssFeedStore,
@@ -165,6 +198,8 @@ class NanoCompanionControllerTest {
         var uploadedFilename: String? = null
         var uploadedCategory: String? = null
         var savedFeeds: List<String>? = null
+        var savedSettings: NanoSettings? = null
+        var savedWifi: Pair<String, String>? = null
         val deletedFilenames = mutableListOf<String>()
 
         override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
@@ -173,13 +208,18 @@ class NanoCompanionControllerTest {
 
         override suspend fun fetchSettings(baseUrl: String): NanoSettings = sampleSettings()
 
-        override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings = settings
+        override suspend fun updateSettings(baseUrl: String, settings: NanoSettings): NanoSettings {
+            savedSettings = settings
+            return settings
+        }
 
         override suspend fun fetchWifiSettings(baseUrl: String): NanoWifiSettings =
             NanoWifiSettings(ok = true, configured = true, ssid = "RSVP", passwordSet = false)
 
-        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings =
-            NanoWifiSettings(ok = true, configured = true, ssid = ssid, passwordSet = true)
+        override suspend fun updateWifi(baseUrl: String, ssid: String, password: String): NanoWifiSettings {
+            savedWifi = ssid to password
+            return NanoWifiSettings(ok = true, configured = true, ssid = ssid, passwordSet = true)
+        }
 
         override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings =
             NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
