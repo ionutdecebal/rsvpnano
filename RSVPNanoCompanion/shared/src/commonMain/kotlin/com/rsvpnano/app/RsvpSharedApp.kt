@@ -10,7 +10,6 @@ import com.rsvpnano.persistence.PendingUploadRepository
  */
 class RsvpSharedApp internal constructor(
     private val dependencies: RsvpSharedDependencies,
-    val facade: RsvpSharedFacade = dependencies.createFacade(),
     val pendingUploadRepository: PendingUploadRepository = dependencies.createPendingUploadRepository(),
     val pendingDraftService: PendingDraftService = dependencies.createPendingDraftService(),
     val rssFeedService: RssFeedService = dependencies.createRssFeedService(),

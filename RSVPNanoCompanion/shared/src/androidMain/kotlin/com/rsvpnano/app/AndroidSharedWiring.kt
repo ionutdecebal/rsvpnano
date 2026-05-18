@@ -31,12 +31,6 @@ fun createAndroidSharedDependencies(
     )
 }
 
-fun createAndroidSharedFacade(
-    appFilesDir: File,
-): RsvpSharedFacade {
-    return createAndroidSharedDependencies(appFilesDir).createFacade()
-}
-
 fun createAndroidSharedApp(
     appFilesDir: File,
 ): RsvpSharedApp {

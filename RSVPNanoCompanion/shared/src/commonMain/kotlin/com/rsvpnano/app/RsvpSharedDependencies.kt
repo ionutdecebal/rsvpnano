@@ -24,14 +24,6 @@ data class RsvpSharedDependencies(
         return RsvpSharedApp(this)
     }
 
-    fun createFacade(): RsvpSharedFacade {
-        return RsvpSharedFacade(
-            pendingUploadStore = PendingUploadJsonStore(pendingUploadStorage),
-            rssFeedStore = JsonRssFeedStore(rssFeedStorage),
-            articleFetchClient = articleFetchClient,
-        )
-    }
-
     fun createPendingUploadRepository(): PendingUploadRepository {
         return PendingUploadRepository(PendingUploadJsonStore(pendingUploadStorage))
     }

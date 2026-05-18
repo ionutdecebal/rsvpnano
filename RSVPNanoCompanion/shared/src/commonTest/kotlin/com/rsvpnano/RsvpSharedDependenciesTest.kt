@@ -8,7 +8,7 @@ import kotlin.test.assertNotNull
 
 class RsvpSharedDependenciesTest {
     @Test
-    fun canCreateFacadeFromStorageBackends() {
+    fun canCreateDependenciesFromStorageBackends() {
         val dependencies = RsvpSharedDependencies(
             pendingUploadStorage = object : PendingUploadStorage {
                 override suspend fun readText(): String? = null
@@ -20,10 +20,8 @@ class RsvpSharedDependenciesTest {
             },
         )
 
-        assertNotNull(dependencies.createFacade())
         assertNotNull(dependencies.createPendingDraftService())
         assertNotNull(dependencies.createRssFeedService())
-        assertNotNull(dependencies.createApp().facade)
         assertNotNull(dependencies.createApp().pendingDraftService)
         assertNotNull(dependencies.createApp().rssFeedService)
     }

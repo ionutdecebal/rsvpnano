@@ -31,12 +31,6 @@ fun createIosSharedDependencies(
     )
 }
 
-fun createIosSharedFacade(
-    appGroupIdentifier: String = DefaultAppGroupIdentifier,
-): RsvpSharedFacade {
-    return createIosSharedDependencies(appGroupIdentifier).createFacade()
-}
-
 fun createIosSharedApp(
     appGroupIdentifier: String = DefaultAppGroupIdentifier,
 ): RsvpSharedApp {
