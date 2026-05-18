@@ -1,5 +1,8 @@
 name: CI - Android
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     paths:
@@ -45,5 +48,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: shared-artifacts
-          path: RSVPNanoCompanion/shared/build/libs
+          name: android-debug-apk
+          path: RSVPNanoCompanion/androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
