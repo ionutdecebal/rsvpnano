@@ -17,10 +17,10 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
 1. Create KMP module: `shared` (Gradle Kotlin Multiplatform). Define `commonMain`, `iosMain`, `androidMain`.
 2. Implement models in `commonMain` with `kotlinx.serialization` (map from `Models.swift` to `RSVPNanoCompanion/shared/src/commonMain/.../NanoModels.kt`).
 3. Port text & EPUB logic to `commonMain`:
-   - Port `RsvpConverter.swift` → `RsvpConverter.kt` and `RsvpWriter.kt` (exact binary parity tests required).
-   - Port `EpubConverter.swift` → `EpubConverter.kt` (use `java.util.zip` / platform zip libs).
-   - Port `ArticleFormatter.swift` → `ArticleFormatter.kt`.
-4. Implement `NanoClient` in `commonMain` using Ktor (map endpoints from `NanoClient.swift`).
+   - `RsvpConverter.kt` and `RsvpWriter.kt` now own RSVP conversion/writing in shared (exact binary parity tests required).
+   - `EpubConverter.kt` now owns EPUB conversion through platform ZIP adapters.
+   - `ArticleFormatter.kt` now owns readable article formatting in shared.
+4. Implement `NanoClient` in `commonMain` using Ktor.
 5. Define persistence interfaces in `commonMain` (`PendingUploadStore`, `RssFeedStore`) and provide `expect/actual` implementations:
    - `iosMain` uses FileManager + App Group and UserDefaults.
    - `androidMain` uses `Context` + SharedPreferences / Room.
@@ -55,7 +55,7 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
 - Highest remaining product gaps are iOS CI/macOS verification, manual device smoke testing on Android and iOS, broader converter parity vectors, and UI/UX styling.
 
 **Refactor Backlog**
-1. Remove stale Swift converter target references and any unused Swift converter files once shared converter usage is confirmed by iOS CI.
+1. Remove stale Swift converter target references and any unused Swift converter files once shared converter usage is confirmed by iOS CI. Target references are removed; physical files are already absent from the iOS source folder.
 2. Split `ContentView.swift` into focused SwiftUI views: connection, library, articles, RSS, settings, help, and article editor.
 3. Split `NanoViewModel.swift` by responsibility if Swift-side orchestration remains: connection/device state, settings/RSS, drafts/articles, and Swift/Kotlin conversion helpers.
 4. Keep shrinking platform ViewModels so they map shared snapshots to UI state only; business rules should stay in shared services/controllers.
@@ -66,15 +66,11 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
 **Relevant files**
 - [RSVPNanoCompanion/ios/RSVPNanoCompanion/ContentView.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/ContentView.swift) — main UI + `NanoViewModel` to adapt to shared `SyncManager`.
 - [RSVPNanoCompanion/ios/RSVPNanoCompanion/Models.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/Models.swift) — source of DTOs to port.
-- [RSVPNanoCompanion/ios/RSVPNanoCompanion/NanoClient.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/NanoClient.swift) — REST endpoints to implement with Ktor.
 - [RSVPNanoCompanion/ios/RSVPNanoCompanion/PendingUploadStore.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/PendingUploadStore.swift) — thin Swift UI model/app-group constants; storage is owned by `shared`.
-- [RSVPNanoCompanion/ios/RSVPNanoCompanion/RsvpConverter.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/RsvpConverter.swift) — complex parser & writer to port to `shared`.
-- [RSVPNanoCompanion/ios/RSVPNanoCompanion/EpubConverter.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/EpubConverter.swift) — EPUB parsing to port.
-- [RSVPNanoCompanion/ios/RSVPNanoCompanion/ArticleFormatter.swift](RSVPNanoCompanion/ios/RSVPNanoCompanion/ArticleFormatter.swift) — HTML extraction logic to port.
 - [RSVPNanoCompanion/ios/RSVPNanoShareExtension/ShareViewController.swift](RSVPNanoCompanion/ios/RSVPNanoShareExtension/ShareViewController.swift) — keep Swift, call into `shared` converters.
 
 **Verification**
-1. Unit tests in `RSVPNanoCompanion/shared/commonTest` for `RsvpConverter`, `EpubConverter`, and `ArticleFormatter` matching Swift outputs.
+1. Unit tests in `RSVPNanoCompanion/shared/commonTest` for `RsvpConverter`, `EpubConverter`, and `ArticleFormatter`, with golden vectors for output stability.
 2. Binary parity: Android/JVM unit tests currently verify byte-for-byte pass-through for `RSVPNanoCompanion/docs/demo-books/european-letter-demo.rsvp`; add EPUB-to-RSVP golden vectors as sample EPUBs become available.
 3. Manual app smoke test on iOS: integrate `shared` framework, run app, upload book to device using existing pairing flow.
 4. Android smoke test: simple Compose screens call `shared` SyncManager to list `NanoBook` DTOs (mocked API), and create an RSVP from sample EPUB.

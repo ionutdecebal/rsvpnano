@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
@@ -6,8 +7,13 @@ plugins {
 	id("com.android.library")
 }
 
+@OptIn(ExperimentalKotlinGradlePluginApi::class)
 kotlin {
 	val sharedXcFramework = XCFramework("shared")
+
+	compilerOptions {
+		freeCompilerArgs.add("-Xexpect-actual-classes")
+	}
 
 	androidTarget()
 
