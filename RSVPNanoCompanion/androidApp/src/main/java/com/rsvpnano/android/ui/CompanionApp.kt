@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -33,9 +34,15 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsvpnano.app.RsvpSharedApp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
-fun CompanionApp(sharedApp: RsvpSharedApp) {
+fun CompanionApp(
+    sharedApp: RsvpSharedApp,
+    shareIntent: Intent? = null,
+    onShareIntentHandled: () -> Unit = {},
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val viewModel: CompanionViewModel = viewModel(factory = CompanionViewModel.Factory(sharedApp))
@@ -57,6 +64,14 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(shareIntent) {
+        val intent = shareIntent ?: return@LaunchedEffect
+        val imports = withContext(Dispatchers.IO) { context.sharedImportsFrom(intent) }
+        if (imports.isNotEmpty() || intent.isAndroidShareIntent()) {
+            viewModel.saveSharedImports(imports)
+        }
+        onShareIntentHandled()
     }
 
     MaterialTheme {
@@ -380,6 +395,42 @@ private fun Context.readSelectedFile(uri: Uri): SelectedFile? {
     return SelectedFile(displayName = displayName, data = data)
 }
 
+private fun Context.sharedImportsFrom(intent: Intent): List<SharedImport> {
+    if (!intent.isAndroidShareIntent()) {
+        return emptyList()
+    }
+
+    val preferredTitle = intent.sharedTitle()
+    val imports = mutableListOf<SharedImport>()
+    val sharedText = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+    if (!sharedText.isNullOrEmpty()) {
+        imports += SharedImport(
+            title = preferredTitle,
+            text = sharedText,
+            source = sharedText.takeIf { it.isHttpUrl() }.orEmpty(),
+        )
+    }
+
+    intent.sharedStreamUris().forEach { uri ->
+        readSharedText(uri, preferredTitle)?.let(imports::add)
+    }
+    return imports
+}
+
+private fun Context.readSharedText(uri: Uri, preferredTitle: String): SharedImport? {
+    val displayName = displayNameFor(uri) ?: preferredTitle.ifEmpty { "Shared Text" }
+    val mimeType = contentResolver.getType(uri).orEmpty()
+    if (!mimeType.isTextMimeType() && !displayName.isTextFileName()) {
+        return null
+    }
+    val text = contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: return null
+    return SharedImport(
+        title = preferredTitle.ifEmpty { displayName.substringBeforeLast('.', displayName) },
+        text = text,
+        source = uri.toString(),
+    )
+}
+
 private fun Context.displayNameFor(uri: Uri): String? {
     contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) {
@@ -390,6 +441,53 @@ private fun Context.displayNameFor(uri: Uri): String? {
         }
     }
     return uri.lastPathSegment?.substringAfterLast('/')
+}
+
+private fun Intent.isAndroidShareIntent(): Boolean {
+    return action == Intent.ACTION_SEND || action == Intent.ACTION_SEND_MULTIPLE
+}
+
+private fun Intent.sharedTitle(): String {
+    return getStringExtra(Intent.EXTRA_TITLE)
+        ?: getStringExtra(Intent.EXTRA_SUBJECT)
+        ?: "Shared Text"
+}
+
+private fun Intent.sharedStreamUris(): List<Uri> {
+    val uris = mutableListOf<Uri>()
+    clipData?.let { data ->
+        for (index in 0 until data.itemCount) {
+            data.getItemAt(index).uri?.let(uris::add)
+        }
+    }
+    extraStreamUri()?.let(uris::add)
+    extraStreamUris().forEach(uris::add)
+    return uris.distinctBy { it.toString() }
+}
+
+@Suppress("DEPRECATION")
+private fun Intent.extraStreamUri(): Uri? {
+    return runCatching { getParcelableExtra<Uri>(Intent.EXTRA_STREAM) }.getOrNull()
+}
+
+@Suppress("DEPRECATION")
+private fun Intent.extraStreamUris(): List<Uri> {
+    return runCatching { getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty() }.getOrDefault(emptyList())
+}
+
+private fun String.isHttpUrl(): Boolean {
+    val value = trim()
+    return value.startsWith("http://") || value.startsWith("https://")
+}
+
+private fun String.isTextMimeType(): Boolean = startsWith("text/")
+
+private fun String.isTextFileName(): Boolean {
+    val value = lowercase()
+    return value.endsWith(".txt") ||
+        value.endsWith(".md") ||
+        value.endsWith(".html") ||
+        value.endsWith(".htm")
 }
 
 private fun Context.openWifiSettings() {

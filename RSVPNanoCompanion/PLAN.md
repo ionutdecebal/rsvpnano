@@ -31,7 +31,7 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
    - Keep Share extension Swift-only but call shared converters for formatting.
 8. Implement Android app shell (Compose) that mirrors SwiftUI flows and calls `shared` APIs.
    - Current Android shell uses shared storage, shared Ktor device sync, device book upload/listing/deletion, saved article create/edit/delete, ready text article sync, URL-only article fetching, and RSS add/sync.
-   - Remaining Android gap: add Android share-sheet support so users can Share -> RSVP Nano from browsers/readers/files into the Android app, using Android `ACTION_SEND` / `ACTION_SEND_MULTIPLE` intents, shared `ImportPreparation`, and shared draft storage before sync.
+   - Android share-sheet support now accepts `ACTION_SEND` / `ACTION_SEND_MULTIPLE` text payloads, URLs, and text-file streams, then saves them through shared `ImportPreparation` and shared draft storage before sync.
    - Remaining Android gap: manual device smoke testing on hardware/emulator and UI polish.
 9. Testing and parity verification:
    - Add `commonTest` unit tests for converters and models.
@@ -51,7 +51,7 @@ TL;DR - Move reusable business logic (parsers, converters, models, sync, API cli
 - Shared is now the source of truth for the main business logic: models, converters, Ktor API client, persistence interfaces, RSS/draft/device workflow services, and the app-level controller are in `shared`.
 - The old shared facade pattern has been removed; platform adapters call the focused shared services/controller directly.
 - Android uses shared storage, shared device sync, upload/list/delete, settings, Wi-Fi, RSS, and saved-article workflows.
-- Android still needs a platform share target equivalent to the iOS share extension, so incoming text, URLs, and supported files can be saved as local drafts/articles without opening the manual editor first.
+- Android now has a platform share target equivalent to the iOS share extension for incoming text, URLs, and text-file streams, saving them as local drafts/articles without opening the manual editor first.
 - iOS uses shared converters/controller/wiring for app and share-extension flows, while keeping SwiftUI UI and Swift presentation models.
 - Device connection state is guarded through shared reachability checks before device mutations, so stale UI should clear when the Nano disconnects.
 - Highest remaining product gaps are iOS CI/macOS verification, manual device smoke testing on Android and iOS, broader converter parity vectors, and UI/UX styling.

@@ -11,6 +11,7 @@ import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
+import java.net.URI
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,12 @@ data class CompanionUiState(
     val isConnected: Boolean = false,
     val showAddressEntry: Boolean = false,
     val status: String = "Ready",
+)
+
+data class SharedImport(
+    val title: String,
+    val text: String,
+    val source: String,
 )
 
 class CompanionViewModel(
@@ -299,6 +306,31 @@ class CompanionViewModel(
         }
     }
 
+    fun saveSharedImports(imports: List<SharedImport>) {
+        viewModelScope.launch {
+            val prepared = imports.mapNotNull { it.toPendingUpload() }
+            if (prepared.isEmpty()) {
+                setStatus("Shared item is not readable text or a URL.")
+                return@launch
+            }
+
+            var drafts = current.drafts
+            prepared.forEach { item ->
+                drafts = companionController.saveDraft(item).drafts
+            }
+            updateState {
+                it.copy(
+                    drafts = drafts,
+                    status = if (prepared.size == 1) {
+                        "Shared item saved locally."
+                    } else {
+                        "Saved ${prepared.size} shared items locally."
+                    },
+                )
+            }
+        }
+    }
+
     fun editDraft(draft: PendingUpload) {
         updateState {
             it.copy(
@@ -452,6 +484,42 @@ class CompanionViewModel(
                 status = status,
             )
         }
+    }
+
+    private fun SharedImport.toPendingUpload(): PendingUpload? {
+        val body = text.trim()
+        if (body.isEmpty()) {
+            return null
+        }
+        val cleanedSource = source.trim()
+        return if (body.isHttpUrl() && cleanedSource.ifEmpty { body }.isHttpUrl()) {
+            val url = cleanedSource.ifEmpty { body }
+            ImportPreparation.pendingUploadForUrl(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                source = url,
+                host = url.hostName(),
+                createdAt = Instant.now().toString(),
+            )
+        } else {
+            ImportPreparation.pendingUploadForText(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                source = cleanedSource,
+                text = body,
+                createdAt = Instant.now().toString(),
+                fallbackTitle = "Shared Text",
+            )
+        }
+    }
+
+    private fun String.isHttpUrl(): Boolean {
+        val value = trim()
+        return value.startsWith("http://") || value.startsWith("https://")
+    }
+
+    private fun String.hostName(): String {
+        return runCatching { URI(this).host.orEmpty() }.getOrDefault("")
     }
 
     private val current: CompanionUiState
