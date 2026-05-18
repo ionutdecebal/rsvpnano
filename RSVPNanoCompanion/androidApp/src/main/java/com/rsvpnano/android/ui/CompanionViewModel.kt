@@ -34,6 +34,7 @@ data class CompanionUiState(
     val editingDraftId: String? = null,
     val rssFeedDraft: String = "",
     val isConnected: Boolean = false,
+    val showAddressEntry: Boolean = false,
     val status: String = "Ready",
 )
 
@@ -50,6 +51,18 @@ class CompanionViewModel(
     }
 
     fun setAddress(value: String) = updateState { it.copy(address = value) }
+
+    fun showAddressEntry() = updateState {
+        it.copy(
+            showAddressEntry = true,
+            status = "If the default address is not working, enter the address shown by the reader.",
+        )
+    }
+
+    fun connectDefault() {
+        updateState { it.copy(address = DEFAULT_DEVICE_ADDRESS) }
+        connect()
+    }
 
     fun setSettingsWpmDraft(value: String) = updateState { it.copy(settingsWpmDraft = value) }
 
@@ -85,7 +98,8 @@ class CompanionViewModel(
         viewModelScope.launch {
             setStatus("Connecting...")
             val state = current
-            runCatching { companionController.connect(state.address, state.rssFeeds) }
+            val address = normalizedAddress(state.address)
+            runCatching { companionController.connect(address, state.rssFeeds) }
                 .onSuccess { snapshot ->
                     val device = snapshot.device
                     val deviceName = device.info?.name ?: "RSVP Nano"
@@ -98,15 +112,27 @@ class CompanionViewModel(
                             settingsBrightnessDraft = device.settings?.display?.brightnessIndex?.toString().orEmpty(),
                             wifiSsidDraft = device.wifiSettings?.ssid.orEmpty(),
                             wifiPasswordDraft = "",
+                            address = address,
                             rssFeeds = snapshot.rssFeeds,
                             drafts = snapshot.drafts,
                             isConnected = device.info != null,
+                            showAddressEntry = false,
                             status = "Connected to $deviceName. Loaded ${device.books.size} books.",
                         )
                     }
                 }
                 .onFailure { error ->
-                    updateState { it.copy(isConnected = false, status = error.message ?: "Connection failed.") }
+                    updateState {
+                        it.copy(
+                            isConnected = false,
+                            showAddressEntry = it.showAddressEntry || address == DEFAULT_DEVICE_ADDRESS,
+                            status = if (address == DEFAULT_DEVICE_ADDRESS) {
+                                "Could not find RSVP Nano at $DEFAULT_DEVICE_ADDRESS. Check the Nano Wi-Fi, or enter the address shown on the reader."
+                            } else {
+                                error.message ?: "Connection failed."
+                            },
+                        )
+                    }
                 }
         }
     }
@@ -450,6 +476,18 @@ class CompanionViewModel(
         _uiState.update(transform)
     }
 
+    private fun normalizedAddress(value: String): String {
+        val trimmed = value.trim()
+        if (trimmed.isEmpty()) {
+            return DEFAULT_DEVICE_ADDRESS
+        }
+        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed
+        } else {
+            "http://$trimmed"
+        }
+    }
+
     class Factory(
         private val sharedApp: RsvpSharedApp,
     ) : ViewModelProvider.Factory {
@@ -457,5 +495,9 @@ class CompanionViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return CompanionViewModel(sharedApp) as T
         }
+    }
+
+    private companion object {
+        const val DEFAULT_DEVICE_ADDRESS = "http://192.168.4.1"
     }
 }

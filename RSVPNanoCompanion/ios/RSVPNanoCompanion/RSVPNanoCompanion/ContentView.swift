@@ -116,24 +116,74 @@ struct ContentView: View {
 
     private var connectInstructions: some View {
         List {
-            Section {
+            Section("Connect to RSVP Nano") {
                 VStack(alignment: .leading, spacing: 16) {
                     Label("Open Companion sync on the reader", systemImage: "1.circle")
                         .font(.headline)
-                    Text("On RSVP Nano, insert the SD card, open the main menu, and choose Companion sync.")
+                    Text("On RSVP Nano, open the main menu and choose Companion sync.")
                         .foregroundStyle(.secondary)
 
-                    Label("Join the reader Wi-Fi", systemImage: "2.circle")
+                    Label("Join the Nano Wi-Fi", systemImage: "2.circle")
                         .font(.headline)
-                    Text("On this iPhone, open Settings -> Wi-Fi and join the network shown on the reader. It starts with RSVP-Nano.")
+                    Text("Join the network shown on the reader. It starts with RSVP-Nano.")
                         .foregroundStyle(.secondary)
 
-                    Label("Return here", systemImage: "3.circle")
+                    Label("Test the default address", systemImage: "3.circle")
                         .font(.headline)
-                    Text("Tap Check Again to connect and show the SD card library from /books.")
+                    Text("Return here and test http://192.168.4.1.")
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 8)
+
+                Button {
+                    openWifiSettings()
+                } label: {
+                    Label("Join Nano Wi-Fi", systemImage: "wifi")
+                }
+
+                Button {
+                    viewModel.connectDefault()
+                } label: {
+                    Label("Test Connection", systemImage: "network")
+                }
+                .disabled(viewModel.isBusy)
+            }
+
+            Section("Fallback") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("If iOS does not show Wi-Fi settings from the app, open Settings manually, join the RSVP-Nano network shown on the reader, then return here.")
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    openWifiSettings()
+                } label: {
+                    Label("Open Wi-Fi Settings", systemImage: "gear")
+                }
+
+                Button {
+                    viewModel.showManualAddressEntry()
+                } label: {
+                    Label("Enter IP Address", systemImage: "number")
+                }
+
+                if viewModel.showAddressEntry {
+                    Text("RSVP Nano was not found at http://192.168.4.1. If the reader shows a different address, enter it here.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField("Reader address or IP", text: $viewModel.address)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+
+                    Button {
+                        viewModel.connect()
+                    } label: {
+                        Label("Connect to This Address", systemImage: "network")
+                    }
+                    .disabled(viewModel.isBusy)
+                }
             }
 
             Section {
@@ -144,13 +194,6 @@ struct ContentView: View {
                     Text(viewModel.status)
                         .foregroundStyle(.secondary)
                 }
-
-                Button {
-                    viewModel.connect()
-                } label: {
-                    Label("Check Again", systemImage: "arrow.clockwise")
-                }
-                .disabled(viewModel.isBusy)
 
                 if viewModel.hasAttemptedConnection, let error = viewModel.lastConnectionError {
                     Text(error)
@@ -788,6 +831,13 @@ struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .background(.bar)
+    }
+
+    private func openWifiSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            return
+        }
+        UIApplication.shared.open(url)
     }
 
     private func pendingDetailLabel(for item: PendingUpload) -> String {

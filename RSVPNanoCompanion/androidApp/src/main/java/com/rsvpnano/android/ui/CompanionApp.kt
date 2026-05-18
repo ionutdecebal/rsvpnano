@@ -1,8 +1,10 @@
 package com.rsvpnano.android.ui
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -53,15 +55,22 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
             ) {
                 Text(text = "RSVP Nano Companion", style = MaterialTheme.typography.headlineSmall)
                 Text(text = uiState.status, style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(
-                    value = uiState.address,
-                    onValueChange = viewModel::setAddress,
-                    label = { Text("Device address") },
-                    singleLine = true,
-                )
-                Button(onClick = viewModel::connect) {
-                    Text(text = if (uiState.isConnected) "Reconnect" else "Connect")
+
+                if (!uiState.isConnected) {
+                    ConnectionPanel(
+                        uiState = uiState,
+                        onOpenWifiSettings = context::openWifiSettings,
+                        onConnectDefault = viewModel::connectDefault,
+                        onShowAddressEntry = viewModel::showAddressEntry,
+                        onAddressChange = viewModel::setAddress,
+                        onConnectCustom = viewModel::connect,
+                    )
+                } else {
+                    Button(onClick = viewModel::connect) {
+                        Text(text = "Reconnect")
+                    }
                 }
+
                 Button(onClick = viewModel::refresh) {
                     Text(text = "Refresh local")
                 }
@@ -290,6 +299,62 @@ fun CompanionApp(sharedApp: RsvpSharedApp) {
     }
 }
 
+@Composable
+private fun ConnectionPanel(
+    uiState: CompanionUiState,
+    onOpenWifiSettings: () -> Unit,
+    onConnectDefault: () -> Unit,
+    onShowAddressEntry: () -> Unit,
+    onAddressChange: (String) -> Unit,
+    onConnectCustom: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(text = "Connect to RSVP Nano", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Open Companion Sync on the reader, join the RSVP-Nano Wi-Fi, then test the default address.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onOpenWifiSettings) {
+                Text(text = "Join Nano Wi-Fi")
+            }
+            Button(onClick = onConnectDefault) {
+                Text(text = "Test Connection")
+            }
+        }
+
+        Text(text = "Fallback", style = MaterialTheme.typography.titleSmall)
+        Text(
+            text = "If Android does not show the network picker, open Wi-Fi settings manually, join the network shown on the reader, then test again.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onOpenWifiSettings) {
+                Text(text = "Open Wi-Fi Settings")
+            }
+            Button(onClick = onShowAddressEntry) {
+                Text(text = "Enter IP Address")
+            }
+        }
+
+        if (uiState.showAddressEntry) {
+            Text(
+                text = "RSVP Nano was not found at http://192.168.4.1. If the reader shows a different address, enter it here.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedTextField(
+                value = uiState.address,
+                onValueChange = onAddressChange,
+                label = { Text("Reader address or IP") },
+                singleLine = true,
+            )
+            Button(onClick = onConnectCustom) {
+                Text(text = "Connect to This Address")
+            }
+        }
+    }
+}
+
 private data class SelectedFile(
     val displayName: String,
     val data: ByteArray,
@@ -311,4 +376,16 @@ private fun Context.displayNameFor(uri: Uri): String? {
         }
     }
     return uri.lastPathSegment?.substringAfterLast('/')
+}
+
+private fun Context.openWifiSettings() {
+    val intent = Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { startActivity(intent) }
+        .recover {
+            startActivity(
+                Intent(Settings.ACTION_WIFI_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
 }

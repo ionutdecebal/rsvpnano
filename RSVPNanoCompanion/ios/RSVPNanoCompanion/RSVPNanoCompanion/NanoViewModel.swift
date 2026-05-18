@@ -4,11 +4,12 @@ import shared
 
 @MainActor
 final class NanoViewModel: ObservableObject {
+    private static let defaultDeviceAddress = "http://192.168.4.1"
     private let companionController = IosSharedWiringKt.createIosCompanionController(appGroupIdentifier: SharedInbox.appGroupIdentifier)
     private let sharedDateFormatter = ISO8601DateFormatter()
     private let sharedFallbackDateFormatter = ISO8601DateFormatter()
 
-    @Published var address = "http://192.168.4.1"
+    @Published var address = NanoViewModel.defaultDeviceAddress
     @Published var info: NanoInfo?
     @Published var books: [NanoBook] = []
     @Published var deviceSettings: NanoSettings?
@@ -26,6 +27,7 @@ final class NanoViewModel: ObservableObject {
     @Published var editingArticle: PendingUpload?
     @Published var hasAttemptedConnection = false
     @Published var lastConnectionError: String?
+    @Published var showAddressEntry = false
 
     var canUpload: Bool {
         info != nil && !isBusy
@@ -71,6 +73,16 @@ final class NanoViewModel: ObservableObject {
         Task {
             _ = await connectOnce(showBusy: showBusy)
         }
+    }
+
+    func connectDefault(showBusy: Bool = true) {
+        address = Self.defaultDeviceAddress
+        connect(showBusy: showBusy)
+    }
+
+    func showManualAddressEntry() {
+        showAddressEntry = true
+        status = "If the default address is not working, enter the address shown by the reader."
     }
 
     func refreshBooks() {
@@ -372,8 +384,10 @@ final class NanoViewModel: ObservableObject {
     private func connectOnce(showBusy: Bool = true) async -> Bool {
         await run("Looking for RSVP Nano", showBusy: showBusy) { [self] in
             self.hasAttemptedConnection = true
-            let snapshot = try await companionController.connect(baseUrl: self.address, localRssFeeds: self.rssFeeds)
+            let address = self.normalizedAddress(self.address)
+            let snapshot = try await companionController.connect(baseUrl: address, localRssFeeds: self.rssFeeds)
             let device = snapshot.device
+            self.address = address
             self.info = device.info
             self.books = device.books
             self.deviceSettings = device.settings
@@ -384,6 +398,7 @@ final class NanoViewModel: ObservableObject {
             self.syncedRssFeeds = snapshot.syncedRssFeeds
             self.pendingUploads = snapshot.drafts.map(pendingUpload(from:))
             self.lastConnectionError = nil
+            self.showAddressEntry = false
             self.status = "Connected to \(self.info?.name ?? "RSVP Nano"). Reading /books."
         }
         return isConnected
@@ -404,7 +419,12 @@ final class NanoViewModel: ObservableObject {
             try await operation()
         } catch {
             lastConnectionError = error.localizedDescription
-            status = isConnected ? "Connected, but the last request failed." : "Still waiting for RSVP Nano Wi-Fi."
+            if !isConnected && normalizedAddress(address) == Self.defaultDeviceAddress {
+                showAddressEntry = true
+                status = "Could not find RSVP Nano at \(Self.defaultDeviceAddress). Check the Nano Wi-Fi, or enter the address shown on the reader."
+            } else {
+                status = isConnected ? "Connected, but the last request failed." : "Still waiting for RSVP Nano Wi-Fi."
+            }
         }
         if showBusy {
             isBusy = false
@@ -424,6 +444,17 @@ final class NanoViewModel: ObservableObject {
         wifiSettings = wifi
         wifiSsidDraft = wifi.ssid
         wifiPasswordDraft = ""
+    }
+
+    private func normalizedAddress(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return Self.defaultDeviceAddress
+        }
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            return trimmed
+        }
+        return "http://\(trimmed)"
     }
 
     private func sharedPendingUpload(from item: PendingUpload) -> shared.PendingUpload {
