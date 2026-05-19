@@ -14,6 +14,7 @@ import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import java.net.URI
 import java.util.UUID
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -51,6 +52,8 @@ class CompanionViewModel(
     private val companionController = sharedApp.companionController
     private val _uiState = MutableStateFlow(CompanionUiState(status = "Loading shared data..."))
     val uiState: StateFlow<CompanionUiState> = _uiState
+    private var pendingSettingsSave: NanoSettings? = null
+    private var settingsSaveJob: Job? = null
     private val current: CompanionUiState
         get() = _uiState.value
 
@@ -146,25 +149,53 @@ class CompanionViewModel(
         }
     }
 
-    fun saveSettings(settings: NanoSettings) {
-        viewModelScope.launch {
-            val state = current
-            if (!state.isConnected) {
-                setStatus("Connect to the reader before saving settings.")
-                return@launch
-            }
-            setStatus("Saving reader settings...")
-            runCatching { companionController.saveSettings(state.address, settings) }
-                .onSuccess { snapshot ->
-                    val saved = snapshot.settings
-                    updateState {
-                        it.copy(
-                            settings = saved,
-                            status = "Reader settings saved.",
-                        )
+    fun updateSettings(transform: (NanoSettings) -> NanoSettings) {
+        val state = current
+        val currentSettings = state.settings
+        if (!state.isConnected || currentSettings == null) {
+            setStatus("Connect to the reader before saving settings.")
+            return
+        }
+
+        val nextSettings = transform(currentSettings)
+        updateState {
+            it.copy(
+                settings = nextSettings,
+                status = "Saving reader settings...",
+            )
+        }
+        enqueueSettingsSave(nextSettings)
+    }
+
+    private fun enqueueSettingsSave(settings: NanoSettings) {
+        pendingSettingsSave = settings
+        if (settingsSaveJob?.isActive == true) {
+            return
+        }
+
+        settingsSaveJob = viewModelScope.launch {
+            while (true) {
+                val settingsToSave = pendingSettingsSave ?: break
+                pendingSettingsSave = null
+                val address = current.address
+
+                val result = runCatching { companionController.saveSettings(address, settingsToSave) }
+                if (result.isFailure) {
+                    val error = result.exceptionOrNull()
+                    pendingSettingsSave = null
+                    markDisconnected(error?.message ?: "Reader disconnected before saving settings.")
+                    break
+                }
+
+                val snapshot = result.getOrThrow()
+                updateState { state ->
+                    if (pendingSettingsSave == null && state.settings == settingsToSave) {
+                        state.copy(settings = snapshot.settings, status = "Reader settings saved.")
+                    } else {
+                        state
                     }
                 }
-                .onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before saving settings.") }
+            }
         }
     }
 
