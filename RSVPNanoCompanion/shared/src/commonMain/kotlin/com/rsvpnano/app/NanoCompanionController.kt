@@ -75,17 +75,45 @@ class NanoCompanionController(
 
     suspend fun syncPendingUploads(baseUrl: String, items: List<PendingUpload>): CompanionPendingSyncSnapshot {
         verifyReachable(baseUrl)
-        val remaining = draftService.syncPendingUploads(client = client, baseUrl = baseUrl, items = items)
+        val readyItems = items.filterNot(::needsArticleFetch)
+        val remaining = draftService.syncPendingUploads(client = client, baseUrl = baseUrl, items = readyItems)
         return CompanionPendingSyncSnapshot(
             drafts = remaining,
             books = deviceSyncService.refreshBooks(baseUrl),
-            syncedCount = items.size,
+            syncedCount = readyItems.size,
         )
     }
 
     suspend fun saveDraft(item: PendingUpload): CompanionDraftsSnapshot {
         draftService.saveDraft(item)
         return CompanionDraftsSnapshot(drafts = draftService.loadDrafts())
+    }
+
+    suspend fun saveDraftFetchingArticleIfNeeded(item: PendingUpload): CompanionDraftSaveSnapshot {
+        val fetched = if (needsArticleFetch(item)) {
+            draftService.fetchArticleIfAvailable(
+                title = item.title,
+                source = item.sourceUrl.orEmpty(),
+            )
+        } else {
+            null
+        }
+        val savedItem = fetched?.let { article ->
+            item.copy(
+                title = article.title,
+                body = article.text,
+            )
+        } ?: item
+        draftService.saveDraft(savedItem)
+        return CompanionDraftSaveSnapshot(
+            drafts = draftService.loadDrafts(),
+            item = savedItem,
+            fetchedArticle = fetched != null,
+        )
+    }
+
+    suspend fun fetchSharedArticle(title: String, source: String): SharedArticle? {
+        return draftService.fetchArticleIfAvailable(title = title, source = source)
     }
 
     suspend fun updateDraft(item: PendingUpload, title: String, body: String): CompanionDraftsSnapshot {
@@ -288,6 +316,12 @@ data class CompanionPendingSyncSnapshot(
 
 data class CompanionDraftsSnapshot(
     val drafts: List<PendingUpload>,
+)
+
+data class CompanionDraftSaveSnapshot(
+    val drafts: List<PendingUpload>,
+    val item: PendingUpload,
+    val fetchedArticle: Boolean,
 )
 
 data class CompanionArticleFetchSnapshot(

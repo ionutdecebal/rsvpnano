@@ -125,12 +125,26 @@ final class ShareViewController: UIViewController {
         if let provider = providers.first(where: { urlTypeIdentifier(from: $0) != nil }),
            let typeIdentifier = urlTypeIdentifier(from: provider),
            let url = try await loadURL(from: provider, typeIdentifier: typeIdentifier) {
+            let title = urlDraftTitle(itemTitle: itemTitle, url: url)
+            if let article = try? await companionController.fetchSharedArticle(
+                title: title,
+                source: url.absoluteString
+            ) {
+                return SharedInput(
+                    title: article.title,
+                    source: url.absoluteString,
+                    text: article.text,
+                    isURL: true,
+                    diagnostic: "Article fetched while you are online. Save it, then connect to the Nano Wi-Fi to sync.",
+                    shouldOpenAppAfterSave: false
+                )
+            }
             return SharedInput(
-                title: urlDraftTitle(itemTitle: itemTitle, url: url),
+                title: title,
                 source: url.absoluteString,
                 text: "",
                 isURL: true,
-                diagnostic: "URL only. Save to fetch in the app.",
+                diagnostic: "Could not fetch article text now. Save the link, or share again while online before connecting to the Nano.",
                 shouldOpenAppAfterSave: true
             )
         }
@@ -249,13 +263,26 @@ final class ShareViewController: UIViewController {
         let text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let source = sharedSource.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard let pending = shared.ImportPreparation.shared.prepareSharedImport(
-            id: UUID().uuidString,
-            title: title,
-            text: text,
-            source: source,
-            createdAt: shared.SharedAppUtils.shared.nowIso8601()
-        ) else {
+        let pending: shared.PendingUpload?
+        if sourceIsURL && text.isEmpty {
+            pending = shared.ImportPreparation.shared.pendingUploadForUrl(
+                id: UUID().uuidString,
+                title: title,
+                source: source,
+                host: URL(string: source)?.host ?? "",
+                createdAt: shared.SharedAppUtils.shared.nowIso8601()
+            )
+        } else {
+            pending = shared.ImportPreparation.shared.prepareSharedImport(
+                id: UUID().uuidString,
+                title: title,
+                text: text,
+                source: source,
+                createdAt: shared.SharedAppUtils.shared.nowIso8601()
+            )
+        }
+
+        guard let pending else {
             statusLabel.text = "Add some text before saving."
             return
         }
@@ -265,7 +292,7 @@ final class ShareViewController: UIViewController {
 
         Task {
             do {
-                let snapshot = try await companionController.saveDraft(item: pending)
+                let snapshot = try await companionController.saveDraftFetchingArticleIfNeeded(item: pending)
                 let savedCount = snapshot.drafts.count
                 let bytes = Data(text.utf8).count
                 await MainActor.run {
@@ -275,7 +302,12 @@ final class ShareViewController: UIViewController {
                     saveButton.isEnabled = true
                     saveButton.setTitle("Done", for: .normal)
                     cancelButton.isHidden = true
-                    statusLabel.text = "Saved \(pending.title): \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)). Inbox now has \(savedCount)."
+                    statusLabel.text = savedStatus(
+                        title: snapshot.item.title,
+                        bytes: bytes,
+                        savedCount: savedCount,
+                        fetchedArticle: snapshot.fetchedArticle
+                    )
                     if shouldOpenAppAfterSave {
                         openContainingApp()
                     }
@@ -308,6 +340,13 @@ final class ShareViewController: UIViewController {
         extensionContext?.open(url) { [weak self] _ in
             self?.finish()
         }
+    }
+
+    private func savedStatus(title: String, bytes: Int, savedCount: Int, fetchedArticle: Bool) -> String {
+        if fetchedArticle || bytes > 0 {
+            return "Saved \(title). Connect to the Nano Wi-Fi when you are ready to sync. Inbox now has \(savedCount)."
+        }
+        return "Saved link for \(title). Add article text while online before syncing to the Nano. Inbox now has \(savedCount)."
     }
 }
 

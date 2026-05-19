@@ -265,9 +265,15 @@ fun CompanionApp(
                         }
                     } else {
                         items(uiState.drafts) { draft ->
-                            val suffix = if (viewModel.needsArticleFetch(draft)) " (needs fetch)" else ""
+                            val suffix = if (viewModel.needsArticleFetch(draft)) " (URL only)" else ""
                             Column {
                                 Text(text = draft.title + suffix)
+                                if (viewModel.needsArticleFetch(draft)) {
+                                    Text(
+                                        text = "Open this draft while you still have internet and add article text before syncing.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(onClick = { viewModel.editDraft(draft) }) {
                                         Text(text = "Edit")
@@ -281,11 +287,6 @@ fun CompanionApp(
                         item {
                             Button(onClick = viewModel::syncSavedArticles) {
                                 Text(text = "Sync saved articles")
-                            }
-                        }
-                        item {
-                            Button(onClick = viewModel::fetchMissingArticles) {
-                                Text(text = "Fetch saved links")
                             }
                         }
                     }

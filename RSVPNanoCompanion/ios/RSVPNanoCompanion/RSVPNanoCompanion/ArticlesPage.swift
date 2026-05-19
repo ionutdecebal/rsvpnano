@@ -15,7 +15,7 @@ struct ArticlesPage: View {
             Section("Article Workflow") {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Share from the browser", systemImage: "square.and.arrow.up")
-                    Text("Use Share -> RSVP Nano from Safari, Chrome, or another app. URL-only articles can be fetched and renamed in the app before syncing.")
+                    Text("Use Share -> RSVP Nano while your phone still has internet. The app saves fetched article text locally; then connect to the Nano Wi-Fi when you are ready to sync.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -60,25 +60,20 @@ struct ArticlesPage: View {
                             }
                             .buttonStyle(.bordered)
 
-                            if item.needsArticleFetch {
-                                Button {
-                                    viewModel.fetchArticleText(for: item)
-                                } label: {
-                                    Label("Fetch", systemImage: "doc.text.magnifyingglass")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(connection.isBusy)
-                            } else {
-                                Button {
-                                    viewModel.syncPendingUpload(item)
-                                } label: {
-                                    Label("Sync", systemImage: "arrow.up.doc")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!connection.isConnected || connection.isBusy)
+                            Button {
+                                viewModel.syncPendingUpload(item)
+                            } label: {
+                                Label("Sync", systemImage: "arrow.up.doc")
+                                    .frame(maxWidth: .infinity)
                             }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(item.needsArticleFetch || !connection.isConnected || connection.isBusy)
+                        }
+
+                        if item.needsArticleFetch {
+                            Text("This is only a saved link. Share it again while online, or paste article text in Preview/Edit before syncing.")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
                         }
                     }
                 }
@@ -89,7 +84,7 @@ struct ArticlesPage: View {
                 } label: {
                     Label("Sync Saved Articles", systemImage: "arrow.up.doc")
                 }
-                .disabled(!connection.isConnected || connection.isBusy || viewModel.pendingUploads.isEmpty)
+                .disabled(!connection.isConnected || connection.isBusy || !viewModel.pendingUploads.contains { !$0.needsArticleFetch })
             }
         }
     }

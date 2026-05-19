@@ -73,7 +73,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 - [ ] Add a short delay/retry window after returning from Wi-Fi settings or selecting the Nano AP before declaring connection failure.
 - [ ] Improve connection copy for casual users who only see the Nano AP name and `http://192.168.4.1`.
 - [ ] Add clearer offline/disconnected states.
-- [ ] Add automatic connection testing after returning from Wi-Fi settings on both platforms.
+- [x] Implement background article fetching: update `shared` module to allow automated, non-interactive fetches, enabling the app to pre-fetch content while the device has internet and eliminating the "fetch" button in UI.
 - [ ] Add better success/failure messaging for Wi-Fi save/clear and settings save.
 
 ## Priority 3: Shared-Core Hardening

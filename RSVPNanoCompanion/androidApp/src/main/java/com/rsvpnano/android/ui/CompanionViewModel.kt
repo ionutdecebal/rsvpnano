@@ -294,36 +294,6 @@ class CompanionViewModel(
         }
     }
 
-    fun saveLinkDraft() {
-        viewModelScope.launch {
-            val state = current
-            val title = state.draftTitle.trim()
-            val sourceUrl = state.draftSourceUrl.trim()
-            if (title.isEmpty() || !sourceUrl.startsWith("http://") && !sourceUrl.startsWith("https://")) {
-                setStatus("Saved links need a title and http:// or https:// URL.")
-                return@launch
-            }
-            val existing = state.editingDraftId?.let { id -> state.drafts.firstOrNull { it.id == id } }
-            val snapshot = companionController.saveDraft(
-                ImportPreparation.pendingUploadForUrl(
-                    id = existing?.id ?: UUID.randomUUID().toString(),
-                    title = title,
-                    source = sourceUrl,
-                    host = hostName(sourceUrl),
-                    createdAt = existing?.createdAt ?: SharedAppUtils.nowIso8601(),
-                )
-            )
-            clearDraftEditor(
-                drafts = snapshot.drafts,
-                status = if (existing == null) {
-                    "Link draft saved locally. Fetch it before syncing."
-                } else {
-                    "Link draft updated. Fetch it before syncing."
-                },
-            )
-        }
-    }
-
     fun saveSharedImports(imports: List<SharedImport>) {
         viewModelScope.launch {
             val prepared = imports.mapNotNull {
@@ -341,19 +311,72 @@ class CompanionViewModel(
             }
 
             var drafts = current.drafts
+            var fetchedCount = 0
             prepared.forEach { item ->
-                drafts = companionController.saveDraft(item).drafts
+                val snapshot = companionController.saveDraftFetchingArticleIfNeeded(item)
+                drafts = snapshot.drafts
+                if (snapshot.fetchedArticle) {
+                    fetchedCount += 1
+                }
             }
             updateState {
                 it.copy(
                     drafts = drafts,
-                    status = if (prepared.size == 1) {
-                        "Shared item saved locally."
-                    } else {
-                        "Saved ${prepared.size} shared items locally."
-                    },
+                    status = sharedImportStatus(savedCount = prepared.size, fetchedCount = fetchedCount),
                 )
             }
+        }
+    }
+
+    private fun sharedImportStatus(savedCount: Int, fetchedCount: Int): String {
+        return when {
+            fetchedCount > 0 && savedCount == 1 -> {
+                "Shared article fetched and saved. Connect to the Nano Wi-Fi when you are ready to sync it."
+            }
+            fetchedCount > 0 -> {
+                "Saved $savedCount shared items and fetched $fetchedCount articles. Connect to the Nano Wi-Fi to sync."
+            }
+            savedCount == 1 -> {
+                "Shared item saved locally. If it is a URL-only draft, edit it while online before syncing to the Nano."
+            }
+            else -> {
+                "Saved $savedCount shared items locally. URL-only drafts need article text before syncing to the Nano."
+            }
+        }
+    }
+
+    fun saveLinkDraft() {
+        viewModelScope.launch {
+            val state = current
+            val title = state.draftTitle.trim()
+            val sourceUrl = state.draftSourceUrl.trim()
+            if (title.isEmpty() || !sourceUrl.startsWith("http://") && !sourceUrl.startsWith("https://")) {
+                setStatus("Saved links need a title and http:// or https:// URL.")
+                return@launch
+            }
+            val existing = state.editingDraftId?.let { id -> state.drafts.firstOrNull { it.id == id } }
+            val pending = ImportPreparation.pendingUploadForUrl(
+                id = existing?.id ?: UUID.randomUUID().toString(),
+                title = title,
+                source = sourceUrl,
+                host = hostName(sourceUrl),
+                createdAt = existing?.createdAt ?: SharedAppUtils.nowIso8601(),
+            )
+            val snapshot = companionController.saveDraftFetchingArticleIfNeeded(pending)
+            clearDraftEditor(
+                drafts = snapshot.drafts,
+                status = when {
+                    snapshot.fetchedArticle -> {
+                        "Fetched and saved ${snapshot.item.title}. Connect to the Nano Wi-Fi to sync it."
+                    }
+                    existing == null -> {
+                        "Link saved locally. If article text was not fetched, edit it while online before syncing."
+                    }
+                    else -> {
+                        "Link updated. If article text was not fetched, edit it while online before syncing."
+                    }
+                },
+            )
         }
     }
 
@@ -415,7 +438,7 @@ class CompanionViewModel(
             }
             val readyDrafts = state.drafts.filterNot(companionController::needsArticleFetch)
             if (readyDrafts.isEmpty()) {
-                setStatus("No text drafts are ready to sync.")
+                setStatus("No fetched articles are ready. Share links while online, or paste article text before syncing.")
                 return@launch
             }
             setStatus("Syncing saved articles...")
@@ -473,24 +496,6 @@ class CompanionViewModel(
             }.onSuccess { snapshot ->
                 updateState { it.copy(books = snapshot.books, status = "Uploaded $displayName.") }
             }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before uploading files.") }
-        }
-    }
-
-    fun fetchMissingArticles() {
-        viewModelScope.launch {
-            val missing = current.drafts.filter(companionController::needsArticleFetch)
-            if (missing.isEmpty()) {
-                setStatus("No saved links need fetching.")
-                return@launch
-            }
-            setStatus("Fetching ${missing.size} saved links...")
-            runCatching {
-                companionController.fetchArticles(missing).drafts
-            }.onSuccess { drafts ->
-                updateState { it.copy(drafts = drafts, status = "Fetched ${missing.size} saved links.") }
-            }.onFailure { error ->
-                setStatus(error.message ?: "Article fetch failed.")
-            }
         }
     }
 

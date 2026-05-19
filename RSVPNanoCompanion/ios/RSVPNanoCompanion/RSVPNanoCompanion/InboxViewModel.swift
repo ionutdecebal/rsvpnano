@@ -49,20 +49,10 @@ final class InboxViewModel: ObservableObject {
     func handleSharedInboxOpen() {
         Task {
             await refreshPendingUploads()
-            guard let item = pendingUploads.first(where: { connection.companionController.needsArticleFetch(item: $0) }) else {
+            if pendingUploads.contains(where: { connection.companionController.needsArticleFetch(item: $0) }) {
+                connection.status = "Saved link. Share it again while online, or paste article text before syncing to the Nano."
+            } else {
                 connection.status = "Saved article ready to edit or sync."
-                return
-            }
-            fetchArticleText(for: item)
-        }
-    }
-
-    func fetchArticleText(for item: PendingUpload) {
-        Task {
-            await connection.run("Fetching article text", showBusy: true) { [self] in
-                let snapshot = try await connection.companionController.fetchArticle(item: item)
-                self.pendingUploads = snapshot.drafts
-                connection.status = "Fetched article text for \(snapshot.article.title)."
             }
         }
     }
@@ -86,7 +76,11 @@ final class InboxViewModel: ObservableObject {
     }
 
     func syncPendingUploads() {
-        let items = pendingUploads
+        let items = pendingUploads.filter { !connection.companionController.needsArticleFetch(item: $0) }
+        guard !items.isEmpty else {
+            connection.status = "No fetched articles are ready. Share links while online, or paste article text first."
+            return
+        }
         Task {
             await connection.run(
                 items.count == 1 ? "Syncing \(items[0].title)" : "Syncing saved articles",
@@ -106,6 +100,10 @@ final class InboxViewModel: ObservableObject {
     }
 
     func syncPendingUpload(_ item: PendingUpload) {
+        guard !connection.companionController.needsArticleFetch(item: item) else {
+            connection.status = "Add article text before syncing this link to the Nano."
+            return
+        }
         Task {
             await connection.run("Syncing \(item.title)", requiresConnection: true) { [self] in
                 let snapshot = try await connection.companionController.syncPendingUploads(

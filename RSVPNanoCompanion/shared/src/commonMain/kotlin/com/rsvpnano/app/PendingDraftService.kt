@@ -24,6 +24,11 @@ class PendingDraftService(
         return client.fetch(title, source)
     }
 
+    suspend fun fetchArticleIfAvailable(title: String, source: String): SharedArticle? {
+        val client = articleFetchClient ?: return null
+        return runCatching { client.fetch(title, source) }.getOrNull()
+    }
+
     suspend fun loadDrafts(): List<PendingUpload> = repository.loadAll()
 
     suspend fun saveDraft(item: PendingUpload) {

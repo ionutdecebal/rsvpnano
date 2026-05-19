@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var inboxViewModel = InboxViewModel()
     
     @State private var selectedPage: CompanionPage = .library
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -63,6 +64,11 @@ struct ContentView: View {
             .onAppear {
                 Task {
                     await connection.connectOnce(showBusy: false)
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    connection.recheckConnectionAfterForeground(showBusy: false)
                 }
             }
             .onOpenURL { url in
