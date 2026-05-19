@@ -11,7 +11,7 @@ orchestration should stay shared.
 Install Android Studio or a JDK 17 + Android SDK environment, then run from the repository root:
 
 ```bash
-bash ./gradlew :shared:check :androidApp:assembleDebug
+./gradlew :shared:check :androidApp:assembleDebug
 ```
 
 The debug APK is written under:
@@ -20,35 +20,25 @@ The debug APK is written under:
 RSVPNanoCompanion/androidApp/build/outputs/apk/debug/
 ```
 
-The local Windows helper can build with the sandboxed `.local` toolchain:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .local\run_local_gradle.ps1 :shared:check :androidApp:assembleDebug --no-daemon --no-configuration-cache
-```
-
 ## Run
 
 1. Open the repository root in Android Studio.
 2. Select the `androidApp` run configuration.
 3. Run on an emulator or Android device.
 
-Or install the current debug APK with the local helper after building:
+Or install the debug APK with Android SDK platform tools:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .local\install_android_debug_apk.ps1 -Launch
-```
-
-Build, install, and launch in one command:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .local\install_android_debug_apk.ps1 -Build -Launch
+```bash
+adb install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb shell monkey -p com.rsvpnano.android -c android.intent.category.LAUNCHER 1
 ```
 
 If multiple Android devices/emulators are connected, pass the ADB serial:
 
-```powershell
-.local\android-sdk\platform-tools\adb.exe devices
-powershell -ExecutionPolicy Bypass -File .local\install_android_debug_apk.ps1 -DeviceSerial SERIAL_FROM_ADB -Launch
+```bash
+adb devices
+adb -s SERIAL_FROM_ADB install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+adb -s SERIAL_FROM_ADB shell monkey -p com.rsvpnano.android -c android.intent.category.LAUNCHER 1
 ```
 
 ## Wireless Device Install
@@ -56,17 +46,18 @@ powershell -ExecutionPolicy Bypass -File .local\install_android_debug_apk.ps1 -D
 ADB-over-Wi-Fi works, but Android's Wireless debugging flow usually requires pairing first from
 Developer options.
 
-```powershell
-.local\android-sdk\platform-tools\adb.exe pair PHONE_LAN_IP:PAIRING_PORT
-.local\android-sdk\platform-tools\adb.exe connect PHONE_LAN_IP:DEBUGGING_PORT
-powershell -ExecutionPolicy Bypass -File .local\install_android_debug_apk.ps1 -DeviceSerial PHONE_LAN_IP:DEBUGGING_PORT -Launch
+```bash
+adb pair PHONE_LAN_IP:PAIRING_PORT
+adb connect PHONE_LAN_IP:DEBUGGING_PORT
+adb -s PHONE_LAN_IP:DEBUGGING_PORT install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
 If the phone was first connected by USB and TCP mode is enabled:
 
-```powershell
-.local\android-sdk\platform-tools\adb.exe -s SERIAL_FROM_ADB tcpip 5555
-powershell -ExecutionPolicy Bypass -File .local\install_android_debug_apk.ps1 -RemoteHost PHONE_LAN_IP -Launch
+```bash
+adb -s SERIAL_FROM_ADB tcpip 5555
+adb connect PHONE_LAN_IP:5555
+adb -s PHONE_LAN_IP:5555 install -r RSVPNanoCompanion/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ```
 
 ## Connect To The Reader

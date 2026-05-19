@@ -33,8 +33,8 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 - [ ] Keep generated iOS XCFramework artifact paths accurate.
 - [ ] Keep local Android verification passing:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .local\run_local_gradle.ps1 :shared:check :androidApp:assembleDebug --no-daemon --no-configuration-cache
+```bash
+./gradlew :shared:check :androidApp:assembleDebug --no-daemon --no-configuration-cache
 ```
 
 ## Priority 1: Hardware And App Behavior
@@ -137,11 +137,10 @@ powershell -ExecutionPolicy Bypass -File .local\run_local_gradle.ps1 :shared:che
 
 ## Priority 7: Documentation And Developer Experience
 
-- [x] Local Java/Gradle/Android SDK setup is documented under `.local`.
-- [x] Local Android emulator/device testing path exists.
-- [x] Local Android debug APK install script exists.
+- [x] Contributor-facing Android README uses standard Gradle/ADB/Android Studio commands.
+- [x] Personal `.local` tooling stays ignored and documented only inside `.local`.
 - [x] Local bridge script was removed because direct Nano AP connection works.
-- [ ] Keep `.local` files out of maintainer workflows unless intentionally documented.
+- [x] Keep `.local` files out of maintainer workflows.
 - [x] Update Android README with build, install, share-target, and hardware testing instructions.
 - [ ] Update iOS README with current shared framework integration and CI expectations.
 - [ ] Document supported import/share types:
