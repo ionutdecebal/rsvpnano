@@ -7,30 +7,48 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -39,9 +57,40 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.converters.RsvpSupportedFileTypes
+import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.PendingUpload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private enum class CompanionTab(val label: String, val icon: ImageVector) {
+    Library("Library", Icons.AutoMirrored.Outlined.LibraryBooks),
+    Articles("Articles", Icons.AutoMirrored.Outlined.Article),
+    Settings("Settings", Icons.Outlined.Settings),
+}
+
+private val CompanionLightColors = lightColorScheme(
+    primary = Color(0xFF2D5B45),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFC8EAD6),
+    onPrimaryContainer = Color(0xFF092016),
+    secondary = Color(0xFF566159),
+    background = Color(0xFFF6F7F1),
+    surface = Color(0xFFFDFCF6),
+    surfaceVariant = Color(0xFFE2E7DD),
+)
+
+private val CompanionDarkColors = darkColorScheme(
+    primary = Color(0xFF9CD8B6),
+    onPrimary = Color(0xFF06351F),
+    primaryContainer = Color(0xFF174C31),
+    onPrimaryContainer = Color(0xFFC8EAD6),
+    secondary = Color(0xFFBAC8BC),
+    background = Color(0xFF101511),
+    surface = Color(0xFF171D18),
+    surfaceVariant = Color(0xFF3F4941),
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CompanionApp(
     sharedApp: RsvpSharedApp,
@@ -79,250 +128,177 @@ fun CompanionApp(
         onShareIntentHandled()
     }
 
-    MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                HeaderCard(
-                    status = uiState.status,
-                    isConnected = uiState.isConnected,
-                    onReconnect = viewModel::connect,
-                )
-
-                if (!uiState.isConnected) {
-                    ConnectionPanel(
-                        uiState = uiState,
-                        onOpenWifiSettings = context::openWifiSettings,
-                        onConnectDefault = viewModel::connectDefault,
-                        onShowAddressEntry = viewModel::showAddressEntry,
-                        onAddressChange = viewModel::setAddress,
-                        onConnectCustom = viewModel::connect,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyColumn(modifier = Modifier.weight(1f, fill = true)) {
-                    item {
-                        SectionCard(title = "Library") {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = viewModel::refresh) {
-                                    Text(text = "Refresh")
-                                }
-                                Button(
-                                    onClick = {
-                                        filePicker.launch(
-                                            arrayOf(
-                                                "application/epub+zip",
-                                                "text/*",
-                                                "text/html",
-                                                "application/octet-stream",
-                                            ),
-                                        )
-                                    },
-                                    enabled = uiState.isConnected,
-                                ) {
-                                    Text(text = "Upload")
-                                }
-                            }
-                            if (uiState.books.isEmpty()) {
+    val colorScheme = if (isSystemInDarkTheme()) CompanionDarkColors else CompanionLightColors
+    MaterialTheme(colorScheme = colorScheme) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            var selectedTab by remember { mutableStateOf(CompanionTab.Library) }
+            Scaffold(
+                topBar = {
+                    CenterAlignedTopAppBar(
+                        title = {
+                            Column {
+                                Text(text = "RSVP Nano", style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    text = if (uiState.isConnected) "No books on device." else "Connect to load books.",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    text = if (uiState.isConnected) "Connected" else "Disconnected",
+                                    style = MaterialTheme.typography.labelSmall,
                                 )
                             }
-                        }
-                    }
-                    if (uiState.books.isNotEmpty()) {
-                        items(uiState.books) { book ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 10.dp),
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Text(text = book.displayTitle, style = MaterialTheme.typography.titleSmall)
-                                    TextButton(onClick = { viewModel.deleteDeviceBook(book) }) {
-                                        Text(text = "Delete")
-                                    }
+                        },
+                        actions = {
+                            if (uiState.isConnected) {
+                                TextButton(onClick = viewModel::connect) {
+                                    Text(text = "Reconnect")
                                 }
                             }
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                },
+                bottomBar = {
+                    NavigationBar {
+                        CompanionTab.entries.forEach { tab ->
+                            NavigationBarItem(
+                                selected = selectedTab == tab,
+                                onClick = { selectedTab = tab },
+                                icon = { Icon(imageVector = tab.icon, contentDescription = null) },
+                                label = { Text(text = tab.label) },
+                            )
                         }
                     }
+                },
+            ) { contentPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding)
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                ) {
+                    when (selectedTab) {
+                        CompanionTab.Library -> LibraryTab(
+                            uiState = uiState,
+                            onOpenWifiSettings = context::openWifiSettings,
+                            onConnectDefault = viewModel::connectDefault,
+                            onShowAddressEntry = viewModel::showAddressEntry,
+                            onAddressChange = viewModel::setAddress,
+                            onConnectCustom = viewModel::connect,
+                            onRefresh = viewModel::refresh,
+                            onUpload = {
+                                filePicker.launch(
+                                    arrayOf(
+                                        "application/epub+zip",
+                                        "text/*",
+                                        "text/html",
+                                        "application/octet-stream",
+                                    ),
+                                )
+                            },
+                            onDeleteBook = viewModel::deleteDeviceBook,
+                        )
+                        CompanionTab.Articles -> ArticlesTab(
+                            uiState = uiState,
+                            needsArticleFetch = viewModel::needsArticleFetch,
+                            onTitleChange = viewModel::setDraftTitle,
+                            onSourceChange = viewModel::setDraftSourceUrl,
+                            onBodyChange = viewModel::setDraftBody,
+                            onSaveText = viewModel::saveTextDraft,
+                            onSaveLink = viewModel::saveLinkDraft,
+                            onCancelEdit = viewModel::cancelDraftEdit,
+                            onEditDraft = viewModel::editDraft,
+                            onDeleteDraft = viewModel::deleteDraft,
+                            onSyncArticles = viewModel::syncSavedArticles,
+                            onFeedChange = viewModel::setRssFeedDraft,
+                            onAddFeed = viewModel::addRssFeed,
+                            onSyncFeeds = viewModel::syncRssFeeds,
+                        )
+                        CompanionTab.Settings -> SettingsTab(
+                            uiState = uiState,
+                            onWpmChange = viewModel::setSettingsWpmDraft,
+                            onBrightnessChange = viewModel::setSettingsBrightnessDraft,
+                            onSaveSettings = viewModel::saveDeviceSettings,
+                            onWifiSsidChange = viewModel::setWifiSsidDraft,
+                            onWifiPasswordChange = viewModel::setWifiPasswordDraft,
+                            onSaveWifi = viewModel::saveWifiSettings,
+                            onClearWifi = viewModel::clearWifiSettings,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
-                    item {
-                        SectionCard(title = "Reader Settings") {
-                            if (uiState.settings == null) {
-                                Text(text = if (uiState.isConnected) "Settings unavailable." else "Connect to load settings.")
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedTextField(
-                                        value = uiState.settingsWpmDraft,
-                                        onValueChange = viewModel::setSettingsWpmDraft,
-                                        label = { Text("Words per minute") },
-                                        singleLine = true,
-                                    )
-                                    OutlinedTextField(
-                                        value = uiState.settingsBrightnessDraft,
-                                        onValueChange = viewModel::setSettingsBrightnessDraft,
-                                        label = { Text("Brightness index") },
-                                        singleLine = true,
-                                    )
-                                    Button(onClick = viewModel::saveDeviceSettings) {
-                                        Text(text = "Save")
-                                    }
-                                }
-                            }
-                        }
-                    }
+@Composable
+private fun LibraryTab(
+    uiState: CompanionUiState,
+    onOpenWifiSettings: () -> Unit,
+    onConnectDefault: () -> Unit,
+    onShowAddressEntry: () -> Unit,
+    onAddressChange: (String) -> Unit,
+    onConnectCustom: () -> Unit,
+    onRefresh: () -> Unit,
+    onUpload: () -> Unit,
+    onDeleteBook: (NanoBook) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (!uiState.isConnected) {
+            item {
+                ConnectionPanel(
+                    uiState = uiState,
+                    onOpenWifiSettings = onOpenWifiSettings,
+                    onConnectDefault = onConnectDefault,
+                    onShowAddressEntry = onShowAddressEntry,
+                    onAddressChange = onAddressChange,
+                    onConnectCustom = onConnectCustom,
+                )
+            }
+        }
 
-                    item {
-                        SectionCard(title = "Wi-Fi") {
-                            val wifiStatus = uiState.wifiSettings?.let { wifi ->
-                                if (wifi.configured) {
-                                    "Configured for ${wifi.ssid}"
-                                } else {
-                                    "Not configured"
-                                }
-                            } ?: if (uiState.isConnected) {
-                                "Wi-Fi settings unavailable."
-                            } else {
-                                "Connect to load Wi-Fi settings."
-                            }
-                            Text(text = wifiStatus)
-                            OutlinedTextField(
-                                value = uiState.wifiSsidDraft,
-                                onValueChange = viewModel::setWifiSsidDraft,
-                                label = { Text("Network name") },
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                value = uiState.wifiPasswordDraft,
-                                onValueChange = viewModel::setWifiPasswordDraft,
-                                label = { Text("Password") },
-                                singleLine = true,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = viewModel::saveWifiSettings) {
-                                    Text(text = "Save")
-                                }
-                                TextButton(onClick = viewModel::clearWifiSettings) {
-                                    Text(text = "Forget")
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        SectionCard(title = "Saved Articles") {
-                            if (uiState.editingDraftId != null) {
-                                Text(text = "Editing saved article", style = MaterialTheme.typography.bodyMedium)
-                            }
-                            OutlinedTextField(
-                                value = uiState.draftTitle,
-                                onValueChange = viewModel::setDraftTitle,
-                                label = { Text("Article title") },
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                value = uiState.draftSourceUrl,
-                                onValueChange = viewModel::setDraftSourceUrl,
-                                label = { Text("Source URL") },
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                value = uiState.draftBody,
-                                onValueChange = viewModel::setDraftBody,
-                                label = { Text("Article text") },
-                                minLines = 3,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = viewModel::saveTextDraft) {
-                                    Text(text = if (uiState.editingDraftId == null) "Save text" else "Update")
-                                }
-                                TextButton(onClick = viewModel::saveLinkDraft) {
-                                    Text(text = if (uiState.editingDraftId == null) "Save link" else "Update link")
-                                }
-                                if (uiState.editingDraftId != null) {
-                                    TextButton(onClick = viewModel::cancelDraftEdit) {
-                                        Text(text = "Cancel")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (uiState.drafts.isEmpty()) {
-                        item {
-                            Text(text = "No drafts yet.")
-                        }
+        item {
+            SectionCard(title = "Device Library") {
+                Text(text = uiState.status, style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
+                Text(
+                    text = if (uiState.isConnected) {
+                        "Books and synced articles currently on the reader."
                     } else {
-                        items(uiState.drafts) { draft ->
-                            val suffix = if (viewModel.needsArticleFetch(draft)) " (URL only)" else ""
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 10.dp),
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                Text(text = draft.title + suffix, style = MaterialTheme.typography.titleSmall)
-                                if (viewModel.needsArticleFetch(draft)) {
-                                    Text(
-                                        text = "Needs article text before sync.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TextButton(onClick = { viewModel.editDraft(draft) }) {
-                                        Text(text = "Edit")
-                                    }
-                                    TextButton(onClick = { viewModel.deleteDraft(draft) }) {
-                                        Text(text = "Delete")
-                                    }
-                                }
-                                }
-                            }
-                        }
-                        item {
-                            Button(onClick = viewModel::syncSavedArticles) {
-                                Text(text = "Sync ready articles")
-                            }
-                        }
+                        "Connect to the reader to load its library."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onRefresh) {
+                        Text(text = "Refresh")
                     }
+                    Button(onClick = onUpload, enabled = uiState.isConnected) {
+                        Text(text = "Upload")
+                    }
+                }
+            }
+        }
 
-                    item {
-                        SectionCard(title = "RSS Feeds") {
-                            if (uiState.rssFeeds.isEmpty()) {
-                                Text(text = "No feeds saved.")
-                            } else {
-                                uiState.rssFeeds.forEach { feed ->
-                                    Text(text = feed, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                            OutlinedTextField(
-                                value = uiState.rssFeedDraft,
-                                onValueChange = viewModel::setRssFeedDraft,
-                                label = { Text("Feed URL") },
-                                singleLine = true,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = viewModel::addRssFeed) {
-                                    Text(text = "Add")
-                                }
-                                TextButton(onClick = viewModel::syncRssFeeds) {
-                                    Text(text = "Sync")
-                                }
-                            }
+        if (uiState.books.isEmpty()) {
+            item {
+                EmptyCard(text = if (uiState.isConnected) "No books on device." else "Library unavailable while disconnected.")
+            }
+        } else {
+            items(uiState.books) { book ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(text = book.displayTitle, style = MaterialTheme.typography.titleSmall)
+                        TextButton(onClick = { onDeleteBook(book) }) {
+                            Text(text = "Delete")
                         }
                     }
                 }
@@ -332,35 +308,224 @@ fun CompanionApp(
 }
 
 @Composable
-private fun HeaderCard(
-    status: String,
-    isConnected: Boolean,
-    onReconnect: () -> Unit,
+private fun ArticlesTab(
+    uiState: CompanionUiState,
+    needsArticleFetch: (PendingUpload) -> Boolean,
+    onTitleChange: (String) -> Unit,
+    onSourceChange: (String) -> Unit,
+    onBodyChange: (String) -> Unit,
+    onSaveText: () -> Unit,
+    onSaveLink: () -> Unit,
+    onCancelEdit: () -> Unit,
+    onEditDraft: (PendingUpload) -> Unit,
+    onDeleteDraft: (PendingUpload) -> Unit,
+    onSyncArticles: () -> Unit,
+    onFeedChange: (String) -> Unit,
+    onAddFeed: () -> Unit,
+    onSyncFeeds: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(text = "RSVP Nano", style = MaterialTheme.typography.headlineSmall)
-            Text(
-                text = if (isConnected) "Connected" else "Connect to sync books, articles, and settings.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            HorizontalDivider()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SectionCard(title = "Saved Articles") {
                 Text(
-                    text = status,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Share articles while online, then connect to the Nano to sync them.",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
-                if (isConnected) {
-                    TextButton(onClick = onReconnect) {
-                        Text(text = "Reconnect")
+                OutlinedTextField(
+                    value = uiState.draftTitle,
+                    onValueChange = onTitleChange,
+                    label = { Text("Article title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = uiState.draftSourceUrl,
+                    onValueChange = onSourceChange,
+                    label = { Text("Source URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = uiState.draftBody,
+                    onValueChange = onBodyChange,
+                    label = { Text("Article text") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onSaveText) {
+                        Text(text = if (uiState.editingDraftId == null) "Save text" else "Update")
+                    }
+                    TextButton(onClick = onSaveLink) {
+                        Text(text = if (uiState.editingDraftId == null) "Save link" else "Update link")
+                    }
+                    if (uiState.editingDraftId != null) {
+                        TextButton(onClick = onCancelEdit) {
+                            Text(text = "Cancel")
+                        }
                     }
                 }
             }
         }
+
+        if (uiState.drafts.isEmpty()) {
+            item { EmptyCard(text = "No saved articles yet.") }
+        } else {
+            items(uiState.drafts) { draft ->
+                val urlOnly = needsArticleFetch(draft)
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = draft.title + if (urlOnly) " (URL only)" else "",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (urlOnly) {
+                            Text(
+                                text = "Needs article text before sync.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { onEditDraft(draft) }) {
+                                Text(text = "Edit")
+                            }
+                            TextButton(onClick = { onDeleteDraft(draft) }) {
+                                Text(text = "Delete")
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                Button(onClick = onSyncArticles, enabled = uiState.isConnected) {
+                    Text(text = "Sync ready articles")
+                }
+            }
+        }
+
+        item {
+            SectionCard(title = "RSS Feeds") {
+                if (uiState.rssFeeds.isEmpty()) {
+                    Text(text = "No feeds saved.")
+                } else {
+                    uiState.rssFeeds.forEach { feed ->
+                        Text(text = feed, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                OutlinedTextField(
+                    value = uiState.rssFeedDraft,
+                    onValueChange = onFeedChange,
+                    label = { Text("Feed URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onAddFeed) {
+                        Text(text = "Add")
+                    }
+                    TextButton(onClick = onSyncFeeds, enabled = uiState.isConnected) {
+                        Text(text = "Sync")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsTab(
+    uiState: CompanionUiState,
+    onWpmChange: (String) -> Unit,
+    onBrightnessChange: (String) -> Unit,
+    onSaveSettings: () -> Unit,
+    onWifiSsidChange: (String) -> Unit,
+    onWifiPasswordChange: (String) -> Unit,
+    onSaveWifi: () -> Unit,
+    onClearWifi: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SectionCard(title = "Reader Settings") {
+                if (uiState.settings == null) {
+                    Text(text = if (uiState.isConnected) "Settings unavailable." else "Connect to load settings.")
+                } else {
+                    OutlinedTextField(
+                        value = uiState.settingsWpmDraft,
+                        onValueChange = onWpmChange,
+                        label = { Text("Words per minute") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = uiState.settingsBrightnessDraft,
+                        onValueChange = onBrightnessChange,
+                        label = { Text("Brightness index") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Button(onClick = onSaveSettings) {
+                        Text(text = "Save")
+                    }
+                }
+            }
+        }
+
+        item {
+            SectionCard(title = "Wi-Fi") {
+                val wifiStatus = uiState.wifiSettings?.let { wifi ->
+                    if (wifi.configured) "Configured for ${wifi.ssid}" else "Not configured"
+                } ?: if (uiState.isConnected) {
+                    "Wi-Fi settings unavailable."
+                } else {
+                    "Connect to load Wi-Fi settings."
+                }
+                Text(text = wifiStatus)
+                OutlinedTextField(
+                    value = uiState.wifiSsidDraft,
+                    onValueChange = onWifiSsidChange,
+                    label = { Text("Network name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = uiState.wifiPasswordDraft,
+                    onValueChange = onWifiPasswordChange,
+                    label = { Text("Password") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onSaveWifi) {
+                        Text(text = "Save")
+                    }
+                    TextButton(onClick = onClearWifi) {
+                        Text(text = "Forget")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyCard(text: String) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 
@@ -398,45 +563,45 @@ private fun ConnectionPanel(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-        Text(text = "Connect", style = MaterialTheme.typography.titleMedium)
-        Text(
-            text = "Open Companion sync on the reader, join its Wi-Fi, then return here.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onOpenWifiSettings) {
-                Text(text = "Join Nano Wi-Fi")
-            }
-            Button(onClick = onConnectDefault) {
-                Text(text = "Check Now")
-            }
-        }
-
-        TextButton(onClick = onShowAddressEntry) {
-            Text(text = "Reader not found?")
-        }
-
-        if (uiState.showAddressEntry) {
+            Text(text = "Connect", style = MaterialTheme.typography.titleMedium)
             Text(
-                text = "Enter the address shown on the reader if it is not 192.168.4.1.",
-                style = MaterialTheme.typography.bodySmall,
+                text = "Open Companion sync on the reader, join its Wi-Fi, then return here.",
+                style = MaterialTheme.typography.bodyMedium,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onOpenWifiSettings) {
-                    Text(text = "Wi-Fi Settings")
+                Button(onClick = onOpenWifiSettings) {
+                    Text(text = "Join Nano Wi-Fi")
+                }
+                Button(onClick = onConnectDefault) {
+                    Text(text = "Check Now")
                 }
             }
 
-            OutlinedTextField(
-                value = uiState.address,
-                onValueChange = onAddressChange,
-                label = { Text("Reader address or IP") },
-                singleLine = true,
-            )
-            Button(onClick = onConnectCustom) {
-                Text(text = "Connect to This Address")
+            TextButton(onClick = onShowAddressEntry) {
+                Text(text = "Reader not found?")
             }
-        }
+
+            if (uiState.showAddressEntry) {
+                Text(
+                    text = "Enter the address shown on the reader if it is not 192.168.4.1.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onOpenWifiSettings) {
+                        Text(text = "Wi-Fi Settings")
+                    }
+                }
+
+                OutlinedTextField(
+                    value = uiState.address,
+                    onValueChange = onAddressChange,
+                    label = { Text("Reader address or IP") },
+                    singleLine = true,
+                )
+                Button(onClick = onConnectCustom) {
+                    Text(text = "Connect to This Address")
+                }
+            }
         }
     }
 }
