@@ -267,6 +267,16 @@ bool isSupportedBookName(const String &loweredName) {
          loweredName.endsWith(".epub");
 }
 
+void removeBookSidecars(const String &path) {
+  const char *const suffixes[] = {".rdat", ".ridx"};
+  for (const char *suffix : suffixes) {
+    const String sidecarPath = path + suffix;
+    if (SD_MMC.exists(sidecarPath)) {
+      SD_MMC.remove(sidecarPath);
+    }
+  }
+}
+
 String displayNameForPath(const String &path) {
   const int separator = path.lastIndexOf('/');
   if (separator < 0) {
@@ -909,6 +919,7 @@ void CompanionSyncManager::handleBookDelete() {
     server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Delete failed\"}");
     return;
   }
+  removeBookSidecars(path);
 
   statusLine1_ = "Book deleted";
   statusLine2_ = filename;
