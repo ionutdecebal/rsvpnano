@@ -40,11 +40,12 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 ## Priority 1: Hardware And App Behavior
 
 - [ ] Manually smoke test iOS against real RSVP Nano hardware.
-- [ ] Manually smoke test Android against real RSVP Nano hardware.
+- [x] Manually smoke test Android against real RSVP Nano hardware.
   - [x] Uploading to the Nano from a physical Android phone works.
   - [x] Deleting while the Nano is powered off fails safely with a connection error instead of silently succeeding.
-  - [ ] Re-test full connect/refresh/upload/delete/settings/RSS/article sync pass after connection-delay UX is fixed.
+  - [x] Re-test full connect/refresh/upload/delete/settings/RSS/article sync pass after the connection retry changes.
 - [ ] Confirm powered-off/disconnected reader state clears promptly on both platforms.
+  - [x] Android detects powered-off/disconnected reader state correctly.
 - [x] Confirm destructive operations are blocked or fail safely while disconnected on Android.
 - [ ] Confirm destructive operations are blocked or fail safely while disconnected on iOS.
 - [ ] Confirm core device operations on both platforms:
@@ -59,7 +60,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
   - [x] Fetch URL-only article drafts.
   - [x] Sync saved articles to the reader.
 - [ ] Manually test iOS sharing from Safari, Chrome, and reader/file apps.
-- [ ] Manually test Android sharing from Chrome, reader, and file apps.
+- [x] Manually test Android sharing from Chrome, reader, and file apps.
 - [ ] Decide the UX for binary file sharing:
   - [ ] Save as a local pending book.
   - [ ] Direct upload only.
@@ -70,7 +71,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 - [x] Primary route tells the user to open Companion Sync and join the RSVP-Nano Wi-Fi.
 - [x] App checks `http://192.168.4.1` automatically when returning/connecting.
 - [x] If the default address fails, user can enter the IP/address shown on the reader.
-- [ ] Add a short delay/retry window after returning from Wi-Fi settings or selecting the Nano AP before declaring connection failure.
+- [x] Add a short delay/retry window after returning from Wi-Fi settings or selecting the Nano AP before declaring connection failure.
 - [ ] Improve connection copy for casual users who only see the Nano AP name and `http://192.168.4.1`.
 - [ ] Add clearer offline/disconnected states.
 - [x] Implement background article fetching: update `shared` module to allow automated, non-interactive fetches, enabling the app to pre-fetch content while the device has internet and eliminating the "fetch" button in UI.
@@ -159,7 +160,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
   - [x] App cannot change firmware UI.
   - [x] Primary UX assumes the user joins the Nano AP when needed.
 - [ ] Document CI artifacts:
-  - [ ] Android APK/AAR outputs.
+  - [ ] Android APK output.
   - [x] iOS XCFramework output.
 - [ ] Add release checklist:
   - [ ] Android debug/release build.
@@ -169,21 +170,13 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
   - [ ] Share-flow smoke test.
   - [ ] Basic accessibility pass.
 
-## Deferred
-
-- [ ] LAN discovery is deferred until firmware exposes a reliable discovery mechanism such as mDNS, a stable hostname, or an advertised API endpoint.
-- [ ] Docker is not useful for real iOS app testing because Xcode/macOS is still required.
-- [ ] Firmware changes are out of scope unless permission to modify the Nano firmware changes.
-- [ ] Firmware Companion sync screen bug: while Companion sync is open, swipe/hold can still enter reading, then the UI returns to the sync screen.
-- [ ] Binary file sharing into local pending drafts is deferred until the product UX is defined.
-
 ## Definition Of Done
 
 - [ ] Android CI passes.
 - [ ] iOS CI passes.
 - [ ] Shared parity tests cover representative text, HTML, EPUB, and existing `.rsvp` paths.
 - [ ] iOS app builds and runs against real hardware.
-- [ ] Android app builds and runs against real hardware.
+- [x] Android app builds and runs against real hardware.
 - [ ] Both apps can connect, refresh, upload, delete, sync articles, sync RSS, and update settings.
 - [ ] Both share flows save drafts correctly.
 - [ ] Disconnect/power-off behavior prevents stale destructive actions.
