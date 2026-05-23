@@ -47,18 +47,14 @@ final class LibraryViewModel: ObservableObject {
         }
     }
     
-    func refreshBooks() {
-        Task {
-            await connection.run("Refreshing", requiresConnection: true) { [self] in
-                // We need RSS feeds from the settings/inbox model if we wanted to merge them here,
-                // but for now we focus on books.
-                let snapshot = try await connection.companionController.refreshDevice(
-                    baseUrl: connection.address,
-                    localRssFeeds: [] 
-                )
-                self.books = snapshot.books
-                self.librarySummary = snapshot.summaryText
-            }
+    func refreshBooks() async {
+        await connection.run("Refreshing", requiresConnection: true) { [self] in
+            let snapshot = try await connection.companionController.refreshDevice(
+                baseUrl: connection.address,
+                localRssFeeds: []
+            )
+            self.books = snapshot.books
+            self.librarySummary = snapshot.summaryText
         }
     }
     

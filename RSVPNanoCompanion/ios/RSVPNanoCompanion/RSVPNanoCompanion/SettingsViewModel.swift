@@ -60,7 +60,7 @@ final class SettingsViewModel: ObservableObject {
                     baseUrl: connection.address, 
                     settings: next
                 ).settings
-                connection.status = "Device settings saved. Exit sync on the reader to apply all changes."
+                connection.status = "Saved to Nano. Some changes apply after leaving Companion Sync."
             }
         }
     }

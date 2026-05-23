@@ -7,27 +7,46 @@ struct SettingsPage: View {
 
     var body: some View {
         List {
+            connectionSection
             if viewModel.deviceSettings == nil {
                 settingsSummarySection
             } else {
                 wordPacingSettingsSection
                 displaySettingsSection
-                wifiSettingsSection
                 typographySettingsSection
+                wifiSettingsSection
 
                 Section {
-                    Button {
-                        viewModel.refreshSettings()
-                    } label: {
-                        Label("Refresh Settings", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(connection.isBusy)
-
                     Text("Changes are saved to the reader. Exit sync on the device to apply every setting on-screen.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+        .listStyle(.insetGrouped)
+        .refreshable {
+            if connection.isConnected {
+                viewModel.refreshSettings()
+                viewModel.refreshWifiSettings()
+            }
+        }
+    }
+
+    private var connectionSection: some View {
+        Section("Reader Connection") {
+            TextField("Reader address", text: $connection.address)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+
+            Button {
+                connection.connectDefault()
+            } label: {
+                Label("Reset to 192.168.4.1", systemImage: "wifi")
+            }
+            .buttonStyle(.bordered)
+            .tint(.secondary)
+            .disabled(connection.isBusy)
         }
     }
 
@@ -41,6 +60,7 @@ struct SettingsPage: View {
             } label: {
                 Label("Load Settings", systemImage: "slider.horizontal.3")
             }
+            .buttonStyle(.borderedProminent)
             .disabled(!connection.isConnected || connection.isBusy)
         }
     }
@@ -68,23 +88,20 @@ struct SettingsPage: View {
                 }
                 .disabled(connection.isBusy)
 
-                Stepper(value: wpmBinding(for: settings), in: 100...1000, step: 25) {
-                    LabeledContent("Base Speed", value: "\(settings.reading.wpm) WPM")
-                }
-                .disabled(connection.isBusy)
+                sliderSetting("Base Speed", value: wpmBinding(for: settings), range: 10...1000, step: 1, label: "\(settings.reading.wpm) WPM")
+                sliderSetting("Long Words", value: pacingLongBinding(for: settings), range: 0...600, step: 50, label: "\(settings.reading.pacing.longWordMs) ms")
+                sliderSetting("Complexity", value: pacingComplexBinding(for: settings), range: 0...600, step: 50, label: "\(settings.reading.pacing.complexWordMs) ms")
+                sliderSetting("Punctuation", value: pacingPunctuationBinding(for: settings), range: 0...600, step: 50, label: "\(settings.reading.pacing.punctuationMs) ms")
 
-                Stepper(value: pacingLongBinding(for: settings), in: 0...600, step: 50) {
-                    LabeledContent("Long Words", value: "\(settings.reading.pacing.longWordMs) ms")
-                }
-                .disabled(connection.isBusy)
-
-                Stepper(value: pacingComplexBinding(for: settings), in: 0...600, step: 50) {
-                    LabeledContent("Complexity", value: "\(settings.reading.pacing.complexWordMs) ms")
-                }
-                .disabled(connection.isBusy)
-
-                Stepper(value: pacingPunctuationBinding(for: settings), in: 0...600, step: 50) {
-                    LabeledContent("Punctuation", value: "\(settings.reading.pacing.punctuationMs) ms")
+                Button {
+                    viewModel.saveSettings(
+                        settings
+                            .withPacingLongWordMs(value: 0)
+                            .withPacingComplexWordMs(value: 0)
+                            .withPacingPunctuationMs(value: 0)
+                    )
+                } label: {
+                    Label("Reset Pacing", systemImage: "arrow.counterclockwise")
                 }
                 .disabled(connection.isBusy)
             }
@@ -105,10 +122,7 @@ struct SettingsPage: View {
                 }
                 .disabled(connection.isBusy)
 
-                Stepper(value: brightnessBinding(for: settings), in: 0...4) {
-                    LabeledContent("Brightness", value: "\(settings.display.brightnessIndex + 1) / 5")
-                }
-                .disabled(connection.isBusy)
+                sliderSetting("Brightness", value: brightnessBinding(for: settings), range: 0...4, step: 1, label: "\(settings.display.brightnessIndex + 1) / 5")
 
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Reader Hand")
@@ -135,10 +149,20 @@ struct SettingsPage: View {
                     Picker("Battery Label", selection: batteryLabelBinding(for: settings)) {
                         Text("Percentage").tag("percent")
                         Text("Time Remaining").tag("time_remaining")
+                        Text("Voltage").tag("voltage")
                     }
                     .pickerStyle(.segmented)
                 }
                 .disabled(connection.isBusy)
+
+                Toggle("Show Battery While Reading", isOn: readingBatteryBinding(for: settings))
+                    .disabled(connection.isBusy)
+
+                Toggle("Show Chapter While Reading", isOn: readingChapterBinding(for: settings))
+                    .disabled(connection.isBusy)
+
+                Toggle("Show Book Percent While Reading", isOn: readingProgressBinding(for: settings))
+                    .disabled(connection.isBusy)
             }
         }
     }
@@ -170,6 +194,7 @@ struct SettingsPage: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
                 .disabled(connection.isBusy || viewModel.wifiSsidDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Button(role: .destructive) {
@@ -179,15 +204,10 @@ struct SettingsPage: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .tint(.red)
                 .disabled(connection.isBusy || viewModel.wifiSettings?.configured != true)
             }
 
-            Button {
-                viewModel.refreshWifiSettings()
-            } label: {
-                Label("Refresh Wi-Fi", systemImage: "arrow.clockwise")
-            }
-            .disabled(connection.isBusy)
         } header: {
             Text("Wi-Fi")
         } footer: {
@@ -211,30 +231,11 @@ struct SettingsPage: View {
                 Toggle("Phantom Words", isOn: phantomWordsBinding(for: settings))
                     .disabled(connection.isBusy)
 
-                Stepper(value: fontSizeBinding(for: settings), in: 0...2) {
-                    LabeledContent("Font Size", value: "\(settings.display.fontSizeIndex + 1) / 3")
-                }
-                .disabled(connection.isBusy)
-
-                Stepper(value: trackingBinding(for: settings), in: -2...3) {
-                    LabeledContent("Tracking", value: "\(settings.typography.tracking)")
-                }
-                .disabled(connection.isBusy)
-
-                Stepper(value: anchorBinding(for: settings), in: 30...40) {
-                    LabeledContent("Anchor", value: "\(settings.typography.anchorPercent)%")
-                }
-                .disabled(connection.isBusy)
-
-                Stepper(value: guideWidthBinding(for: settings), in: 12...30, step: 2) {
-                    LabeledContent("Guide Width", value: "\(settings.typography.guideWidth)")
-                }
-                .disabled(connection.isBusy)
-
-                Stepper(value: guideGapBinding(for: settings), in: 2...8) {
-                    LabeledContent("Guide Gap", value: "\(settings.typography.guideGap)")
-                }
-                .disabled(connection.isBusy)
+                sliderSetting("Font Size", value: fontSizeBinding(for: settings), range: 0...2, step: 1, label: "\(settings.display.fontSizeIndex + 1) / 3")
+                sliderSetting("Tracking", value: trackingBinding(for: settings), range: -2...3, step: 1, label: "\(settings.typography.tracking)")
+                sliderSetting("Anchor", value: anchorBinding(for: settings), range: 30...40, step: 1, label: "\(settings.typography.anchorPercent)%")
+                sliderSetting("Guide Width", value: guideWidthBinding(for: settings), range: 12...30, step: 2, label: "\(settings.typography.guideWidth)")
+                sliderSetting("Guide Gap", value: guideGapBinding(for: settings), range: 2...8, step: 1, label: "\(settings.typography.guideGap)")
             }
         }
     }
@@ -245,14 +246,40 @@ struct SettingsPage: View {
             .foregroundStyle(.secondary)
     }
 
+    private func sliderSetting(_ title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            LabeledContent(title, value: label)
+            Slider(
+                value: Binding(
+                    get: { Double(value.wrappedValue) },
+                    set: { next in
+                        let snapped = Int((next / Double(step)).rounded()) * step
+                        value.wrappedValue = min(max(snapped, range.lowerBound), range.upperBound)
+                    }
+                ),
+                in: Double(range.lowerBound)...Double(range.upperBound),
+                step: Double(step)
+            )
+        }
+        .disabled(connection.isBusy)
+    }
+
     private func wpmBinding(for settings: NanoSettings) -> Binding<Int> {
         Binding(
             get: { viewModel.deviceSettings?.reading.wpm ?? settings.reading.wpm },
             set: { value in
                 guard let current = viewModel.deviceSettings else { return }
-                viewModel.saveSettings(current.withWpm(value: Int32(value)))
+                viewModel.saveSettings(current.withWpm(value: Int32(snappedWpm(value))))
             }
         )
+    }
+
+    private func snappedWpm(_ value: Int) -> Int {
+        let clamped = min(max(value, 10), 1000)
+        if clamped <= 100 {
+            return min(max(((clamped + 5) / 10) * 10, 10), 100)
+        }
+        return min(max(100 + (((clamped - 100 + 12) / 25) * 25), 100), 1000)
     }
 
     private func pauseModeBinding(for settings: NanoSettings) -> Binding<String> {
@@ -341,6 +368,36 @@ struct SettingsPage: View {
             set: { value in
                 guard let current = viewModel.deviceSettings else { return }
                 viewModel.saveSettings(current.withBatteryLabel(value: value))
+            }
+        )
+    }
+
+    private func readingBatteryBinding(for settings: NanoSettings) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.deviceSettings?.display.readingBattery ?? settings.display.readingBattery },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withReadingBattery(value: value))
+            }
+        )
+    }
+
+    private func readingChapterBinding(for settings: NanoSettings) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.deviceSettings?.display.readingChapter ?? settings.display.readingChapter },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withReadingChapter(value: value))
+            }
+        )
+    }
+
+    private func readingProgressBinding(for settings: NanoSettings) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.deviceSettings?.display.readingProgress ?? settings.display.readingProgress },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withReadingProgress(value: value))
             }
         )
     }

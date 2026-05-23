@@ -1,8 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:label="RSVP Nano"
         android:allowBackup="true"
+        android:theme="@style/Theme.RSVPNanoCompanion"
         android:usesCleartextTraffic="true"
         android:supportsRtl="true">
         <activity

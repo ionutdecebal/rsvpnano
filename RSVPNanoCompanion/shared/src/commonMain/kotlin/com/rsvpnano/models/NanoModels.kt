@@ -94,6 +94,9 @@ data class NanoSettings(
         val handedness: String,
         val footerMetric: String,
         val batteryLabel: String,
+        val readingBattery: Boolean = true,
+        val readingChapter: Boolean = false,
+        val readingProgress: Boolean = false,
         val language: Int,
         val phantomWords: Boolean,
         val fontSizeIndex: Int,
@@ -158,6 +161,15 @@ data class NanoSettings(
 
     fun withBatteryLabel(value: String): NanoSettings =
         copy(display = display.copy(batteryLabel = value))
+
+    fun withReadingBattery(value: Boolean): NanoSettings =
+        copy(display = display.copy(readingBattery = value))
+
+    fun withReadingChapter(value: Boolean): NanoSettings =
+        copy(display = display.copy(readingChapter = value))
+
+    fun withReadingProgress(value: Boolean): NanoSettings =
+        copy(display = display.copy(readingProgress = value))
 
     fun withAppearance(darkMode: Boolean, nightMode: Boolean): NanoSettings =
         copy(display = display.copy(darkMode = darkMode, nightMode = nightMode))

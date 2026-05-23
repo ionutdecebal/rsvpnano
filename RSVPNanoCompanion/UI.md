@@ -16,9 +16,9 @@ Most functionality already exists. The redesign should focus on clarity, speed, 
 Use bottom navigation for the primary sections:
 
 - Library
-- Articles
-- RSS
 - Settings
+
+Do not keep separate Articles and RSS tabs for the first redesign pass. Article drafts and fetched article entries should live in Library. RSS should only get a primary tab later if the app becomes an actual RSS reader with feed timelines, unread counts, per-feed browsing, and refresh controls.
 
 Use a help icon instead of a Help tab. It can open contextual help for the current section, or a single help sheet with grouped topics.
 
@@ -82,24 +82,53 @@ Saved to Nano.
 
 ## Library
 
-Library is the reader-side collection. It should show content currently on the Nano.
+Library is the unified content surface for books and articles. It should cover both local saved/draft content and content currently on the Nano, with clear sync/status indicators rather than separate primary tabs.
 
-Books and synced articles can share one library list. Differentiate with icons instead of repeating text labels on every row:
+Books and articles should share one list. Differentiate with icons instead of repeating text labels on every row:
 
 - Book icon for books.
 - Newspaper/article icon for articles.
 
-Add filtering/search:
+Use a single Upload action for creation/import:
 
-- Search by title, author, or path.
+- Upload book.
+- Add article.
+- Add RSS feed.
+
+Place Upload as the first Library row, above search and filters. It should be simple and list-native:
+
+- Label: `Upload`.
+- Upload icon.
+- No long explanatory subtitle.
+- Opens the creation/import picker.
+
+Avoid a title-bar Add button because the action is Library-scoped, not global. Avoid a bottom-right FAB by default because it competes with the bottom navigation and can cover list content. If testing later shows Upload must stay reachable while deep-scrolled, revisit a modest FAB.
+
+Tapping Upload should open a compact action picker, not an expanding speed-dial. Use a platform-native popup, menu, confirmation dialog, or bottom sheet with:
+
+- Upload book.
+- Add article.
+- Add RSS feed.
+
+The picker should lead to the chosen workflow. Do not put the article URL field directly in the first Upload picker. Keep the menu shallow so the common path does not feel hidden or cumbersome.
+
+Use minimal filtering/search:
+
+- Search by title, author, source, URL, or path.
 - Filter chips: All, Books, Articles.
 
-Each list row should show metadata already available from the reader API:
+Avoid adding filters that behave like replacement tabs, such as Pending, Feeds, Unread, Synced, or Failed. Add those only if the list becomes hard to scan in real use.
+
+Pending article fetches should appear in a small section at the top of Library only while they are unresolved. When a pending article resolves, it should move into its normal place in the list. Failed fetches should remain visible with retry, edit, and delete actions.
+
+Each list row should show the metadata available for that item:
 
 - Title.
 - Author/source when available.
 - Progress percent when available.
 - File size.
+- Date for local drafts/articles when useful.
+- Ready/pending/failed/synced state when relevant.
 - Book/article icon.
 
 Do not add word count in this pass. Current firmware `/api/books` does not return word count or chapter count. The firmware has word count internally for indexed reading/progress, but exposing it to the app requires a firmware/API change first.
@@ -112,6 +141,7 @@ Tapping an item should open a detail sheet with:
 - Size.
 - Path/id.
 - Content type inferred from category/path.
+- Local article status and source URL when relevant.
 - Delete action.
 
 No replace/reupload workflow is needed now.
@@ -119,8 +149,23 @@ No replace/reupload workflow is needed now.
 Primary library actions:
 
 - Refresh.
-- Upload supported files.
+- Add/import content.
 - Delete selected item.
+
+Where the platform supports it cleanly, refresh reader-backed lists with pull-to-refresh instead of a persistent refresh button. Keep explicit reconnect/check controls in the global connection bar because they affect the app connection state, not just one list.
+
+Pull-to-refresh should use the standard refresh/loop-arrow indicator:
+
+- While pulling, show the loop-arrow indicator and let it rotate/progress with pull distance.
+- Once the threshold is crossed, switch the indicator into active refreshing state.
+- Keep the indicator visible until the underlying refresh operation finishes, not just until the gesture ends.
+- If refresh completes too quickly to perceive, keep the indicator visible briefly so the action has feedback.
+- Collapse the indicator when refresh completes.
+
+Show a short snackbar/toast when useful:
+
+- `Library refreshed` if the list did not visibly change.
+- `Refresh failed` if the request failed, with retry where appropriate.
 
 Supported upload formats:
 
@@ -133,39 +178,40 @@ Supported upload formats:
 - `.htm`
 - `.xhtml`
 
-## Articles
+### Add Article
 
-Articles is the local article/draft workflow.
+Adding an article should be URL-first, with manual editing available but not presented as the main workload.
 
-It should manage:
+The Add article sheet/dialog should initially show:
+
+- URL text field.
+- Title text field that is auto-filled after fetch and remains editable.
+- `Edit body` action that reveals the article body editor.
+
+The body editor should stay behind `Edit body` so the normal case is quick: paste URL, fetch, optionally adjust title, save.
+
+Behavior:
+
+- If a URL is provided, fetch article metadata/content.
+- While fetch is running, show a pending item at the top of Library.
+- If fetch succeeds, auto-fill the title and body, then place the article in its normal Library position.
+- If fetch fails, keep a visible failed item with retry, edit, and delete actions.
+- The title should remain editable after fetch.
+- The body should be editable through `Edit body`.
+- Manual creation should be possible by entering title/body, but it should not dominate the default flow.
+
+Article workflows that should be represented in Library:
 
 - Shared URLs.
 - Shared text.
 - Text-like shared files.
 - Manually created article drafts.
 - Drafts waiting to sync to the Nano.
-
-Draft rows should clearly show:
-
-- Title.
-- Source host/url when available.
-- Date.
-- Size or word count from local draft body.
-- Ready-to-sync state vs needs article text.
-
-Actions:
-
-- Edit draft.
-- Delete draft.
-- Sync one ready article.
-- Sync all ready articles.
-- Save/paste article text manually.
-
-URL-only drafts should show that article text is needed before sync. If background fetching succeeded, show the draft as ready.
+- Synced articles currently on the Nano.
 
 ## RSS
 
-RSS is feed-source management, not article content management.
+RSS is feed-source management unless the app grows into an RSS reader.
 
 It should support:
 
@@ -175,6 +221,16 @@ It should support:
 - Sync feeds to the reader.
 - Reload feeds from the reader.
 - Delete local feed entries.
+
+If RSS only creates article entries, those entries belong in Library and RSS should not be a primary tab. Feed URL management can live behind Add RSS feed or in a small feed/source management sheet.
+
+Only promote RSS to a primary tab if the app itself shows the actual feed experience:
+
+- Feed timelines.
+- Unread counts.
+- Per-feed browsing.
+- Refresh controls.
+- Feed item triage separate from saved Library content.
 
 Keep the copy short. Make clear that RSS feeds are saved to the reader and used by the reader to download articles when it has configured home Wi-Fi.
 
@@ -290,8 +346,8 @@ Future firmware work:
 Use icons where the meaning is familiar:
 
 - Library: book.
-- Articles: newspaper/article.
-- RSS: RSS icon.
+- Articles: newspaper/article icon inside Library rows and Upload picker actions.
+- RSS: RSS icon for Add RSS feed and feed/source management.
 - Settings: sliders.
 - Connect: Wi-Fi/link.
 - Refresh: refresh.
@@ -324,3 +380,29 @@ Avoid:
 - Card-heavy nested layouts.
 - One-note color palettes.
 - Repeating obvious type labels in every row when section context or icons are enough.
+
+## Surface And Color Hierarchy
+
+Use surface roles to guide behavior:
+
+- App/page background: lowest emphasis neutral surface.
+- Lists and normal rows: neutral surface/container colors so content is readable but not screaming for action.
+- Grouped settings and form sections: slightly raised neutral containers.
+- Global connection bar: a higher-emphasis surface because it affects the whole app.
+- Connected state: subtle primary container tint.
+- Needs attention/disconnected state: subtle tertiary/warning tint, not destructive red.
+
+Use action colors sparingly:
+
+- Primary/prominent buttons: only the main action in a region, such as Wi-Fi, upload, save, or sync.
+- Secondary/tonal buttons: refresh, reconnect/check, edit, reset, and supporting actions.
+- Text buttons: low-emphasis actions like reveal manual connection or cancel.
+- Error/destructive color: delete, forget Wi-Fi, and confirmed destructive actions only.
+- Destructive icon buttons should use an error-container background, not just a red icon, so the action reads differently from ordinary row tools.
+
+Use type hierarchy with the same restraint:
+
+- Section titles: title styles.
+- Row titles: title/body emphasis.
+- Metadata, helper text, and status detail: secondary/on-surface-variant styles.
+- Avoid large text inside dense controls and settings rows.

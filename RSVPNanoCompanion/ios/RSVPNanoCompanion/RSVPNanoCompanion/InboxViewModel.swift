@@ -5,6 +5,7 @@ import shared
 final class InboxViewModel: ObservableObject {
     @Published var pendingUploads: [PendingUpload] = []
     @Published var editingArticle: PendingUpload?
+    @Published var showingAddArticle = false
     
     private let connection: NanoConnectionManager
     private var connectionObserver: Any?
@@ -75,6 +76,54 @@ final class InboxViewModel: ObservableObject {
         }
     }
 
+    func saveArticle(title: String, sourceUrl: String, body: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSource = sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let pending: shared.PendingUpload?
+        if !trimmedBody.isEmpty {
+            pending = shared.ImportPreparation.shared.pendingUploadForText(
+                id: UUID().uuidString,
+                title: trimmedTitle,
+                source: trimmedSource,
+                text: trimmedBody,
+                createdAt: shared.SharedAppUtils.shared.nowIso8601(),
+                fallbackTitle: "Untitled Article"
+            )
+        } else {
+            guard let url = URL(string: trimmedSource), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+                connection.lastConnectionError = "Article URLs must start with http:// or https://."
+                connection.status = "Could not save article."
+                return
+            }
+            pending = shared.ImportPreparation.shared.pendingUploadForUrl(
+                id: UUID().uuidString,
+                title: trimmedTitle.isEmpty ? (url.host ?? "Saved Article") : trimmedTitle,
+                source: trimmedSource,
+                host: url.host ?? "",
+                createdAt: shared.SharedAppUtils.shared.nowIso8601()
+            )
+        }
+
+        guard let pending else {
+            connection.status = "Add a URL or article body before saving."
+            return
+        }
+
+        Task {
+            do {
+                let snapshot = try await connection.companionController.saveDraftFetchingArticleIfNeeded(item: pending)
+                pendingUploads = snapshot.drafts
+                showingAddArticle = false
+                connection.status = snapshot.fetchedArticle ? "Fetched and saved \(snapshot.item.title)." : "Saved \(snapshot.item.title)."
+            } catch {
+                connection.lastConnectionError = error.localizedDescription
+                connection.status = "Could not save article."
+            }
+        }
+    }
+
     func syncPendingUploads() {
         let items = pendingUploads.filter { !connection.companionController.needsArticleFetch(item: $0) }
         guard !items.isEmpty else {
@@ -124,6 +173,17 @@ final class InboxViewModel: ObservableObject {
                     index < pendingUploads.count ? pendingUploads[index].id : nil
                 }
                 let snapshot = try await connection.companionController.deleteDrafts(ids: ids)
+                pendingUploads = snapshot.drafts
+            } catch {
+                connection.lastConnectionError = error.localizedDescription
+            }
+        }
+    }
+
+    func deletePendingUpload(_ item: PendingUpload) {
+        Task {
+            do {
+                let snapshot = try await connection.companionController.deleteDrafts(ids: [item.id])
                 pendingUploads = snapshot.drafts
             } catch {
                 connection.lastConnectionError = error.localizedDescription

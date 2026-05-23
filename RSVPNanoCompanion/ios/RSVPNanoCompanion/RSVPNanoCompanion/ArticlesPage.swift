@@ -3,15 +3,14 @@ import shared
 
 struct ArticlesPage: View {
     @ObservedObject var viewModel: InboxViewModel
-    @ObservedObject var settingsViewModel: SettingsViewModel
     @ObservedObject var connection: NanoConnectionManager = .shared
 
     var body: some View {
         List {
             workflowSection
             savedArticlesSection
-            rssFeedsSection
         }
+        .listStyle(.insetGrouped)
     }
 
     private var workflowSection: some View {
@@ -81,72 +80,9 @@ struct ArticlesPage: View {
                 } label: {
                     Label("Sync Saved Articles", systemImage: "arrow.up.doc")
                 }
+                .buttonStyle(.borderedProminent)
                 .disabled(!connection.isConnected || connection.isBusy || !viewModel.pendingUploads.contains { !$0.needsArticleFetch })
             }
-        }
-    }
-
-    private var rssFeedsSection: some View {
-        Section {
-            if settingsViewModel.rssFeeds.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("No RSS feeds saved.")
-                    Text("Add feed URLs now, then sync them to the reader when Companion sync is connected.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                ForEach(settingsViewModel.rssFeeds, id: \.self) { feed in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(feed)
-                            .font(.caption)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(settingsViewModel.syncedRssFeeds.contains(feed) ? "Synced" : "Pending")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(settingsViewModel.syncedRssFeeds.contains(feed) ? .green : .orange)
-                    }
-                }
-                .onDelete(perform: settingsViewModel.deleteRssFeeds)
-            }
-
-            TextField("https://example.com/feed.xml", text: $settingsViewModel.rssFeedDraft)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-
-            HStack(spacing: 10) {
-                Button {
-                    settingsViewModel.addRssFeed()
-                } label: {
-                    Label(connection.isConnected ? "Add & Sync" : "Add Feed", systemImage: "plus")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(connection.isBusy || settingsViewModel.rssFeedDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Button {
-                    connection.isConnected ? settingsViewModel.syncRssFeeds() : connection.connect()
-                } label: {
-                    Label(connection.isConnected ? "Sync Feeds" : "Connect", systemImage: "arrow.triangle.2.circlepath")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(connection.isBusy || (connection.isConnected && settingsViewModel.rssFeeds.isEmpty))
-            }
-
-            if connection.isConnected {
-                Button {
-                    settingsViewModel.refreshRssFeeds()
-                } label: {
-                    Label("Reload From Reader", systemImage: "arrow.down.circle")
-                }
-                .disabled(connection.isBusy)
-            }
-        } header: {
-            Text("RSS Feeds")
-        } footer: {
-            Text("Feeds marked Pending are saved on this iPhone. Sync writes the full list to /config/rss.conf on the reader.")
         }
     }
 

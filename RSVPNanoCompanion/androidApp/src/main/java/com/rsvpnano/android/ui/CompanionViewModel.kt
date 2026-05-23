@@ -15,10 +15,13 @@ import com.rsvpnano.models.PendingUpload
 import java.net.URI
 import java.util.UUID
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 data class CompanionUiState(
     val drafts: List<PendingUpload> = emptyList(),
@@ -36,6 +39,7 @@ data class CompanionUiState(
     val rssFeedDraft: String = "",
     val isConnected: Boolean = false,
     val showAddressEntry: Boolean = false,
+    val isRefreshing: Boolean = false,
     val status: String = "Ready",
 )
 
@@ -54,19 +58,27 @@ class CompanionViewModel(
     val uiState: StateFlow<CompanionUiState> = _uiState
     private var pendingSettingsSave: NanoSettings? = null
     private var settingsSaveJob: Job? = null
+    private var connectionMonitorJob: Job? = null
+    private var recheckJob: Job? = null
     private val current: CompanionUiState
         get() = _uiState.value
 
     init {
         refresh()
+        startConnectionMonitor()
     }
 
     fun setAddress(value: String) = updateState { it.copy(address = value) }
 
     fun showAddressEntry() = updateState {
+        val shouldShowAddressEntry = !it.showAddressEntry
         it.copy(
-            showAddressEntry = true,
-            status = "If the default address is not working, enter the address shown by the reader.",
+            showAddressEntry = shouldShowAddressEntry,
+            status = if (shouldShowAddressEntry) {
+                "If the default address is not working, enter the address shown by the reader."
+            } else {
+                it.status
+            },
         )
     }
 
@@ -89,17 +101,25 @@ class CompanionViewModel(
 
     fun refresh() {
         viewModelScope.launch {
-            setStatus("Refreshing...")
-            val local = companionController.refreshLocal()
-            updateState {
-                it.copy(
-                    drafts = local.drafts,
-                    rssFeeds = local.rssFeeds,
-                    status = "Loaded ${local.drafts.size} drafts.",
-                )
-            }
-            if (!current.isConnected) {
-                connectSilently()
+            updateState { it.copy(isRefreshing = true, status = "Refreshing...") }
+            runCatching {
+                val local = companionController.refreshLocal()
+                updateState {
+                    it.copy(
+                        drafts = local.drafts,
+                        rssFeeds = local.rssFeeds,
+                        status = "Loaded ${local.drafts.size} drafts.",
+                    )
+                }
+                if (!current.isConnected) {
+                    connectSilently()
+                }
+            }.onFailure { error ->
+                updateState {
+                    it.copy(status = error.message ?: "Refresh failed.")
+                }
+            }.also {
+                updateState { it.copy(isRefreshing = false) }
             }
         }
     }
@@ -134,18 +154,57 @@ class CompanionViewModel(
     }
 
     fun recheckConnectionAfterResume() {
-        viewModelScope.launch {
-            val state = current
-            if (!state.isConnected) {
-                connect(showBusyStatus = false)
-                return@launch
-            }
+        recheckJob?.cancel()
+        recheckJob = viewModelScope.launch {
+            verifyCurrentConnectionOrReconnect()
+        }
+    }
 
-            runCatching {
-                companionController.verifyReachableWithRetry(SharedAppUtils.normalizedAddress(state.address))
-            }.onFailure {
-                markDisconnected("Reader disconnected. Reconnect to RSVP Nano before continuing.")
+    fun recheckConnectionAfterNetworkChange() {
+        recheckJob?.cancel()
+        recheckJob = viewModelScope.launch {
+            verifyCurrentConnectionOrReconnect()
+            if (!current.isConnected) {
+                delay(1_200)
+                verifyCurrentConnectionOrReconnect()
             }
+        }
+    }
+
+    private fun startConnectionMonitor() {
+        connectionMonitorJob?.cancel()
+        connectionMonitorJob = viewModelScope.launch {
+            while (isActive) {
+                delay(2_500)
+                if (current.isConnected) {
+                    verifyCurrentConnection()
+                }
+            }
+        }
+    }
+
+    private suspend fun verifyCurrentConnectionOrReconnect() {
+        val state = current
+        if (!state.isConnected) {
+            connect(showBusyStatus = false)
+            return
+        }
+        verifyCurrentConnection()
+    }
+
+    private suspend fun verifyCurrentConnection() {
+        val state = current
+        if (!state.isConnected) return
+        runCatching {
+            withTimeout(3_000) {
+                companionController.verifyReachableWithRetry(
+                    baseUrl = SharedAppUtils.normalizedAddress(state.address),
+                    attempts = 1,
+                    retryDelayMillis = 0,
+                )
+            }
+        }.onFailure {
+            markDisconnected("Reader disconnected. Reconnect to RSVP Nano before continuing.")
         }
     }
 
@@ -190,7 +249,7 @@ class CompanionViewModel(
                 val snapshot = result.getOrThrow()
                 updateState { state ->
                     if (pendingSettingsSave == null && state.settings == settingsToSave) {
-                        state.copy(settings = snapshot.settings, status = "Reader settings saved.")
+                        state.copy(settings = snapshot.settings, status = "Saved to Nano. Some changes apply after leaving Companion Sync.")
                     } else {
                         state
                     }
@@ -279,6 +338,22 @@ class CompanionViewModel(
         }
     }
 
+    fun deleteRssFeed(feed: String) {
+        viewModelScope.launch {
+            val feeds = companionController.saveRssFeeds(
+                baseUrl = current.address,
+                feeds = current.rssFeeds.filterNot { it == feed },
+                syncToDevice = false,
+            ).rssFeeds
+            updateState {
+                it.copy(
+                    rssFeeds = feeds,
+                    status = "RSS feed removed.",
+                )
+            }
+        }
+    }
+
     fun saveTextDraft() {
         viewModelScope.launch {
             val state = current
@@ -360,12 +435,12 @@ class CompanionViewModel(
     fun saveLinkDraft() {
         viewModelScope.launch {
             val state = current
-            val title = state.draftTitle.trim()
             val sourceUrl = state.draftSourceUrl.trim()
-            if (title.isEmpty() || !sourceUrl.startsWith("http://") && !sourceUrl.startsWith("https://")) {
-                setStatus("Saved links need a title and http:// or https:// URL.")
+            if (!sourceUrl.startsWith("http://") && !sourceUrl.startsWith("https://")) {
+                setStatus("Saved links need an http:// or https:// URL.")
                 return@launch
             }
+            val title = state.draftTitle.trim().ifEmpty { hostName(sourceUrl).ifEmpty { "Saved Article" } }
             val existing = state.editingDraftId?.let { id -> state.drafts.firstOrNull { it.id == id } }
             val pending = ImportPreparation.pendingUploadForUrl(
                 id = existing?.id ?: UUID.randomUUID().toString(),

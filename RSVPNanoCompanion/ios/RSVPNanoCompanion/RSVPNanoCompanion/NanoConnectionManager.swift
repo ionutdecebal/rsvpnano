@@ -1,4 +1,5 @@
 import SwiftUI
+import Network
 import shared
 
 @MainActor
@@ -14,9 +15,17 @@ final class NanoConnectionManager: ObservableObject {
     @Published var hasAttemptedConnection = false
     @Published var lastConnectionError: String?
     @Published var showAddressEntry = false
+    private var connectionMonitorTask: Task<Void, Never>?
+    private let pathMonitor = NWPathMonitor()
+    private let pathMonitorQueue = DispatchQueue(label: "NanoConnectionPathMonitor")
     
     var isConnected: Bool {
         info != nil
+    }
+
+    private init() {
+        startConnectionMonitor()
+        startNetworkMonitor()
     }
     
     func connect(showBusy: Bool = true) {
@@ -31,8 +40,10 @@ final class NanoConnectionManager: ObservableObject {
     }
     
     func showManualAddressEntry() {
-        showAddressEntry = true
-        status = "If the default address is not working, enter the address shown by the reader."
+        showAddressEntry.toggle()
+        if showAddressEntry {
+            status = "If the default address is not working, enter the address shown by the reader."
+        }
     }
     
     @discardableResult
@@ -55,10 +66,47 @@ final class NanoConnectionManager: ObservableObject {
     func recheckConnectionAfterForeground(showBusy: Bool = false) {
         Task {
             if isConnected {
-                await run("Checking reader connection", showBusy: showBusy, requiresConnection: true) {}
+                await verifyCurrentConnection()
             } else {
                 await connectOnce(showBusy: showBusy)
             }
+        }
+    }
+
+    private func startConnectionMonitor() {
+        connectionMonitorTask?.cancel()
+        connectionMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await self?.verifyCurrentConnection()
+            }
+        }
+    }
+
+    private func startNetworkMonitor() {
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.isConnected && !path.usesInterfaceType(.wifi) {
+                    self.markDisconnected("Reader disconnected. Reconnect to RSVP Nano before continuing.")
+                } else {
+                    await self.verifyCurrentConnection()
+                }
+            }
+        }
+        pathMonitor.start(queue: pathMonitorQueue)
+    }
+
+    private func verifyCurrentConnection() async {
+        guard isConnected else { return }
+        do {
+            try await companionController.verifyReachableWithRetry(
+                baseUrl: normalizedAddress(address),
+                attempts: 1,
+                retryDelayMillis: 0
+            )
+        } catch {
+            markDisconnected("Reader disconnected. Reconnect to RSVP Nano before continuing.")
         }
     }
     
