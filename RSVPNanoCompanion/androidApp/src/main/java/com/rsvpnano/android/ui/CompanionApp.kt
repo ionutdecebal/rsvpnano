@@ -2,10 +2,10 @@ package com.rsvpnano.android.ui
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -32,6 +32,7 @@ import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Delete
@@ -67,6 +68,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -92,12 +94,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rsvpnano.android.net.AndroidNanoNetworkController
 import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.converters.RsvpSupportedFileTypes
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -143,7 +147,13 @@ fun CompanionApp(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val viewModel: CompanionViewModel = viewModel(factory = CompanionViewModel.Factory(sharedApp))
+    val nanoNetworkController = remember(context) { AndroidNanoNetworkController(context.applicationContext) }
+    val viewModel: CompanionViewModel = viewModel(
+        factory = CompanionViewModel.Factory(
+            sharedApp = sharedApp,
+            nanoNetworkController = nanoNetworkController,
+        )
+    )
     val uiState by viewModel.uiState.collectAsState()
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -152,6 +162,25 @@ fun CompanionApp(
             context.readSelectedFile(uri)?.let { file ->
                 viewModel.uploadSelectedFile(displayName = file.displayName, data = file.data)
             }
+        }
+    }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val nanoWifiPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { permissions ->
+        val granted = permissions.values.all { it } || nanoNetworkController.hasRequiredPermissions()
+        if (granted) {
+            viewModel.connectNanoScan()
+        } else {
+            viewModel.scanPermissionDenied()
+        }
+    }
+    fun connectNanoFromApp() {
+        if (nanoNetworkController.hasRequiredPermissions()) {
+            viewModel.connectNanoScan()
+        } else {
+            nanoWifiPermissionLauncher.launch(nanoWifiPermissions())
         }
     }
     DisposableEffect(lifecycleOwner, viewModel) {
@@ -170,26 +199,26 @@ fun CompanionApp(
         } else {
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
-                    viewModel.recheckConnectionAfterNetworkChange()
+                    viewModel.fetchPendingArticlesWhenOnline()
                 }
 
                 override fun onLost(network: Network) {
-                    viewModel.recheckConnectionAfterNetworkChange()
                 }
 
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                    viewModel.recheckConnectionAfterNetworkChange()
+                    if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                        viewModel.fetchPendingArticlesWhenOnline()
+                    }
                 }
             }
-            val request = NetworkRequest.Builder()
-                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                .build()
-            connectivityManager.registerNetworkCallback(request, callback)
+            connectivityManager.registerDefaultNetworkCallback(callback)
             onDispose { connectivityManager.unregisterNetworkCallback(callback) }
         }
     }
     LaunchedEffect(shareIntent) {
         val intent = shareIntent ?: return@LaunchedEffect
+        viewModel.releaseNanoForInternetWork()
+        delay(800)
         val imports = withContext(Dispatchers.IO) { context.sharedImportsFrom(intent) }
         if (imports.isNotEmpty() || intent.isAndroidShareIntent()) {
             viewModel.saveSharedImports(imports)
@@ -207,8 +236,6 @@ fun CompanionApp(
             var showAddPicker by remember { mutableStateOf(false) }
             var showArticleDialog by remember { mutableStateOf(false) }
             var showRssDialog by remember { mutableStateOf(false) }
-            val snackbarHostState = remember { SnackbarHostState() }
-            val scope = rememberCoroutineScope()
             LaunchedEffect(uiState.status) {
                 if (
                     uiState.status.startsWith("Uploaded") ||
@@ -219,9 +246,28 @@ fun CompanionApp(
                     uiState.status.startsWith("Shared") ||
                     uiState.status.startsWith("Saved") ||
                     uiState.status.startsWith("Reader disconnected") ||
-                    uiState.status.startsWith("Could not find")
+                    uiState.status.startsWith("Could not find") ||
+                    uiState.status.startsWith("Searching for RSVP Nano") ||
+                    uiState.status.startsWith("Starting RSVP Nano") ||
+                    uiState.status.startsWith("Waiting for Android") ||
+                    uiState.status.startsWith("Could not connect to RSVP Nano Wi-Fi") ||
+                    uiState.status.startsWith("Scan permission denied") ||
+                    uiState.status.startsWith("Scan needs") ||
+                    uiState.status.startsWith("Android did not find") ||
+                    uiState.status.startsWith("Android rejected")
                 ) {
                     snackbarHostState.showSnackbar(uiState.status)
+                }
+            }
+            LaunchedEffect(uiState.canRememberCurrentNano, uiState.nanoSsid) {
+                if (uiState.canRememberCurrentNano && !uiState.nanoSsid.isNullOrBlank()) {
+                    val result = snackbarHostState.showSnackbar(
+                        message = "Connected to ${uiState.nanoSsid}.",
+                        actionLabel = "Remember",
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.rememberCurrentNano()
+                    }
                 }
             }
             Scaffold(
@@ -247,15 +293,11 @@ fun CompanionApp(
                         ConnectionBar(
                             uiState = uiState,
                             onOpenWifiSettings = context::openWifiSettings,
-                            onCheckConnection = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(if (uiState.isConnected) "Reconnecting to reader" else "Checking for reader")
-                                }
-                                if (uiState.isConnected) viewModel.connect() else viewModel.connectDefault()
-                            },
+                            onConnect = { connectNanoFromApp() },
                             onShowAddressEntry = viewModel::showAddressEntry,
                             onAddressChange = viewModel::setAddress,
                             onConnectCustom = viewModel::connect,
+                            hasPermissions = nanoNetworkController.hasRequiredPermissions(),
                         )
                     }
                 },
@@ -303,6 +345,9 @@ fun CompanionApp(
                             onWifiPasswordChange = viewModel::setWifiPasswordDraft,
                             onSaveWifi = viewModel::saveWifiSettings,
                             onClearWifi = viewModel::clearWifiSettings,
+                            onForgetRememberedNano = viewModel::forgetRememberedNano,
+                            hasPermissions = nanoNetworkController.hasRequiredPermissions(),
+                            onGrantPermissions = { connectNanoFromApp() },
                         )
                     }
                 }
@@ -617,10 +662,11 @@ private fun RssFeedsDialog(
 private fun ConnectionBar(
     uiState: CompanionUiState,
     onOpenWifiSettings: () -> Unit,
-    onCheckConnection: () -> Unit,
+    onConnect: () -> Unit,
     onShowAddressEntry: () -> Unit,
     onAddressChange: (String) -> Unit,
     onConnectCustom: () -> Unit,
+    hasPermissions: Boolean,
 ) {
     val containerColor by animateColorAsState(
         targetValue = if (uiState.isConnected) {
@@ -662,10 +708,11 @@ private fun ConnectionBar(
                 DisconnectedConnectionBarContent(
                     uiState = uiState,
                     onOpenWifiSettings = onOpenWifiSettings,
-                    onCheckConnection = onCheckConnection,
+                    onConnect = onConnect,
                     onShowAddressEntry = onShowAddressEntry,
                     onAddressChange = onAddressChange,
                     onConnectCustom = onConnectCustom,
+                    hasPermissions = hasPermissions,
                 )
             }
         }
@@ -676,16 +723,15 @@ private fun ConnectionBar(
 private fun DisconnectedConnectionBarContent(
     uiState: CompanionUiState,
     onOpenWifiSettings: () -> Unit,
-    onCheckConnection: () -> Unit,
+    onConnect: () -> Unit,
     onShowAddressEntry: () -> Unit,
     onAddressChange: (String) -> Unit,
     onConnectCustom: () -> Unit,
+    hasPermissions: Boolean,
 ) {
     val statusLabel = when {
-        uiState.status.startsWith("Connecting") -> "Connecting"
-        uiState.status.startsWith("Could not find") -> "Not found"
-        uiState.status.startsWith("Reader disconnected") -> "Disconnected"
-        uiState.status.startsWith("Still waiting") -> "Waiting"
+        uiState.isRequestingNanoNetwork -> "Connecting"
+        uiState.isCheckingReader -> "Checking reader"
         else -> "Disconnected"
     }
     Row(
@@ -705,12 +751,16 @@ private fun DisconnectedConnectionBarContent(
             maxLines = 1,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Button(onClick = onOpenWifiSettings) {
-            Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null)
-            Text(text = "Wi-Fi")
-        }
-        FilledTonalButton(onClick = onCheckConnection) {
-            Icon(imageVector = Icons.Outlined.Refresh, contentDescription = "Check connection")
+        if (hasPermissions) {
+            Button(onClick = onConnect, enabled = !uiState.isRequestingNanoNetwork && !uiState.isCheckingReader) {
+                Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null)
+                Text(text = "Connect")
+            }
+        } else {
+            Button(onClick = onOpenWifiSettings) {
+                Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null)
+                Text(text = "Wi-Fi")
+            }
         }
     }
 
@@ -732,7 +782,7 @@ private fun DisconnectedConnectionBarContent(
                 modifier = Modifier.weight(1f),
             )
             Button(onClick = onConnectCustom) {
-                Text(text = "Check")
+                Text(text = "Connect")
             }
         }
     }
@@ -789,7 +839,9 @@ private fun LibraryTab(
         ) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    UploadLibraryRow(onClick = onShowUpload)
+                    if (uiState.isConnected) {
+                        UploadLibraryRow(onClick = onShowUpload)
+                    }
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -1028,7 +1080,7 @@ private fun LibraryBookRow(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(
-                imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.LibraryBooks,
+                imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
                 contentDescription = null,
                 tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
             )
@@ -1065,7 +1117,7 @@ private fun LibraryBookDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.LibraryBooks,
+                imageVector = if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
                 contentDescription = null,
             )
         },
@@ -1318,6 +1370,9 @@ private fun SettingsTab(
     onWifiPasswordChange: (String) -> Unit,
     onSaveWifi: () -> Unit,
     onClearWifi: () -> Unit,
+    onForgetRememberedNano: () -> Unit,
+    hasPermissions: Boolean,
+    onGrantPermissions: () -> Unit,
 ) {
     PullRefreshBox(
         isRefreshing = uiState.isRefreshing,
@@ -1331,6 +1386,41 @@ private fun SettingsTab(
             val settings = uiState.settings
             item {
                 SectionCard(title = "Reader Connection") {
+                    if (!hasPermissions) {
+                        Text(
+                            text = "Wi-Fi permissions are required to scan for the RSVP Nano.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        Button(onClick = onGrantPermissions) {
+                            Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null)
+                            Text(text = "Grant Wi-Fi permissions")
+                        }
+                        HorizontalDivider()
+                    }
+
+                    if (uiState.rememberedNano != null) {
+                        val remembered = uiState.rememberedNano
+                        Text(
+                            text = "Remembered Nano: ${remembered.ssid}",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        TextButton(onClick = onForgetRememberedNano) {
+                            Icon(imageVector = Icons.Outlined.Delete, contentDescription = null)
+                            Text(text = "Forget this Nano")
+                        }
+                    } else {
+                        Text(
+                            text = if (uiState.isConnected) {
+                                "No Nano remembered. Connected, but Android did not expose a Wi-Fi identity to remember."
+                            } else {
+                                "No Nano remembered. Use Connect to let the app find and remember a Nano."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider()
                     Text(
                         text = "Default address used when checking for the Nano.",
                         style = MaterialTheme.typography.bodySmall,
@@ -1915,4 +2005,15 @@ private fun Context.openWifiSettings() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }
+}
+
+private fun nanoWifiPermissions(): Array<String> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.NEARBY_WIFI_DEVICES,
+        )
+    } else {
+        arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    }
 }

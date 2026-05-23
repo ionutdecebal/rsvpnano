@@ -36,6 +36,9 @@ kotlin {
 		commonMain.dependencies {
 			implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 
+			implementation("androidx.datastore:datastore:1.2.1")
+			implementation("androidx.datastore:datastore-preferences:1.2.1")
+
 			implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.7.3")
 			implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 

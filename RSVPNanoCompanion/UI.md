@@ -38,6 +38,114 @@ Avoid always-visible setup instructions. The normal UI should be obvious enough 
 
 During connection attempts or failures, show a small `Connect manually` action. Tapping it expands an address field for the reader AP/IP.
 
+Connection state should be event-driven rather than based on constant polling.
+
+Track these states separately:
+
+- Phone internet is available/unavailable.
+- Phone is attached to a Nano Companion Sync AP.
+- Nano HTTP API is available/unavailable.
+- Article fetches are waiting for internet.
+- Nano sync/upload/settings work is waiting for the reader.
+
+Use platform network events to decide when to check the reader. Run Nano API checks when:
+
+- A Nano-like Wi-Fi network becomes available.
+- The app resumes.
+- The user explicitly refreshes or connects.
+- A write operation is about to run.
+
+Avoid background loops that constantly poll the Nano API. One failed API request should not immediately imply that the phone is no longer connected to the Nano AP. If the platform still reports Nano Wi-Fi attachment, show a state such as:
+
+```text
+Nano Wi-Fi connected, checking reader
+```
+
+or:
+
+```text
+Nano Wi-Fi connected, reader unavailable
+```
+
+### Connect To Nano
+
+The default flow stays manual and explicit:
+
+- User taps `Connect to Nano`.
+- The app requests or guides the user to a Wi-Fi network whose SSID starts with `RSVP-Nano-`.
+- The platform shows any required system approval.
+- After the network is available, the app checks the Nano API at the default address.
+- If `/api/info` responds, the app treats the reader as available.
+
+Support `RSVP-Nano-` as the canonical prefix. If older firmware ever shipped `RSVP_Nano-`, tolerate it only as a compatibility fallback.
+
+Prefix discovery is for:
+
+- First connection.
+- Manual connect when no Nano is remembered.
+- Recovery after a remembered Nano cannot be found.
+- Connecting to a different Nano after the user forgets the remembered one.
+
+### Remember This Nano
+
+Remembering should happen after a successful verified connection, not before.
+
+Flow:
+
+- User manually connects to a Nano.
+- App verifies that the API is really an RSVP Nano.
+- App captures exact SSID and BSSID when the platform exposes them.
+- App shows a non-intrusive prompt:
+
+```text
+Connected to RSVP-Nano-123456
+```
+
+Snackbar/toast action:
+
+```text
+Remember
+```
+
+If the user accepts, save the exact Nano identity. Remembering the Nano implies future auto-connect. Do not add a separate `Auto-connect to remembered Nano` toggle unless real users later need separate behavior.
+
+Auto-connect to a remembered Nano is allowed when:
+
+- A Nano has been remembered.
+- No URL-only article drafts are still waiting for internet fetch.
+- The app is foregrounded or continuing a user-initiated share/sync flow.
+- A Nano network request is not already active.
+- The app is not already connected to a verified Nano API.
+
+Do not require pending sync work before auto-connecting. If the user remembered the Nano, opening the app and loading live library/settings state is useful on its own.
+
+Settings should include:
+
+- Remembered Nano summary when one exists.
+- `Forget this Nano`.
+
+Forgetting clears the saved SSID/BSSID and returns the app to the default manual discovery flow. No separate `Find another Nano` action is needed; after forgetting, the normal `Connect to Nano` action discovers again.
+
+### Platform Notes
+
+Android:
+
+- Use native network requests for manual Nano discovery where possible.
+- Use an SSID prefix request for `RSVP-Nano-*` during first/manual connection.
+- After approval, store the exact SSID/BSSID when available.
+- Future remembered requests should use the exact remembered identity, because exact AP requests are more likely to avoid repeated approval than broad prefix requests.
+- Route Nano HTTP API calls through the Nano `Network` so the no-internet AP does not fight Android's default internet network.
+- Keep article fetching on the normal internet route. Do not auto-connect to Nano while URL-only drafts still need internet.
+
+iOS:
+
+- Treat iOS as a first-class platform, but validate the exact API and entitlement requirements before implementation.
+- Evaluate `NEHotspotConfiguration` for joining the Nano AP by exact SSID or prefix.
+- Expect iOS to require a user-visible system prompt for joining Wi-Fi.
+- If iOS cannot support prefix discovery or background auto-join reliably, keep the same product model with manual Wi-Fi guidance plus remembered exact SSID where allowed.
+- Keep Nano API checks separate from Wi-Fi join state, just like Android.
+- Local network privacy prompts may apply when the app talks to the reader on the local AP; keep copy short and specific if iOS asks for permission.
+
 Settings should also include a reader connection section near the top:
 
 - Default reader address.
@@ -67,6 +175,15 @@ Avoid toasts for:
 - Destructive confirmations.
 
 Use confirmation dialogs for destructive actions such as deleting reader files or forgetting Wi-Fi.
+
+Snackbars/toasts should use light status color coding instead of all-white content:
+
+- Success: subtle primary/success container.
+- Warning, offline, or waiting for internet: subtle tertiary/warning container.
+- Error or failed operation: error container.
+- Neutral/progress: surface variant.
+
+Keep colors restrained and consistent with action buttons. The goal is faster scanning, not louder UI.
 
 For settings saves, show:
 
@@ -208,6 +325,15 @@ Article workflows that should be represented in Library:
 - Manually created article drafts.
 - Drafts waiting to sync to the Nano.
 - Synced articles currently on the Nano.
+
+Article sharing should prefer internet first:
+
+- Save the shared link/text immediately.
+- Fetch URL-only shared links while normal phone internet is available.
+- If internet is unavailable, show the draft as waiting for internet.
+- Do not auto-connect to the Nano while URL-only drafts still need fetching.
+- Once pending fetches finish, remembered-Nano auto-connect may run if the user opted into remembering the Nano.
+- Manual `Connect to Nano` remains available, but warn if unresolved URL-only drafts still need internet before they can sync.
 
 ## RSS
 

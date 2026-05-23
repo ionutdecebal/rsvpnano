@@ -25,6 +25,7 @@ class RsvpSharedDependenciesDeviceTest {
                 override suspend fun readText(): String? = null
                 override suspend fun writeText(value: String) = Unit
             },
+            appSettingsStore = testAppSettingsStore(),
         )
 
         assertNotNull(dependencies.createDeviceSyncService(FakeClient()))

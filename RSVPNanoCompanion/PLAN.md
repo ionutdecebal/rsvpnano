@@ -59,6 +59,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
   - [x] Save local text/article drafts.
   - [x] Fetch URL-only article drafts.
   - [x] Sync saved articles to the reader.
+- [ ] Firmware follow-up: ensure Nano-side upload/delete/finalize paths clean stale `.failed`, `.tmp`, and `.converting` sidecars for books and articles.
 - [ ] Manually test iOS sharing from Safari, Chrome, and reader/file apps.
 - [x] Manually test Android sharing from Chrome, reader, and file apps.
 - [ ] Decide the UX for binary file sharing:
@@ -72,6 +73,25 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 - [x] App checks `http://192.168.4.1` automatically when returning/connecting.
 - [x] If the default address fails, user can enter the IP/address shown on the reader.
 - [x] Add a short delay/retry window after returning from Wi-Fi settings or selecting the Nano AP before declaring connection failure.
+- [ ] Replace periodic reader polling with event-driven platform network state:
+  - [ ] Separate phone internet state, Nano AP attachment state, and Nano HTTP API availability in app state.
+  - [ ] Trigger Nano API checks from network events, app resume, explicit refresh, and preflight checks before writes.
+  - [ ] Stop treating one transient API failure as proof that the phone left the Nano AP.
+- [ ] Add native Nano AP discovery/connection where platforms allow it:
+  - [ ] Android: use a network request for `RSVP-Nano-*` during manual `Connect to Nano`.
+  - [ ] Android: after successful connection, capture the exact SSID/BSSID when available and route Nano API calls through that `Network`.
+  - [ ] iOS: evaluate `NEHotspotConfiguration` for joining `RSVP-Nano-*`/exact SSID, including entitlement, prompt, and App Store constraints.
+  - [ ] Keep manual Wi-Fi-settings/address fallback on both platforms.
+- [ ] Add remembered Nano flow:
+  - [ ] After a successful verified Nano connection, non-intrusively offer `Remember this Nano`.
+  - [ ] Remembering stores the exact Nano identity and implies future auto-connect when allowed.
+  - [ ] Auto-connect only when no URL-only article drafts are still waiting for internet fetch.
+  - [ ] Prefix discovery remains only for first connection, failed remembered connection, or after forgetting the Nano.
+  - [ ] Settings includes `Forget remembered Nano`.
+- [ ] Decide whether to add optional auto-disconnect:
+  - [ ] Consider app-requested Nano connections only, not user-selected Wi-Fi from system settings.
+  - [ ] Consider an opt-in setting for disconnecting after the app backgrounds for a grace period.
+  - [ ] Do not implement until remembered/auto-connect is reliable.
 - [ ] Improve connection copy for casual users who only see the Nano AP name and `http://192.168.4.1`.
 - [ ] Add clearer offline/disconnected states.
 - [x] Implement background article fetching: update `shared` module to allow automated, non-interactive fetches, enabling the app to pre-fetch content while the device has internet and eliminating the "fetch" button in UI.
@@ -133,6 +153,11 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
   - [ ] Saved article workflow.
   - [ ] RSS workflow.
   - [ ] Settings workflow.
+- [ ] Lightly color-code transient feedback by status:
+  - [ ] Success.
+  - [ ] Warning/offline/waiting.
+  - [ ] Error/failure.
+  - [ ] Neutral/progress.
 - [ ] Redesign iOS SwiftUI screens with native polish.
 - [ ] Redesign Android Compose screens with native polish.
 - [ ] Accessibility pass:
@@ -159,6 +184,8 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
   - [x] Firmware exposes AP details and `http://192.168.4.1`.
   - [x] App cannot change firmware UI.
   - [x] Primary UX assumes the user joins the Nano AP when needed.
+  - [ ] Document Android native network request behavior, remembered exact AP behavior, and fallback to manual Wi-Fi settings.
+  - [ ] Document iOS hotspot configuration capabilities/limits after entitlement/API validation.
 - [ ] Document CI artifacts:
   - [ ] Android APK output.
   - [x] iOS XCFramework output.

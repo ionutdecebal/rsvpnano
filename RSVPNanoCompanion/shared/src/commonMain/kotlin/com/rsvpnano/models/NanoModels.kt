@@ -198,3 +198,25 @@ data class NanoSettings(
     fun withGuideGap(value: Int): NanoSettings =
         copy(typography = typography.copy(guideGap = value))
 }
+
+@Serializable
+data class RememberedNano(
+    val ssid: String,
+    val bssid: String? = null,
+)
+
+@Serializable
+data class CompanionAppSettings(
+    val defaultAddress: String = "http://192.168.4.1",
+    val rememberedNano: RememberedNano? = null,
+) {
+    fun withDefaultAddress(value: String): CompanionAppSettings =
+        copy(defaultAddress = value)
+
+    fun withRememberedNano(value: RememberedNano?): CompanionAppSettings =
+        copy(rememberedNano = value)
+}
+
+fun CompanionAppSettings.canAutoConnectToNano(pendingUploads: List<PendingUpload>): Boolean {
+    return rememberedNano != null && pendingUploads.none { it.needsArticleFetch() }
+}

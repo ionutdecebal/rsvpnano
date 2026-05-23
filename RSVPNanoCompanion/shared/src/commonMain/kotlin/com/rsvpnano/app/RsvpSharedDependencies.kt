@@ -2,6 +2,7 @@ package com.rsvpnano.app
 
 import com.rsvpnano.api.ArticleFetchClient
 import com.rsvpnano.api.NanoClient
+import com.rsvpnano.persistence.AppSettingsStore
 import com.rsvpnano.persistence.PendingUploadArticleService
 import com.rsvpnano.persistence.PendingUploadRepository
 import com.rsvpnano.persistence.PendingUploadJsonStore
@@ -17,6 +18,7 @@ import com.rsvpnano.persistence.RssFeedStorage
 data class RsvpSharedDependencies(
     val pendingUploadStorage: PendingUploadStorage,
     val rssFeedStorage: RssFeedStorage,
+    val appSettingsStore: AppSettingsStore,
     val articleFetchClient: ArticleFetchClient? = null,
     val nanoClient: NanoClient? = null,
 ) {

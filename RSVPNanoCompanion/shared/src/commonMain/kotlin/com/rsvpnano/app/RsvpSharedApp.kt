@@ -1,6 +1,7 @@
 package com.rsvpnano.app
 
 import com.rsvpnano.api.NanoClient
+import com.rsvpnano.persistence.AppSettingsStore
 import com.rsvpnano.persistence.PendingUploadRepository
 
 /**
@@ -13,6 +14,7 @@ class RsvpSharedApp internal constructor(
     val pendingUploadRepository: PendingUploadRepository = dependencies.createPendingUploadRepository(),
     val pendingDraftService: PendingDraftService = dependencies.createPendingDraftService(),
     val rssFeedService: RssFeedService = dependencies.createRssFeedService(),
+    val appSettingsStore: AppSettingsStore = dependencies.appSettingsStore,
 ) {
     val deviceSyncService: NanoDeviceSyncService by lazy { dependencies.createDeviceSyncService() }
     val companionController: NanoCompanionController by lazy {

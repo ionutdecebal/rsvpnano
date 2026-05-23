@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
     <application
         android:label="RSVP Nano"
         android:allowBackup="true"
@@ -9,6 +14,8 @@
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
+            android:documentLaunchMode="never"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

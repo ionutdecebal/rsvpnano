@@ -170,6 +170,17 @@ class RsvpParityTest {
         assertEquals("Hello reader.", article.text)
     }
 
+    @Test
+    fun articleFormatterNormalizesEscapedLineBreaks() {
+        val article = ArticleFormatter.article(
+            title = "GitHub",
+            source = "https://github.com/example/repo",
+            htmlOrText = "First paragraph.\\n\\nSecond paragraph.\\r\\nThird line.",
+        )
+
+        assertEquals("First paragraph.\n\nSecond paragraph.\n\nThird line.", article.text)
+    }
+
     private companion object {
         // Mirrors testdata/conversion/basic-text-input.txt. Keep commonTest free of JVM-only file APIs.
         private val BASIC_TEXT_INPUT = """

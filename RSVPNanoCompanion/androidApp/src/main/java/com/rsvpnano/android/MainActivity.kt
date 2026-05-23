@@ -18,14 +18,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        incomingShareIntent.value = intent
+        incomingShareIntent.value = intent.takeIf { it.isAndroidShareIntent() }
         setContent {
             val sharedApp = remember { createAndroidSharedApp(filesDir) }
             val shareIntent by incomingShareIntent.collectAsState()
             CompanionApp(
                 sharedApp = sharedApp,
                 shareIntent = shareIntent,
-                onShareIntentHandled = { incomingShareIntent.value = null },
+                onShareIntentHandled = { clearIncomingShareIntent() },
             )
         }
     }
@@ -33,6 +33,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        incomingShareIntent.value = intent
+        incomingShareIntent.value = intent.takeIf { it.isAndroidShareIntent() }
+    }
+
+    private fun clearIncomingShareIntent() {
+        incomingShareIntent.value = null
+        setIntent(Intent(Intent.ACTION_MAIN))
+    }
+
+    private fun Intent.isAndroidShareIntent(): Boolean {
+        return action == Intent.ACTION_SEND || action == Intent.ACTION_SEND_MULTIPLE
     }
 }

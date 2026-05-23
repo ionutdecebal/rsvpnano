@@ -3,8 +3,10 @@ package com.rsvpnano.app
 import com.rsvpnano.api.NanoClient
 import com.rsvpnano.api.NanoKtorClient
 import com.rsvpnano.api.ArticleFetchClient
+import com.rsvpnano.persistence.AppSettingsStore
 import com.rsvpnano.persistence.FilePendingUploadStorage
 import com.rsvpnano.persistence.FileRssFeedStorage
+import com.rsvpnano.persistence.createSettingsDataStore
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -14,6 +16,7 @@ import kotlinx.serialization.json.Json
 
 private const val PendingUploadRelativePath = "pending-uploads/drafts.json"
 private const val RssFeedsRelativePath = "rss/feeds.json"
+private const val SettingsRelativePath = "settings/companion_settings.preferences_pb"
 
 /**
  * Creates shared dependencies for Android using app-private storage paths.
@@ -26,6 +29,7 @@ fun createAndroidSharedDependencies(
     return RsvpSharedDependencies(
         pendingUploadStorage = FilePendingUploadStorage(File(appFilesDir, PendingUploadRelativePath)),
         rssFeedStorage = FileRssFeedStorage(File(appFilesDir, RssFeedsRelativePath)),
+        appSettingsStore = AppSettingsStore(createSettingsDataStore(File(appFilesDir, SettingsRelativePath))),
         articleFetchClient = ArticleFetchClient(httpClient = httpClient),
         nanoClient = nanoClient,
     )

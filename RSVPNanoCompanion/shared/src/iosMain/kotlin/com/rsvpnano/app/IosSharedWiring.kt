@@ -3,8 +3,10 @@ package com.rsvpnano.app
 import com.rsvpnano.api.NanoClient
 import com.rsvpnano.api.NanoKtorClient
 import com.rsvpnano.api.ArticleFetchClient
+import com.rsvpnano.persistence.AppSettingsStore
 import com.rsvpnano.persistence.FilePendingUploadStorage
 import com.rsvpnano.persistence.FileRssFeedStorage
+import com.rsvpnano.persistence.createSettingsDataStore
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -26,6 +28,7 @@ fun createIosSharedDependencies(
     return RsvpSharedDependencies(
         pendingUploadStorage = FilePendingUploadStorage(appGroupIdentifier = appGroupIdentifier),
         rssFeedStorage = FileRssFeedStorage(appGroupIdentifier = appGroupIdentifier),
+        appSettingsStore = AppSettingsStore(createSettingsDataStore(appGroupIdentifier = appGroupIdentifier)),
         articleFetchClient = ArticleFetchClient(httpClient = httpClient),
         nanoClient = nanoClient,
     )

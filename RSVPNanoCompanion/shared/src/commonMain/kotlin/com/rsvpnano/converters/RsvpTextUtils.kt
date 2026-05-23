@@ -57,6 +57,10 @@ internal object RsvpTextUtils {
         if (looksLikeHTML(text)) {
             text = stripHTML(text)
         }
+        text = text.replace("\\r\\n", "\n")
+        text = text.replace("\\n", "\n")
+        text = text.replace("\\r", "\n")
+        text = text.replace("\\t", " ")
         text = text.replace("\r\n", "\n")
         text = text.replace("\r", "\n")
         return paragraphs(text).joinToString("\n\n")
