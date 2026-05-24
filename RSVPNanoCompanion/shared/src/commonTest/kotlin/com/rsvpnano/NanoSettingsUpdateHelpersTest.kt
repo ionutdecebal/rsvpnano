@@ -25,11 +25,35 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals("scroll", updated.reading.readerMode)
         assertEquals("instant", updated.reading.pauseMode)
         assertFalse(updated.reading.accurateTimeEstimate)
-        assertEquals(120, updated.reading.pacing.longWordMs)
-        assertEquals(80, updated.reading.pacing.complexWordMs)
+        assertEquals(100, updated.reading.pacing.longWordMs)
+        assertEquals(100, updated.reading.pacing.complexWordMs)
         assertEquals(200, updated.reading.pacing.punctuationMs)
         assertEquals(original.display, updated.display)
         assertEquals(original.typography, updated.typography)
+    }
+
+    @Test
+    fun numericHelpersNormalizeSharedSettingsValues() {
+        val updated = sampleSettings()
+            .withWpm(103)
+            .withPacingLongWordMs(626)
+            .withPacingComplexWordMs(-20)
+            .withBrightnessIndex(99)
+            .withFontSizeIndex(-1)
+            .withTracking(10)
+            .withAnchorPercent(12)
+            .withGuideWidth(19)
+            .withGuideGap(99)
+
+        assertEquals(100, updated.reading.wpm)
+        assertEquals(600, updated.reading.pacing.longWordMs)
+        assertEquals(0, updated.reading.pacing.complexWordMs)
+        assertEquals(4, updated.display.brightnessIndex)
+        assertEquals(0, updated.display.fontSizeIndex)
+        assertEquals(3, updated.typography.tracking)
+        assertEquals(30, updated.typography.anchorPercent)
+        assertEquals(20, updated.typography.guideWidth)
+        assertEquals(8, updated.typography.guideGap)
     }
 
     @Test
@@ -52,10 +76,28 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals("time_remaining", updated.display.batteryLabel)
         assertTrue(updated.display.darkMode)
         assertTrue(updated.display.nightMode)
+        assertEquals("night", updated.appearanceMode)
         assertTrue(updated.display.phantomWords)
         assertEquals(2, updated.display.fontSizeIndex)
         assertEquals(original.reading, updated.reading)
         assertEquals(original.typography, updated.typography)
+    }
+
+    @Test
+    fun appearanceModeHelperUpdatesDarkAndNightModeTogether() {
+        val light = sampleSettings().withAppearanceMode("light")
+        val dark = sampleSettings().withAppearanceMode("dark")
+        val night = sampleSettings().withAppearanceMode("night")
+
+        assertFalse(light.display.darkMode)
+        assertFalse(light.display.nightMode)
+        assertEquals("light", light.appearanceMode)
+        assertTrue(dark.display.darkMode)
+        assertFalse(dark.display.nightMode)
+        assertEquals("dark", dark.appearanceMode)
+        assertTrue(night.display.darkMode)
+        assertTrue(night.display.nightMode)
+        assertEquals("night", night.appearanceMode)
     }
 
     @Test

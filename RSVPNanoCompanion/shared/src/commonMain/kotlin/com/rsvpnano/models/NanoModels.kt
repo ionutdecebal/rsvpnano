@@ -133,7 +133,7 @@ data class NanoSettings(
         copy(reading = reading.copy(accurateTimeEstimate = value))
 
     fun withWpm(value: Int): NanoSettings =
-        copy(reading = reading.copy(wpm = value))
+        copy(reading = reading.copy(wpm = NanoSettingsSchema.snapWpm(value)))
 
     fun withReaderMode(value: String): NanoSettings =
         copy(reading = reading.copy(readerMode = value))
@@ -142,16 +142,28 @@ data class NanoSettings(
         copy(reading = reading.copy(pauseMode = value))
 
     fun withPacingLongWordMs(value: Int): NanoSettings =
-        copy(reading = reading.copy(pacing = reading.pacing.copy(longWordMs = value)))
+        copy(
+            reading = reading.copy(
+                pacing = reading.pacing.copy(longWordMs = NanoSettingsSchema.snapPacingMs(value)),
+            ),
+        )
 
     fun withPacingComplexWordMs(value: Int): NanoSettings =
-        copy(reading = reading.copy(pacing = reading.pacing.copy(complexWordMs = value)))
+        copy(
+            reading = reading.copy(
+                pacing = reading.pacing.copy(complexWordMs = NanoSettingsSchema.snapPacingMs(value)),
+            ),
+        )
 
     fun withPacingPunctuationMs(value: Int): NanoSettings =
-        copy(reading = reading.copy(pacing = reading.pacing.copy(punctuationMs = value)))
+        copy(
+            reading = reading.copy(
+                pacing = reading.pacing.copy(punctuationMs = NanoSettingsSchema.snapPacingMs(value)),
+            ),
+        )
 
     fun withBrightnessIndex(value: Int): NanoSettings =
-        copy(display = display.copy(brightnessIndex = value))
+        copy(display = display.copy(brightnessIndex = NanoSettingsSchema.coerceBrightnessIndex(value)))
 
     fun withHandedness(value: String): NanoSettings =
         copy(display = display.copy(handedness = value))
@@ -178,7 +190,7 @@ data class NanoSettings(
         copy(display = display.copy(phantomWords = value))
 
     fun withFontSizeIndex(value: Int): NanoSettings =
-        copy(display = display.copy(fontSizeIndex = value))
+        copy(display = display.copy(fontSizeIndex = NanoSettingsSchema.coerceFontSizeIndex(value)))
 
     fun withTypeface(value: String): NanoSettings =
         copy(typography = typography.copy(typeface = value))
@@ -187,16 +199,107 @@ data class NanoSettings(
         copy(typography = typography.copy(focusHighlight = value))
 
     fun withTracking(value: Int): NanoSettings =
-        copy(typography = typography.copy(tracking = value))
+        copy(typography = typography.copy(tracking = NanoSettingsSchema.coerceTracking(value)))
 
     fun withAnchorPercent(value: Int): NanoSettings =
-        copy(typography = typography.copy(anchorPercent = value))
+        copy(typography = typography.copy(anchorPercent = NanoSettingsSchema.coerceAnchorPercent(value)))
 
     fun withGuideWidth(value: Int): NanoSettings =
-        copy(typography = typography.copy(guideWidth = value))
+        copy(typography = typography.copy(guideWidth = NanoSettingsSchema.snapGuideWidth(value)))
 
     fun withGuideGap(value: Int): NanoSettings =
-        copy(typography = typography.copy(guideGap = value))
+        copy(typography = typography.copy(guideGap = NanoSettingsSchema.coerceGuideGap(value)))
+
+    val appearanceMode: String
+        get() = when {
+            display.nightMode -> NanoSettingsSchema.APPEARANCE_NIGHT
+            display.darkMode -> NanoSettingsSchema.APPEARANCE_DARK
+            else -> NanoSettingsSchema.APPEARANCE_LIGHT
+        }
+
+    fun withAppearanceMode(value: String): NanoSettings =
+        withAppearance(
+            darkMode = value == NanoSettingsSchema.APPEARANCE_DARK ||
+                value == NanoSettingsSchema.APPEARANCE_NIGHT,
+            nightMode = value == NanoSettingsSchema.APPEARANCE_NIGHT,
+        )
+}
+
+object NanoSettingsSchema {
+    const val READER_MODE_RSVP = "rsvp"
+    const val READER_MODE_SCROLL = "scroll"
+    const val PAUSE_MODE_SENTENCE_END = "sentence_end"
+    const val PAUSE_MODE_INSTANT = "instant"
+    const val APPEARANCE_LIGHT = "light"
+    const val APPEARANCE_DARK = "dark"
+    const val APPEARANCE_NIGHT = "night"
+    const val HANDEDNESS_LEFT = "left"
+    const val HANDEDNESS_RIGHT = "right"
+    const val FOOTER_PERCENTAGE = "percentage"
+    const val FOOTER_CHAPTER_TIME = "chapter_time"
+    const val FOOTER_BOOK_TIME = "book_time"
+    const val BATTERY_PERCENT = "percent"
+    const val BATTERY_TIME_REMAINING = "time_remaining"
+    const val BATTERY_VOLTAGE = "voltage"
+    const val TYPEFACE_STANDARD = "standard"
+    const val TYPEFACE_ATKINSON = "atkinson"
+    const val TYPEFACE_OPEN_DYSLEXIC = "open_dyslexic"
+
+    const val WPM_MIN = 10
+    const val WPM_MAX = 1000
+    const val WPM_LOW_STEP = 10
+    const val WPM_HIGH_STEP = 25
+    const val WPM_STEP_CUTOFF = 100
+    const val PACING_MS_MIN = 0
+    const val PACING_MS_MAX = 600
+    const val PACING_MS_STEP = 50
+    const val BRIGHTNESS_MIN = 0
+    const val BRIGHTNESS_MAX = 4
+    const val FONT_SIZE_MIN = 0
+    const val FONT_SIZE_MAX = 2
+    const val TRACKING_MIN = -2
+    const val TRACKING_MAX = 3
+    const val ANCHOR_PERCENT_MIN = 30
+    const val ANCHOR_PERCENT_MAX = 40
+    const val GUIDE_WIDTH_MIN = 12
+    const val GUIDE_WIDTH_MAX = 30
+    const val GUIDE_WIDTH_STEP = 2
+    const val GUIDE_GAP_MIN = 2
+    const val GUIDE_GAP_MAX = 8
+
+    fun snapToStep(value: Int, step: Int): Int =
+        ((value + step / 2) / step) * step
+
+    fun snapWpm(value: Int): Int {
+        val clamped = value.coerceIn(WPM_MIN, WPM_MAX)
+        return if (clamped <= WPM_STEP_CUTOFF) {
+            snapToStep(clamped, WPM_LOW_STEP).coerceIn(WPM_MIN, WPM_STEP_CUTOFF)
+        } else {
+            (WPM_STEP_CUTOFF + snapToStep(clamped - WPM_STEP_CUTOFF, WPM_HIGH_STEP))
+                .coerceIn(WPM_STEP_CUTOFF, WPM_MAX)
+        }
+    }
+
+    fun snapPacingMs(value: Int): Int =
+        snapToStep(value, PACING_MS_STEP).coerceIn(PACING_MS_MIN, PACING_MS_MAX)
+
+    fun coerceBrightnessIndex(value: Int): Int =
+        value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
+
+    fun coerceFontSizeIndex(value: Int): Int =
+        value.coerceIn(FONT_SIZE_MIN, FONT_SIZE_MAX)
+
+    fun coerceTracking(value: Int): Int =
+        value.coerceIn(TRACKING_MIN, TRACKING_MAX)
+
+    fun coerceAnchorPercent(value: Int): Int =
+        value.coerceIn(ANCHOR_PERCENT_MIN, ANCHOR_PERCENT_MAX)
+
+    fun snapGuideWidth(value: Int): Int =
+        snapToStep(value, GUIDE_WIDTH_STEP).coerceIn(GUIDE_WIDTH_MIN, GUIDE_WIDTH_MAX)
+
+    fun coerceGuideGap(value: Int): Int =
+        value.coerceIn(GUIDE_GAP_MIN, GUIDE_GAP_MAX)
 }
 
 @Serializable
