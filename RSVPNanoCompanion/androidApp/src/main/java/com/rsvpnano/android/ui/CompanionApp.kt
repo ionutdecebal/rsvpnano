@@ -1,7 +1,9 @@
 package com.rsvpnano.android.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.ContextWrapper
 import android.os.Build
 import android.net.ConnectivityManager
 import android.net.Network
@@ -11,8 +13,13 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +57,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -85,6 +94,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -101,7 +111,6 @@ import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -114,6 +123,11 @@ private enum class LibraryFilter(val label: String) {
     All("All"),
     Books("Books"),
     Articles("Articles"),
+}
+
+private enum class PermissionFallback {
+    WifiSettings,
+    AppSettings,
 }
 
 private val CompanionLightColors = lightColorScheme(
@@ -166,27 +180,61 @@ fun CompanionApp(
     }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var permissionRequestAttempted by remember { mutableStateOf(false) }
+    var permissionBlockedFallback by remember { mutableStateOf(PermissionFallback.WifiSettings) }
     val nanoWifiPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions(),
-    ) { permissions ->
-        val granted = permissions.values.all { it } || nanoNetworkController.hasRequiredPermissions()
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { permissionGranted ->
+        val granted = permissionGranted || nanoNetworkController.hasRequiredPermissions()
         if (granted) {
             viewModel.connectNanoScan()
         } else {
-            viewModel.scanPermissionDenied()
+            val permission = nanoWifiPermission()
+            val canAskAgain = context.findActivity()?.shouldShowRequestPermissionRationale(permission) == true
+            if (canAskAgain) {
+                viewModel.scanPermissionDenied()
+            } else if (permissionBlockedFallback == PermissionFallback.AppSettings) {
+                viewModel.wifiPermissionsBlocked()
+                context.openAppSettings()
+            } else {
+                viewModel.scanPermissionDenied()
+                context.openWifiSettings()
+            }
         }
     }
-    fun connectNanoFromApp() {
+    fun connectNanoFromApp(openWifiSettingsOnBlocked: Boolean) {
         if (nanoNetworkController.hasRequiredPermissions()) {
             viewModel.connectNanoScan()
         } else {
-            nanoWifiPermissionLauncher.launch(nanoWifiPermissions())
+            val permission = nanoWifiPermission()
+            val canAskAgain = !permissionRequestAttempted ||
+                context.findActivity()?.shouldShowRequestPermissionRationale(permission) == true
+            viewModel.requestWifiPermissions()
+            if (canAskAgain) {
+                permissionRequestAttempted = true
+                permissionBlockedFallback = if (openWifiSettingsOnBlocked) {
+                    PermissionFallback.WifiSettings
+                } else {
+                    PermissionFallback.AppSettings
+                }
+                nanoWifiPermissionLauncher.launch(permission)
+            } else if (openWifiSettingsOnBlocked) {
+                viewModel.scanPermissionDenied()
+                context.openWifiSettings()
+            } else {
+                viewModel.wifiPermissionsBlocked()
+                context.openAppSettings()
+            }
         }
     }
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.recheckConnectionAfterResume()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    nanoNetworkController.refreshSnapshot()
+                    viewModel.recheckConnectionAfterResume()
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -217,8 +265,6 @@ fun CompanionApp(
     }
     LaunchedEffect(shareIntent) {
         val intent = shareIntent ?: return@LaunchedEffect
-        viewModel.releaseNanoForInternetWork()
-        delay(800)
         val imports = withContext(Dispatchers.IO) { context.sharedImportsFrom(intent) }
         if (imports.isNotEmpty() || intent.isAndroidShareIntent()) {
             viewModel.saveSharedImports(imports)
@@ -248,11 +294,13 @@ fun CompanionApp(
                     uiState.status.startsWith("Reader disconnected") ||
                     uiState.status.startsWith("Could not find") ||
                     uiState.status.startsWith("Searching for RSVP Nano") ||
-                    uiState.status.startsWith("Starting RSVP Nano") ||
+                    uiState.status.startsWith("Connecting to remembered Nano") ||
                     uiState.status.startsWith("Waiting for Android") ||
                     uiState.status.startsWith("Could not connect to RSVP Nano Wi-Fi") ||
                     uiState.status.startsWith("Scan permission denied") ||
                     uiState.status.startsWith("Scan needs") ||
+                    uiState.status.startsWith("Grant Wi-Fi") ||
+                    uiState.status.startsWith("Wi-Fi permission") ||
                     uiState.status.startsWith("Android did not find") ||
                     uiState.status.startsWith("Android rejected")
                 ) {
@@ -292,16 +340,20 @@ fun CompanionApp(
                         )
                         ConnectionBar(
                             uiState = uiState,
-                            onOpenWifiSettings = context::openWifiSettings,
-                            onConnect = { connectNanoFromApp() },
                             onShowAddressEntry = viewModel::showAddressEntry,
                             onAddressChange = viewModel::setAddress,
                             onConnectCustom = viewModel::connect,
-                            hasPermissions = nanoNetworkController.hasRequiredPermissions(),
                         )
                     }
                 },
                 snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                floatingActionButton = {
+                    NanoConnectFab(
+                        uiState = uiState,
+                        onConnect = { connectNanoFromApp(openWifiSettingsOnBlocked = true) },
+                    )
+                },
+                floatingActionButtonPosition = FabPosition.End,
                 bottomBar = {
                     NavigationBar {
                         CompanionTab.entries.forEach { tab ->
@@ -347,7 +399,7 @@ fun CompanionApp(
                             onClearWifi = viewModel::clearWifiSettings,
                             onForgetRememberedNano = viewModel::forgetRememberedNano,
                             hasPermissions = nanoNetworkController.hasRequiredPermissions(),
-                            onGrantPermissions = { connectNanoFromApp() },
+                            onGrantPermissions = { connectNanoFromApp(openWifiSettingsOnBlocked = false) },
                         )
                     }
                 }
@@ -661,12 +713,9 @@ private fun RssFeedsDialog(
 @Composable
 private fun ConnectionBar(
     uiState: CompanionUiState,
-    onOpenWifiSettings: () -> Unit,
-    onConnect: () -> Unit,
     onShowAddressEntry: () -> Unit,
     onAddressChange: (String) -> Unit,
     onConnectCustom: () -> Unit,
-    hasPermissions: Boolean,
 ) {
     val containerColor by animateColorAsState(
         targetValue = if (uiState.isConnected) {
@@ -707,12 +756,9 @@ private fun ConnectionBar(
             ) {
                 DisconnectedConnectionBarContent(
                     uiState = uiState,
-                    onOpenWifiSettings = onOpenWifiSettings,
-                    onConnect = onConnect,
                     onShowAddressEntry = onShowAddressEntry,
                     onAddressChange = onAddressChange,
                     onConnectCustom = onConnectCustom,
-                    hasPermissions = hasPermissions,
                 )
             }
         }
@@ -720,14 +766,34 @@ private fun ConnectionBar(
 }
 
 @Composable
+private fun NanoConnectFab(
+    uiState: CompanionUiState,
+    onConnect: () -> Unit,
+) {
+    val busy = uiState.isRequestingNanoNetwork || uiState.isCheckingReader
+    AnimatedVisibility(
+        visible = !uiState.isConnected,
+        enter = fadeIn(animationSpec = tween(durationMillis = 180)) + scaleIn(animationSpec = tween(durationMillis = 180)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 140)) + scaleOut(animationSpec = tween(durationMillis = 140)),
+    ) {
+        ExtendedFloatingActionButton(
+            onClick = { if (!busy) onConnect() },
+            modifier = Modifier.alpha(if (busy) 0.72f else 1f),
+            text = { Text(text = if (busy) "Connecting" else "Connect") },
+            icon = { Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null) },
+            expanded = true,
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    }
+}
+
+@Composable
 private fun DisconnectedConnectionBarContent(
     uiState: CompanionUiState,
-    onOpenWifiSettings: () -> Unit,
-    onConnect: () -> Unit,
     onShowAddressEntry: () -> Unit,
     onAddressChange: (String) -> Unit,
     onConnectCustom: () -> Unit,
-    hasPermissions: Boolean,
 ) {
     val statusLabel = when {
         uiState.isRequestingNanoNetwork -> "Connecting"
@@ -751,17 +817,6 @@ private fun DisconnectedConnectionBarContent(
             maxLines = 1,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        if (hasPermissions) {
-            Button(onClick = onConnect, enabled = !uiState.isRequestingNanoNetwork && !uiState.isCheckingReader) {
-                Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null)
-                Text(text = "Connect")
-            }
-        } else {
-            Button(onClick = onOpenWifiSettings) {
-                Icon(imageVector = Icons.Outlined.Wifi, contentDescription = null)
-                Text(text = "Wi-Fi")
-            }
-        }
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2007,13 +2062,27 @@ private fun Context.openWifiSettings() {
         }
 }
 
-private fun nanoWifiPermissions(): Array<String> {
+private fun Context.openAppSettings() {
+    startActivity(
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+}
+
+private tailrec fun Context.findActivity(): Activity? {
+    return when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+}
+
+private fun nanoWifiPermission(): String {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.NEARBY_WIFI_DEVICES,
-        )
+        android.Manifest.permission.NEARBY_WIFI_DEVICES
     } else {
-        arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        android.Manifest.permission.ACCESS_FINE_LOCATION
     }
 }

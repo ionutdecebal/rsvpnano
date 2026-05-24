@@ -3,11 +3,19 @@ package com.rsvpnano.android.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.rsvpnano.android.net.AndroidNanoNetworkController
-import com.rsvpnano.android.net.NanoNetworkSnapshot
+import com.rsvpnano.app.NanoConnectionState
 import com.rsvpnano.app.NanoDeviceSyncService
+import com.rsvpnano.app.NanoWifiConnector
+import com.rsvpnano.app.NanoWifiEvent
+import com.rsvpnano.app.NanoWifiIdentity
+import com.rsvpnano.app.NanoWifiRequestResult
+import com.rsvpnano.app.NanoWifiSnapshot
 import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.app.SharedAppUtils
+import com.rsvpnano.app.isCheckingReader
+import com.rsvpnano.app.isConnected
+import com.rsvpnano.app.isRequesting
+import com.rsvpnano.app.isWifiAttached
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
@@ -15,7 +23,6 @@ import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
-import com.rsvpnano.models.canAutoConnectToNano
 import com.rsvpnano.persistence.AppSettingsStore
 import java.net.URI
 import java.util.UUID
@@ -41,17 +48,31 @@ data class CompanionUiState(
     val draftBody: String = "",
     val editingDraftId: String? = null,
     val rssFeedDraft: String = "",
-    val isConnected: Boolean = false,
-    val isNanoWifiAttached: Boolean = false,
-    val isCheckingReader: Boolean = false,
-    val isRequestingNanoNetwork: Boolean = false,
-    val nanoSsid: String? = null,
+    val connectionState: NanoConnectionState = NanoConnectionState.Disconnected,
     val rememberedNano: RememberedNano? = null,
     val canRememberCurrentNano: Boolean = false,
     val showAddressEntry: Boolean = false,
     val isRefreshing: Boolean = false,
     val status: String = "Ready",
-)
+) {
+    val isConnected: Boolean
+        get() = connectionState.isConnected
+
+    val isNanoWifiAttached: Boolean
+        get() = connectionState.isWifiAttached
+
+    val isCheckingReader: Boolean
+        get() = connectionState.isCheckingReader
+
+    val isRequestingNanoNetwork: Boolean
+        get() = connectionState.isRequesting
+
+    val currentNano: RememberedNano?
+        get() = connectionState.currentNano
+
+    val nanoSsid: String?
+        get() = currentNano?.ssid
+}
 
 data class SharedImport(
     val title: String,
@@ -61,7 +82,7 @@ data class SharedImport(
 
 class CompanionViewModel(
     private val sharedApp: RsvpSharedApp,
-    private val nanoNetworkController: AndroidNanoNetworkController,
+    private val nanoNetworkController: NanoWifiConnector,
     private val settingsStore: AppSettingsStore,
 ) : ViewModel() {
     private val deviceSyncService: NanoDeviceSyncService = sharedApp.deviceSyncService
@@ -71,7 +92,9 @@ class CompanionViewModel(
     private var pendingSettingsSave: NanoSettings? = null
     private var settingsSaveJob: Job? = null
     private var recheckJob: Job? = null
+    private var connectionCheckJob: Job? = null
     private var articleFetchJob: Job? = null
+    private var suppressedRememberPrompt: RememberedNano? = null
     private val current: CompanionUiState
         get() = _uiState.value
 
@@ -85,9 +108,9 @@ class CompanionViewModel(
                     address = appSettings.defaultAddress,
                 )
             }
-            autoConnectIfPossible()
         }
         observeNanoNetwork()
+        observeNanoNetworkEvents()
         refresh()
     }
 
@@ -113,26 +136,19 @@ class CompanionViewModel(
     }
 
     fun connectNanoScan() {
-        setStatus("Starting RSVP Nano Wi-Fi scan...")
-        requestNanoNetwork(rememberedNano = current.rememberedNano, manual = true)
-    }
-
-    fun testNanoScanStartingPermission() {
-        setStatus("Starting RSVP Nano Wi-Fi scan...")
-    }
-
-    private fun autoConnectIfPossible() {
-        viewModelScope.launch {
-            val settings = settingsStore.load()
-            val remembered = settings.rememberedNano ?: return@launch
-            if (settings.canAutoConnectToNano(current.drafts)) {
-                requestNanoNetwork(rememberedNano = remembered, manual = false)
-            }
-        }
+        connectNano(rememberedNano = current.rememberedNano)
     }
 
     fun scanPermissionDenied() {
         setStatus("Scan permission denied. Use Wi-Fi settings for the default connection flow.")
+    }
+
+    fun requestWifiPermissions() {
+        setStatus("Grant Wi-Fi permissions to let the app find your RSVP Nano.")
+    }
+
+    fun wifiPermissionsBlocked() {
+        setStatus("Wi-Fi permission is blocked. Enable it in app settings to let the app find your RSVP Nano.")
     }
 
     fun setWifiSsidDraft(value: String) = updateState { it.copy(wifiSsidDraft = value) }
@@ -180,17 +196,9 @@ class CompanionViewModel(
     }
 
     fun connect() {
-        connect(showBusyStatus = true)
-    }
-
-    private fun connect(showBusyStatus: Boolean) {
         viewModelScope.launch {
-            connectNow(showBusyStatus = showBusyStatus)
+            connectCurrentAddress(showBusyStatus = true, markFailure = true)
         }
-    }
-
-    private suspend fun connectNow(showBusyStatus: Boolean) {
-        connectCurrentAddress(showBusyStatus = showBusyStatus, markFailure = true)
     }
 
     private suspend fun connectCurrentAddress(
@@ -225,6 +233,7 @@ class CompanionViewModel(
     fun recheckConnectionAfterResume() {
         recheckJob?.cancel()
         recheckJob = viewModelScope.launch {
+            nanoNetworkController.refreshSnapshot()
             if (current.isConnected) {
                 verifyCurrentConnection()
             }
@@ -260,6 +269,25 @@ class CompanionViewModel(
         }
     }
 
+    private suspend fun ensureReaderReachable(action: String): Boolean {
+        val state = current
+        if (!state.isConnected) {
+            setStatus("Connect to the reader before $action.")
+            return false
+        }
+        return runCatching {
+            withNanoApi {
+                companionController.verifyReachableWithRetry(
+                    baseUrl = SharedAppUtils.normalizedAddress(state.address),
+                    attempts = 1,
+                    retryDelayMillis = 0,
+                )
+            }
+        }.onFailure {
+            markDisconnected("Reader disconnected. Reconnect to RSVP Nano before $action.")
+        }.isSuccess
+    }
+
     fun updateSettings(transform: (NanoSettings) -> NanoSettings) {
         val state = current
         val currentSettings = state.settings
@@ -289,6 +317,10 @@ class CompanionViewModel(
                 val settingsToSave = pendingSettingsSave ?: break
                 pendingSettingsSave = null
                 val address = current.address
+                if (!ensureReaderReachable("saving settings")) {
+                    pendingSettingsSave = null
+                    break
+                }
 
                 val result = runCatching { withNanoApi { companionController.saveSettings(address, settingsToSave) } }
                 if (result.isFailure) {
@@ -323,6 +355,7 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Saving Wi-Fi settings...")
+            if (!ensureReaderReachable("saving Wi-Fi")) return@launch
             runCatching { withNanoApi { companionController.saveWifiSettings(state.address, ssid, state.wifiPasswordDraft) } }
                 .onSuccess { snapshot ->
                     val wifi = snapshot.wifiSettings
@@ -347,6 +380,7 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Clearing Wi-Fi settings...")
+            if (!ensureReaderReachable("clearing Wi-Fi")) return@launch
             runCatching { withNanoApi { companionController.clearWifiSettings(state.address) } }
                 .onSuccess { snapshot ->
                     val wifi = snapshot.wifiSettings
@@ -503,6 +537,7 @@ class CompanionViewModel(
         viewModelScope.launch {
             val currentSettings = settingsStore.load()
             settingsStore.save(currentSettings.copy(rememberedNano = identity))
+            suppressedRememberPrompt = null
             updateState {
                 it.copy(
                     rememberedNano = identity,
@@ -516,11 +551,13 @@ class CompanionViewModel(
     fun forgetRememberedNano() {
         viewModelScope.launch {
             val currentSettings = settingsStore.load()
+            val identity = currentRememberableNano()
+            suppressedRememberPrompt = identity
             settingsStore.save(currentSettings.copy(rememberedNano = null))
             updateState {
                 it.copy(
                     rememberedNano = null,
-                    canRememberCurrentNano = currentRememberableNano() != null,
+                    canRememberCurrentNano = false,
                     status = "Forgot remembered Nano.",
                 )
             }
@@ -614,6 +651,7 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Syncing RSS feeds...")
+            if (!ensureReaderReachable("syncing RSS feeds")) return@launch
             runCatching {
                 withNanoApi {
                     companionController.saveRssFeeds(
@@ -643,6 +681,7 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Syncing saved articles...")
+            if (!ensureReaderReachable("syncing saved articles")) return@launch
             runCatching {
                 withNanoApi {
                     companionController.syncPendingUploads(
@@ -673,6 +712,7 @@ class CompanionViewModel(
             }
             val title = book.displayTitle
             setStatus("Deleting $title...")
+            if (!ensureReaderReachable("deleting books")) return@launch
             runCatching {
                 withNanoApi { companionController.deleteBooks(state.address, listOf(book.id)) }
             }.onSuccess { snapshot ->
@@ -689,6 +729,7 @@ class CompanionViewModel(
                 return@launch
             }
             setStatus("Uploading $displayName...")
+            if (!ensureReaderReachable("uploading files")) return@launch
             runCatching {
                 val file = RsvpConverter.bookFile(data = data, filename = displayName)
                 withNanoApi {
@@ -732,54 +773,86 @@ class CompanionViewModel(
         }
     }
 
-    private fun onNanoNetworkSnapshot(snapshot: NanoNetworkSnapshot) {
-        val remembered = current.rememberedNano
-        val currentIdentity = snapshot.identity ?: current.nanoSsid?.toRememberedNano()
+    private fun observeNanoNetworkEvents() {
+        viewModelScope.launch {
+            nanoNetworkController.events.collect { event ->
+                when (event) {
+                    NanoWifiEvent.RequestUnavailable -> {
+                        setStatus("Android did not find a matching RSVP-Nano Wi-Fi network.")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun onNanoNetworkSnapshot(snapshot: NanoWifiSnapshot) {
+        val stateBefore = current
+        val remembered = stateBefore.rememberedNano
+        val currentIdentity = nanoIdentity(snapshot)
+        val canRemember = canPromptToRemember(currentIdentity, remembered)
         updateState {
             it.copy(
-                isNanoWifiAttached = snapshot.isNanoWifi,
-                isRequestingNanoNetwork = snapshot.isRequestingNano,
-                nanoSsid = snapshot.ssid ?: it.nanoSsid,
-                canRememberCurrentNano = currentIdentity != null && currentIdentity != remembered,
+                connectionState = snapshot.toConnectionState(previous = it.connectionState),
+                canRememberCurrentNano = canRemember,
             )
         }
         
-        if (snapshot.requestFailed) {
-            setStatus(snapshot.requestFailureReason ?: "Could not connect to RSVP Nano Wi-Fi.")
-        } else if (snapshot.isNanoWifi && !current.isConnected && !current.isCheckingReader) {
-            checkDefaultAddress(showBusyStatus = false)
-        } else if (!snapshot.isNanoWifi && current.isConnected) {
-            markDisconnected("Reader disconnected.")
+        when {
+            snapshot.isAttached && !stateBefore.isConnected && !stateBefore.isCheckingReader -> {
+                checkDefaultAddress(showBusyStatus = false)
+            }
+            !snapshot.isAttached && (stateBefore.isConnected || stateBefore.isNanoWifiAttached) -> {
+                markDisconnected("Reader disconnected.")
+            }
         }
     }
 
     private fun checkDefaultAddress(showBusyStatus: Boolean = true) {
-        viewModelScope.launch {
-            updateState { it.copy(address = SharedAppUtils.DEFAULT_DEVICE_ADDRESS, isCheckingReader = true) }
-            connectCurrentAddress(showBusyStatus = showBusyStatus, markFailure = true)
-            updateState { it.copy(isCheckingReader = false) }
+        if (connectionCheckJob?.isActive == true) return
+        connectionCheckJob = viewModelScope.launch {
+            updateState {
+                it.copy(
+                    address = SharedAppUtils.DEFAULT_DEVICE_ADDRESS,
+                    connectionState = NanoConnectionState.CheckingReader(it.currentNano),
+                )
+            }
+            try {
+                connectCurrentAddress(showBusyStatus = showBusyStatus, markFailure = true)
+            } finally {
+                updateState {
+                    if (it.connectionState is NanoConnectionState.CheckingReader) {
+                        it.copy(connectionState = NanoConnectionState.WifiAttached(it.currentNano))
+                    } else {
+                        it
+                    }
+                }
+            }
         }
     }
 
-    private fun requestNanoNetwork(rememberedNano: RememberedNano?, manual: Boolean): Boolean {
-        val pendingFetches = current.drafts.any(companionController::needsArticleFetch)
-        if (!manual && pendingFetches) return false
-        if (current.isRequestingNanoNetwork || current.isNanoWifiAttached) return false
-        if (!nanoNetworkController.hasRequiredPermissions()) {
-            if (manual) {
-                setStatus("Scan needs nearby Wi-Fi and location permission. Use Wi-Fi settings for the default flow.")
-            }
-            return false
-        }
-
+    private fun connectNano(rememberedNano: RememberedNano?) {
         updateState {
             it.copy(
                 status = rememberedNano?.let { nano -> "Connecting to remembered Nano ${nano.ssid}..." }
                     ?: "Searching for RSVP Nano Wi-Fi...",
             )
         }
-        nanoNetworkController.requestNanoNetwork(rememberedNano)
-        return true
+        when (val result = nanoNetworkController.requestNanoNetwork(rememberedNano)) {
+            NanoWifiRequestResult.Started -> Unit
+            NanoWifiRequestResult.AlreadyAttached -> {
+                checkDefaultAddress(showBusyStatus = false)
+            }
+            NanoWifiRequestResult.AlreadyRequesting -> Unit
+            NanoWifiRequestResult.MissingPermissions -> {
+                setStatus("Scan needs nearby Wi-Fi and location permission. Use Wi-Fi settings for the default flow.")
+            }
+            NanoWifiRequestResult.Unsupported -> {
+                setStatus("Android 10 or newer is required for app Wi-Fi scan. Use Wi-Fi settings instead.")
+            }
+            is NanoWifiRequestResult.Failed -> {
+                setStatus(result.reason)
+            }
+        }
     }
 
     private suspend fun refreshConnection(address: String, localRssFeeds: List<String>) {
@@ -788,9 +861,14 @@ class CompanionViewModel(
         }
         val device = snapshot.device
         val deviceName = device.info?.name ?: "RSVP Nano"
-        val apiIdentity = device.info?.networkSsid?.toRememberedNano()
-        val currentIdentity = nanoNetworkController.snapshot.value.identity ?: apiIdentity
+        val apiIdentity = NanoWifiIdentity.rememberedNanoOrNull(device.info?.networkSsid)
+        val currentIdentity = nanoNetworkController.snapshot.value.currentNano ?: apiIdentity
         updateState {
+            val nextConnectionState = if (device.info != null) {
+                NanoConnectionState.ReaderConnected(currentIdentity ?: it.currentNano)
+            } else {
+                it.connectionState
+            }
             it.copy(
                 books = device.books,
                 settings = device.settings,
@@ -800,9 +878,8 @@ class CompanionViewModel(
                 address = address,
                 rssFeeds = snapshot.rssFeeds,
                 drafts = snapshot.drafts,
-                isConnected = device.info != null,
-                nanoSsid = currentIdentity?.ssid ?: it.nanoSsid,
-                canRememberCurrentNano = currentIdentity != null && currentIdentity != it.rememberedNano,
+                connectionState = nextConnectionState,
+                canRememberCurrentNano = canPromptToRemember(currentIdentity, it.rememberedNano),
                 showAddressEntry = false,
                 status = "Connected to $deviceName. ${device.summaryText}",
             )
@@ -840,7 +917,7 @@ class CompanionViewModel(
                 books = emptyList(),
                 settings = null,
                 wifiSettings = null,
-                isConnected = false,
+                connectionState = NanoConnectionState.Disconnected,
                 showAddressEntry = showAddressEntry,
                 status = status,
             )
@@ -856,23 +933,20 @@ class CompanionViewModel(
     }
 
     private fun currentRememberableNano(): RememberedNano? {
-        return nanoNetworkController.snapshot.value.identity ?: current.nanoSsid?.toRememberedNano()
+        return current.currentNano ?: nanoIdentity(nanoNetworkController.snapshot.value)
     }
 
-    private fun String.toRememberedNano(): RememberedNano? {
-        val clean = trim().trim('"')
-        return clean.takeIf { it.isNanoSsid() }?.let { RememberedNano(ssid = it) }
+    private fun nanoIdentity(snapshot: NanoWifiSnapshot): RememberedNano? {
+        return snapshot.currentNano ?: current.currentNano
     }
 
-    private fun String.isNanoSsid(): Boolean {
-        return startsWith(NANO_SSID_PREFIX) || startsWith(LEGACY_NANO_SSID_PREFIX)
-    }
-
-    fun releaseNanoForInternetWork() {
-        nanoNetworkController.releaseRequestedNanoNetwork()
-        if (current.isConnected) {
-            markDisconnected("Disconnected from RSVP Nano to use phone internet.")
-        }
+    private fun canPromptToRemember(
+        currentNano: RememberedNano?,
+        rememberedNano: RememberedNano?,
+    ): Boolean {
+        return currentNano != null &&
+            currentNano != rememberedNano &&
+            currentNano != suppressedRememberPrompt
     }
 
     override fun onCleared() {
@@ -888,7 +962,7 @@ class CompanionViewModel(
 
     class Factory(
         private val sharedApp: RsvpSharedApp,
-        private val nanoNetworkController: AndroidNanoNetworkController,
+        private val nanoNetworkController: NanoWifiConnector,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -901,9 +975,6 @@ class CompanionViewModel(
     }
 
     private companion object {
-        const val DEFAULT_DEVICE_ADDRESS = "http://192.168.4.1"
         const val MIN_REFRESH_INDICATOR_MS = 650L
-        const val NANO_SSID_PREFIX = "RSVP-Nano-"
-        const val LEGACY_NANO_SSID_PREFIX = "RSVP_Nano-"
     }
 }
