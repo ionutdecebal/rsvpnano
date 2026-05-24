@@ -93,19 +93,20 @@ fun ConnectionBar(
 ) {
     val containerColor by animateColorAsState(
         targetValue = if (uiState.isConnected) {
-            MaterialTheme.colorScheme.primaryContainer
+            MaterialTheme.colorScheme.surface
         } else {
-            MaterialTheme.colorScheme.surfaceContainerHigh
+            MaterialTheme.colorScheme.surface
         },
         animationSpec = tween(durationMillis = 320),
         label = "ConnectionBarColor",
     )
     Surface(color = containerColor) {
         if (uiState.isConnected) {
+            val connectedLabel = uiState.nanoSsid?.let { "Connected to $it" } ?: "Connected"
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -115,9 +116,9 @@ fun ConnectionBar(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "Connected",
+                    text = connectedLabel,
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
@@ -182,18 +183,15 @@ private fun DisconnectedConnectionBarContent(
         Icon(
             imageVector = Icons.Outlined.WarningAmber,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.tertiary,
+            tint = MaterialTheme.colorScheme.secondary,
         )
         Text(
             text = statusLabel,
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = onShowAddressEntry) {
             Text(text = if (uiState.showAddressEntry) "Hide manual connection" else "Connect manually")
         }
@@ -202,6 +200,7 @@ private fun DisconnectedConnectionBarContent(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedTextField(
                 value = uiState.address,
