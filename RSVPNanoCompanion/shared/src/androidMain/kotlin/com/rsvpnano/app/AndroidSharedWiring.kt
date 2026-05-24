@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
 
 private const val PendingUploadRelativePath = "pending-uploads/drafts.json"
 private const val RssFeedsRelativePath = "rss/feeds.json"
-private const val SettingsRelativePath = "settings/companion_settings.preferences_pb"
+private const val SettingsRelativePath = "settings/companion_settings.json"
 
 /**
  * Creates shared dependencies for Android using app-private storage paths.

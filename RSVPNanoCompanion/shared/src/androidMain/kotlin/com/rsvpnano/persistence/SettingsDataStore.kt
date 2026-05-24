@@ -1,13 +1,22 @@
 package com.rsvpnano.persistence
 
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.PreferenceDataStoreFactory
-import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.core.DataStoreFactory
+import androidx.datastore.core.okio.OkioStorage
+import com.rsvpnano.models.CompanionAppSettings
 import java.io.File
+import okio.FileSystem
+import okio.Path.Companion.toPath
 
-fun createSettingsDataStore(file: File): DataStore<Preferences> {
-    return PreferenceDataStoreFactory.create {
-        file.parentFile?.mkdirs()
-        file
-    }
+fun createSettingsDataStore(file: File): DataStore<CompanionAppSettings> {
+    return DataStoreFactory.create(
+        storage = OkioStorage(
+            fileSystem = FileSystem.SYSTEM,
+            serializer = AppSettingsSerializer,
+            producePath = {
+                file.parentFile?.mkdirs()
+                file.absolutePath.toPath()
+            },
+        ),
+    )
 }

@@ -216,7 +216,3 @@ data class CompanionAppSettings(
     fun withRememberedNano(value: RememberedNano?): CompanionAppSettings =
         copy(rememberedNano = value)
 }
-
-fun CompanionAppSettings.canAutoConnectToNano(pendingUploads: List<PendingUpload>): Boolean {
-    return rememberedNano != null && pendingUploads.none { it.needsArticleFetch() }
-}
