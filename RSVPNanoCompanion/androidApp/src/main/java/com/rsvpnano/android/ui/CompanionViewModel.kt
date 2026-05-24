@@ -3,6 +3,7 @@ package com.rsvpnano.android.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.NanoConnectionState
 import com.rsvpnano.app.NanoDeviceSyncService
 import com.rsvpnano.app.NanoWifiConnector
@@ -12,15 +13,10 @@ import com.rsvpnano.app.NanoWifiRequestResult
 import com.rsvpnano.app.NanoWifiSnapshot
 import com.rsvpnano.app.RsvpSharedApp
 import com.rsvpnano.app.SharedAppUtils
-import com.rsvpnano.app.isCheckingReader
-import com.rsvpnano.app.isConnected
-import com.rsvpnano.app.isRequesting
-import com.rsvpnano.app.isWifiAttached
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
-import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
 import com.rsvpnano.persistence.AppSettingsStore
@@ -34,52 +30,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
-data class CompanionUiState(
-    val drafts: List<PendingUpload> = emptyList(),
-    val rssFeeds: List<String> = emptyList(),
-    val books: List<NanoBook> = emptyList(),
-    val settings: NanoSettings? = null,
-    val wifiSettings: NanoWifiSettings? = null,
-    val address: String = "http://192.168.4.1",
-    val wifiSsidDraft: String = "",
-    val wifiPasswordDraft: String = "",
-    val draftTitle: String = "",
-    val draftSourceUrl: String = "",
-    val draftBody: String = "",
-    val editingDraftId: String? = null,
-    val rssFeedDraft: String = "",
-    val connectionState: NanoConnectionState = NanoConnectionState.Disconnected,
-    val rememberedNano: RememberedNano? = null,
-    val canRememberCurrentNano: Boolean = false,
-    val showAddressEntry: Boolean = false,
-    val isRefreshing: Boolean = false,
-    val status: String = "Ready",
-) {
-    val isConnected: Boolean
-        get() = connectionState.isConnected
-
-    val isNanoWifiAttached: Boolean
-        get() = connectionState.isWifiAttached
-
-    val isCheckingReader: Boolean
-        get() = connectionState.isCheckingReader
-
-    val isRequestingNanoNetwork: Boolean
-        get() = connectionState.isRequesting
-
-    val currentNano: RememberedNano?
-        get() = connectionState.currentNano
-
-    val nanoSsid: String?
-        get() = currentNano?.ssid
-}
-
-data class SharedImport(
-    val title: String,
-    val text: String,
-    val source: String,
-)
-
 class CompanionViewModel(
     private val sharedApp: RsvpSharedApp,
     private val nanoNetworkController: NanoWifiConnector,
@@ -87,7 +37,7 @@ class CompanionViewModel(
 ) : ViewModel() {
     private val deviceSyncService: NanoDeviceSyncService = sharedApp.deviceSyncService
     private val companionController = sharedApp.companionController
-    private val _uiState = MutableStateFlow(CompanionUiState(status = "Loading shared data..."))
+    private val _uiState = MutableStateFlow(CompanionUiState(notice = CompanionNotice.Neutral("Loading shared data...")))
     val uiState: StateFlow<CompanionUiState> = _uiState
     private var pendingSettingsSave: NanoSettings? = null
     private var settingsSaveJob: Job? = null
@@ -120,10 +70,10 @@ class CompanionViewModel(
         val shouldShowAddressEntry = !it.showAddressEntry
         it.copy(
             showAddressEntry = shouldShowAddressEntry,
-            status = if (shouldShowAddressEntry) {
-                "If the default address is not working, enter the address shown by the reader."
+            notice = if (shouldShowAddressEntry) {
+                CompanionNotice.Neutral("If the default address is not working, enter the address shown by the reader.")
             } else {
-                it.status
+                it.notice
             },
         )
     }
@@ -140,15 +90,15 @@ class CompanionViewModel(
     }
 
     fun scanPermissionDenied() {
-        setStatus("Scan permission denied. Use Wi-Fi settings for the default connection flow.")
+        setNotice(CompanionNotice.Attention("Wi-Fi permission was not granted. Use the Wi-Fi panel to join your Nano manually."))
     }
 
     fun requestWifiPermissions() {
-        setStatus("Grant Wi-Fi permissions to let the app find your RSVP Nano.")
+        setNotice(CompanionNotice.Attention("Grant Wi-Fi permission so the app can find your RSVP Nano."))
     }
 
     fun wifiPermissionsBlocked() {
-        setStatus("Wi-Fi permission is blocked. Enable it in app settings to let the app find your RSVP Nano.")
+        setNotice(CompanionNotice.Error("Wi-Fi permission is blocked. Enable it in app settings to let the app find your RSVP Nano."))
     }
 
     fun setWifiSsidDraft(value: String) = updateState { it.copy(wifiSsidDraft = value) }
@@ -166,24 +116,24 @@ class CompanionViewModel(
     fun refresh() {
         viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
-            updateState { it.copy(isRefreshing = true, status = "Refreshing...") }
+            updateState { it.copy(isRefreshing = true, notice = CompanionNotice.Neutral("Refreshing...")) }
             runCatching {
                 val local = companionController.refreshLocal()
                 updateState {
                     it.copy(
                         drafts = local.drafts,
                         rssFeeds = local.rssFeeds,
-                        status = "Loaded ${local.drafts.size} drafts.",
+                        notice = CompanionNotice.Neutral("Loaded ${local.drafts.size} drafts."),
                     )
                 }
                 if (!current.isConnected) {
-                    setStatus("Ready. Join RSVP-Nano Wi-Fi, then tap Check.")
+                    setNotice(CompanionNotice.Neutral("Ready. Connect to your Nano when you want to sync."))
                 } else {
                     verifyCurrentConnection()
                 }
             }.onFailure { error ->
                 updateState {
-                    it.copy(status = error.message ?: "Refresh failed.")
+                    it.copy(notice = CompanionNotice.Error(error.message ?: "Refresh failed."))
                 }
             }.also {
                 val elapsed = System.currentTimeMillis() - startedAt
@@ -206,7 +156,7 @@ class CompanionViewModel(
         markFailure: Boolean,
     ): Boolean {
         if (showBusyStatus) {
-            setStatus("Connecting... Give the phone a few seconds after joining the Nano Wi-Fi.")
+            setNotice(CompanionNotice.Attention("Connecting... Give the phone a few seconds after joining the Nano Wi-Fi."))
         }
         val state = current
         val address = SharedAppUtils.normalizedAddress(state.address)
@@ -222,7 +172,7 @@ class CompanionViewModel(
     private fun markConnectionFailure(address: String) {
         markDisconnected(
             if (address == SharedAppUtils.DEFAULT_DEVICE_ADDRESS) {
-                "Could not find RSVP Nano at ${SharedAppUtils.DEFAULT_DEVICE_ADDRESS}. Use Connect to search, or open Wi-Fi settings and join the Nano AP manually."
+                "Could not find RSVP Nano at ${SharedAppUtils.DEFAULT_DEVICE_ADDRESS}. Use Connect to search, or join the Nano Wi-Fi manually."
             } else {
                 "Connection failed."
             },
@@ -262,9 +212,9 @@ class CompanionViewModel(
             }
         }.onFailure {
             if (current.isNanoWifiAttached) {
-                setStatus("Nano Wi-Fi connected, reader API unavailable.")
+                setNotice(CompanionNotice.Attention("Nano Wi-Fi is connected, but the reader is not responding."))
             } else {
-                markDisconnected("Reader disconnected. Reconnect to RSVP Nano before continuing.")
+                markDisconnected("Reader disconnected. Reconnect to your Nano before continuing.")
             }
         }
     }
@@ -272,7 +222,7 @@ class CompanionViewModel(
     private suspend fun ensureReaderReachable(action: String): Boolean {
         val state = current
         if (!state.isConnected) {
-            setStatus("Connect to the reader before $action.")
+            setNotice(CompanionNotice.Error("Connect to your Nano before $action."))
             return false
         }
         return runCatching {
@@ -284,7 +234,7 @@ class CompanionViewModel(
                 )
             }
         }.onFailure {
-            markDisconnected("Reader disconnected. Reconnect to RSVP Nano before $action.")
+            markDisconnected("Reader disconnected. Reconnect to your Nano before $action.")
         }.isSuccess
     }
 
@@ -292,7 +242,7 @@ class CompanionViewModel(
         val state = current
         val currentSettings = state.settings
         if (!state.isConnected || currentSettings == null) {
-            setStatus("Connect to the reader before saving settings.")
+            setNotice(CompanionNotice.Error("Connect to your Nano before saving settings."))
             return
         }
 
@@ -300,7 +250,7 @@ class CompanionViewModel(
         updateState {
             it.copy(
                 settings = nextSettings,
-                status = "Saving reader settings...",
+                notice = CompanionNotice.Attention("Saving reader settings..."),
             )
         }
         enqueueSettingsSave(nextSettings)
@@ -333,7 +283,7 @@ class CompanionViewModel(
                 val snapshot = result.getOrThrow()
                 updateState { state ->
                     if (pendingSettingsSave == null && state.settings == settingsToSave) {
-                        state.copy(settings = snapshot.settings, status = "Saved to Nano. Some changes apply after leaving Companion Sync.")
+                        state.copy(settings = snapshot.settings, notice = CompanionNotice.Success("Saved to Nano. Some changes apply after leaving Companion Sync."))
                     } else {
                         state
                     }
@@ -346,15 +296,15 @@ class CompanionViewModel(
         viewModelScope.launch {
             val state = current
             if (!state.isConnected) {
-                setStatus("Connect to the reader before saving Wi-Fi.")
+                setNotice(CompanionNotice.Error("Connect to your Nano before saving Wi-Fi."))
                 return@launch
             }
             val ssid = state.wifiSsidDraft.trim()
             if (ssid.isEmpty()) {
-                setStatus("Wi-Fi SSID is required.")
+                setNotice(CompanionNotice.Error("Wi-Fi SSID is required."))
                 return@launch
             }
-            setStatus("Saving Wi-Fi settings...")
+            setNotice(CompanionNotice.Attention("Saving Wi-Fi settings..."))
             if (!ensureReaderReachable("saving Wi-Fi")) return@launch
             runCatching { withNanoApi { companionController.saveWifiSettings(state.address, ssid, state.wifiPasswordDraft) } }
                 .onSuccess { snapshot ->
@@ -364,7 +314,7 @@ class CompanionViewModel(
                             wifiSettings = wifi,
                             wifiSsidDraft = wifi.ssid,
                             wifiPasswordDraft = "",
-                            status = "Wi-Fi settings saved.",
+                            notice = CompanionNotice.Success("Wi-Fi settings saved."),
                         )
                     }
                 }
@@ -376,10 +326,10 @@ class CompanionViewModel(
         viewModelScope.launch {
             val state = current
             if (!state.isConnected) {
-                setStatus("Connect to the reader before clearing Wi-Fi.")
+                setNotice(CompanionNotice.Error("Connect to your Nano before clearing Wi-Fi."))
                 return@launch
             }
-            setStatus("Clearing Wi-Fi settings...")
+            setNotice(CompanionNotice.Attention("Clearing Wi-Fi settings..."))
             if (!ensureReaderReachable("clearing Wi-Fi")) return@launch
             runCatching { withNanoApi { companionController.clearWifiSettings(state.address) } }
                 .onSuccess { snapshot ->
@@ -389,7 +339,7 @@ class CompanionViewModel(
                             wifiSettings = wifi,
                             wifiSsidDraft = wifi.ssid,
                             wifiPasswordDraft = "",
-                            status = "Wi-Fi settings cleared.",
+                            notice = CompanionNotice.Success("Wi-Fi settings cleared."),
                         )
                     }
                 }
@@ -402,7 +352,7 @@ class CompanionViewModel(
             val state = current
             val feed = state.rssFeedDraft.trim()
             if (!feed.startsWith("http://") && !feed.startsWith("https://")) {
-                setStatus("RSS feed URLs must start with http:// or https://.")
+                setNotice(CompanionNotice.Error("RSS feed URLs must start with http:// or https://."))
                 return@launch
             }
             val feeds = companionController.saveRssFeeds(
@@ -414,10 +364,10 @@ class CompanionViewModel(
                 it.copy(
                     rssFeeds = feeds,
                     rssFeedDraft = "",
-                    status = if (state.isConnected) {
-                        "RSS feed saved locally. Sync to write it to the reader."
+                    notice = if (state.isConnected) {
+                        CompanionNotice.Success("RSS feed saved locally. Sync to write it to the reader.")
                     } else {
-                        "RSS feed saved locally."
+                        CompanionNotice.Success("RSS feed saved locally.")
                     },
                 )
             }
@@ -434,7 +384,7 @@ class CompanionViewModel(
             updateState {
                 it.copy(
                     rssFeeds = feeds,
-                    status = "RSS feed removed.",
+                    notice = CompanionNotice.Success("RSS feed removed."),
                 )
             }
         }
@@ -446,7 +396,7 @@ class CompanionViewModel(
             val title = state.draftTitle.trim()
             val body = state.draftBody.trim()
             if (title.isEmpty() || body.isEmpty()) {
-                setStatus("Text drafts need a title and body.")
+                setNotice(CompanionNotice.Error("Text drafts need a title and body."))
                 return@launch
             }
             val existing = state.editingDraftId?.let { id -> state.drafts.firstOrNull { it.id == id } }
@@ -462,7 +412,7 @@ class CompanionViewModel(
             )
             clearDraftEditor(
                 drafts = snapshot.drafts,
-                status = if (existing == null) "Text draft saved locally." else "Text draft updated.",
+                notice = if (existing == null) CompanionNotice.Success("Text draft saved locally.") else CompanionNotice.Success("Text draft updated."),
             )
         }
     }
@@ -479,7 +429,7 @@ class CompanionViewModel(
                 )
             }
             if (prepared.isEmpty()) {
-                setStatus("Shared item is not readable text or a URL.")
+                setNotice(CompanionNotice.Error("Shared item is not readable text or a URL."))
                 return@launch
             }
 
@@ -495,7 +445,7 @@ class CompanionViewModel(
             updateState {
                 it.copy(
                     drafts = drafts,
-                    status = sharedImportStatus(savedCount = prepared.size, fetchedCount = fetchedCount),
+                    notice = sharedImportNotice(savedCount = prepared.size, fetchedCount = fetchedCount),
                 )
             }
         }
@@ -521,7 +471,7 @@ class CompanionViewModel(
                 updateState {
                     it.copy(
                         drafts = drafts,
-                status = "Fetched $fetchedCount saved articles. Connect to the Nano Wi-Fi to sync.",
+                        notice = CompanionNotice.Success("Fetched $fetchedCount saved articles. Connect to the Nano Wi-Fi to sync."),
                     )
                 }
             }
@@ -531,7 +481,7 @@ class CompanionViewModel(
     fun rememberCurrentNano() {
         val identity = currentRememberableNano()
         if (identity == null) {
-            setStatus("Connect to a Nano before remembering it.")
+            setNotice(CompanionNotice.Error("Connect to a Nano before remembering it."))
             return
         }
         viewModelScope.launch {
@@ -542,7 +492,7 @@ class CompanionViewModel(
                 it.copy(
                     rememberedNano = identity,
                     canRememberCurrentNano = false,
-                    status = "Remembered ${identity.ssid}.",
+                    notice = CompanionNotice.Success("Remembered ${identity.ssid}."),
                 )
             }
         }
@@ -558,25 +508,25 @@ class CompanionViewModel(
                 it.copy(
                     rememberedNano = null,
                     canRememberCurrentNano = false,
-                    status = "Forgot remembered Nano.",
+                    notice = CompanionNotice.Success("Forgot remembered Nano."),
                 )
             }
         }
     }
 
-    private fun sharedImportStatus(savedCount: Int, fetchedCount: Int): String {
+    private fun sharedImportNotice(savedCount: Int, fetchedCount: Int): CompanionNotice {
         return when {
             fetchedCount > 0 && savedCount == 1 -> {
-                "Shared article fetched and saved. Connect to the Nano Wi-Fi when you are ready to sync it."
+                CompanionNotice.Success("Shared article fetched and saved. Connect to the Nano Wi-Fi when you are ready to sync it.")
             }
             fetchedCount > 0 -> {
-                "Saved $savedCount shared items and fetched $fetchedCount articles. Connect to the Nano Wi-Fi to sync."
+                CompanionNotice.Success("Saved $savedCount shared items and fetched $fetchedCount articles. Connect to the Nano Wi-Fi to sync.")
             }
             savedCount == 1 -> {
-                "Shared link saved locally. It will fetch article text when the phone has internet again; then connect to the Nano Wi-Fi to sync."
+                CompanionNotice.Attention("Shared link saved locally. It will fetch article text when the phone has internet again; then connect to the Nano Wi-Fi to sync.")
             }
             else -> {
-                "Saved $savedCount shared items locally. URL-only drafts will fetch when the phone has internet again."
+                CompanionNotice.Attention("Saved $savedCount shared items locally. URL-only drafts will fetch when the phone has internet again.")
             }
         }
     }
@@ -586,7 +536,7 @@ class CompanionViewModel(
             val state = current
             val sourceUrl = state.draftSourceUrl.trim()
             if (!sourceUrl.startsWith("http://") && !sourceUrl.startsWith("https://")) {
-                setStatus("Saved links need an http:// or https:// URL.")
+                setNotice(CompanionNotice.Error("Saved links need an http:// or https:// URL."))
                 return@launch
             }
             val title = state.draftTitle.trim().ifEmpty { hostName(sourceUrl).ifEmpty { "Saved Article" } }
@@ -601,15 +551,15 @@ class CompanionViewModel(
             val snapshot = companionController.saveDraftFetchingArticleIfNeeded(pending)
             clearDraftEditor(
                 drafts = snapshot.drafts,
-                status = when {
+                notice = when {
                     snapshot.fetchedArticle -> {
-                        "Fetched and saved ${snapshot.item.title}. Connect to the Nano Wi-Fi to sync it."
+                        CompanionNotice.Success("Fetched and saved ${snapshot.item.title}. Connect to the Nano Wi-Fi to sync it.")
                     }
                     existing == null -> {
-                        "Link saved locally. If article text was not fetched, edit it while online before syncing."
+                        CompanionNotice.Attention("Link saved locally. If article text was not fetched, edit it while online before syncing.")
                     }
                     else -> {
-                        "Link updated. If article text was not fetched, edit it while online before syncing."
+                        CompanionNotice.Attention("Link updated. If article text was not fetched, edit it while online before syncing.")
                     }
                 },
             )
@@ -623,22 +573,22 @@ class CompanionViewModel(
                 draftSourceUrl = draft.sourceUrl.orEmpty(),
                 draftBody = draft.body,
                 editingDraftId = draft.id,
-                status = "Editing ${draft.title}.",
+                notice = CompanionNotice.Neutral("Editing ${draft.title}."),
             )
         }
     }
 
     fun cancelDraftEdit() {
-        clearDraftEditor(status = "Edit cancelled.")
+        clearDraftEditor(notice = CompanionNotice.Neutral("Edit cancelled."))
     }
 
     fun deleteDraft(draft: PendingUpload) {
         viewModelScope.launch {
             val drafts = companionController.deleteDraft(draft).drafts
             if (current.editingDraftId == draft.id) {
-                clearDraftEditor(drafts = drafts, status = "Draft deleted.")
+                clearDraftEditor(drafts = drafts, notice = CompanionNotice.Success("Draft deleted."))
             } else {
-                updateState { it.copy(drafts = drafts, status = "Draft deleted.") }
+                updateState { it.copy(drafts = drafts, notice = CompanionNotice.Success("Draft deleted.")) }
             }
         }
     }
@@ -647,10 +597,10 @@ class CompanionViewModel(
         viewModelScope.launch {
             val state = current
             if (!state.isConnected) {
-                setStatus("Connect to the reader before syncing RSS feeds.")
+                setNotice(CompanionNotice.Error("Connect to your Nano before syncing RSS feeds."))
                 return@launch
             }
-            setStatus("Syncing RSS feeds...")
+            setNotice(CompanionNotice.Attention("Syncing RSS feeds..."))
             if (!ensureReaderReachable("syncing RSS feeds")) return@launch
             runCatching {
                 withNanoApi {
@@ -661,7 +611,7 @@ class CompanionViewModel(
                     )
                 }
             }.onSuccess { rss ->
-                updateState { it.copy(rssFeeds = rss.rssFeeds, status = "RSS feeds synced to the reader.") }
+                updateState { it.copy(rssFeeds = rss.rssFeeds, notice = CompanionNotice.Success("RSS feeds synced to the reader.")) }
             }.onFailure { error ->
                 markDisconnected(error.message ?: "Reader disconnected before syncing RSS feeds.")
             }
@@ -672,15 +622,15 @@ class CompanionViewModel(
         viewModelScope.launch {
             val state = current
             if (!state.isConnected) {
-                setStatus("Connect to the reader before syncing saved articles.")
+                setNotice(CompanionNotice.Error("Connect to your Nano before syncing saved articles."))
                 return@launch
             }
             val readyDrafts = state.drafts.filterNot(companionController::needsArticleFetch)
             if (readyDrafts.isEmpty()) {
-                setStatus("No fetched articles are ready. Share links while online, or paste article text before syncing.")
+                setNotice(CompanionNotice.Error("No fetched articles are ready. Share links while online, or paste article text before syncing."))
                 return@launch
             }
-            setStatus("Syncing saved articles...")
+            setNotice(CompanionNotice.Attention("Syncing saved articles..."))
             if (!ensureReaderReachable("syncing saved articles")) return@launch
             runCatching {
                 withNanoApi {
@@ -694,7 +644,7 @@ class CompanionViewModel(
                     it.copy(
                         drafts = synced.drafts,
                         books = synced.books,
-                        status = "Synced ${synced.syncedCount} saved articles.",
+                        notice = CompanionNotice.Success("Synced ${synced.syncedCount} saved articles."),
                     )
                 }
             }.onFailure { error ->
@@ -707,16 +657,16 @@ class CompanionViewModel(
         viewModelScope.launch {
             val state = current
             if (!state.isConnected) {
-                setStatus("Connect to the reader before deleting books.")
+                setNotice(CompanionNotice.Error("Connect to your Nano before deleting books."))
                 return@launch
             }
             val title = book.displayTitle
-            setStatus("Deleting $title...")
+            setNotice(CompanionNotice.Attention("Deleting $title..."))
             if (!ensureReaderReachable("deleting books")) return@launch
             runCatching {
                 withNanoApi { companionController.deleteBooks(state.address, listOf(book.id)) }
             }.onSuccess { snapshot ->
-                updateState { it.copy(books = snapshot.books, status = "Deleted $title.") }
+                updateState { it.copy(books = snapshot.books, notice = CompanionNotice.Success("Deleted $title.")) }
             }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before deleting books.") }
         }
     }
@@ -725,10 +675,10 @@ class CompanionViewModel(
         viewModelScope.launch {
             val state = current
             if (!state.isConnected) {
-                setStatus("Connect to the reader before uploading files.")
+                setNotice(CompanionNotice.Error("Connect to your Nano before uploading files."))
                 return@launch
             }
-            setStatus("Uploading $displayName...")
+            setNotice(CompanionNotice.Attention("Uploading $displayName..."))
             if (!ensureReaderReachable("uploading files")) return@launch
             runCatching {
                 val file = RsvpConverter.bookFile(data = data, filename = displayName)
@@ -740,7 +690,7 @@ class CompanionViewModel(
                     )
                 }
             }.onSuccess { snapshot ->
-                updateState { it.copy(books = snapshot.books, status = "Uploaded $displayName.") }
+                updateState { it.copy(books = snapshot.books, notice = CompanionNotice.Success("Uploaded $displayName.")) }
             }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before uploading files.") }
         }
     }
@@ -749,7 +699,7 @@ class CompanionViewModel(
 
     private fun clearDraftEditor(
         drafts: List<PendingUpload> = current.drafts,
-        status: String,
+        notice: CompanionNotice,
     ) {
         updateState {
             it.copy(
@@ -758,12 +708,12 @@ class CompanionViewModel(
                 draftSourceUrl = "",
                 draftBody = "",
                 editingDraftId = null,
-                status = status,
+                notice = notice,
             )
         }
     }
 
-    private fun setStatus(status: String) = updateState { it.copy(status = status) }
+    private fun setNotice(notice: CompanionNotice) = updateState { it.copy(notice = notice) }
 
     private fun observeNanoNetwork() {
         viewModelScope.launch {
@@ -778,7 +728,7 @@ class CompanionViewModel(
             nanoNetworkController.events.collect { event ->
                 when (event) {
                     NanoWifiEvent.RequestUnavailable -> {
-                        setStatus("Android did not find a matching RSVP-Nano Wi-Fi network.")
+                        setNotice(CompanionNotice.Error("Android did not find a matching RSVP-Nano Wi-Fi network."))
                     }
                 }
             }
@@ -833,8 +783,10 @@ class CompanionViewModel(
     private fun connectNano(rememberedNano: RememberedNano?) {
         updateState {
             it.copy(
-                status = rememberedNano?.let { nano -> "Connecting to remembered Nano ${nano.ssid}..." }
-                    ?: "Searching for RSVP Nano Wi-Fi...",
+                notice = CompanionNotice.Attention(
+                    rememberedNano?.let { nano -> "Connecting to remembered Nano ${nano.ssid}..." }
+                        ?: "Searching for RSVP Nano Wi-Fi...",
+                ),
             )
         }
         when (val result = nanoNetworkController.requestNanoNetwork(rememberedNano)) {
@@ -844,13 +796,13 @@ class CompanionViewModel(
             }
             NanoWifiRequestResult.AlreadyRequesting -> Unit
             NanoWifiRequestResult.MissingPermissions -> {
-                setStatus("Scan needs nearby Wi-Fi and location permission. Use Wi-Fi settings for the default flow.")
+                setNotice(CompanionNotice.Error("Wi-Fi permission is needed to find your Nano from the app."))
             }
             NanoWifiRequestResult.Unsupported -> {
-                setStatus("Android 10 or newer is required for app Wi-Fi scan. Use Wi-Fi settings instead.")
+                setNotice(CompanionNotice.Error("Android 10 or newer is required for app Wi-Fi scan. Use Wi-Fi settings instead."))
             }
             is NanoWifiRequestResult.Failed -> {
-                setStatus(result.reason)
+                setNotice(CompanionNotice.Error(result.reason))
             }
         }
     }
@@ -881,7 +833,7 @@ class CompanionViewModel(
                 connectionState = nextConnectionState,
                 canRememberCurrentNano = canPromptToRemember(currentIdentity, it.rememberedNano),
                 showAddressEntry = false,
-                status = "Connected to $deviceName. ${device.summaryText}",
+                notice = CompanionNotice.Success("Connected to $deviceName. ${device.summaryText}"),
             )
         }
         if (device.info != null && device.settings == null) {
@@ -898,12 +850,12 @@ class CompanionViewModel(
                     settings = snapshot.settings,
                     wifiSettings = snapshot.wifiSettings ?: it.wifiSettings,
                     wifiSsidDraft = snapshot.wifiSettings?.ssid ?: it.wifiSsidDraft,
-                    status = "Reader settings loaded.",
+                    notice = CompanionNotice.Success("Reader settings loaded."),
                 )
             }
         }.onFailure { error ->
             updateState {
-                it.copy(status = "Connected, but reader settings could not be loaded: ${error.message ?: "unknown error"}.")
+                it.copy(notice = CompanionNotice.Attention("Connected, but reader settings could not be loaded: ${error.message ?: "unknown error"}."))
             }
         }
     }
@@ -919,7 +871,7 @@ class CompanionViewModel(
                 wifiSettings = null,
                 connectionState = NanoConnectionState.Disconnected,
                 showAddressEntry = showAddressEntry,
-                status = status,
+                notice = CompanionNotice.Error(status),
             )
         }
     }
