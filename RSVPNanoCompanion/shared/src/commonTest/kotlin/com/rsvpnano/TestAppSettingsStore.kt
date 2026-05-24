@@ -1,25 +1,18 @@
 package com.rsvpnano
 
-import androidx.datastore.core.DataStore
 import com.rsvpnano.models.CompanionAppSettings
 import com.rsvpnano.persistence.AppSettingsStore
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 
 fun testAppSettingsStore(): AppSettingsStore {
-    return AppSettingsStore(TestSettingsDataStore())
+    return TestAppSettingsStore()
 }
 
-private class TestSettingsDataStore : DataStore<CompanionAppSettings> {
-    private val state = MutableStateFlow(CompanionAppSettings())
+private class TestAppSettingsStore : AppSettingsStore {
+    private var state = CompanionAppSettings()
 
-    override val data: Flow<CompanionAppSettings> = state
+    override suspend fun load(): CompanionAppSettings = state
 
-    override suspend fun updateData(
-        transform: suspend (t: CompanionAppSettings) -> CompanionAppSettings,
-    ): CompanionAppSettings {
-        val updated = transform(state.value)
-        state.value = updated
-        return updated
+    override suspend fun save(settings: CompanionAppSettings) {
+        state = settings
     }
 }

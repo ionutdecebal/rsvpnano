@@ -3,7 +3,7 @@ package com.rsvpnano.app
 import com.rsvpnano.api.NanoClient
 import com.rsvpnano.api.NanoKtorClient
 import com.rsvpnano.api.ArticleFetchClient
-import com.rsvpnano.persistence.AppSettingsStore
+import com.rsvpnano.persistence.DataStoreAppSettingsStore
 import com.rsvpnano.persistence.FilePendingUploadStorage
 import com.rsvpnano.persistence.FileRssFeedStorage
 import com.rsvpnano.persistence.createSettingsDataStore
@@ -29,7 +29,7 @@ fun createAndroidSharedDependencies(
     return RsvpSharedDependencies(
         pendingUploadStorage = FilePendingUploadStorage(File(appFilesDir, PendingUploadRelativePath)),
         rssFeedStorage = FileRssFeedStorage(File(appFilesDir, RssFeedsRelativePath)),
-        appSettingsStore = AppSettingsStore(createSettingsDataStore(File(appFilesDir, SettingsRelativePath))),
+        appSettingsStore = DataStoreAppSettingsStore(createSettingsDataStore(File(appFilesDir, SettingsRelativePath))),
         articleFetchClient = ArticleFetchClient(httpClient = httpClient),
         nanoClient = nanoClient,
     )

@@ -1,0 +1,36 @@
+package com.rsvpnano.persistence
+
+import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSData
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSString
+import platform.Foundation.NSUTF8StringEncoding
+import platform.Foundation.NSURL
+import platform.Foundation.dataUsingEncoding
+import platform.Foundation.stringWithContentsOfURL
+import platform.Foundation.writeToURL
+
+@OptIn(ExperimentalForeignApi::class)
+class FileAppSettingsStorage(
+    private val fileManager: NSFileManager = NSFileManager.defaultManager(),
+    private val appGroupIdentifier: String = "group.com.rsvpnano.companion",
+) : AppSettingsStorage {
+    private fun fileURL(): NSURL? {
+        val rootURL = fileManager.containerURLForSecurityApplicationGroupIdentifier(appGroupIdentifier) ?: return null
+        val folder = rootURL.URLByAppendingPathComponent("Settings", isDirectory = true) ?: return null
+        fileManager.createDirectoryAtURL(folder, withIntermediateDirectories = true, attributes = null, error = null)
+        return folder.URLByAppendingPathComponent("companion_settings.json")
+    }
+
+    override suspend fun readText(): String? {
+        val url = fileURL() ?: return null
+        return NSString.stringWithContentsOfURL(url, NSUTF8StringEncoding, null)
+    }
+
+    override suspend fun writeText(value: String) {
+        val url = fileURL() ?: return
+        val nsValue = value as NSString
+        val data: NSData = nsValue.dataUsingEncoding(NSUTF8StringEncoding) ?: return
+        data.writeToURL(url, atomically = true)
+    }
+}
