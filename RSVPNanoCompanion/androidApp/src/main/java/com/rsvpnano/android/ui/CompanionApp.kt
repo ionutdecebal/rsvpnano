@@ -91,6 +91,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -260,8 +261,10 @@ fun CompanionApp(
             var showAddPicker by remember { mutableStateOf(false) }
             var showArticleDialog by remember { mutableStateOf(false) }
             var showRssDialog by remember { mutableStateOf(false) }
+            val snackbarNotices = remember { mutableStateMapOf<String, CompanionNotice>() }
             LaunchedEffect(uiState.notice) {
                 if (uiState.notice.showTransient) {
+                    snackbarNotices[uiState.status] = uiState.notice
                     snackbarHostState.showSnackbar(uiState.status)
                 }
             }
@@ -306,11 +309,13 @@ fun CompanionApp(
                 },
                 snackbarHost = {
                     SnackbarHost(hostState = snackbarHostState) { data ->
+                        val snackbarNotice = snackbarNotices[data.visuals.message]
+                            ?: CompanionNotice.Neutral(data.visuals.message)
                         Snackbar(
                             snackbarData = data,
-                            containerColor = snackbarColor(uiState.notice),
-                            contentColor = snackbarContentColor(uiState.notice),
-                            actionColor = snackbarActionColor(uiState.notice),
+                            containerColor = snackbarColor(snackbarNotice),
+                            contentColor = snackbarContentColor(snackbarNotice),
+                            actionColor = snackbarActionColor(snackbarNotice),
                             dismissActionContentColor = SnackbarDefaults.dismissActionContentColor,
                         )
                     }

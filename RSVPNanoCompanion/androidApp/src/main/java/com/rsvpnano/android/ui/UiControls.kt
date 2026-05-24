@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,9 +24,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
@@ -91,19 +94,18 @@ fun ChoiceRow(
     options: List<Pair<String, String>>,
     onSelected: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = label, style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             options.forEach { (value, title) ->
-                if (value == selected) {
-                    Button(onClick = { onSelected(value) }) {
-                        Text(text = title)
-                    }
-                } else {
-                    TextButton(onClick = { onSelected(value) }) {
-                        Text(text = title)
-                    }
-                }
+                FilterChip(
+                    selected = value == selected,
+                    onClick = { onSelected(value) },
+                    label = { Text(text = title) },
+                )
             }
         }
     }
@@ -112,24 +114,25 @@ fun ChoiceRow(
 @Composable
 fun SliderRow(
     label: String,
-    valueLabel: String,
+    valueLabel: (Float) -> String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
+    snapValue: (Float) -> Float = { it },
     onValueChangeFinished: (Float) -> Unit,
 ) {
-    var sliderValue by remember(value) { mutableStateOf(value) }
+    var sliderValue by remember(value) { mutableStateOf(snapValue(value)) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(text = label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
-            Text(text = valueLabel, style = MaterialTheme.typography.bodyMedium)
+            Text(text = valueLabel(sliderValue), style = MaterialTheme.typography.bodyMedium)
         }
         Slider(
             value = sliderValue.coerceIn(valueRange.start, valueRange.endInclusive),
-            onValueChange = { sliderValue = it },
+            onValueChange = { sliderValue = snapValue(it).coerceIn(valueRange.start, valueRange.endInclusive) },
             valueRange = valueRange,
             steps = steps,
             onValueChangeFinished = { onValueChangeFinished(sliderValue) },
@@ -164,19 +167,66 @@ fun StepperRow(
 @Composable
 fun SwitchRow(
     label: String,
+    description: String? = null,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.labelLarge,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
+            if (description != null) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+fun SettingsStatusRow(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(text = title, style = MaterialTheme.typography.labelLarge)
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (action != null) {
+                action()
+            }
+        }
     }
 }
 
@@ -188,7 +238,9 @@ fun EmptyCard(text: String) {
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .heightIn(min = 64.dp)
+                .padding(16.dp),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -240,6 +292,7 @@ fun DestructiveIconButton(
 @Composable
 fun SectionCard(
     title: String,
+    subtitle: String? = null,
     content: @Composable () -> Unit,
 ) {
     Card(
@@ -250,9 +303,18 @@ fun SectionCard(
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             content()
         }
     }

@@ -129,7 +129,7 @@ fun snackbarColor(notice: CompanionNotice): Color {
     return when {
         notice is Error -> MaterialTheme.colorScheme.errorContainer
         notice is Success -> MaterialTheme.colorScheme.primaryContainer
-        notice is Attention -> MaterialTheme.colorScheme.tertiaryContainer
+        notice is Attention -> MaterialTheme.colorScheme.secondaryContainer
         else -> SnackbarDefaults.color
     }
 }
@@ -139,7 +139,7 @@ fun snackbarContentColor(notice: CompanionNotice): Color {
     return when {
         notice is Error -> MaterialTheme.colorScheme.onErrorContainer
         notice is Success -> MaterialTheme.colorScheme.onPrimaryContainer
-        notice is Attention -> MaterialTheme.colorScheme.onTertiaryContainer
+        notice is Attention -> MaterialTheme.colorScheme.onSecondaryContainer
         else -> SnackbarDefaults.contentColor
     }
 }
@@ -149,7 +149,7 @@ fun snackbarActionColor(notice: CompanionNotice): Color {
     return when {
         notice is Error -> MaterialTheme.colorScheme.onErrorContainer
         notice is Success -> MaterialTheme.colorScheme.primary
-        notice is Attention -> MaterialTheme.colorScheme.tertiary
+        notice is Attention -> MaterialTheme.colorScheme.secondary
         else -> SnackbarDefaults.actionColor
     }
 }

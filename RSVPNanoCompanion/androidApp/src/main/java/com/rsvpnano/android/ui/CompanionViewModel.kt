@@ -41,6 +41,7 @@ class CompanionViewModel(
     val uiState: StateFlow<CompanionUiState> = _uiState
     private var pendingSettingsSave: NanoSettings? = null
     private var settingsSaveJob: Job? = null
+    private var settingsSaveStatusJob: Job? = null
     private var recheckJob: Job? = null
     private var connectionCheckJob: Job? = null
     private var articleFetchJob: Job? = null
@@ -247,10 +248,13 @@ class CompanionViewModel(
         }
 
         val nextSettings = transform(currentSettings)
+        settingsSaveStatusJob?.cancel()
         updateState {
             it.copy(
                 settings = nextSettings,
-                notice = CompanionNotice.Attention("Saving reader settings..."),
+                isSavingSettings = true,
+                settingsSaveStatus = "Saving changes...",
+                notice = CompanionNotice.Neutral("Saving reader settings..."),
             )
         }
         enqueueSettingsSave(nextSettings)
@@ -269,6 +273,7 @@ class CompanionViewModel(
                 val address = current.address
                 if (!ensureReaderReachable("saving settings")) {
                     pendingSettingsSave = null
+                    updateState { it.copy(isSavingSettings = false, settingsSaveStatus = null) }
                     break
                 }
 
@@ -276,6 +281,7 @@ class CompanionViewModel(
                 if (result.isFailure) {
                     val error = result.exceptionOrNull()
                     pendingSettingsSave = null
+                    updateState { it.copy(isSavingSettings = false, settingsSaveStatus = null) }
                     markDisconnected(error?.message ?: "Reader disconnected before saving settings.")
                     break
                 }
@@ -283,10 +289,18 @@ class CompanionViewModel(
                 val snapshot = result.getOrThrow()
                 updateState { state ->
                     if (pendingSettingsSave == null && state.settings == settingsToSave) {
-                        state.copy(settings = snapshot.settings, notice = CompanionNotice.Success("Saved to Nano. Some changes apply after leaving Companion Sync."))
+                        state.copy(
+                            settings = snapshot.settings,
+                            isSavingSettings = false,
+                            settingsSaveStatus = "Saved on Nano. Exit Companion Sync to apply every setting.",
+                            notice = CompanionNotice.Neutral("Saved to Nano. Some changes apply after leaving Companion Sync."),
+                        )
                     } else {
                         state
                     }
+                }
+                if (pendingSettingsSave == null) {
+                    scheduleSettingsSaveStatusClear()
                 }
             }
         }
@@ -871,8 +885,24 @@ class CompanionViewModel(
                 wifiSettings = null,
                 connectionState = NanoConnectionState.Disconnected,
                 showAddressEntry = showAddressEntry,
+                isSavingSettings = false,
+                settingsSaveStatus = null,
                 notice = CompanionNotice.Error(status),
             )
+        }
+    }
+
+    private fun scheduleSettingsSaveStatusClear() {
+        settingsSaveStatusJob?.cancel()
+        settingsSaveStatusJob = viewModelScope.launch {
+            delay(3_200)
+            updateState {
+                if (it.isSavingSettings) {
+                    it
+                } else {
+                    it.copy(settingsSaveStatus = null)
+                }
+            }
         }
     }
 

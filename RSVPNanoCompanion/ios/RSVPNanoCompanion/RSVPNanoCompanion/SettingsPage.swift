@@ -16,11 +16,7 @@ struct SettingsPage: View {
                 typographySettingsSection
                 wifiSettingsSection
 
-                Section {
-                    Text("Changes are saved to the reader. Exit sync on the device to apply every setting on-screen.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                saveStatusSection
             }
         }
         .listStyle(.insetGrouped)
@@ -33,7 +29,7 @@ struct SettingsPage: View {
     }
 
     private var connectionSection: some View {
-        Section("Reader Connection") {
+        Section {
             TextField("Reader address", text: $connection.address)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -47,12 +43,16 @@ struct SettingsPage: View {
             .buttonStyle(.bordered)
             .tint(.secondary)
             .disabled(connection.isBusy)
+        } header: {
+            Text("Reader Connection")
+        } footer: {
+            Text("Connect to the Nano and set the fallback API address.")
         }
     }
 
     private var settingsSummarySection: some View {
-        Section("Device Settings") {
-            Text(connection.isConnected ? "Load reader settings to edit them here." : "Connect to the reader to edit settings.")
+        Section {
+            Text(connection.isConnected ? "Load reader settings to edit them here." : "Connect to the Nano to edit reader settings.")
                 .foregroundStyle(.secondary)
 
             Button {
@@ -62,27 +62,29 @@ struct SettingsPage: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(!connection.isConnected || connection.isBusy)
+        } header: {
+            Text("Device Settings")
         }
     }
 
     private var wordPacingSettingsSection: some View {
-        Section("Word Pacing") {
+        Section {
             if let settings = viewModel.deviceSettings {
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Reading Mode")
                     Picker("Reading Mode", selection: readerModeBinding(for: settings)) {
-                        Text("One Word").tag("rsvp")
-                        Text("Scroll Text").tag("scroll")
+                        Text("One word").tag("rsvp")
+                        Text("Scroll").tag("scroll")
                     }
                     .pickerStyle(.segmented)
                 }
                 .disabled(connection.isBusy)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    settingsControlLabel("Pause Behaviour")
-                    Picker("Pause Behaviour", selection: pauseModeBinding(for: settings)) {
-                        Text("At Sentence End").tag("sentence_end")
-                        Text("Immediately").tag("instant")
+                    settingsControlLabel("Pause Behavior")
+                    Picker("Pause Behavior", selection: pauseModeBinding(for: settings)) {
+                        Text("Sentence end").tag("sentence_end")
+                        Text("Immediate").tag("instant")
                     }
                     .pickerStyle(.segmented)
                 }
@@ -105,11 +107,15 @@ struct SettingsPage: View {
                 }
                 .disabled(connection.isBusy)
             }
+        } header: {
+            Text("Word Pacing")
+        } footer: {
+            Text("Reading speed, pause timing, and RSVP behavior.")
         }
     }
 
     private var displaySettingsSection: some View {
-        Section("Display") {
+        Section {
             if let settings = viewModel.deviceSettings {
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Display Mode")
@@ -137,9 +143,9 @@ struct SettingsPage: View {
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Footer Label")
                     Picker("Footer Label", selection: footerMetricBinding(for: settings)) {
-                        Text("Percent Read").tag("percentage")
-                        Text("Chapter Time").tag("chapter_time")
-                        Text("Book Time").tag("book_time")
+                        Text("Percent").tag("percentage")
+                        Text("Chapter time").tag("chapter_time")
+                        Text("Book time").tag("book_time")
                     }
                 }
                 .disabled(connection.isBusy)
@@ -147,23 +153,27 @@ struct SettingsPage: View {
                 VStack(alignment: .leading, spacing: 8) {
                     settingsControlLabel("Battery Label")
                     Picker("Battery Label", selection: batteryLabelBinding(for: settings)) {
-                        Text("Percentage").tag("percent")
-                        Text("Time Remaining").tag("time_remaining")
+                        Text("Percent").tag("percent")
+                        Text("Time left").tag("time_remaining")
                         Text("Voltage").tag("voltage")
                     }
                     .pickerStyle(.segmented)
                 }
                 .disabled(connection.isBusy)
 
-                Toggle("Show Battery While Reading", isOn: readingBatteryBinding(for: settings))
+                Toggle("Battery while reading", isOn: readingBatteryBinding(for: settings))
                     .disabled(connection.isBusy)
 
-                Toggle("Show Chapter While Reading", isOn: readingChapterBinding(for: settings))
+                Toggle("Chapter while reading", isOn: readingChapterBinding(for: settings))
                     .disabled(connection.isBusy)
 
-                Toggle("Show Book Percent While Reading", isOn: readingProgressBinding(for: settings))
+                Toggle("Book percent while reading", isOn: readingProgressBinding(for: settings))
                     .disabled(connection.isBusy)
             }
+        } header: {
+            Text("Display")
+        } footer: {
+            Text("Screen mode, brightness, and reader status labels.")
         }
     }
 
@@ -211,12 +221,12 @@ struct SettingsPage: View {
         } header: {
             Text("Wi-Fi")
         } footer: {
-            Text("Used by the reader for RSS and OTA updates.")
+            Text("Saved on the Nano for RSS and OTA updates.")
         }
     }
 
     private var typographySettingsSection: some View {
-        Section("Typography") {
+        Section {
             if let settings = viewModel.deviceSettings {
                 Picker("Typeface", selection: typefaceBinding(for: settings)) {
                     Text("Standard").tag("standard")
@@ -237,6 +247,22 @@ struct SettingsPage: View {
                 sliderSetting("Guide Width", value: guideWidthBinding(for: settings), range: 12...30, step: 2, label: "\(settings.typography.guideWidth)")
                 sliderSetting("Guide Gap", value: guideGapBinding(for: settings), range: 2...8, step: 1, label: "\(settings.typography.guideGap)")
             }
+        } header: {
+            Text("Typography")
+        } footer: {
+            Text("Typeface, focus markers, and word placement.")
+        }
+    }
+
+    private var saveStatusSection: some View {
+        Section {
+            Label {
+                Text("Changes are saved to the reader. Exit sync on the device to apply every setting on-screen.")
+            } icon: {
+                Image(systemName: "checkmark.circle")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 }
