@@ -2,16 +2,16 @@
 
 Native Android companion app for RSVP Nano.
 
-The Android UI is Jetpack Compose. Business logic comes from the `:shared` Kotlin Multiplatform
-module: persistence, converters, RSS feed storage, article drafts, device API access, and sync
-orchestration should stay shared.
+The Android UI is Jetpack Compose. Business logic comes from Kotlin Multiplatform modules:
+`:shared` owns companion workflows, persistence, RSS/article drafts, device API access, and sync
+orchestration; `:conversionCore` owns document conversion.
 
 ## Build
 
 Install Android Studio or a JDK 17 + Android SDK environment, then run from the repository root:
 
 ```bash
-./gradlew :shared:check :androidApp:assembleDebug
+./gradlew :conversionCore:testDebugUnitTest :shared:check :androidApp:assembleDebug
 ```
 
 The debug APK is written under:

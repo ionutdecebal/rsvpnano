@@ -2,9 +2,9 @@
 
 Native SwiftUI companion app and share extension for RSVP Nano.
 
-The iOS UI stays native. Shared business logic comes from the Kotlin Multiplatform `:shared`
-module: converters, models, API access, persistence, RSS/article workflows, and device
-orchestration should stay shared.
+The iOS UI stays native. Shared business logic comes from Kotlin Multiplatform modules: `:shared`
+owns models, API access, persistence, RSS/article workflows, and device orchestration;
+`:conversionCore` owns document conversion.
 
 ## Requirements
 
@@ -75,14 +75,14 @@ RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
 
 ## CI Expectations
 
-The macOS CI workflow runs shared checks, builds the Kotlin XCFramework, and uploads the generated
-framework artifact. CI validates the shared iOS build path, but real app/share-extension behavior
-still needs Xcode and device testing.
+The macOS CI workflow compiles the converter for iOS, runs shared checks, builds the Kotlin
+XCFramework, and uploads the generated framework artifact. CI validates the shared iOS build path,
+but real app/share-extension behavior still needs Xcode and device testing.
 
 Run this locally on macOS when touching shared/iOS integration:
 
 ```bash
-./gradlew :shared:check --no-daemon
+./gradlew :conversionCore:compileKotlinIosX64 :conversionCore:compileKotlinIosSimulatorArm64 :shared:check --no-daemon
 bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
 ```
 

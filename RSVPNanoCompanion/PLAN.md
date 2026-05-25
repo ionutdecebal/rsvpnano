@@ -2,9 +2,9 @@
 
 ## Goal
 
-Ship native iOS and Android companion apps backed by one Kotlin Multiplatform core.
+Ship native iOS and Android companion apps backed by Kotlin Multiplatform core modules.
 
-- Shared Kotlin owns models, API access, conversion, persistence contracts, article/RSS workflows, settings rules, and device orchestration.
+- Shared Kotlin modules own models, API access, conversion, persistence contracts, article/RSS workflows, settings rules, and device orchestration.
 - SwiftUI and Compose own platform UI, permissions, and presentation state.
 - Platform code adapts native storage, networking, and UI events into shared services.
 
@@ -17,7 +17,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 - [x] Shared import preparation centralizes text/link draft normalization.
 - [x] Shared settings helpers centralize Nano setting IDs, ranges, snapping, clamping, and appearance-mode logic.
 - [x] Android app uses shared storage, device sync, uploads, delete, settings, Wi-Fi, RSS, saved article workflows, and share intents.
-- [x] iOS app and share extension use shared converters/controller/wiring for app and share workflows.
+- [x] iOS app and share extension use shared converter/controller/wiring for app and share workflows.
 - [x] Platform UI files are split into focused Compose and SwiftUI files.
 - [x] Android app settings storage uses Android DataStore behind a shared `AppSettingsStore` contract.
 - [x] iOS app settings storage uses shared JSON settings logic over app-group file storage. It does not depend on AndroidX DataStore.
@@ -35,7 +35,7 @@ Ship native iOS and Android companion apps backed by one Kotlin Multiplatform co
 - [x] Keep local Android verification passing:
 
 ```bash
-./gradlew :shared:check :androidApp:assembleDebug --no-daemon --no-configuration-cache
+./gradlew :conversionCore:testDebugUnitTest :shared:check :androidApp:assembleDebug --no-daemon --no-configuration-cache
 ```
 
 ## Priority 1: Hardware Behavior
@@ -111,13 +111,13 @@ Deferred work:
 ## Priority 4: Conversion And Parity
 
 - [x] Conversion contract is documented in `docs/conversion-spec.md`.
-- [x] Shared converter supports `.rsvp`, `.epub`, `.txt`, `.md`, `.markdown`, `.html`, `.htm`, and `.xhtml`.
-- [x] Shared EPUB conversion supports ZIP parsing through Korlibs compression.
+- [x] `:conversionCore` supports `.rsvp`, `.epub`, `.txt`, `.md`, `.markdown`, `.html`, `.htm`, and `.xhtml`.
+- [x] `:conversionCore` EPUB conversion supports ZIP parsing through Korlibs compression.
 - [x] EPUB2 NCX and EPUB3 nav TOC chapter labels are preferred when available.
 - [x] Python SD-card converter follows the shared conversion spec.
-- [x] Website converter core is split from UI for CLI/parity reuse.
-- [x] Cross-runtime parity checks cover Kotlin, Python, and web text/HTML conversion.
-- [x] Android/JVM tests cover representative EPUB and existing `.rsvp` paths.
+- [x] Website imports the generated Kotlin/JS converter artifact from `:conversionCore`.
+- [x] Cross-runtime parity checks cover Kotlin, Python, and web text/HTML/EPUB conversion.
+- [x] Android/JVM converter tests cover representative EPUB and existing `.rsvp` paths.
 - [ ] Add iOS EPUB parity coverage in macOS CI.
 - [ ] Low priority: add Markdown-aware conversion.
 
@@ -182,7 +182,7 @@ Deferred work:
 
 - [ ] Android CI passes.
 - [ ] iOS CI passes.
-- [ ] Shared parity tests cover representative text, HTML, EPUB, and existing `.rsvp` paths.
+- [ ] Converter parity tests cover representative text, HTML, EPUB, and existing `.rsvp` paths.
 - [ ] iOS app builds and runs against real hardware.
 - [x] Android app builds and runs against real hardware.
 - [ ] Both apps can connect, refresh, upload, delete, sync articles, sync RSS, and update settings.

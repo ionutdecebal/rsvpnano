@@ -100,7 +100,14 @@ The firmware can read or convert a narrower set directly:
 - Build the manifest from OPF `item` entries.
 - Prefer OPF spine reading order.
 - Support both EPUB2 NCX and EPUB3 navigation documents.
-- Prefer NCX / EPUB3 navigation table-of-contents labels for chapter titles when available.
+- Prefer EPUB2 NCX labels for EPUB2 packages and EPUB3 navigation document labels for EPUB3
+  packages. If the preferred TOC source is unavailable or empty, converters may fall back to the
+  other TOC source.
+- Resolve percent-encoded manifest, spine, TOC, and fragment references before matching them to ZIP
+  entries or XHTML `id` / `name` anchors.
+- Flatten nested TOC entries into reading order for `@chapter` output.
+- Preserve multiple TOC entries that point to different anchors in the same content document; apply
+  those labels in TOC order instead of collapsing them to one label per file.
 - Ignore non-content TOC labels such as cover, title page, table of contents, and labels matching
   the book title.
 - If the spine is missing or empty, a converter may fall back to manifest content documents.
@@ -109,10 +116,19 @@ The firmware can read or convert a narrower set directly:
 - Each selected content document is processed using the HTML/XHTML rules.
 - If a readable content document is mapped by the EPUB TOC, the output chapter marker must use
   that TOC label and must not duplicate the document's first heading.
+- If one readable content document contains several TOC-mapped chapters, generated `@chapter`
+  markers should follow the ordered TOC labels and should replace short in-body headings such as
+  bare Roman numerals.
+- If an EPUB TOC is sparse and does not map readable body content documents, reliable in-body
+  headings from those unmapped documents should still be preserved as chapter markers.
 - If an EPUB TOC is available, readable content documents that are not mapped by the TOC must not
   receive generated filename chapter markers.
+- Generated title pages and table-of-contents pages should not become chapter markers when a
+  better TOC or body chapter structure is available.
 - If no usable EPUB TOC is available and a readable content document has no heading, insert a
   chapter marker from its filename.
+- EPUBs with `META-INF/encryption.xml` must fail with a clear unsupported-conversion error rather
+  than attempting to emit partially readable or corrupt text.
 
 ## Text Normalization
 
@@ -141,14 +157,15 @@ producing empty output.
 
 | Runtime | Role |
 | --- | --- |
-| Web JavaScript | Product-facing browser converter. |
-| Kotlin Multiplatform | Native Android/iOS app converter. |
+| Kotlin Multiplatform `:conversionCore` | Source implementation for Android, iOS, and generated JavaScript. |
+| Generated web JavaScript | Product-facing browser converter built from `:conversionCore`. |
 | Python tools | CLI and SD-card batch converter. |
 | Firmware C++ | Constrained on-device fallback and RSVP parser. |
 
-Runtime-specific APIs such as ZIP access, DOM parsing, file pickers, storage, and firmware cache
-management may differ. The resulting `.rsvp` output should still match the reference test cases
-unless a runtime limitation is documented.
+Runtime-specific APIs such as file pickers, storage, and firmware cache management may differ. The
+Kotlin implementation should use shared ZIP and DOM parsing through `:conversionCore` where
+possible. The resulting `.rsvp` output should still match the reference test cases unless a runtime
+limitation is documented.
 
 ## Parity Requirements
 
