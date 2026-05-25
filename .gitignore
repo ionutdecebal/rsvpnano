@@ -23,6 +23,8 @@ RSVPNanoCompanion/testdata/conversion/from-nano/
 *.rsvp.failed
 *.rsvp.converting
 web/firmware/*.bin
+RSVPNanoCompanion/web/firmware/*.bin
+RSVPNanoCompanion/web/generated/converter/
 .cache/
 .local/
 compile_commands.json

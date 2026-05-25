@@ -1,6 +1,12 @@
 package com.rsvpnano.converters
 
+import com.fleeksoft.ksoup.Ksoup
+import com.fleeksoft.ksoup.nodes.Element
+import com.fleeksoft.ksoup.parser.Parser
+
 object ArticleFormatter {
+    private val noiseTags = setOf("script", "style", "svg", "nav", "header", "footer", "aside", "form", "noscript")
+
     fun article(title: String, source: String, htmlOrText: String): SharedArticle {
         val resolvedTitle = articleTitle(title = title, source = source, htmlOrText = htmlOrText)
 
@@ -29,15 +35,15 @@ object ArticleFormatter {
     }
 
     private fun focusedHTML(from: String): String {
-        val cleaned = removingBlocks(
-            from = from,
-            tags = listOf("script", "style", "svg", "nav", "header", "footer", "aside", "form", "noscript"),
-        )
+        val document = parseHtml(from)
+        document.allElements()
+            .filter { it.localName() in noiseTags }
+            .forEach { it.remove() }
 
-        for (tag in listOf("article", "main", "body")) {
-            firstElementContent(value = cleaned, tag = tag)?.let { return it }
-        }
-        return cleaned
+        return listOf("article", "main", "body")
+            .firstNotNullOfOrNull { tag -> document.allElements().firstOrNull { it.localName() == tag } }
+            ?.html()
+            ?: document.html()
     }
 
     private fun fallbackTitle(from: String): String {
@@ -79,35 +85,13 @@ object ArticleFormatter {
     }
 
     private fun htmlTitle(from: String): String? {
-        val title = firstElementContent(value = from, tag = "title")
-        val content = title ?: return null
-        val cleaned = RsvpTextUtils.cleanedLine(RsvpTextUtils.readableText(content))
+        val cleaned = RsvpTextUtils.cleanedLine(parseHtml(from).selectFirst("title")?.text().orEmpty())
         return cleaned.takeIf { it.isNotEmpty() }?.take(120)
     }
 
-    private fun firstElementContent(value: String, tag: String): String? {
-        val regex = Regex("<$tag\\b[^>]*>(.*?)</$tag>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        return regex.find(value)?.groupValues?.getOrNull(1)
-    }
+    private fun parseHtml(markup: String) = Ksoup.parse(markup, Parser.htmlParser(), "")
 
-    private fun removingBlocks(from: String, tags: List<String>): String {
-        var result = from
-        for (tag in tags) {
-            var searchStart = 0
-            var removedCount = 0
-            while (removedCount < 80) {
-                val open = result.indexOf("<$tag", startIndex = searchStart, ignoreCase = true)
-                if (open < 0) break
-                val close = result.indexOf("</$tag>", startIndex = open, ignoreCase = true)
-                if (close < 0) break
-                val closeEnd = result.indexOf('>', startIndex = close)
-                if (closeEnd < 0) break
+    private fun Element.allElements(): List<Element> = getAllElements().toList()
 
-                result = result.replaceRange(open, closeEnd + 1, " ")
-                searchStart = open
-                removedCount += 1
-            }
-        }
-        return result
-    }
+    private fun Element.localName(): String = normalName().substringAfter(':').lowercase()
 }

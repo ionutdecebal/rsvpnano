@@ -1,12 +1,17 @@
 import {
-  DEFAULT_OUTPUT_MODE,
-  RsvpWriter,
-  SIDE_CAR_SUFFIXES,
-  SUPPORTED_EXTENSIONS,
-  eventsForFile,
-  extensionForName,
-  stripExtension,
-} from "./converter_core.mjs";
+  rsvpConvertBytesToRsvp,
+  rsvpDefaultOutputMode,
+  rsvpExtensionForName,
+  rsvpSideCarSuffixes,
+  rsvpStripExtension,
+  rsvpSupportedExtensions,
+} from "./generated/converter/rsvpnano_converter.mjs";
+
+const DEFAULT_OUTPUT_MODE = rsvpDefaultOutputMode();
+const SIDE_CAR_SUFFIXES = rsvpSideCarSuffixes();
+const SUPPORTED_EXTENSIONS = new Set(rsvpSupportedExtensions());
+const extensionForName = rsvpExtensionForName;
+const stripExtension = rsvpStripExtension;
 
 const state = {
   items: [],
@@ -444,30 +449,14 @@ async function convertDescriptorIntoItem(item) {
 
   try {
     const file = await item.descriptor.getFile();
-    const { title, author, events } = await eventsForFile(file, state.outputMode, { loadJsZip });
-    const writer = new RsvpWriter({
-      title: title || stripExtension(file.name),
-      author,
-      source: file.name,
-      mode: state.outputMode,
-    });
+    const result = rsvpConvertBytesToRsvp(file.name, new Uint8Array(await file.arrayBuffer()));
 
-    for (const [kind, value] of events) {
-      if (kind === "chapter") {
-        writer.addChapter(value);
-        continue;
-      }
-
-      writer.beginParagraph();
-      writer.addText(value);
-    }
-
-    item.title = writer.title;
-    item.author = writer.author;
+    item.title = result.title || stripExtension(file.name);
+    item.author = "";
     item.outputName = `${stripExtension(file.name)}.rsvp`;
-    item.outputText = writer.finalize(title || stripExtension(file.name));
-    item.wordCount = writer.wordCount;
-    item.chapterCount = writer.chapterCount;
+    item.outputText = result.text;
+    item.wordCount = result.wordCount;
+    item.chapterCount = result.chapterCount;
     item.mode = state.outputMode;
     item.status = "ready";
   } catch (error) {

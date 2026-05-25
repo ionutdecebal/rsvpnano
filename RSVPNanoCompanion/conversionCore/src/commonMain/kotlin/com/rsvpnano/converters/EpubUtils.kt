@@ -8,11 +8,39 @@ internal object EpubUtils {
 
     fun zipJoin(base: String, href: String): String {
         val withoutFragment = href.substringBefore('#').substringBefore('?')
-        val decoded = withoutFragment
+        val decoded = percentDecode(withoutFragment)
         if (decoded.startsWith('/')) {
             return collapseZipPath(decoded)
         }
         return collapseZipPath(zipDirname(base) + decoded)
+    }
+
+    fun percentDecode(value: String): String {
+        val bytes = mutableListOf<Byte>()
+        val output = StringBuilder()
+        var index = 0
+        fun flushBytes() {
+            if (bytes.isNotEmpty()) {
+                output.append(bytes.toByteArray().decodeToString())
+                bytes.clear()
+            }
+        }
+        while (index < value.length) {
+            val character = value[index]
+            if (character == '%' && index + 2 < value.length) {
+                val byte = value.substring(index + 1, index + 3).toIntOrNull(16)
+                if (byte != null) {
+                    bytes += byte.toByte()
+                    index += 3
+                    continue
+                }
+            }
+            flushBytes()
+            output.append(character)
+            index += 1
+        }
+        flushBytes()
+        return output.toString()
     }
 
     fun fallbackChapterTitle(path: String, index: Int): String {

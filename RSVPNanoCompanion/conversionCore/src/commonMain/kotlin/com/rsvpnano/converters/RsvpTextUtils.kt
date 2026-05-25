@@ -68,7 +68,7 @@ internal object RsvpTextUtils {
 
     fun titleFromText(text: String, fallback: String): String {
         if (looksLikeHTML(text)) {
-            firstMatch(text, Regex("<title[^>]*>(.*?)</title>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)))
+            firstMatch(text, Regex("<title[^>]*>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE))
                 ?.let { cleanedLine(stripHTML(it)) }
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { return it }
@@ -84,13 +84,16 @@ internal object RsvpTextUtils {
         val blockBreak = "\u0000"
         var text = markup
         skipTags.forEach { tag ->
-            text = text.replace(Regex("(?is)<$tag\\b.*?</$tag>"), " ")
+            text = text.replace(Regex("<$tag\\b[\\s\\S]*?</$tag>", RegexOption.IGNORE_CASE), " ")
         }
-        text = text.replace(Regex("(?is)<h[1-6][^>]*>(.*?)</h[1-6]>"), "$blockBreak@chapter $1$blockBreak")
-        text = text.replace(Regex("(?i)<br\\b[^>]*>"), blockBreak)
-        text = text.replace(Regex("(?i)</(${blockTags.joinToString("|")})\\b[^>]*>"), blockBreak)
-        text = text.replace(Regex("(?i)<(${blockTags.joinToString("|")})\\b[^>]*>"), " ")
-        text = text.replace(Regex("(?is)<[^>]+>"), " ")
+        text = Regex("<h[1-6][^>]*>([\\s\\S]*?)</h[1-6]>", RegexOption.IGNORE_CASE).replace(text) { match ->
+            val heading = match.groupValues[1].replace(Regex("<br\\b[^>]*>", RegexOption.IGNORE_CASE), " ")
+            "$blockBreak@chapter $heading$blockBreak"
+        }
+        text = text.replace(Regex("<br\\b[^>]*>", RegexOption.IGNORE_CASE), blockBreak)
+        text = text.replace(Regex("</(${blockTags.joinToString("|")})\\b[^>]*>", RegexOption.IGNORE_CASE), blockBreak)
+        text = text.replace(Regex("<(${blockTags.joinToString("|")})\\b[^>]*>", RegexOption.IGNORE_CASE), " ")
+        text = text.replace(Regex("<[^>]+>", RegexOption.IGNORE_CASE), " ")
         text = decodeEntities(text)
         text = text.replace(Regex("[\\r\\n\\t]+"), " ").replace(blockBreak, "\n")
 
@@ -227,7 +230,7 @@ internal object RsvpTextUtils {
         val head = text.take(512)
         val value = firstMatch(
             head,
-            Regex("(?i)(?:encoding|charset)\\s*=\\s*[\"']?\\s*([^\"'>\\s/]+)")
+            Regex("(?:encoding|charset)\\s*=\\s*[\"']?\\s*([^\"'>\\s/]+)", RegexOption.IGNORE_CASE)
         ) ?: return null
 
         return when (value.lowercase()) {
@@ -244,10 +247,10 @@ internal object RsvpTextUtils {
     private fun stripHTML(value: String): String {
         var text = value
         skipTags.forEach { tag ->
-            text = text.replace(Regex("(?is)<$tag\\b.*?</$tag>"), " ")
+            text = text.replace(Regex("<$tag\\b[\\s\\S]*?</$tag>", RegexOption.IGNORE_CASE), " ")
         }
-        text = text.replace(Regex("(?i)</?(${blockTags.joinToString("|")}|h[1-6])\\b[^>]*>"), "\n")
-        text = text.replace(Regex("(?is)<[^>]+>"), " ")
+        text = text.replace(Regex("</?(${blockTags.joinToString("|")}|h[1-6])\\b[^>]*>", RegexOption.IGNORE_CASE), "\n")
+        text = text.replace(Regex("<[^>]+>", RegexOption.IGNORE_CASE), " ")
         return decodeEntities(text)
     }
 
