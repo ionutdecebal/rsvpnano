@@ -12,8 +12,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
-  pages: write
 
 jobs:
   firmware:
@@ -38,7 +36,7 @@ jobs:
         run: pip install platformio
 
       - name: Export firmware assets
-        run: python3 tools/export_web_firmware.py --version "${{ steps.version.outputs.value }}"
+        run: python3 RSVPNanoCompanion/tools/export_web_firmware.py --version "${{ steps.version.outputs.value }}"
 
       - name: Write release notes
         env:
@@ -64,25 +62,13 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
-              web/firmware/rsvp-nano.bin \
-              web/firmware/rsvp-nano-ota.bin \
+              RSVPNanoCompanion/web/firmware/rsvp-nano.bin \
+              RSVPNanoCompanion/web/firmware/rsvp-nano-ota.bin \
               --clobber
           else
             gh release create "$RELEASE_TAG" \
-              web/firmware/rsvp-nano.bin \
-              web/firmware/rsvp-nano-ota.bin \
+              RSVPNanoCompanion/web/firmware/rsvp-nano.bin \
+              RSVPNanoCompanion/web/firmware/rsvp-nano-ota.bin \
               --title "$RELEASE_TAG" \
               --notes-file release-notes.md
           fi
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-
-      - name: Deploy GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

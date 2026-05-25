@@ -10,6 +10,7 @@ on:
       - 'settings.gradle.kts'
       - 'gradlew'
       - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/androidApp/**'
       - '.github/workflows/**'
@@ -19,6 +20,7 @@ on:
       - 'settings.gradle.kts'
       - 'gradlew'
       - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/androidApp/**'
       - '.github/workflows/**'
@@ -43,7 +45,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
       - name: Run Gradle assemble and tests
-        run: bash ./gradlew :shared:check :androidApp:assembleDebug --no-daemon
+        run: bash ./gradlew :conversionCore:testDebugUnitTest :conversionCore:publishWebConverterJs :shared:check :androidApp:assembleDebug --no-daemon
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4

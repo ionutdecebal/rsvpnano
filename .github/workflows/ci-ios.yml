@@ -10,6 +10,7 @@ on:
       - 'settings.gradle.kts'
       - 'gradlew'
       - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/ios/**'
       - '.github/workflows/**'
@@ -19,6 +20,7 @@ on:
       - 'settings.gradle.kts'
       - 'gradlew'
       - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
       - 'RSVPNanoCompanion/shared/**'
       - 'RSVPNanoCompanion/ios/**'
       - '.github/workflows/**'
@@ -34,7 +36,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Run shared tests
-        run: bash ./gradlew :shared:check --no-daemon
+        run: bash ./gradlew :conversionCore:compileKotlinIosX64 :conversionCore:compileKotlinIosSimulatorArm64 :shared:check --no-daemon
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4
