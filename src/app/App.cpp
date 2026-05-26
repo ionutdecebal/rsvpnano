@@ -5654,6 +5654,7 @@ void App::cancelTimeEstimateBuild() {
   timeEstimateBuildLastLogMs_ = 0;
 }
 
+
 bool App::timeEstimateBuildMatchesCurrentBook() const {
   return timeEstimateBuildInProgress_ && timeEstimateBuildBookPath_ == currentBookPath_ &&
          timeEstimateBuildWordCount_ == reader_.wordCount();
