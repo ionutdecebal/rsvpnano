@@ -36,6 +36,11 @@ constexpr uint32_t kTouchDurations[] = {
     20UL * 60UL * 1000UL,
     25UL * 60UL * 1000UL,
     30UL * 60UL * 1000UL,
+    35UL * 60UL * 1000UL,
+    40UL * 60UL * 1000UL,
+    45UL * 60UL * 1000UL,
+    50UL * 60UL * 1000UL,
+    60UL * 60UL * 1000UL,
 };
 constexpr size_t kTouchDurationCount = sizeof(kTouchDurations) / sizeof(kTouchDurations[0]);
 
@@ -246,6 +251,14 @@ bool FocusTimer::consumeCompletionCue() {
 void FocusTimer::cycleTouchDuration() {
   touchDurationIndex_ = static_cast<uint8_t>((touchDurationIndex_ + 1) % kTouchDurationCount);
 }
+
+void FocusTimer::setTouchDurationIndex(uint8_t index) {
+  if (index < kTouchDurationCount) {
+    touchDurationIndex_ = index;
+  }
+}
+
+uint8_t FocusTimer::touchDurationIndex() const { return touchDurationIndex_; }
 
 uint32_t FocusTimer::selectedTouchDurationMs() const {
   return kTouchDurations[touchDurationIndex_];
@@ -480,7 +493,7 @@ void FocusTimer::clearSession() {
   completedTouchBlocks_ = 0;
   completedWorkBlocks_ = 0;
   completedBreakBlocks_ = 0;
-  touchDurationIndex_ = 0;
+  // touchDurationIndex_ is intentionally preserved across sessions
 }
 
 void FocusTimer::startMode(TimerMode mode, uint32_t nowMs, uint32_t durationMs,

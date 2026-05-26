@@ -36,6 +36,8 @@ class FocusTimer {
   void chooseGenre(Genre genre, uint32_t nowMs);
   void cancelActiveTimer(uint32_t nowMs);
   void cycleTouchDuration();
+  void setTouchDurationIndex(uint8_t index);
+  uint8_t touchDurationIndex() const;
   void abandon();
 
   bool available() const;

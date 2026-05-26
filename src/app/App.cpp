@@ -225,6 +225,7 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
+constexpr const char *kPrefTimerDuration = "tmr_dur";
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -618,6 +619,7 @@ void App::begin() {
   if (brightnessLevelIndex_ >= kBrightnessLevelCount) {
     brightnessLevelIndex_ = kBrightnessLevelCount - 1;
   }
+  focusTimer_.setTouchDurationIndex(preferences_.getUChar(kPrefTimerDuration, 0));
   phantomWordsEnabled_ = preferences_.getBool(kPrefPhantomWords, phantomWordsEnabled_);
   readerBatteryVisibleWhilePlaying_ =
       preferences_.getBool(kPrefReaderBatteryVisible, readerBatteryVisibleWhilePlaying_);
@@ -2303,6 +2305,7 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
 
   if (tapLike && focusTimer_.state() == FocusTimer::State::WaitForTouchStart) {
     focusTimer_.cycleTouchDuration();
+    preferences_.putUChar(kPrefTimerDuration, focusTimer_.touchDurationIndex());
     renderFocusTimerSession();
   }
 }
