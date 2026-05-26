@@ -5211,7 +5211,7 @@ void App::renderFocusTimerSession() {
       return;
     case FocusTimer::State::WaitForTouchStart: {
       const String durationLabel = formatFocusTimerDuration(focusTimer_.selectedTouchDurationMs());
-      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Tap To Change");
+      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Tap To Change\nPlace to Start");
       return;
     }
     case FocusTimer::State::TouchRunning:
