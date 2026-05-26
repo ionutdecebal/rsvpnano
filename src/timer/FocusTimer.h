@@ -30,6 +30,8 @@ class FocusTimer {
     Complete,
   };
 
+  static constexpr uint8_t kGenreCount = 5;
+
   bool begin();
   void open();
   void update(uint32_t nowMs);
@@ -37,8 +39,9 @@ class FocusTimer {
   void cancelActiveTimer(uint32_t nowMs);
   void cycleTouchDuration();
   void stepTouchDuration(int direction);
-  void setTouchDurationIndex(uint8_t index);
+  void setTouchDurationIndexForGenre(Genre genre, uint8_t index);
   uint8_t touchDurationIndex() const;
+  uint8_t touchDurationIndexForGenre(Genre genre) const;
   void abandon();
 
   bool available() const;
@@ -89,6 +92,7 @@ class FocusTimer {
   void stopActiveTimer();
   void completeActiveTimer();
   bool timerExpired(uint32_t nowMs) const;
+  uint8_t genreIdx() const;
   static bool isShortSide(OrientationState orientation);
   static OrientationState oppositeShortSide(OrientationState orientation);
   static BoardConfig::UiOrientation portraitOrientationForShortSide(
@@ -96,7 +100,7 @@ class FocusTimer {
 
   bool imuAvailable_ = false;
   float accelScale_ = 4.0f / 32768.0f;
-  uint8_t touchDurationIndex_ = 0;
+  uint8_t touchDurationByGenre_[kGenreCount] = {};
   OrientationState rawOrientation_ = OrientationState::Unknown;
   OrientationState stableOrientation_ = OrientationState::Unknown;
   OrientationState candidateOrientation_ = OrientationState::Unknown;

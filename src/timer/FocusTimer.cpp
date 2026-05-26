@@ -75,7 +75,7 @@ void FocusTimer::update(uint32_t nowMs) {
 
     case State::WaitForTouchStart:
       if (orientationInputArmed(nowMs) && isShortSide(stableOrientation_)) {
-        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationIndex_], stableOrientation_);
+        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationByGenre_[genreIdx()]], stableOrientation_);
         transitionTo(State::TouchRunning, nowMs);
       }
       break;
@@ -87,7 +87,7 @@ void FocusTimer::update(uint32_t nowMs) {
         transitionTo(State::WaitAfterTouch, nowMs);
       } else if (isShortSide(stableOrientation_) &&
                  stableOrientation_ == oppositeShortSide(lastShortSide_)) {
-        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationIndex_], stableOrientation_);
+        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationByGenre_[genreIdx()]], stableOrientation_);
         resetOrientationStability();
       }
       break;
@@ -253,27 +253,40 @@ bool FocusTimer::consumeCompletionCue() {
 }
 
 void FocusTimer::cycleTouchDuration() {
-  touchDurationIndex_ = static_cast<uint8_t>((touchDurationIndex_ + 1) % kTouchDurationCount);
+  uint8_t &idx = touchDurationByGenre_[genreIdx()];
+  idx = static_cast<uint8_t>((idx + 1) % kTouchDurationCount);
 }
 
 void FocusTimer::stepTouchDuration(int direction) {
-  if (direction > 0 && touchDurationIndex_ < kTouchDurationCount - 1) {
-    ++touchDurationIndex_;
-  } else if (direction < 0 && touchDurationIndex_ > 0) {
-    --touchDurationIndex_;
+  uint8_t &idx = touchDurationByGenre_[genreIdx()];
+  if (direction > 0 && idx < kTouchDurationCount - 1) {
+    ++idx;
+  } else if (direction < 0 && idx > 0) {
+    --idx;
   }
 }
 
-void FocusTimer::setTouchDurationIndex(uint8_t index) {
-  if (index < kTouchDurationCount) {
-    touchDurationIndex_ = index;
+void FocusTimer::setTouchDurationIndexForGenre(Genre genre, uint8_t index) {
+  const uint8_t g = static_cast<uint8_t>(genre);
+  if (g < kGenreCount && index < kTouchDurationCount) {
+    touchDurationByGenre_[g] = index;
   }
 }
 
-uint8_t FocusTimer::touchDurationIndex() const { return touchDurationIndex_; }
+uint8_t FocusTimer::touchDurationIndexForGenre(Genre genre) const {
+  const uint8_t g = static_cast<uint8_t>(genre);
+  return g < kGenreCount ? touchDurationByGenre_[g] : 0;
+}
+
+uint8_t FocusTimer::touchDurationIndex() const { return touchDurationByGenre_[genreIdx()]; }
 
 uint32_t FocusTimer::selectedTouchDurationMs() const {
-  return kTouchDurations[touchDurationIndex_];
+  return kTouchDurations[touchDurationByGenre_[genreIdx()]];
+}
+
+uint8_t FocusTimer::genreIdx() const {
+  const uint8_t idx = static_cast<uint8_t>(genre_);
+  return idx < kGenreCount ? idx : 0;
 }
 
 const char *FocusTimer::genreLabel(Genre genre) {
@@ -505,7 +518,7 @@ void FocusTimer::clearSession() {
   completedTouchBlocks_ = 0;
   completedWorkBlocks_ = 0;
   completedBreakBlocks_ = 0;
-  // touchDurationIndex_ is intentionally preserved across sessions
+  // touchDurationByGenre_ is intentionally preserved across sessions
 }
 
 void FocusTimer::startMode(TimerMode mode, uint32_t nowMs, uint32_t durationMs,

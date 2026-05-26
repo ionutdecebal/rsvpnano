@@ -225,7 +225,13 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
-constexpr const char *kPrefTimerDuration = "tmr_dur";
+constexpr const char *kPrefTimerDurationByGenre[FocusTimer::kGenreCount] = {
+    "tmr_dur_0",  // Chores
+    "tmr_dur_1",  // RsvpNano (Work)
+    "tmr_dur_2",  // StrengthLabs (Fitness)
+    "tmr_dur_3",  // SelfCare
+    "tmr_dur_4",  // Other
+};
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -619,7 +625,11 @@ void App::begin() {
   if (brightnessLevelIndex_ >= kBrightnessLevelCount) {
     brightnessLevelIndex_ = kBrightnessLevelCount - 1;
   }
-  focusTimer_.setTouchDurationIndex(preferences_.getUChar(kPrefTimerDuration, 0));
+  for (uint8_t i = 0; i < FocusTimer::kGenreCount; i++) {
+    focusTimer_.setTouchDurationIndexForGenre(
+        static_cast<FocusTimer::Genre>(i),
+        preferences_.getUChar(kPrefTimerDurationByGenre[i], 0));
+  }
   phantomWordsEnabled_ = preferences_.getBool(kPrefPhantomWords, phantomWordsEnabled_);
   readerBatteryVisibleWhilePlaying_ =
       preferences_.getBool(kPrefReaderBatteryVisible, readerBatteryVisibleWhilePlaying_);
@@ -2305,7 +2315,10 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
       absDeltaX >= static_cast<int>(kSwipeThresholdPx) &&
       absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx)) {
     focusTimer_.stepTouchDuration(deltaX > 0 ? 1 : -1);
-    preferences_.putUChar(kPrefTimerDuration, focusTimer_.touchDurationIndex());
+    const uint8_t genreIdx = static_cast<uint8_t>(focusTimer_.genre());
+    if (genreIdx < FocusTimer::kGenreCount) {
+      preferences_.putUChar(kPrefTimerDurationByGenre[genreIdx], focusTimer_.touchDurationIndex());
+    }
     renderFocusTimerSession();
     return;
   }
