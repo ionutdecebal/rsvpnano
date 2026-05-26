@@ -5220,7 +5220,7 @@ void App::renderFocusTimerSession() {
     }
     case FocusTimer::State::TouchRunning:
       display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "",
-                                      "", focusTimer_.progressPercent(millis()));
+                                      "Restart", focusTimer_.progressPercent(millis()));
       return;
     case FocusTimer::State::WaitAfterTouch:
       display_.renderFocusTimerScreen("WORK", "", "", "Flip to continue");

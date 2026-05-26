@@ -85,6 +85,10 @@ void FocusTimer::update(uint32_t nowMs) {
         completeActiveTimer();
         resetOrientationStability();
         transitionTo(State::WaitAfterTouch, nowMs);
+      } else if (isShortSide(stableOrientation_) &&
+                 stableOrientation_ == oppositeShortSide(lastShortSide_)) {
+        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationIndex_], stableOrientation_);
+        resetOrientationStability();
       }
       break;
 

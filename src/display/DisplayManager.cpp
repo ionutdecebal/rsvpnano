@@ -3091,7 +3091,6 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
                                             const String &footer, int progressPercent,
                                             bool breakAccent) {
   (void)genre;
-  (void)footer;
   progressPercent = std::max(-1, std::min(100, progressPercent));
   const int virtualWidth = logicalWidth();
   const int virtualHeight = logicalHeight();
@@ -3317,6 +3316,20 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
 
     drawTinyTextAt(mode, titleX, titleY, baseTextColor, titleScale);
     drawTinyTextAt(timer, timerX, timerY, accent, timerScale);
+
+    if (!footer.isEmpty()) {
+      int footerScale = titleScale;
+      while (footerScale > 1 && measureTinyTextWidth(footer, footerScale) > contentWidth) {
+        --footerScale;
+      }
+      const int footerY = virtualHeight - (kTinyGlyphHeight * footerScale) - (portrait ? 8 : 6);
+      const int footerX = centeredXForTiny(footer, footerScale);
+      drawTinyTextAt(footer, footerX, footerY, baseTextColor, footerScale);
+      if (fillWidth > 0 && fillHeight > 0) {
+        drawTinyTextAtClipped(footer, footerX, footerY, inverseTextColor, footerScale,
+                              fillX, fillY, fillWidth, fillHeight);
+      }
+    }
 
     if (fillWidth > 0 && fillHeight > 0) {
       drawTinyTextAtClipped(mode, titleX, titleY, inverseTextColor, titleScale, fillX, fillY,
