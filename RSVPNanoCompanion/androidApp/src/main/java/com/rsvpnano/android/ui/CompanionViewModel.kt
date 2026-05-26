@@ -23,11 +23,13 @@ import com.rsvpnano.persistence.AppSettingsStore
 import java.net.URI
 import java.util.UUID
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 class CompanionViewModel(
@@ -692,20 +694,61 @@ class CompanionViewModel(
                 setNotice(CompanionNotice.Error("Connect to your Nano before uploading files."))
                 return@launch
             }
-            setNotice(CompanionNotice.Attention("Uploading $displayName..."))
             if (!ensureReaderReachable("uploading files")) return@launch
+            updateBookJob(BookJob(active = BookJobStep.Convert, name = displayName))
+            val file = runCatching {
+                withContext(Dispatchers.Default) {
+                    RsvpConverter.bookFile(data = data, filename = displayName)
+                }
+            }.onFailure { error ->
+                updateState {
+                    it.copy(
+                        bookJob = null,
+                        notice = CompanionNotice.Error(error.message ?: "Could not convert $displayName."),
+                    )
+                }
+            }.getOrNull() ?: return@launch
+
+            val jobName = file.title.ifBlank { displayName }
+            updateBookJob(
+                BookJob(
+                    active = BookJobStep.Upload,
+                    name = jobName,
+                    done = listOf(BookJobStep.Convert),
+                    progress = 0f,
+                )
+            )
             runCatching {
-                val file = RsvpConverter.bookFile(data = data, filename = displayName)
                 withNanoApi {
                     companionController.uploadBook(
                         baseUrl = state.address,
                         file = file,
                         category = "book",
+                        onProgress = { sent, total ->
+                            updateBookJob(
+                                BookJob(
+                                    active = BookJobStep.Upload,
+                                    name = jobName,
+                                    done = listOf(BookJobStep.Convert),
+                                    progress = uploadProgress(sent = sent, total = total),
+                                )
+                            )
+                        },
                     )
                 }
             }.onSuccess { snapshot ->
-                updateState { it.copy(books = snapshot.books, notice = CompanionNotice.Success("Uploaded $displayName.")) }
-            }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before uploading files.") }
+                val uploadedName = current.bookJob?.name ?: jobName
+                updateState {
+                    it.copy(
+                        books = snapshot.books,
+                        bookJob = null,
+                        notice = CompanionNotice.Success("Uploaded $uploadedName."),
+                    )
+                }
+            }.onFailure { error ->
+                updateState { it.copy(bookJob = null) }
+                markDisconnected(error.message ?: "Reader disconnected before uploading files.")
+            }
         }
     }
 
@@ -728,6 +771,8 @@ class CompanionViewModel(
     }
 
     private fun setNotice(notice: CompanionNotice) = updateState { it.copy(notice = notice) }
+
+    private fun updateBookJob(bookJob: BookJob) = updateState { it.copy(bookJob = bookJob) }
 
     private fun observeNanoNetwork() {
         viewModelScope.launch {
@@ -887,6 +932,7 @@ class CompanionViewModel(
                 showAddressEntry = showAddressEntry,
                 isSavingSettings = false,
                 settingsSaveStatus = null,
+                bookJob = null,
                 notice = CompanionNotice.Error(status),
             )
         }
@@ -940,6 +986,11 @@ class CompanionViewModel(
         return runCatching {
             URI(url).host.orEmpty().ifEmpty { url.substringAfter("://").substringBefore("/") }
         }.getOrDefault(url.substringAfter("://").substringBefore("/"))
+    }
+
+    private fun uploadProgress(sent: Long, total: Long): Float? {
+        if (total <= 0L) return null
+        return (sent.toFloat() / total.toFloat()).coerceIn(0f, 1f)
     }
 
     class Factory(

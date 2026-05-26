@@ -33,6 +33,7 @@ data class CompanionUiState(
     val isRefreshing: Boolean = false,
     val isSavingSettings: Boolean = false,
     val settingsSaveStatus: String? = null,
+    val bookJob: BookJob? = null,
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {
     val status: String

@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.ExperimentalMaterialApi
@@ -62,6 +63,7 @@ import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -102,6 +104,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -148,16 +151,19 @@ fun CompanionApp(
         )
     )
     val uiState by viewModel.uiState.collectAsState()
+    val scope = rememberCoroutineScope()
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            context.readSelectedFile(uri)?.let { file ->
-                viewModel.uploadSelectedFile(displayName = file.displayName, data = file.data)
+            scope.launch {
+                val file = withContext(Dispatchers.IO) { context.readSelectedFile(uri) }
+                file?.let {
+                    viewModel.uploadSelectedFile(displayName = it.displayName, data = it.data)
+                }
             }
         }
     }
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var permissionRequestAttempted by remember { mutableStateOf(false) }
     var permissionBlockedFallback by remember { mutableStateOf(PermissionFallback.WifiSettings) }
@@ -308,16 +314,21 @@ fun CompanionApp(
                     }
                 },
                 snackbarHost = {
-                    SnackbarHost(hostState = snackbarHostState) { data ->
-                        val snackbarNotice = snackbarNotices[data.visuals.message]
-                            ?: CompanionNotice.Neutral(data.visuals.message)
-                        Snackbar(
-                            snackbarData = data,
-                            containerColor = snackbarColor(snackbarNotice),
-                            contentColor = snackbarContentColor(snackbarNotice),
-                            actionColor = snackbarActionColor(snackbarNotice),
-                            dismissActionContentColor = SnackbarDefaults.dismissActionContentColor,
-                        )
+                    val bookJob = uiState.bookJob
+                    if (bookJob != null) {
+                        BookJobSnackbar(bookJob)
+                    } else {
+                        SnackbarHost(hostState = snackbarHostState) { data ->
+                            val snackbarNotice = snackbarNotices[data.visuals.message]
+                                ?: CompanionNotice.Neutral(data.visuals.message)
+                            Snackbar(
+                                snackbarData = data,
+                                containerColor = snackbarColor(snackbarNotice),
+                                contentColor = snackbarContentColor(snackbarNotice),
+                                actionColor = snackbarActionColor(snackbarNotice),
+                                dismissActionContentColor = SnackbarDefaults.dismissActionContentColor,
+                            )
+                        }
                     }
                 },
                 floatingActionButton = {
@@ -432,6 +443,83 @@ fun CompanionApp(
                     onAddFeed = viewModel::addRssFeed,
                     onSyncFeeds = viewModel::syncRssFeeds,
                     onDeleteFeed = viewModel::deleteRssFeed,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookJobSnackbar(job: BookJob) {
+    val progress = job.progress
+    val percent = job.percent
+    Snackbar(
+        modifier = Modifier.padding(12.dp),
+        containerColor = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            job.done.forEach { step ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "${step.doneLabel} \"${job.name}\"",
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (progress == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        trackColor = MaterialTheme.colorScheme.inverseSurface,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.UploadFile,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Text(
+                    text = buildString {
+                        append(job.active.activeLabel)
+                        append(" \"")
+                        append(job.name)
+                        append("\"")
+                        if (percent != null) {
+                            append(" ")
+                            append(percent)
+                            append("%")
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    trackColor = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.32f),
                 )
             }
         }
