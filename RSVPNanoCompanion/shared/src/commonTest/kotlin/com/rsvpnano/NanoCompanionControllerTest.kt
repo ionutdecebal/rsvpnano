@@ -271,7 +271,9 @@ class NanoCompanionControllerTest {
             name: String,
             data: ByteArray,
             category: String?,
+            onProgress: ((sent: Long, total: Long) -> Unit)?,
         ): NanoUploadResponse {
+            onProgress?.invoke(data.size.toLong(), data.size.toLong())
             uploadedFilename = name
             uploadedCategory = category
             books = listOf(NanoBook(id = name, title = name.substringBeforeLast('.')))

@@ -49,8 +49,14 @@ class NanoDeviceSyncService(
 
     suspend fun clearWifiSettings(baseUrl: String): NanoWifiSettings = client.forgetWifi(baseUrl)
 
-    suspend fun uploadBook(baseUrl: String, filename: String, data: ByteArray, category: String? = null): NanoUploadResponse =
-        client.uploadBook(baseUrl = baseUrl, name = filename, data = data, category = category)
+    suspend fun uploadBook(
+        baseUrl: String,
+        filename: String,
+        data: ByteArray,
+        category: String? = null,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): NanoUploadResponse =
+        client.uploadBook(baseUrl = baseUrl, name = filename, data = data, category = category, onProgress = onProgress)
 
     suspend fun deleteBook(baseUrl: String, filename: String): NanoUploadResponse = client.deleteBook(baseUrl, filename)
 }

@@ -187,13 +187,19 @@ class NanoCompanionController(
         )
     }
 
-    suspend fun uploadBook(baseUrl: String, file: RsvpBookFile, category: String): CompanionBooksSnapshot {
+    suspend fun uploadBook(
+        baseUrl: String,
+        file: RsvpBookFile,
+        category: String,
+        onProgress: ((sent: Long, total: Long) -> Unit)? = null,
+    ): CompanionBooksSnapshot {
         verifyReachable(baseUrl)
         deviceSyncService.uploadBook(
             baseUrl = baseUrl,
             filename = file.filename,
             data = file.data,
             category = category,
+            onProgress = onProgress,
         )
         return CompanionBooksSnapshot(books = deviceSyncService.refreshBooks(baseUrl))
     }

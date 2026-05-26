@@ -9,6 +9,7 @@ import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.onUpload
 import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
@@ -86,7 +87,13 @@ class NanoKtorClient(
         return decodeDeviceResponse(response.status, body, NanoRssFeeds.serializer())
     }
 
-    override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?): NanoUploadResponse {
+    override suspend fun uploadBook(
+        baseUrl: String,
+        name: String,
+        data: ByteArray,
+        category: String?,
+        onProgress: ((sent: Long, total: Long) -> Unit)?,
+    ): NanoUploadResponse {
         val response = httpClient.post(
             buildUrl(
                 baseUrl = baseUrl,
@@ -104,6 +111,11 @@ class NanoKtorClient(
                     }
                 )
             )
+            onProgress?.let { progress ->
+                onUpload { sent, total ->
+                    progress(sent, total)
+                }
+            }
         }
 
         val body = response.body<String>()

@@ -119,7 +119,14 @@ class PendingUploadSyncServiceTest {
         override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds =
             NanoRssFeeds(ok = true, feeds = feeds)
 
-        override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?): NanoUploadResponse {
+        override suspend fun uploadBook(
+            baseUrl: String,
+            name: String,
+            data: ByteArray,
+            category: String?,
+            onProgress: ((sent: Long, total: Long) -> Unit)?,
+        ): NanoUploadResponse {
+            onProgress?.invoke(data.size.toLong(), data.size.toLong())
             uploadedFilename = name
             uploadedFilenames += name
             if (name in failingFilenames) {

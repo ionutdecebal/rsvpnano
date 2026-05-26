@@ -42,7 +42,13 @@ class RsvpSharedDependenciesDeviceTest {
         override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
         override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = emptyList())
         override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = feeds)
-        override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?): NanoUploadResponse =
+        override suspend fun uploadBook(
+            baseUrl: String,
+            name: String,
+            data: ByteArray,
+            category: String?,
+            onProgress: ((sent: Long, total: Long) -> Unit)?,
+        ): NanoUploadResponse =
             NanoUploadResponse(ok = true, path = "/books/$name")
         override suspend fun deleteBook(baseUrl: String, name: String): NanoUploadResponse = NanoUploadResponse(ok = true)
     }

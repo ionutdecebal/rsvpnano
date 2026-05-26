@@ -29,11 +29,13 @@ class NanoDeviceSyncServiceTest {
         val service = NanoDeviceSyncService(client)
 
         val feeds = service.saveRssFeeds("http://device.local", listOf("https://example.com/feed"))
+        var uploadProgress: Pair<Long, Long>? = null
         val upload = service.uploadBook(
             baseUrl = "http://device.local",
             filename = "Story.rsvp",
             data = byteArrayOf(1, 2, 3),
             category = "article",
+            onProgress = { sent, total -> uploadProgress = sent to total },
         )
         val delete = service.deleteBook("http://device.local", "Story.rsvp")
 
@@ -43,6 +45,7 @@ class NanoDeviceSyncServiceTest {
         assertEquals("Story.rsvp", client.uploadedName)
         assertEquals("article", client.uploadedCategory)
         assertContentEquals(byteArrayOf(1, 2, 3), client.uploadedData)
+        assertEquals(3L to 3L, uploadProgress)
         assertEquals("Story.rsvp", client.deletedName)
     }
 
@@ -61,7 +64,14 @@ class NanoDeviceSyncServiceTest {
         override suspend fun forgetWifi(baseUrl: String): NanoWifiSettings = NanoWifiSettings(ok = true, configured = false, ssid = "", passwordSet = false)
         override suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = listOf("https://example.com/feed"))
         override suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = NanoRssFeeds(ok = true, feeds = feeds)
-        override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?): NanoUploadResponse {
+        override suspend fun uploadBook(
+            baseUrl: String,
+            name: String,
+            data: ByteArray,
+            category: String?,
+            onProgress: ((sent: Long, total: Long) -> Unit)?,
+        ): NanoUploadResponse {
+            onProgress?.invoke(data.size.toLong(), data.size.toLong())
             uploadedName = name
             uploadedCategory = category
             uploadedData = data
