@@ -1432,6 +1432,7 @@ void App::cycleBrightness(uint32_t nowMs) {
                 static_cast<unsigned int>(percent));
   brightnessToastVisible_ = true;
   brightnessToastUntilMs_ = nowMs + kBrightnessToastMs;
+  display_.setBrightnessOverlay(String(percent) + "%");
   applyDisplayPreferences(nowMs);
 }
 
@@ -1683,9 +1684,8 @@ void App::updateBrightnessToast(uint32_t nowMs) {
   }
 
   brightnessToastVisible_ = false;
-  if (state_ == AppState::Playing || state_ == AppState::Paused) {
-    renderActiveReader(nowMs);
-  }
+  display_.setBrightnessOverlay("");
+  applyDisplayPreferences(nowMs);
 }
 
 void App::updateWpmFeedback(uint32_t nowMs) {
@@ -5923,9 +5923,7 @@ void App::renderActiveReader(uint32_t nowMs) {
 
   applyReaderUiOrientation();
   if (scrollModeEnabled()) {
-    if (brightnessToastVisible_) {
-      renderBrightnessToast(nowMs);
-    } else if (wpmFeedbackVisible_) {
+    if (wpmFeedbackVisible_) {
       renderScrollReader(nowMs, String(reader_.wpm()) + " WPM");
     } else {
       renderScrollReader(nowMs);
@@ -5935,8 +5933,6 @@ void App::renderActiveReader(uint32_t nowMs) {
 
   if (contextViewVisible_) {
     renderContextPreview();
-  } else if (brightnessToastVisible_) {
-    renderBrightnessToast(nowMs);
   } else if (wpmFeedbackVisible_) {
     renderWpmFeedback(nowMs);
   } else {
@@ -6157,29 +6153,6 @@ void App::renderWpmFeedback(uint32_t nowMs) {
                                         readerFontSizeIndex_, reader_.wpm(),
                                         currentChapterLabel(), readingProgressPercent(),
                                         readerFooterVisible(), footerMetricLabel, chrome);
-}
-
-void App::renderBrightnessToast(uint32_t nowMs) {
-  if (!ensureCurrentBookWordAvailable(nowMs)) {
-    return;
-  }
-
-  applyReaderUiOrientation();
-  const String overlayText = String(currentBrightnessPercent()) + "%";
-  if (scrollModeEnabled()) {
-    renderScrollReader(nowMs, overlayText);
-    return;
-  }
-
-  contextViewVisible_ = false;
-  const String beforeText = phantomWordsEnabled_ ? phantomBeforeText() : "";
-  const String afterText = phantomWordsEnabled_ ? phantomAfterText() : "";
-  const DisplayManager::ReaderChrome chrome = readerChrome();
-  const String footerMetricLabel = readerFooterStatusLabel();
-  display_.renderPhantomRsvpWord(beforeText, reader_.currentWord(), afterText,
-                                 readerFontSizeIndex_, currentChapterLabel(),
-                                 readingProgressPercent(), readerFooterVisible(),
-                                 footerMetricLabel, chrome, overlayText);
 }
 
 void App::renderStorageStatus(const char *title, const char *line1, const char *line2,

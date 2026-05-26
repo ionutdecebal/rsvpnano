@@ -372,7 +372,6 @@ class App {
   void renderReaderWord();
   void renderContextPreview();
   void renderWpmFeedback(uint32_t nowMs);
-  void renderBrightnessToast(uint32_t nowMs);
   size_t phantomBeforeCharTarget() const;
   size_t phantomAfterCharTarget() const;
   String collectPhantomBeforeText(size_t currentIndex, size_t charTarget) const;

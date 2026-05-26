@@ -882,6 +882,11 @@ void DisplayManager::setBrightnessPercent(uint8_t percent) {
   }
 }
 
+void DisplayManager::setBrightnessOverlay(const String &text) {
+  brightnessOverlayText_ = text;
+  lastRenderKey_ = "";
+}
+
 void DisplayManager::setDarkMode(bool darkMode) {
   if (darkMode_ == darkMode) {
     return;
@@ -1769,6 +1774,9 @@ void DisplayManager::applyBrightness() {
 
 void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHeight) {
   tickerPlaybackFrameActive_ = false;
+  if (!brightnessOverlayText_.isEmpty()) {
+    drawBrightnessToastBadge(brightnessOverlayText_);
+  }
   for (int nativeYStart = 0; nativeYStart < kPanelNativeHeight;
        nativeYStart += kMaxChunkPhysicalRows) {
     const int nativeRows = std::min(kMaxChunkPhysicalRows, kPanelNativeHeight - nativeYStart);

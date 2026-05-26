@@ -61,6 +61,7 @@ class DisplayManager {
   bool begin();
   void setBatteryLabel(const String &label);
   void setBrightnessPercent(uint8_t percent);
+  void setBrightnessOverlay(const String &text);
   void setDarkMode(bool darkMode);
   void setNightMode(bool nightMode);
   void setUiOrientation(BoardConfig::UiOrientation orientation);
@@ -203,4 +204,5 @@ class DisplayManager {
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;
+  String brightnessOverlayText_;
 };
