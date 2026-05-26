@@ -2301,7 +2301,10 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
     return;
   }
 
-  (void)tapLike;
+  if (tapLike && focusTimer_.state() == FocusTimer::State::WaitForTouchStart) {
+    focusTimer_.cycleTouchDuration();
+    renderFocusTimerSession();
+  }
 }
 
 void App::openFocusTimer() {
@@ -5206,9 +5209,11 @@ void App::renderFocusTimerSession() {
     case FocusTimer::State::GenreSelect:
       renderFocusTimerGenres();
       return;
-    case FocusTimer::State::WaitForTouchStart:
-      display_.renderFocusTimerScreen("BEGIN", "", "", "Place on short side");
+    case FocusTimer::State::WaitForTouchStart: {
+      const String durationLabel = formatFocusTimerDuration(focusTimer_.selectedTouchDurationMs());
+      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Tap To Change");
       return;
+    }
     case FocusTimer::State::TouchRunning:
       display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "",
                                       "", focusTimer_.progressPercent(millis()));
@@ -5742,6 +5747,17 @@ void App::applyReaderUiOrientation() {
 BoardConfig::UiOrientation App::readerUiOrientation() const {
   return uiRotated180() ? BoardConfig::UiOrientation::LandscapeFlipped
                         : BoardConfig::UiOrientation::Landscape;
+}
+
+String App::formatFocusTimerDuration(uint32_t durationMs) const {
+  const uint32_t totalSeconds = durationMs / 1000UL;
+  const uint32_t minutes = totalSeconds / 60UL;
+  const uint32_t seconds = totalSeconds % 60UL;
+  char buffer[8];
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu",
+                static_cast<unsigned long>(minutes),
+                static_cast<unsigned long>(seconds));
+  return String(buffer);
 }
 
 String App::formatFocusTimerRemaining(uint32_t nowMs) const {

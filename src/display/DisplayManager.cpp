@@ -18,6 +18,12 @@
 #include "text/LatinText.h"
 
 namespace {
+constexpr uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+    return static_cast<uint16_t>(((r & 0xF8U) << 8) |
+                                 ((g & 0xFCU) << 3) |
+                                 (b >> 3));
+}
+
 constexpr int kDisplayWidth = BoardConfig::DISPLAY_WIDTH;
 constexpr int kDisplayHeight = BoardConfig::DISPLAY_HEIGHT;
 constexpr int kPanelNativeWidth = BoardConfig::PANEL_NATIVE_WIDTH;
@@ -146,10 +152,6 @@ void mapPhysicalToLogical(BoardConfig::UiOrientation orientation, int physicalX,
       logicalY = kDisplayHeight - 1 - physicalX;
       break;
   }
-}
-
-uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
-  return static_cast<uint16_t>(((r & 0xF8U) << 8) | ((g & 0xFCU) << 3) | (b >> 3));
 }
 
 struct TinyGlyph {
@@ -3314,7 +3316,7 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
     const int timerX = centeredXForTiny(timer, timerScale);
 
     drawTinyTextAt(mode, titleX, titleY, baseTextColor, titleScale);
-    drawTinyTextAt(timer, timerX, timerY, baseTextColor, timerScale);
+    drawTinyTextAt(timer, timerX, timerY, accent, timerScale);
 
     if (fillWidth > 0 && fillHeight > 0) {
       drawTinyTextAtClipped(mode, titleX, titleY, inverseTextColor, titleScale, fillX, fillY,
@@ -3338,26 +3340,43 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
       const int dividerWidth =
           std::min(contentWidth, 40 + (static_cast<int>(mode.length()) * 12));
       const int dividerX = contentX + ((contentWidth - dividerWidth) / 2);
-      fillVirtualRect(dividerX, dividerY, dividerWidth, 2, instructionColor);
+      fillVirtualRect(dividerX, dividerY, dividerWidth, 2, accent);
     }
 
     drawTinyTextAt(mode, centeredXForTiny(mode, titleScale), titleY, baseTextColor, titleScale);
 
-    if (!instruction.isEmpty()) {
-      const std::vector<String> lines =
-          wrapTinyLines(instruction, instructionBlockWidth, instructionScale);
-      const int lineHeight = (kTinyGlyphHeight * instructionScale) + instructionScale + 4;
-      int y = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 42 : 28);
-      if (portraitFocusLayout) {
-        y = dividerY + 66;
+    const std::vector<String> lines = wrapTinyLines(instruction, instructionBlockWidth, instructionScale);
+    const int lineHeight = (kTinyGlyphHeight * instructionScale) + instructionScale + 4;
+    int y = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 42 : 28);
+    if (portraitFocusLayout) {
+      y = dividerY + 66;
+    }
+
+    if (!timer.isEmpty()) {
+      int timerStaticScale = portrait ? 4 : 5;
+      while (timerStaticScale > 1 && measureTinyTextWidth(timer, timerStaticScale) > contentWidth) {
+        --timerStaticScale;
       }
-      for (const String &line : lines) {
-        drawTinyTextAt(line,
-                       centeredXWithin(line, instructionScale, instructionBlockX,
-                                       instructionBlockWidth),
-                       y, instructionColor, instructionScale);
-        y += lineHeight;
-      }
+      drawTinyTextAt(timer, centeredXForTiny(timer, timerStaticScale), y, accent,
+                     timerStaticScale);
+      y += (kTinyGlyphHeight * timerStaticScale) + timerStaticScale + 20;
+    }
+
+    // First paragraph (e.g. "Tap To Change") → baseTextColor (white)
+    // Second paragraph (e.g. "Place to Start") → instructionColor (accent)
+    const int newlinePos = instruction.indexOf('\n');
+    const String instructionPart1 = (newlinePos >= 0) ? instruction.substring(0, newlinePos) : instruction;
+    const std::vector<String> part1Lines = wrapTinyLines(instructionPart1, instructionBlockWidth, instructionScale);
+    const size_t part1Count = (newlinePos >= 0) ? part1Lines.size() : 0;
+
+    for (size_t i = 0; i < lines.size(); ++i) {
+      const String &line = lines[i];
+      const uint16_t lineColor = (i < part1Count) ? baseTextColor : instructionColor;
+      drawTinyTextAt(line,
+                     centeredXWithin(line, instructionScale, instructionBlockX,
+                                     instructionBlockWidth),
+                     y, lineColor, instructionScale);
+      y += lineHeight;
     }
   }
 

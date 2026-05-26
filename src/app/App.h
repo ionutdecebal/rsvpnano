@@ -399,6 +399,7 @@ class App {
   DisplayManager::TypographyConfig effectiveTypographyConfig() const;
   uint32_t currentReaderContentToken() const;
   String formatFocusTimerRemaining(uint32_t nowMs) const;
+  String formatFocusTimerDuration(uint32_t durationMs) const;
   String focusTimerCountsLabel() const;
   void playFocusTimerCompletionCue();
 
