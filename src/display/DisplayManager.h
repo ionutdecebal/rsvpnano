@@ -84,7 +84,8 @@ class DisplayManager {
                              uint8_t fontSizeLevel, const String &chapterLabel = "",
                              uint8_t progressPercent = 0, bool showFooter = true,
                              const String &footerStatusLabel = "",
-                             ReaderChrome chrome = ReaderChrome());
+                             ReaderChrome chrome = ReaderChrome(),
+                             const String &overlayText = "");
   void renderPhantomRsvpWordWithWpm(const String &beforeText, const String &word,
                                     const String &afterText, uint8_t fontSizeLevel, uint16_t wpm,
                                     const String &chapterLabel = "",
@@ -169,6 +170,7 @@ class DisplayManager {
                                    int width, int xOffset);
   void drawBatteryBadge();
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
+  void drawBrightnessToastBadge(const String &text);
   void drawPreviousSentenceHint();
   void drawFooter(const String &chapterLabel, const String &statusLabel,
                   const ReaderChrome &chrome);

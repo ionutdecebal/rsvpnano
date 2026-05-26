@@ -24,6 +24,7 @@ static const char *kAppTag = "app";
 constexpr uint32_t kOtaCheckTaskStackBytes = 10240;
 constexpr uint32_t kBootSplashMs = 750;
 constexpr uint32_t kWpmFeedbackMs = 900;
+constexpr uint32_t kBrightnessToastMs = 1500;
 constexpr uint32_t kPowerOffHoldMs = 1600;
 constexpr uint32_t kPowerOffReleaseWaitMs = 4000;
 constexpr uint32_t kBatterySampleIntervalMs = 180000;
@@ -825,6 +826,7 @@ void App::update(uint32_t nowMs) {
   updateReader(nowMs);
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
+  updateBrightnessToast(nowMs);
   maybeSaveReadingPosition(nowMs);
   updateTimeEstimateBuild(nowMs);
 
@@ -1131,7 +1133,7 @@ void App::handleBootButton(uint32_t nowMs) {
   }
 
   if (button_.lastHoldDurationMs() < kThemeToggleHoldMs) {
-    cycleBrightness();
+    cycleBrightness(nowMs);
   }
 }
 
@@ -1420,7 +1422,7 @@ void App::applyTypographySettings(uint32_t nowMs, bool rerender) {
   }
 }
 
-void App::cycleBrightness() {
+void App::cycleBrightness(uint32_t nowMs) {
   brightnessLevelIndex_ = static_cast<uint8_t>((brightnessLevelIndex_ + 1) % kBrightnessLevelCount);
   preferences_.putUChar(kPrefBrightness, brightnessLevelIndex_);
   const uint8_t percent = currentBrightnessPercent();
@@ -1428,7 +1430,9 @@ void App::cycleBrightness() {
                 static_cast<unsigned int>(brightnessLevelIndex_ + 1),
                 static_cast<unsigned int>(kBrightnessLevelCount),
                 static_cast<unsigned int>(percent));
-  applyDisplayPreferences(millis());
+  brightnessToastVisible_ = true;
+  brightnessToastUntilMs_ = nowMs + kBrightnessToastMs;
+  applyDisplayPreferences(nowMs);
 }
 
 void App::cycleThemeMode(uint32_t nowMs) {
@@ -1666,6 +1670,21 @@ void App::updateBatteryWarningOverlay(uint32_t nowMs) {
     renderMenu();
   } else if (state_ == AppState::Standby) {
     updateStandbyScreensaver(nowMs, true);
+  }
+}
+
+void App::updateBrightnessToast(uint32_t nowMs) {
+  if (!brightnessToastVisible_) {
+    return;
+  }
+
+  if (nowMs < brightnessToastUntilMs_) {
+    return;
+  }
+
+  brightnessToastVisible_ = false;
+  if (state_ == AppState::Playing || state_ == AppState::Paused) {
+    renderActiveReader(nowMs);
   }
 }
 
@@ -2683,7 +2702,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
         cycleThemeMode(nowMs);
         return;
       case kSettingsDisplayBrightnessIndex:
-        cycleBrightness();
+        cycleBrightness(nowMs);
         return;
       case kSettingsDisplayHandednessIndex:
         cycleHandednessMode(nowMs);
@@ -5904,7 +5923,9 @@ void App::renderActiveReader(uint32_t nowMs) {
 
   applyReaderUiOrientation();
   if (scrollModeEnabled()) {
-    if (wpmFeedbackVisible_) {
+    if (brightnessToastVisible_) {
+      renderBrightnessToast(nowMs);
+    } else if (wpmFeedbackVisible_) {
       renderScrollReader(nowMs, String(reader_.wpm()) + " WPM");
     } else {
       renderScrollReader(nowMs);
@@ -5914,6 +5935,8 @@ void App::renderActiveReader(uint32_t nowMs) {
 
   if (contextViewVisible_) {
     renderContextPreview();
+  } else if (brightnessToastVisible_) {
+    renderBrightnessToast(nowMs);
   } else if (wpmFeedbackVisible_) {
     renderWpmFeedback(nowMs);
   } else {
@@ -6134,6 +6157,29 @@ void App::renderWpmFeedback(uint32_t nowMs) {
                                         readerFontSizeIndex_, reader_.wpm(),
                                         currentChapterLabel(), readingProgressPercent(),
                                         readerFooterVisible(), footerMetricLabel, chrome);
+}
+
+void App::renderBrightnessToast(uint32_t nowMs) {
+  if (!ensureCurrentBookWordAvailable(nowMs)) {
+    return;
+  }
+
+  applyReaderUiOrientation();
+  const String overlayText = String(currentBrightnessPercent()) + "%";
+  if (scrollModeEnabled()) {
+    renderScrollReader(nowMs, overlayText);
+    return;
+  }
+
+  contextViewVisible_ = false;
+  const String beforeText = phantomWordsEnabled_ ? phantomBeforeText() : "";
+  const String afterText = phantomWordsEnabled_ ? phantomAfterText() : "";
+  const DisplayManager::ReaderChrome chrome = readerChrome();
+  const String footerMetricLabel = readerFooterStatusLabel();
+  display_.renderPhantomRsvpWord(beforeText, reader_.currentWord(), afterText,
+                                 readerFontSizeIndex_, currentChapterLabel(),
+                                 readingProgressPercent(), readerFooterVisible(),
+                                 footerMetricLabel, chrome, overlayText);
 }
 
 void App::renderStorageStatus(const char *title, const char *line1, const char *line2,

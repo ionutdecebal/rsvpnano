@@ -175,13 +175,14 @@ class App {
   void updateState(uint32_t nowMs);
   void updateReader(uint32_t nowMs);
   void updateWpmFeedback(uint32_t nowMs);
+  void updateBrightnessToast(uint32_t nowMs);
   void maybeSaveReadingPosition(uint32_t nowMs);
   void handleBootButton(uint32_t nowMs);
   void handlePowerButton(uint32_t nowMs);
   bool handleStandbyCombo(uint32_t nowMs);
   void toggleMenuFromPowerButton(uint32_t nowMs);
   void openMainMenu(uint32_t nowMs);
-  void cycleBrightness();
+  void cycleBrightness(uint32_t nowMs);
   void cycleThemeMode(uint32_t nowMs);
   void cycleUiLanguage(uint32_t nowMs);
   void cycleReaderMode(uint32_t nowMs);
@@ -371,6 +372,7 @@ class App {
   void renderReaderWord();
   void renderContextPreview();
   void renderWpmFeedback(uint32_t nowMs);
+  void renderBrightnessToast(uint32_t nowMs);
   size_t phantomBeforeCharTarget() const;
   size_t phantomAfterCharTarget() const;
   String collectPhantomBeforeText(size_t currentIndex, size_t charTarget) const;
@@ -424,6 +426,7 @@ class App {
   uint32_t bootStartedMs_ = 0;
   uint32_t lastStateLogMs_ = 0;
   uint32_t wpmFeedbackUntilMs_ = 0;
+  uint32_t brightnessToastUntilMs_ = 0;
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
   uint32_t batteryRuntimeAnchorMs_ = 0;
@@ -530,6 +533,7 @@ class App {
   bool contextViewVisible_ = false;
   bool contextPreviewWindowValid_ = false;
   bool wpmFeedbackVisible_ = false;
+  bool brightnessToastVisible_ = false;
   bool usingStorageBook_ = false;
   bool storageReady_ = false;
   bool pendingBootBookLoad_ = false;

@@ -1580,6 +1580,40 @@ void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight) {
   drawTinyTextAt(batteryLabel_, x, y, footerColor(), kTinyScale);
 }
 
+void DisplayManager::drawBrightnessToastBadge(const String &text) {
+  // Sun icon pixel pattern (5x7), drawn at kTinyScale
+  static constexpr uint8_t kSunRows[kTinyGlyphHeight] = {
+    0x0A, // .X.X.
+    0x04, // ..X..
+    0x0E, // .XXX.
+    0x1F, // XXXXX
+    0x0E, // .XXX.
+    0x04, // ..X..
+    0x0A, // .X.X.
+  };
+
+  const int textWidth = measureTinyTextWidth(text, kTinyScale);
+  const int iconW = kTinyGlyphWidth * kTinyScale;
+  const int iconSpacing = 4;
+  const int totalWidth = iconW + iconSpacing + textWidth;
+  const int batteryW = batteryLabel_.isEmpty()
+                           ? 0
+                           : measureTinyTextWidth(batteryLabel_, kTinyScale) + 10;
+  const int rightEdge = logicalWidth() - kFooterMarginX - batteryW;
+  const int x = rightEdge - totalWidth - 4;
+  const int y = kFooterMarginBottom;
+
+  const uint16_t color = focusColor();
+  for (int row = 0; row < kTinyGlyphHeight; ++row) {
+    for (int col = 0; col < kTinyGlyphWidth; ++col) {
+      if (kSunRows[row] & (1 << (kTinyGlyphWidth - 1 - col))) {
+        fillVirtualRect(x + col * kTinyScale, y + row * kTinyScale, kTinyScale, kTinyScale, color);
+      }
+    }
+  }
+  drawTinyTextAt(text, x + iconW + iconSpacing, y, color, kTinyScale);
+}
+
 void DisplayManager::drawPreviousSentenceHint() {
   drawTinyTextAt("<<", kFooterMarginX, kFooterMarginBottom, footerColor(), kTinyScale);
 }
@@ -1928,13 +1962,13 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
                                            const String &afterText, uint8_t fontSizeLevel,
                                            const String &chapterLabel, uint8_t progressPercent,
                                            bool showFooter, const String &footerStatusLabel,
-                                           ReaderChrome chrome) {
+                                           ReaderChrome chrome, const String &overlayText) {
   const String renderKey =
       "rsvp_phantom|" + beforeText + "|" + word + "|" + afterText + "|s:" +
       String(fontSizeLevel) + "|" + chapterLabel + "|" + String(progressPercent) + "|" +
-      String(showFooter ? 1 : 0) + "|f:" + footerStatusLabel + "|b:" + batteryLabel_ +
-      "|rc:" + readerChromeKey(chrome) + "|d:" + String(darkMode_ ? 1 : 0) + "|n:" +
-      String(nightMode_ ? 1 : 0);
+      String(showFooter ? 1 : 0) + "|f:" + footerStatusLabel + "|o:" + overlayText + "|b:" +
+      batteryLabel_ + "|rc:" + readerChromeKey(chrome) + "|d:" + String(darkMode_ ? 1 : 0) +
+      "|n:" + String(nightMode_ ? 1 : 0);
   if (!initialized_ || renderKey == lastRenderKey_) {
     return;
   }
@@ -1967,6 +2001,9 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
       const int afterX =
           currentX + currentLayout.maxX + kPhantomCurrentGapMedium - afterLayout.minX;
       drawSerif70TextAt(afterText, afterX, textY, phantomColor);
+    }
+    if (!overlayText.isEmpty()) {
+      drawBrightnessToastBadge(overlayText);
     }
     if (showFooter) {
       drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
@@ -2012,6 +2049,9 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
         serifWordLayoutScaledPercent(afterText, -1, style.scalePercent);
     const int afterX = currentX + currentLayout.maxX + style.currentGap - afterLayout.minX;
     drawSerifTextScaledAt(afterText, afterX, textY, phantomColor, style.scalePercent);
+  }
+  if (!overlayText.isEmpty()) {
+    drawBrightnessToastBadge(overlayText);
   }
   if (showFooter) {
     drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
