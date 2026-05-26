@@ -3387,6 +3387,14 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
         drawTinyTextAt180Clipped(footer, footerX, footerY, inverseTextColor, footerScale,
                                  fillX, fillY, fillWidth, fillHeight);
       }
+      if (portraitFocusLayout) {
+        // Divider mirrored: same gap above text as BEGIN's divider is below BEGIN
+        const int footerDividerWidth =
+            std::min(contentWidth, 40 + (static_cast<int>(footer.length()) * 12));
+        const int footerDividerX = contentX + ((contentWidth - footerDividerWidth) / 2);
+        const int footerDividerY = footerY - 20 - 2;
+        fillVirtualRect(footerDividerX, footerDividerY, footerDividerWidth, 2, accent);
+      }
     }
 
     if (fillWidth > 0 && fillHeight > 0) {
