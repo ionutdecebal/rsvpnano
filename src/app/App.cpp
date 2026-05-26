@@ -2347,6 +2347,7 @@ void App::resetFocusTimer() {
   focusTimerCancelHoldTriggered_ = false;
   pausedTouch_.active = false;
   focusTimerGenreSelectedIndex_ = kFocusTimerGenreBackIndex;
+  applyReaderUiOrientation();
 }
 
 void App::rebuildFocusTimerGenreMenuItems() {
