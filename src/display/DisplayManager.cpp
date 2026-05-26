@@ -1535,6 +1535,34 @@ void DisplayManager::drawTinyGlyph(int x, int y, char c, uint16_t color, int sca
   }
 }
 
+void DisplayManager::drawTinyTextAt180(const String &text, int x, int y, uint16_t color,
+                                       int scale) {
+  const uint16_t panel = panelColor(color);
+  const int n = static_cast<int>(text.length());
+  for (int ci = 0; ci < n; ++ci) {
+    const int charBaseX = x + (n - 1 - ci) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
+    const uint8_t *rows = tinyRowsFor(text[ci]);
+    for (int row = 0; row < kTinyGlyphHeight; ++row) {
+      const int dstRow = kTinyGlyphHeight - 1 - row;
+      for (int col = 0; col < kTinyGlyphWidth; ++col) {
+        if ((rows[row] & (1 << (kTinyGlyphWidth - 1 - col))) == 0) {
+          continue;
+        }
+        const int dstCol = kTinyGlyphWidth - 1 - col;
+        for (int yy = 0; yy < scale; ++yy) {
+          const int dstY = y + dstRow * scale + yy;
+          if (dstY < 0 || dstY >= kVirtualBufferHeight) continue;
+          for (int xx = 0; xx < scale; ++xx) {
+            const int dstX = charBaseX + dstCol * scale + xx;
+            if (dstX < 0 || dstX >= kVirtualBufferWidth) continue;
+            virtualFrame_[dstY * kVirtualBufferWidth + dstX] = panel;
+          }
+        }
+      }
+    }
+  }
+}
+
 void DisplayManager::drawTinyTextAt(const String &text, int x, int y, uint16_t color, int scale) {
   int cursorX = x;
   for (size_t i = 0; i < text.length(); ++i) {
@@ -3275,6 +3303,35 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
     }
   };
 
+  auto drawTinyTextAt180Clipped = [&](const String &text, int x, int y, uint16_t color, int scale,
+                                      int clipX, int clipY, int clipWidth, int clipHeight) {
+    if (clipWidth <= 0 || clipHeight <= 0) return;
+    const int clipXEnd = clipX + clipWidth;
+    const int clipYEnd = clipY + clipHeight;
+    const uint16_t panel = panelColor(color);
+    const int n = static_cast<int>(text.length());
+    for (int ci = 0; ci < n; ++ci) {
+      const int charBaseX = x + (n - 1 - ci) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
+      const uint8_t *rows = tinyRowsFor(text[ci]);
+      for (int row = 0; row < kTinyGlyphHeight; ++row) {
+        const int dstRow = kTinyGlyphHeight - 1 - row;
+        for (int col = 0; col < kTinyGlyphWidth; ++col) {
+          if ((rows[row] & (1 << (kTinyGlyphWidth - 1 - col))) == 0) continue;
+          const int dstCol = kTinyGlyphWidth - 1 - col;
+          for (int yy = 0; yy < scale; ++yy) {
+            const int dstY = y + dstRow * scale + yy;
+            if (dstY < 0 || dstY >= kVirtualBufferHeight || dstY < clipY || dstY >= clipYEnd) continue;
+            for (int xx = 0; xx < scale; ++xx) {
+              const int dstX = charBaseX + dstCol * scale + xx;
+              if (dstX < 0 || dstX >= kVirtualBufferWidth || dstX < clipX || dstX >= clipXEnd) continue;
+              virtualFrame_[dstY * kVirtualBufferWidth + dstX] = panel;
+            }
+          }
+        }
+      }
+    }
+  };
+
   auto centeredXForTiny = [&](const String &text, int scale) {
     const int textWidth = measureTinyTextWidth(text, scale);
     return std::max(contentX, contentX + ((contentWidth - textWidth) / 2));
@@ -3322,12 +3379,13 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
       while (footerScale > 1 && measureTinyTextWidth(footer, footerScale) > contentWidth) {
         --footerScale;
       }
-      const int footerY = virtualHeight - (kTinyGlyphHeight * footerScale) - (portrait ? 8 : 6);
+      // Mirror titleY padding: same distance from bottom as titleY is from top
+      const int footerY = virtualHeight - titleY - (kTinyGlyphHeight * footerScale);
       const int footerX = centeredXForTiny(footer, footerScale);
-      drawTinyTextAt(footer, footerX, footerY, baseTextColor, footerScale);
+      drawTinyTextAt180(footer, footerX, footerY, baseTextColor, footerScale);
       if (fillWidth > 0 && fillHeight > 0) {
-        drawTinyTextAtClipped(footer, footerX, footerY, inverseTextColor, footerScale,
-                              fillX, fillY, fillWidth, fillHeight);
+        drawTinyTextAt180Clipped(footer, footerX, footerY, inverseTextColor, footerScale,
+                                 fillX, fillY, fillWidth, fillHeight);
       }
     }
 
