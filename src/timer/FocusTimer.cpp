@@ -252,6 +252,14 @@ void FocusTimer::cycleTouchDuration() {
   touchDurationIndex_ = static_cast<uint8_t>((touchDurationIndex_ + 1) % kTouchDurationCount);
 }
 
+void FocusTimer::stepTouchDuration(int direction) {
+  if (direction > 0 && touchDurationIndex_ < kTouchDurationCount - 1) {
+    ++touchDurationIndex_;
+  } else if (direction < 0 && touchDurationIndex_ > 0) {
+    --touchDurationIndex_;
+  }
+}
+
 void FocusTimer::setTouchDurationIndex(uint8_t index) {
   if (index < kTouchDurationCount) {
     touchDurationIndex_ = index;

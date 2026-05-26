@@ -2277,8 +2277,6 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
   const int deltaY = static_cast<int>(pausedTouch_.lastY) - static_cast<int>(pausedTouch_.startY);
   const int absDeltaX = abs(deltaX);
   const int absDeltaY = abs(deltaY);
-  const bool tapLike = absDeltaX <= static_cast<int>(kTapSlopPx) &&
-                       absDeltaY <= static_cast<int>(kTapSlopPx);
 
   if (focusTimer_.isActiveTimerRunning() && !focusTimerCancelHoldTriggered_ &&
       event.phase != TouchPhase::End &&
@@ -2303,10 +2301,13 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
     return;
   }
 
-  if (tapLike && focusTimer_.state() == FocusTimer::State::WaitForTouchStart) {
-    focusTimer_.cycleTouchDuration();
+  if (focusTimer_.state() == FocusTimer::State::WaitForTouchStart &&
+      absDeltaX >= static_cast<int>(kSwipeThresholdPx) &&
+      absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx)) {
+    focusTimer_.stepTouchDuration(deltaX > 0 ? 1 : -1);
     preferences_.putUChar(kPrefTimerDuration, focusTimer_.touchDurationIndex());
     renderFocusTimerSession();
+    return;
   }
 }
 
@@ -5214,7 +5215,7 @@ void App::renderFocusTimerSession() {
       return;
     case FocusTimer::State::WaitForTouchStart: {
       const String durationLabel = formatFocusTimerDuration(focusTimer_.selectedTouchDurationMs());
-      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Tap To Change\nPlace to Start");
+      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Swipe to Change\nPlace to Start");
       return;
     }
     case FocusTimer::State::TouchRunning:
