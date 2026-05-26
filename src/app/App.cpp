@@ -226,6 +226,13 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
+constexpr const char *kPrefTimerDurationByGenre[FocusTimer::kGenreCount] = {
+    "tmr_dur_0",  // Chores
+    "tmr_dur_1",  // RsvpNano (Work)
+    "tmr_dur_2",  // StrengthLabs (Fitness)
+    "tmr_dur_3",  // SelfCare
+    "tmr_dur_4",  // Other
+};
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -618,6 +625,11 @@ void App::begin() {
   brightnessLevelIndex_ = preferences_.getUChar(kPrefBrightness, brightnessLevelIndex_);
   if (brightnessLevelIndex_ >= kBrightnessLevelCount) {
     brightnessLevelIndex_ = kBrightnessLevelCount - 1;
+  }
+  for (uint8_t i = 0; i < FocusTimer::kGenreCount; i++) {
+    focusTimer_.setTouchDurationIndexForGenre(
+        static_cast<FocusTimer::Genre>(i),
+        preferences_.getUChar(kPrefTimerDurationByGenre[i], 0));
   }
   phantomWordsEnabled_ = preferences_.getBool(kPrefPhantomWords, phantomWordsEnabled_);
   readerBatteryVisibleWhilePlaying_ =
@@ -2294,8 +2306,6 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
   const int deltaY = static_cast<int>(pausedTouch_.lastY) - static_cast<int>(pausedTouch_.startY);
   const int absDeltaX = abs(deltaX);
   const int absDeltaY = abs(deltaY);
-  const bool tapLike = absDeltaX <= static_cast<int>(kTapSlopPx) &&
-                       absDeltaY <= static_cast<int>(kTapSlopPx);
 
   if (focusTimer_.isActiveTimerRunning() && !focusTimerCancelHoldTriggered_ &&
       event.phase != TouchPhase::End &&
@@ -2320,7 +2330,17 @@ void App::applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs) {
     return;
   }
 
-  (void)tapLike;
+  if (focusTimer_.state() == FocusTimer::State::WaitForTouchStart &&
+      absDeltaX >= static_cast<int>(kSwipeThresholdPx) &&
+      absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx)) {
+    focusTimer_.stepTouchDuration(deltaX > 0 ? 1 : -1);
+    const uint8_t genreIdx = static_cast<uint8_t>(focusTimer_.genre());
+    if (genreIdx < FocusTimer::kGenreCount) {
+      preferences_.putUChar(kPrefTimerDurationByGenre[genreIdx], focusTimer_.touchDurationIndex());
+    }
+    renderFocusTimerSession();
+    return;
+  }
 }
 
 void App::openFocusTimer() {
@@ -2359,6 +2379,7 @@ void App::resetFocusTimer() {
   focusTimerCancelHoldTriggered_ = false;
   pausedTouch_.active = false;
   focusTimerGenreSelectedIndex_ = kFocusTimerGenreBackIndex;
+  applyReaderUiOrientation();
 }
 
 void App::rebuildFocusTimerGenreMenuItems() {
@@ -5225,12 +5246,14 @@ void App::renderFocusTimerSession() {
     case FocusTimer::State::GenreSelect:
       renderFocusTimerGenres();
       return;
-    case FocusTimer::State::WaitForTouchStart:
-      display_.renderFocusTimerScreen("BEGIN", "", "", "Place on short side");
+    case FocusTimer::State::WaitForTouchStart: {
+      const String durationLabel = formatFocusTimerDuration(focusTimer_.selectedTouchDurationMs());
+      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Swipe to Change\nPlace to Start");
       return;
+    }
     case FocusTimer::State::TouchRunning:
       display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "",
-                                      "", focusTimer_.progressPercent(millis()));
+                                      "Restart", focusTimer_.progressPercent(millis()));
       return;
     case FocusTimer::State::WaitAfterTouch:
       display_.renderFocusTimerScreen("WORK", "", "", "Flip to continue");
@@ -5761,6 +5784,17 @@ void App::applyReaderUiOrientation() {
 BoardConfig::UiOrientation App::readerUiOrientation() const {
   return uiRotated180() ? BoardConfig::UiOrientation::LandscapeFlipped
                         : BoardConfig::UiOrientation::Landscape;
+}
+
+String App::formatFocusTimerDuration(uint32_t durationMs) const {
+  const uint32_t totalSeconds = durationMs / 1000UL;
+  const uint32_t minutes = totalSeconds / 60UL;
+  const uint32_t seconds = totalSeconds % 60UL;
+  char buffer[8];
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu",
+                static_cast<unsigned long>(minutes),
+                static_cast<unsigned long>(seconds));
+  return String(buffer);
 }
 
 String App::formatFocusTimerRemaining(uint32_t nowMs) const {
