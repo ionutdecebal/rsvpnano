@@ -351,6 +351,8 @@ class App {
   size_t currentChapterIndex() const;
   String currentChapterLabel() const;
   String cleanedChapterTitle(const String &raw, const String &fallback) const;
+  const char *chapterLabelPrefKey() const;
+  static bool chapterLabelDefaultForMode(ReaderMode mode);
   String currentFooterMetricLabel() const;
   String currentBatteryLabel() const;
   String footerMetricModeLabel() const;
