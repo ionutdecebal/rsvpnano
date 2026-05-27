@@ -951,6 +951,13 @@ DisplayManager::TypographyConfig DisplayManager::typographyConfig() const {
   return activeTypographyConfig();
 }
 
+void DisplayManager::setScrollConfig(const ScrollConfig &config) {
+  scrollConfig_.fontSizeDivisor = std::max(1, std::min(3, config.fontSizeDivisor));
+  scrollConfig_.letterSpacingPx = std::max(0, std::min(8, config.letterSpacingPx));
+  scrollConfig_.wordSpacingPx = std::max(4, std::min(24, config.wordSpacingPx));
+  scrollConfig_.showSearchIcon = config.showSearchIcon;
+}
+
 bool DisplayManager::darkMode() const { return darkMode_; }
 
 bool DisplayManager::nightMode() const { return nightMode_; }
@@ -1454,7 +1461,7 @@ void DisplayManager::fillVirtualRect(int x, int y, int width, int height, uint16
 }
 
 void DisplayManager::drawSerifTextAt(const String &text, int x, int y, uint16_t color,
-                                     int divisor) {
+                                     int divisor, int letterSpacingPx) {
   divisor = std::max(1, divisor);
   int cursorX = x;
   const ReaderTypeface typeface = effectiveReaderTypefaceForText(text);
@@ -1469,6 +1476,7 @@ void DisplayManager::drawSerifTextAt(const String &text, int x, int y, uint16_t 
       tracked -= opticalKerningAdjustment(
           text[i], text[i + 1], xOffset, width, tracked,
           scaledSignedAdvance(nextGlyph.xOffset, divisor), scaledDesiredGap(divisor));
+      tracked += letterSpacingPx;
     }
     cursorX += std::max(1, tracked);
   }
@@ -2559,9 +2567,12 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
   const int textTop = kScrollTop;
   const int textBottom = virtualHeight - footerReserve - overlayReserve;
   const ReaderTypeface contextTypeface = currentReaderTypeface();
+  const int serifDivisor = scrollConfig_.fontSizeDivisor;
+  const int letterSpacing = scrollConfig_.letterSpacingPx;
+  const int wordSpacing = scrollConfig_.wordSpacingPx;
   const int contextGlyphHeight = std::max(
-      1, (baseGlyphHeightForTypeface(contextTypeface) + kScrollSerifDivisor - 1) /
-             kScrollSerifDivisor);
+      1, (baseGlyphHeightForTypeface(contextTypeface) + serifDivisor - 1) /
+             serifDivisor);
   const int maxLineWidth = virtualWidth - (kScrollMarginX * 2);
 
   size_t currentLocalIndex = 0;
@@ -2595,8 +2606,9 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
         break;
       }
 
-      const int wordWidth = measureSerifTextWidth(words[index].text, kScrollSerifDivisor);
-      const int gap = (index == line.start) ? 0 : kScrollSpaceWidth;
+      const int wordWidth = measureSerifTextWidth(words[index].text, serifDivisor)
+                            + letterSpacing * std::max(0, (int)words[index].text.length() - 1);
+      const int gap = (index == line.start) ? 0 : wordSpacing;
       if (index > line.start && lineWidth + gap + wordWidth > maxLineWidth) {
         break;
       }
@@ -2693,9 +2705,11 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
       const uint16_t color =
           (word.current && currentFocusHighlightEnabled()) ? focusColor() : wordColor();
       const String visibleWord =
-          fitSerifText(word.text, virtualWidth - x - kScrollMarginX, kScrollSerifDivisor);
-      drawSerifTextAt(visibleWord, x, lineY, color, kScrollSerifDivisor);
-      x += measureSerifTextWidth(visibleWord, kScrollSerifDivisor) + kScrollSpaceWidth;
+          fitSerifText(word.text, virtualWidth - x - kScrollMarginX, serifDivisor);
+      drawSerifTextAt(visibleWord, x, lineY, color, serifDivisor, letterSpacing);
+      x += measureSerifTextWidth(visibleWord, serifDivisor)
+           + letterSpacing * std::max(0, (int)visibleWord.length() - 1)
+           + wordSpacing;
     }
   }
 
@@ -2708,6 +2722,11 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
   drawFooter(chapterLabel, footerStatusLabel.isEmpty() ? String(progressPercent) + "%"
                                                        : footerStatusLabel,
              chrome);
+  if (scrollConfig_.showSearchIcon && showFooterRow) {
+    const int iconY = virtualHeight - kTinyGlyphHeight * kTinyScale - kFooterMarginBottom;
+    const int iconX = virtualWidth / 2 - measureTinyTextWidth("Q", kTinyScale) / 2;
+    drawTinyTextAt("Q", iconX, iconY, focusColor(), kTinyScale);
+  }
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }

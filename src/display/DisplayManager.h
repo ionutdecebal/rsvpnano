@@ -41,6 +41,13 @@ class DisplayManager {
     bool showPreviousSentenceHint;
   };
 
+  struct ScrollConfig {
+    int fontSizeDivisor = 2;   // 1=large, 2=medium, 3=small
+    int letterSpacingPx = 0;   // extra px between characters
+    int wordSpacingPx = 10;    // space between words
+    bool showSearchIcon = false;
+  };
+
   struct LibraryItem {
     String title;
     String subtitle;
@@ -67,6 +74,7 @@ class DisplayManager {
   void setUiOrientation(BoardConfig::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
   void setTypographyConfig(const TypographyConfig &config);
+  void setScrollConfig(const ScrollConfig &config);
   TypographyConfig typographyConfig() const;
   bool darkMode() const;
   bool nightMode() const;
@@ -157,7 +165,8 @@ class DisplayManager {
   void drawSerifGlyphScaledPercent(int x, int y, char c, uint16_t color, uint8_t scalePercent,
                                    ReaderTypeface typeface);
   void fillVirtualRect(int x, int y, int width, int height, uint16_t color);
-  void drawSerifTextAt(const String &text, int x, int y, uint16_t color, int divisor);
+  void drawSerifTextAt(const String &text, int x, int y, uint16_t color, int divisor,
+                       int letterSpacingPx = 0);
   void drawSerif70TextAt(const String &text, int x, int y, uint16_t color);
   void drawSerifTextScaledAt(const String &text, int x, int y, uint16_t color,
                              uint8_t scalePercent);
@@ -206,4 +215,5 @@ class DisplayManager {
   String lastRenderKey_;
   String batteryLabel_;
   String brightnessOverlayText_;
+  ScrollConfig scrollConfig_;
 };
