@@ -43,8 +43,6 @@ constexpr uint16_t kFooterMetricTapWidthPx = 220;
 constexpr uint16_t kFooterMetricTapHeightPx = 32;
 constexpr uint16_t kBatteryBadgeTapWidthPx = 160;
 constexpr uint16_t kBatteryBadgeTapHeightPx = 40;
-constexpr uint16_t kScrollSearchIconTapWidthPx = 80;   // centered ±40px from display center
-constexpr uint16_t kScrollSearchIconTapHeightPx = 32;
 constexpr uint16_t kScrubStepPx = 22;
 constexpr uint16_t kBrowseNeutralZonePx = 14;
 constexpr uint16_t kFocusTimerCancelHoldMaxDriftPx = 20;
@@ -165,14 +163,14 @@ constexpr size_t kSettingsHomeFirmwareVersionIndex = 6;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
-constexpr size_t kSettingsDisplayFooterIndex = 4;
-constexpr size_t kSettingsDisplayBatteryIndex = 5;
-constexpr size_t kSettingsDisplayScreensaverIndex = 6;
-constexpr size_t kSettingsDisplayReaderBatteryIndex = 7;
-constexpr size_t kSettingsDisplayReaderChapterIndex = 8;
-constexpr size_t kSettingsDisplayReaderProgressIndex = 9;
-constexpr size_t kSettingsDisplayLanguageIndex = 10;
-constexpr size_t kSettingsDisplayChapterLabelIndex = 11;
+constexpr size_t kSettingsDisplayChapterLabelIndex = 4;
+constexpr size_t kSettingsDisplayFooterIndex = 5;
+constexpr size_t kSettingsDisplayBatteryIndex = 6;
+constexpr size_t kSettingsDisplayScreensaverIndex = 7;
+constexpr size_t kSettingsDisplayReaderBatteryIndex = 8;
+constexpr size_t kSettingsDisplayReaderChapterIndex = 9;
+constexpr size_t kSettingsDisplayReaderProgressIndex = 10;
+constexpr size_t kSettingsDisplayLanguageIndex = 11;
 constexpr size_t kSettingsPacingReadingModeIndex = 1;
 constexpr size_t kSettingsPacingPauseModeIndex = 2;
 constexpr size_t kSettingsPacingWpmIndex = 3;
@@ -180,12 +178,6 @@ constexpr size_t kSettingsPacingLongWordsIndex = 4;
 constexpr size_t kSettingsPacingComplexityIndex = 5;
 constexpr size_t kSettingsPacingPunctuationIndex = 6;
 constexpr size_t kSettingsPacingResetIndex = 7;
-constexpr size_t kSettingsPacingPageScrollIndex = 8;
-constexpr size_t kSettingsScrollPageFontSizeIndex = 1;
-constexpr size_t kSettingsScrollPageLetterSpacingIndex = 2;
-constexpr size_t kSettingsScrollPageWordSpacingIndex = 3;
-constexpr size_t kSettingsScrollPageHSpeedIndex = 4;
-constexpr size_t kSettingsScrollPageVSpeedIndex = 5;
 constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
@@ -247,8 +239,6 @@ constexpr const char *kPrefTimerDurationByGenre[FocusTimer::kGenreCount] = {
 constexpr const char *kPrefScrollFontSize = "psc_font";
 constexpr const char *kPrefScrollLetterSpacing = "psc_lspc";
 constexpr const char *kPrefScrollWordSpacing = "psc_wspc";
-constexpr const char *kPrefScrollHSpeed = "psc_hspd";
-constexpr const char *kPrefScrollVSpeed = "psc_vspd";
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -743,16 +733,6 @@ void App::begin() {
       kTypographyGuideGapMin, kTypographyGuideGapMax));
   darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
   nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
-  scrollFontSizeIndex_ = preferences_.getUChar(kPrefScrollFontSize, scrollFontSizeIndex_);
-  if (scrollFontSizeIndex_ > 2) scrollFontSizeIndex_ = 1;
-  scrollLetterSpacing_ = preferences_.getUChar(kPrefScrollLetterSpacing, scrollLetterSpacing_);
-  if (scrollLetterSpacing_ > 4) scrollLetterSpacing_ = 0;
-  scrollWordSpacingIndex_ = preferences_.getUChar(kPrefScrollWordSpacing, scrollWordSpacingIndex_);
-  if (scrollWordSpacingIndex_ > 4) scrollWordSpacingIndex_ = 2;
-  scrollHSpeedIndex_ = preferences_.getUChar(kPrefScrollHSpeed, scrollHSpeedIndex_);
-  if (scrollHSpeedIndex_ > 2) scrollHSpeedIndex_ = 1;
-  scrollVSpeedIndex_ = preferences_.getUChar(kPrefScrollVSpeed, scrollVSpeedIndex_);
-  if (scrollVSpeedIndex_ > 2) scrollVSpeedIndex_ = 0;
   applyHandednessSettings(0, false);
   applyDisplayPreferences(0, false);
   applyTypographySettings(0, false);
@@ -2048,9 +2028,6 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
       pausedTouch_.active = false;
       pausedTouchIntent_ = TouchIntent::None;
       if (tapLike) {
-        if (handleScrollSearchIconTap(event.x, event.y, nowMs)) {
-          return;
-        }
         if (handleBatteryBadgeTap(event.x, event.y, nowMs)) {
           return;
         }
@@ -2100,8 +2077,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   }
 
   if (pausedTouchIntent_ == TouchIntent::Scrub) {
-    static constexpr int kHSpeedMultipliers[] = {1, 2, 4};
-    const int hMult = scrollModeEnabled() ? kHSpeedMultipliers[scrollHSpeedIndex_] : 1;
+    const int hMult = 1;
     applyScrubTarget(scrubStepsForDrag(deltaX) * hMult, nowMs);
     if (ended) {
       pausedTouch_.active = false;
@@ -2126,8 +2102,7 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
       return;
     }
 
-    const int vSpeedMultipliers[] = {1, 5, 25};
-    const int vMult = vSpeedMultipliers[scrollVSpeedIndex_];
+    const int vMult = 1;
     const int wpmDelta = (deltaY < 0) ? vMult : -vMult;
     reader_.adjustWpm(wpmDelta);
     preferences_.putUShort(kPrefWpm, reader_.wpm());
@@ -2142,26 +2117,6 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   if (ended) {
     pausedTouch_.active = false;
     pausedTouchIntent_ = TouchIntent::None;
-    if (tapLike && handleScrollSearchIconTap(event.x, event.y, nowMs)) {
-      return;
-    }
-    if (tapLike && scrollSearchActive_ && !scrollSearchMatches_.empty() &&
-        isScrollSearchIconTap(event.x, event.y)) {
-      // Search icon tapped again: open search
-      openTextEntry(TextEntryPurpose::ScrollSearch, "Search", "Find in book", "",
-                    scrollSearchQuery_, "", false, 48, MenuScreen::Main);
-      return;
-    }
-    if (tapLike && scrollSearchActive_ && !scrollSearchMatches_.empty()) {
-      // Check for overlay navigation taps (left half = prev, right half = next)
-      const uint16_t centerX = static_cast<uint16_t>(BoardConfig::DISPLAY_WIDTH / 2);
-      const bool inOverlayY = event.y >= static_cast<uint16_t>(BoardConfig::DISPLAY_HEIGHT - 50) &&
-                              event.y < static_cast<uint16_t>(BoardConfig::DISPLAY_HEIGHT - 20);
-      if (inOverlayY) {
-        navigateScrollSearch((event.x < centerX) ? -1 : 1, nowMs);
-        return;
-      }
-    }
     if (tapLike && handleBatteryBadgeTap(event.x, event.y, nowMs)) {
       return;
     }
@@ -2768,11 +2723,6 @@ void App::selectSettingsItem(uint32_t nowMs) {
     return;
   }
 
-  if (menuScreen_ == MenuScreen::SettingsScrollPage) {
-    selectScrollPageSettingsItem(nowMs);
-    return;
-  }
-
   if (menuScreen_ == MenuScreen::SettingsDisplay) {
     switch (settingsSelectedIndex_) {
       case kSettingsBackIndex:
@@ -2934,60 +2884,12 @@ void App::selectSettingsItem(uint32_t nowMs) {
       preferences_.putUShort(kPrefPacingPunctuationMs, pacingPunctuationDelayMs_);
       pacingConfigChanged = true;
       break;
-    case kSettingsPacingPageScrollIndex:
-      flushPendingTimeEstimateRebuild();
-      settingsSelectedIndex_ = kSettingsScrollPageFontSizeIndex;
-      menuScreen_ = MenuScreen::SettingsScrollPage;
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
     default:
       return;
   }
 
   if (pacingConfigChanged) {
     applyPacingSettings();
-  }
-  rebuildSettingsMenuItems();
-  renderSettings();
-}
-
-void App::selectScrollPageSettingsItem(uint32_t nowMs) {
-  (void)nowMs;
-  if (menuScreen_ != MenuScreen::SettingsScrollPage) return;
-
-  switch (settingsSelectedIndex_) {
-    case kSettingsBackIndex:
-      settingsSelectedIndex_ = kSettingsPacingPageScrollIndex;
-      menuScreen_ = MenuScreen::SettingsPacing;
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
-    case kSettingsScrollPageFontSizeIndex:
-      scrollFontSizeIndex_ = (scrollFontSizeIndex_ + 1) % 3;
-      preferences_.putUChar(kPrefScrollFontSize, scrollFontSizeIndex_);
-      applyScrollConfig();
-      break;
-    case kSettingsScrollPageLetterSpacingIndex:
-      scrollLetterSpacing_ = (scrollLetterSpacing_ >= 4) ? 0 : (scrollLetterSpacing_ + 1);
-      preferences_.putUChar(kPrefScrollLetterSpacing, scrollLetterSpacing_);
-      applyScrollConfig();
-      break;
-    case kSettingsScrollPageWordSpacingIndex:
-      scrollWordSpacingIndex_ = (scrollWordSpacingIndex_ + 1) % 5;
-      preferences_.putUChar(kPrefScrollWordSpacing, scrollWordSpacingIndex_);
-      applyScrollConfig();
-      break;
-    case kSettingsScrollPageHSpeedIndex:
-      scrollHSpeedIndex_ = (scrollHSpeedIndex_ + 1) % 3;
-      preferences_.putUChar(kPrefScrollHSpeed, scrollHSpeedIndex_);
-      break;
-    case kSettingsScrollPageVSpeedIndex:
-      scrollVSpeedIndex_ = (scrollVSpeedIndex_ + 1) % 3;
-      preferences_.putUChar(kPrefScrollVSpeed, scrollVSpeedIndex_);
-      break;
-    default:
-      return;
   }
   rebuildSettingsMenuItems();
   renderSettings();
@@ -3399,24 +3301,6 @@ void App::commitTextEntry(uint32_t nowMs) {
       openWifiSettings();
       return;
     }
-    case TextEntryPurpose::ScrollSearch: {
-      const String query = textEntrySession_.value;
-      textEntrySession_ = TextEntrySession();
-      textEntryButtons_.clear();
-      menuScreen_ = MenuScreen::Main;
-      if (!query.isEmpty()) {
-        buildScrollSearchMatches(query);
-        if (!scrollSearchMatches_.empty()) {
-          scrollSearchMatchIndex_ = 0;
-          reader_.seekTo(scrollSearchMatches_[0]);
-          invalidateContextPreviewWindow();
-          saveReadingPosition(true);
-        }
-      }
-      setState(AppState::Paused, nowMs);
-      renderActiveReader(nowMs);
-      return;
-    }
     case TextEntryPurpose::None:
     default:
       menuScreen_ = textEntrySession_.returnScreen;
@@ -3540,6 +3424,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Brightness) + ": " +
                                  String(currentBrightnessPercent()) + "%");
     settingsMenuItems_.push_back("Reader hand: " + handednessLabel());
+    settingsMenuItems_.push_back("Chapter label: " + onOffLabel(chapterLabelEnabled_));
     settingsMenuItems_.push_back("Footer label: " + footerMetricModeLabel());
     settingsMenuItems_.push_back("Battery label: " + batteryLabelModeLabel());
     settingsMenuItems_.push_back("Screensaver: " + screensaverModeLabel());
@@ -3550,7 +3435,6 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Reading percent: " +
                                  onOffLabel(readerProgressVisibleWhilePlaying_));
     settingsMenuItems_.push_back(uiText(UiText::Language) + ": " + uiLanguageLabel());
-    settingsMenuItems_.push_back("Chapter label: " + onOffLabel(chapterLabelEnabled_));
   } else if (menuScreen_ == MenuScreen::SettingsPacing) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Reading mode: " + readerModeLabel());
@@ -3563,14 +3447,6 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Punctuation) + ": " +
                                  pacingDelayLabel(pacingPunctuationDelayMs_));
     settingsMenuItems_.push_back(uiText(UiText::ResetPacing));
-    settingsMenuItems_.push_back("Page Scroll");
-  } else if (menuScreen_ == MenuScreen::SettingsScrollPage) {
-    settingsMenuItems_.push_back(uiText(UiText::Back));
-    settingsMenuItems_.push_back("Font size: " + scrollFontSizeLabel());
-    settingsMenuItems_.push_back("Letter spacing: " + scrollLetterSpacingLabel());
-    settingsMenuItems_.push_back("Word spacing: " + scrollWordSpacingLabel());
-    settingsMenuItems_.push_back("H-swipe speed: " + scrollSpeedLabel(scrollHSpeedIndex_));
-    settingsMenuItems_.push_back("V-swipe speed: " + scrollSpeedLabel(scrollVSpeedIndex_));
   } else if (menuScreen_ == MenuScreen::WifiSettings) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Network: " + storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
@@ -3586,86 +3462,14 @@ void App::rebuildSettingsMenuItems() {
 }
 
 void App::applyScrollConfig() {
-  static constexpr int kScrollFontDivisors[] = {3, 2, 1};
-  static constexpr int kScrollWordSpacings[] = {6, 8, 10, 12, 14};
   DisplayManager::ScrollConfig cfg;
-  cfg.fontSizeDivisor = kScrollFontDivisors[scrollFontSizeIndex_];
-  cfg.letterSpacingPx = static_cast<int>(scrollLetterSpacing_);
-  cfg.wordSpacingPx = kScrollWordSpacings[scrollWordSpacingIndex_];
-  cfg.showSearchIcon = scrollModeEnabled();
+  cfg.fontSizeDivisor = 2;
+  cfg.letterSpacingPx = 0;
+  cfg.wordSpacingPx = 10;
+  cfg.showSearchIcon = false;
   display_.setScrollConfig(cfg);
 }
 
-String App::scrollFontSizeLabel() const {
-  static constexpr const char *kLabels[] = {"Small", "Medium", "Large"};
-  return kLabels[scrollFontSizeIndex_];
-}
-
-String App::scrollLetterSpacingLabel() const {
-  return String(scrollLetterSpacing_) + " px";
-}
-
-String App::scrollWordSpacingLabel() const {
-  static constexpr int kSpacings[] = {6, 8, 10, 12, 14};
-  return String(kSpacings[scrollWordSpacingIndex_]) + " px";
-}
-
-String App::scrollSpeedLabel(uint8_t idx) const {
-  static constexpr const char *kLabels[] = {"Slow", "Normal", "Fast"};
-  return kLabels[idx];
-}
-
-void App::buildScrollSearchMatches(const String &query) {
-  scrollSearchQuery_ = query;
-  scrollSearchMatches_.clear();
-  scrollSearchMatchIndex_ = 0;
-  scrollSearchActive_ = false;
-  const size_t wordCount = reader_.wordCount();
-  if (wordCount == 0 || query.isEmpty()) return;
-  String lowerQuery = query;
-  lowerQuery.toLowerCase();
-  for (size_t i = 0; i < wordCount; ++i) {
-    String word = reader_.wordAt(i);
-    word.toLowerCase();
-    if (word.indexOf(lowerQuery) >= 0) {
-      scrollSearchMatches_.push_back(i);
-    }
-  }
-  scrollSearchActive_ = !scrollSearchMatches_.empty();
-  Serial.printf("[search] query=%s matches=%u\n", query.c_str(),
-                static_cast<unsigned int>(scrollSearchMatches_.size()));
-}
-
-bool App::isScrollSearchIconTap(uint16_t x, uint16_t y) const {
-  const uint16_t centerX = static_cast<uint16_t>(BoardConfig::DISPLAY_WIDTH / 2);
-  return x >= centerX - kScrollSearchIconTapWidthPx / 2 &&
-         x <= centerX + kScrollSearchIconTapWidthPx / 2 &&
-         y >= BoardConfig::DISPLAY_HEIGHT - kScrollSearchIconTapHeightPx;
-}
-
-bool App::handleScrollSearchIconTap(uint16_t x, uint16_t y, uint32_t nowMs) {
-  (void)nowMs;
-  if (!scrollModeEnabled() || !readerFooterVisible()) return false;
-  if (!isScrollSearchIconTap(x, y)) return false;
-  openTextEntry(TextEntryPurpose::ScrollSearch, "Search", "Find in book", "",
-                scrollSearchQuery_, "", false, 48, MenuScreen::Main);
-  return true;
-}
-
-void App::navigateScrollSearch(int direction, uint32_t nowMs) {
-  if (!scrollSearchActive_ || scrollSearchMatches_.empty()) return;
-  const size_t count = scrollSearchMatches_.size();
-  if (direction > 0) {
-    scrollSearchMatchIndex_ = (scrollSearchMatchIndex_ + 1) % count;
-  } else {
-    scrollSearchMatchIndex_ = (scrollSearchMatchIndex_ == 0) ? count - 1
-                                                             : scrollSearchMatchIndex_ - 1;
-  }
-  reader_.seekTo(scrollSearchMatches_[scrollSearchMatchIndex_]);
-  invalidateContextPreviewWindow();
-  saveReadingPosition(true);
-  renderActiveReader(nowMs);
-}
 
 void App::applyPacingSettings() {
   ReadingLoop::PacingConfig pacingConfig;
@@ -6410,12 +6214,6 @@ void App::renderScrollReader(uint32_t nowMs, const String &overlayText) {
   }
 
   String effectiveOverlay = overlayText;
-  if (scrollSearchActive_ && !scrollSearchMatches_.empty() && overlayText.isEmpty()) {
-    effectiveOverlay = String("< ") +
-                       String(scrollSearchMatchIndex_ + 1) + "/" +
-                       String(scrollSearchMatches_.size()) +
-                       String(" > ") + scrollSearchQuery_;
-  }
 
   const DisplayManager::ReaderChrome chrome = readerChrome();
   display_.renderScrollView(contextPreviewWords_, currentReaderContentToken(),
