@@ -96,7 +96,7 @@ void FocusTimer::update(uint32_t nowMs) {
       if (!orientationInputArmed(nowMs)) {
         break;
       }
-      if (isShortSide(stableOrientation_)) {
+      if (stableOrientation_ == oppositeShortSide(lastShortSide_)) {
         resetOrientationStability();
         transitionTo(State::WaitForTouchStart, nowMs);
       } else if (stableOrientation_ == OrientationState::LongSide) {
