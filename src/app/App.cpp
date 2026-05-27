@@ -2979,6 +2979,7 @@ void App::selectScrollPageSettingsItem(uint32_t nowMs) {
   }
   rebuildSettingsMenuItems();
   renderSettings();
+}
 
 void App::openWifiSettings() {
   settingsSelectedIndex_ = configuredWifiSsid().isEmpty() ? kWifiSettingsChooseIndex
