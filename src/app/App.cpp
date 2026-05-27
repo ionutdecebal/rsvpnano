@@ -168,6 +168,7 @@ constexpr size_t kSettingsDisplayReaderBatteryIndex = 7;
 constexpr size_t kSettingsDisplayReaderChapterIndex = 8;
 constexpr size_t kSettingsDisplayReaderProgressIndex = 9;
 constexpr size_t kSettingsDisplayLanguageIndex = 10;
+constexpr size_t kSettingsDisplayChapterLabelIndex = 11;
 constexpr size_t kSettingsPacingReadingModeIndex = 1;
 constexpr size_t kSettingsPacingPauseModeIndex = 2;
 constexpr size_t kSettingsPacingWpmIndex = 3;
@@ -205,6 +206,7 @@ constexpr const char *kPrefScreensaverMode = "scrn_sv";
 constexpr const char *kPrefReaderBatteryVisible = "read_bat";
 constexpr const char *kPrefReaderChapterVisible = "read_ch";
 constexpr const char *kPrefReaderProgressVisible = "read_pct";
+constexpr const char *kPrefChapterLabelEnabled = "ch_lbl_on";
 constexpr const char *kPrefReaderFontSize = "font_size";
 constexpr const char *kPrefReaderTypeface = "typeface";
 constexpr const char *kPrefTypographyFocusHighlight = "type_hlt";
@@ -623,6 +625,8 @@ void App::begin() {
       preferences_.getBool(kPrefReaderBatteryVisible, readerBatteryVisibleWhilePlaying_);
   readerChapterVisibleWhilePlaying_ =
       preferences_.getBool(kPrefReaderChapterVisible, readerChapterVisibleWhilePlaying_);
+  chapterLabelEnabled_ =
+      preferences_.getBool(kPrefChapterLabelEnabled, chapterLabelEnabled_);
   readerProgressVisibleWhilePlaying_ =
       preferences_.getBool(kPrefReaderProgressVisible, readerProgressVisibleWhilePlaying_);
   uiLanguage_ =
@@ -1704,7 +1708,8 @@ DisplayManager::ReaderChrome App::readerChrome() const {
   DisplayManager::ReaderChrome chrome;
   const bool reading = isActivelyReading();
   chrome.showBattery = !reading || readerBatteryVisibleWhilePlaying_;
-  chrome.showChapter = !reading || readerChapterVisibleWhilePlaying_;
+  const bool chapterAllowed = chapterLabelEnabled_ && !scrollModeEnabled();
+  chrome.showChapter = chapterAllowed && (!reading || readerChapterVisibleWhilePlaying_);
   chrome.showProgress = !reading || readerProgressVisibleWhilePlaying_;
   chrome.showPreviousSentenceHint = !contextViewVisible_ || scrollModeEnabled();
   return chrome;
@@ -2764,6 +2769,12 @@ void App::selectSettingsItem(uint32_t nowMs) {
       case kSettingsDisplayLanguageIndex:
         cycleUiLanguage(nowMs);
         return;
+      case kSettingsDisplayChapterLabelIndex:
+        chapterLabelEnabled_ = !chapterLabelEnabled_;
+        preferences_.putBool(kPrefChapterLabelEnabled, chapterLabelEnabled_);
+        rebuildSettingsMenuItems();
+        renderSettings();
+        return;
       default:
         return;
     }
@@ -3375,6 +3386,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Reading percent: " +
                                  onOffLabel(readerProgressVisibleWhilePlaying_));
     settingsMenuItems_.push_back(uiText(UiText::Language) + ": " + uiLanguageLabel());
+    settingsMenuItems_.push_back("Chapter label: " + onOffLabel(chapterLabelEnabled_));
   } else if (menuScreen_ == MenuScreen::SettingsPacing) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Reading mode: " + readerModeLabel());
@@ -5360,11 +5372,24 @@ size_t App::currentChapterIndex() const {
 
 String App::currentChapterLabel() const {
   const size_t chapterIndex = currentChapterIndex();
+  const String fallback = currentBookTitle_.isEmpty() ? uiText(UiText::Start) : currentBookTitle_;
   if (chapterIndex >= chapterMarkers_.size()) {
-    return currentBookTitle_.isEmpty() ? uiText(UiText::Start) : currentBookTitle_;
+    return fallback;
   }
+  return cleanedChapterTitle(chapterMarkers_[chapterIndex].title, fallback);
+}
 
-  return chapterMarkers_[chapterIndex].title;
+String App::cleanedChapterTitle(const String &raw, const String &fallback) const {
+  if (raw.isEmpty()) return fallback;
+  // Strip leading "N." prefix (e.g. "2.EbookTitle" -> "EbookTitle")
+  size_t i = 0;
+  while (i < (size_t)raw.length() && isDigit(raw[i])) i++;
+  if (i > 0 && i < (size_t)raw.length() && raw[i] == '.') {
+    String cleaned = raw.substring(i + 1);
+    cleaned.trim();
+    return cleaned.isEmpty() ? fallback : cleaned;
+  }
+  return raw;
 }
 
 String App::currentFooterMetricLabel() const {
