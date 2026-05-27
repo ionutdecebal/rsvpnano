@@ -5237,7 +5237,7 @@ void App::renderFocusTimerSession() {
                                       "Restart", focusTimer_.progressPercent(millis()));
       return;
     case FocusTimer::State::WaitAfterTouch:
-      display_.renderFocusTimerScreen("WORK", "", "", "Flip to continue");
+      display_.renderFocusTimerScreen("BEGIN", "", "", "Flip to restart");
       return;
     case FocusTimer::State::WorkRunning:
       display_.renderFocusTimerScreen("WORK", "", remainingLabel, "",
@@ -5252,7 +5252,7 @@ void App::renderFocusTimerSession() {
                                       -1, true);
       return;
     case FocusTimer::State::WaitAfterBreak:
-      display_.renderFocusTimerScreen("WORK", "", "", "Flip to begin");
+      display_.renderFocusTimerScreen("BEGIN", "", "", "Flip to restart");
       return;
     case FocusTimer::State::Cancelled:
       display_.renderFocusTimerScreen("BEGIN", "", "", "Place to begin again");
