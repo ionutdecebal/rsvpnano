@@ -3522,7 +3522,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::TypographyTune));
     settingsMenuItems_.push_back("Wi-Fi");
     settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
-    settingsMenuItems_.push_back("Version: " + firmwareVersionLabel());
+    settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Display mode: " + themeModeLabel());
