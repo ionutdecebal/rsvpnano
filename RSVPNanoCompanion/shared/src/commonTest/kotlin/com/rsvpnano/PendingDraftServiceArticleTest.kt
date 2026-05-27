@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 
 class PendingDraftServiceArticleTest {
     @Test
-    fun producesBookFileFromPendingUpload() {
+    fun producesBookFileFromPendingUpload() = kotlinx.coroutines.runBlocking {
         val articleService = PendingUploadArticleService()
         val service = PendingDraftService(
             repository = PendingUploadRepository(

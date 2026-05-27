@@ -5,6 +5,8 @@ import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.persistence.PendingUploadArticleService
 import com.rsvpnano.persistence.PendingUploadRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Shared upload flow for pending drafts.
@@ -15,7 +17,9 @@ class PendingUploadSyncService(
     private val pendingUploadRepository: PendingUploadRepository,
     private val articleService: PendingUploadArticleService = PendingUploadArticleService(),
 ) {
-    fun bookFileFor(item: PendingUpload): RsvpBookFile = articleService.bookFileFor(item)
+    suspend fun bookFileFor(item: PendingUpload): RsvpBookFile = withContext(Dispatchers.Default) {
+        articleService.bookFileFor(item)
+    }
 
     suspend fun syncAll(client: NanoClient, baseUrl: String, items: List<PendingUpload>): List<PendingUpload> {
         items.forEach { syncOne(client, baseUrl, it) }

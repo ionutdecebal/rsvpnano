@@ -9,6 +9,8 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ArticleFetchError(message: String) : IllegalArgumentException(message) {
     companion object {
@@ -45,9 +47,11 @@ class ArticleFetchClient(
             throw ArticleFetchError.articleTooLarge
         }
 
-        val decoded = RsvpConverter.decodeText(bytes) ?: bytes.decodeToString()
-        val clipped = decoded.take(maxTextCharacters)
-        val article = ArticleFormatter.article(title = title, source = normalizedSource, htmlOrText = clipped)
+        val article = withContext(Dispatchers.Default) {
+            val decoded = RsvpConverter.decodeText(bytes) ?: bytes.decodeToString()
+            val clipped = decoded.take(maxTextCharacters)
+            ArticleFormatter.article(title = title, source = normalizedSource, htmlOrText = clipped)
+        }
         if (article.text.isBlank()) {
             throw ArticleFetchError.emptyArticle
         }

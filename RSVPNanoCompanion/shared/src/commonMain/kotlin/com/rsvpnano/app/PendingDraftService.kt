@@ -51,7 +51,7 @@ class PendingDraftService(
 
     fun articleFor(item: PendingUpload) = articleService.articleFor(item)
 
-    fun bookFileFor(item: PendingUpload): RsvpBookFile = repository.bookFileFor(item)
+    suspend fun bookFileFor(item: PendingUpload): RsvpBookFile = uploadSyncService.bookFileFor(item)
 
     suspend fun syncPendingUpload(client: NanoClient, baseUrl: String, item: PendingUpload): RsvpBookFile =
         uploadSyncService.syncOne(client, baseUrl, item)

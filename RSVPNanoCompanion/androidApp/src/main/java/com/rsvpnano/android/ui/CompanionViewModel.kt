@@ -54,7 +54,7 @@ class CompanionViewModel(
     init {
         nanoNetworkController.start()
         viewModelScope.launch {
-            val appSettings = settingsStore.load()
+            val appSettings = withContext(Dispatchers.IO) { settingsStore.load() }
             updateState { 
                 it.copy(
                     rememberedNano = appSettings.rememberedNano,
@@ -121,7 +121,7 @@ class CompanionViewModel(
             val startedAt = System.currentTimeMillis()
             updateState { it.copy(isRefreshing = true, notice = CompanionNotice.Neutral("Refreshing...")) }
             runCatching {
-                val local = companionController.refreshLocal()
+                val local = withContext(Dispatchers.IO) { companionController.refreshLocal() }
                 updateState {
                     it.copy(
                         drafts = local.drafts,
@@ -371,11 +371,13 @@ class CompanionViewModel(
                 setNotice(CompanionNotice.Error("RSS feed URLs must start with http:// or https://."))
                 return@launch
             }
-            val feeds = companionController.saveRssFeeds(
-                baseUrl = state.address,
-                feeds = state.rssFeeds + feed,
-                syncToDevice = false,
-            ).rssFeeds
+            val feeds = withContext(Dispatchers.IO) {
+                companionController.saveRssFeeds(
+                    baseUrl = state.address,
+                    feeds = state.rssFeeds + feed,
+                    syncToDevice = false,
+                ).rssFeeds
+            }
             updateState {
                 it.copy(
                     rssFeeds = feeds,
@@ -392,11 +394,15 @@ class CompanionViewModel(
 
     fun deleteRssFeed(feed: String) {
         viewModelScope.launch {
-            val feeds = companionController.saveRssFeeds(
-                baseUrl = current.address,
-                feeds = current.rssFeeds.filterNot { it == feed },
-                syncToDevice = false,
-            ).rssFeeds
+            val address = current.address
+            val nextFeeds = current.rssFeeds.filterNot { it == feed }
+            val feeds = withContext(Dispatchers.IO) {
+                companionController.saveRssFeeds(
+                    baseUrl = address,
+                    feeds = nextFeeds,
+                    syncToDevice = false,
+                ).rssFeeds
+            }
             updateState {
                 it.copy(
                     rssFeeds = feeds,
@@ -416,16 +422,18 @@ class CompanionViewModel(
                 return@launch
             }
             val existing = state.editingDraftId?.let { id -> state.drafts.firstOrNull { it.id == id } }
-            val snapshot = companionController.saveDraft(
-                ImportPreparation.pendingUploadForText(
-                    id = existing?.id ?: UUID.randomUUID().toString(),
-                    title = title,
-                    source = state.draftSourceUrl,
-                    text = body,
-                    createdAt = existing?.createdAt ?: SharedAppUtils.nowIso8601(),
-                    fallbackTitle = "Untitled",
+            val snapshot = withContext(Dispatchers.IO) {
+                companionController.saveDraft(
+                    ImportPreparation.pendingUploadForText(
+                        id = existing?.id ?: UUID.randomUUID().toString(),
+                        title = title,
+                        source = state.draftSourceUrl,
+                        text = body,
+                        createdAt = existing?.createdAt ?: SharedAppUtils.nowIso8601(),
+                        fallbackTitle = "Untitled",
+                    )
                 )
-            )
+            }
             clearDraftEditor(
                 drafts = snapshot.drafts,
                 notice = if (existing == null) CompanionNotice.Success("Text draft saved locally.") else CompanionNotice.Success("Text draft updated."),
@@ -435,14 +443,16 @@ class CompanionViewModel(
 
     fun saveSharedImports(imports: List<SharedImport>) {
         viewModelScope.launch {
-            val prepared = imports.mapNotNull {
-                ImportPreparation.prepareSharedImport(
-                    id = UUID.randomUUID().toString(),
-                    title = it.title,
-                    text = it.text,
-                    source = it.source,
-                    createdAt = SharedAppUtils.nowIso8601(),
-                )
+            val prepared = withContext(Dispatchers.Default) {
+                imports.mapNotNull {
+                    ImportPreparation.prepareSharedImport(
+                        id = UUID.randomUUID().toString(),
+                        title = it.title,
+                        text = it.text,
+                        source = it.source,
+                        createdAt = SharedAppUtils.nowIso8601(),
+                    )
+                }
             }
             if (prepared.isEmpty()) {
                 setNotice(CompanionNotice.Error("Shared item is not readable text or a URL."))
@@ -452,7 +462,9 @@ class CompanionViewModel(
             var drafts = current.drafts
             var fetchedCount = 0
             prepared.forEach { item ->
-                val snapshot = companionController.saveDraftFetchingArticleIfNeeded(item)
+                val snapshot = withContext(Dispatchers.IO) {
+                    companionController.saveDraftFetchingArticleIfNeeded(item)
+                }
                 drafts = snapshot.drafts
                 if (snapshot.fetchedArticle) {
                     fetchedCount += 1
@@ -476,7 +488,9 @@ class CompanionViewModel(
             var drafts = current.drafts
             var fetchedCount = 0
             pending.forEach { item ->
-                val snapshot = companionController.saveDraftFetchingArticleIfNeeded(item)
+                val snapshot = withContext(Dispatchers.IO) {
+                    companionController.saveDraftFetchingArticleIfNeeded(item)
+                }
                 drafts = snapshot.drafts
                 if (snapshot.fetchedArticle) {
                     fetchedCount += 1
@@ -501,8 +515,10 @@ class CompanionViewModel(
             return
         }
         viewModelScope.launch {
-            val currentSettings = settingsStore.load()
-            settingsStore.save(currentSettings.copy(rememberedNano = identity))
+            withContext(Dispatchers.IO) {
+                val currentSettings = settingsStore.load()
+                settingsStore.save(currentSettings.copy(rememberedNano = identity))
+            }
             suppressedRememberPrompt = null
             updateState {
                 it.copy(
@@ -516,10 +532,12 @@ class CompanionViewModel(
 
     fun forgetRememberedNano() {
         viewModelScope.launch {
-            val currentSettings = settingsStore.load()
             val identity = currentRememberableNano()
             suppressedRememberPrompt = identity
-            settingsStore.save(currentSettings.copy(rememberedNano = null))
+            withContext(Dispatchers.IO) {
+                val currentSettings = settingsStore.load()
+                settingsStore.save(currentSettings.copy(rememberedNano = null))
+            }
             updateState {
                 it.copy(
                     rememberedNano = null,
@@ -564,7 +582,9 @@ class CompanionViewModel(
                 host = hostName(sourceUrl),
                 createdAt = existing?.createdAt ?: SharedAppUtils.nowIso8601(),
             )
-            val snapshot = companionController.saveDraftFetchingArticleIfNeeded(pending)
+            val snapshot = withContext(Dispatchers.IO) {
+                companionController.saveDraftFetchingArticleIfNeeded(pending)
+            }
             clearDraftEditor(
                 drafts = snapshot.drafts,
                 notice = when {
@@ -600,7 +620,9 @@ class CompanionViewModel(
 
     fun deleteDraft(draft: PendingUpload) {
         viewModelScope.launch {
-            val drafts = companionController.deleteDraft(draft).drafts
+            val drafts = withContext(Dispatchers.IO) {
+                companionController.deleteDraft(draft).drafts
+            }
             if (current.editingDraftId == draft.id) {
                 clearDraftEditor(drafts = drafts, notice = CompanionNotice.Success("Draft deleted."))
             } else {
