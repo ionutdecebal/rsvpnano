@@ -161,6 +161,7 @@ constexpr size_t kSettingsHomeDisplayIndex = 2;
 constexpr size_t kSettingsHomeTypographyIndex = 3;
 constexpr size_t kSettingsHomeWifiIndex = 4;
 constexpr size_t kSettingsHomeUpdateIndex = 5;
+constexpr size_t kSettingsHomeFirmwareVersionIndex = 6;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
@@ -3521,6 +3522,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::TypographyTune));
     settingsMenuItems_.push_back("Wi-Fi");
     settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
+    settingsMenuItems_.push_back("Version: " + firmwareVersionLabel());
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Display mode: " + themeModeLabel());
@@ -3936,6 +3938,14 @@ void App::runRssFeedCheck(uint32_t nowMs) {
 String App::pacingDelayLabel(uint16_t delayMs) const { return String(delayMs) + " ms"; }
 
 String App::firmwareUpdateMenuLabel() const { return "Firmware update"; }
+
+String App::firmwareVersionLabel() const {
+#ifdef RSVP_FIRMWARE_VERSION
+  return String(RSVP_FIRMWARE_VERSION);
+#else
+  return "dev";
+#endif
+}
 
 String App::uiText(UiText key) const { return Localization::text(uiLanguage_, key); }
 
