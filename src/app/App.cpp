@@ -5255,9 +5255,11 @@ void App::renderFocusTimerSession() {
       display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "",
                                       "Restart", focusTimer_.progressPercent(millis()));
       return;
-    case FocusTimer::State::WaitAfterTouch:
-      display_.renderFocusTimerScreen("BEGIN", "", "", "Flip to restart");
+    case FocusTimer::State::WaitAfterTouch: {
+      const String durationLabel = formatFocusTimerDuration(focusTimer_.selectedTouchDurationMs());
+      display_.renderFocusTimerScreen("BEGIN", "", durationLabel, "Flip to restart");
       return;
+    }
     case FocusTimer::State::WorkRunning:
       display_.renderFocusTimerScreen("WORK", "", remainingLabel, "",
                                       "", focusTimer_.progressPercent(millis()));
