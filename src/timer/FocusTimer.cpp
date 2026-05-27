@@ -96,9 +96,9 @@ void FocusTimer::update(uint32_t nowMs) {
       if (!orientationInputArmed(nowMs)) {
         break;
       }
-      if (stableOrientation_ == oppositeShortSide(lastShortSide_)) {
-        startMode(TimerMode::Work, nowMs, kWorkDurationMs, stableOrientation_);
-        transitionTo(State::WorkRunning, nowMs);
+      if (isShortSide(stableOrientation_)) {
+        resetOrientationStability();
+        transitionTo(State::WaitForTouchStart, nowMs);
       } else if (stableOrientation_ == OrientationState::LongSide) {
         startMode(TimerMode::Break, nowMs, kBreakDurationMs, OrientationState::LongSide);
         transitionTo(State::BreakRunning, nowMs);
@@ -136,8 +136,8 @@ void FocusTimer::update(uint32_t nowMs) {
 
     case State::WaitAfterBreak:
       if (orientationInputArmed(nowMs) && isShortSide(stableOrientation_)) {
-        startMode(TimerMode::Work, nowMs, kWorkDurationMs, stableOrientation_);
-        transitionTo(State::WorkRunning, nowMs);
+        resetOrientationStability();
+        transitionTo(State::WaitForTouchStart, nowMs);
       }
       break;
 
