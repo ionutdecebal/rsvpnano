@@ -208,7 +208,9 @@ constexpr const char *kPrefScreensaverMode = "scrn_sv";
 constexpr const char *kPrefReaderBatteryVisible = "read_bat";
 constexpr const char *kPrefReaderChapterVisible = "read_ch";
 constexpr const char *kPrefReaderProgressVisible = "read_pct";
-constexpr const char *kPrefChapterLabelEnabled = "ch_lbl_on";
+constexpr const char *kPrefChapterLabelEnabled = "ch_lbl_on";   // legacy key (unused)
+constexpr const char *kPrefChapterLabelRsvp = "ch_lbl_rsvp";   // default true
+constexpr const char *kPrefChapterLabelScroll = "ch_lbl_scroll"; // default false
 constexpr const char *kPrefReaderFontSize = "font_size";
 constexpr const char *kPrefReaderTypeface = "typeface";
 constexpr const char *kPrefTypographyFocusHighlight = "type_hlt";
@@ -642,8 +644,6 @@ void App::begin() {
       preferences_.getBool(kPrefReaderBatteryVisible, readerBatteryVisibleWhilePlaying_);
   readerChapterVisibleWhilePlaying_ =
       preferences_.getBool(kPrefReaderChapterVisible, readerChapterVisibleWhilePlaying_);
-  chapterLabelEnabled_ =
-      preferences_.getBool(kPrefChapterLabelEnabled, chapterLabelEnabled_);
   readerProgressVisibleWhilePlaying_ =
       preferences_.getBool(kPrefReaderProgressVisible, readerProgressVisibleWhilePlaying_);
   uiLanguage_ =
@@ -651,6 +651,9 @@ void App::begin() {
           kPrefUiLanguage, static_cast<uint8_t>(uiLanguage_)));
   readerMode_ = readerModeFromSetting(
       preferences_.getUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_)));
+  // Load chapter label per reading mode (RSVP defaults ON, Scroll defaults OFF)
+  chapterLabelEnabled_ = preferences_.getBool(
+      chapterLabelPrefKey(), chapterLabelDefaultForMode(readerMode_));
   handednessMode_ = handednessModeFromSetting(
       preferences_.getUChar(kPrefHandedness, static_cast<uint8_t>(handednessMode_)));
   readerFontSizeIndex_ = preferences_.getUChar(kPrefReaderFontSize, readerFontSizeIndex_);
@@ -1498,6 +1501,9 @@ void App::cycleUiLanguage(uint32_t nowMs) {
 void App::cycleReaderMode(uint32_t nowMs) {
   readerMode_ = nextReaderMode(readerMode_);
   preferences_.putUChar(kPrefReaderMode, static_cast<uint8_t>(readerMode_));
+  // Reload chapter label default for the new mode
+  chapterLabelEnabled_ = preferences_.getBool(
+      chapterLabelPrefKey(), chapterLabelDefaultForMode(readerMode_));
   Serial.printf("[display] reader mode=%s\n", readerModeLabel().c_str());
   invalidateContextPreviewWindow();
 
@@ -2818,7 +2824,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
         return;
       case kSettingsDisplayChapterLabelIndex:
         chapterLabelEnabled_ = !chapterLabelEnabled_;
-        preferences_.putBool(kPrefChapterLabelEnabled, chapterLabelEnabled_);
+        preferences_.putBool(chapterLabelPrefKey(), chapterLabelEnabled_);
         rebuildSettingsMenuItems();
         renderSettings();
         return;
@@ -5460,6 +5466,14 @@ String App::cleanedChapterTitle(const String &raw, const String &fallback) const
     return cleaned.isEmpty() ? fallback : cleaned;
   }
   return raw;
+}
+
+const char *App::chapterLabelPrefKey() const {
+  return (readerMode_ == ReaderMode::Scroll) ? kPrefChapterLabelScroll : kPrefChapterLabelRsvp;
+}
+
+bool App::chapterLabelDefaultForMode(ReaderMode mode) {
+  return mode != ReaderMode::Scroll;
 }
 
 String App::currentFooterMetricLabel() const {
