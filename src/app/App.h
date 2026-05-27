@@ -82,6 +82,7 @@ class App {
     SettingsHome,
     SettingsDisplay,
     SettingsPacing,
+    SettingsScrollPage,
     WifiSettings,
     WifiNetworks,
     TextEntry,
@@ -123,6 +124,7 @@ class App {
     None,
     WifiPassword,
     OtaOwner,
+    ScrollSearch,
   };
 
   enum class KeyboardMode : uint8_t {
@@ -201,6 +203,15 @@ class App {
   void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleBatteryBadgeTap(uint16_t x, uint16_t y, uint32_t nowMs);
+  bool handleScrollSearchIconTap(uint16_t x, uint16_t y, uint32_t nowMs);
+  bool isScrollSearchIconTap(uint16_t x, uint16_t y) const;
+  void buildScrollSearchMatches(const String &query);
+  void navigateScrollSearch(int direction, uint32_t nowMs);
+  void applyScrollConfig();
+  String scrollFontSizeLabel() const;
+  String scrollSpeedLabel(uint8_t idx) const;
+  String scrollWordSpacingLabel() const;
+  String scrollLetterSpacingLabel() const;
   bool handlePreviousSentenceTap(uint16_t x, uint16_t y, uint32_t nowMs);
   void requestReaderPauseAtSentenceEnd(uint32_t nowMs);
   void finalizeReaderPause(uint32_t nowMs);
@@ -232,6 +243,7 @@ class App {
   void selectSettingsItem(uint32_t nowMs);
   void openWifiSettings();
   void selectWifiSettingsItem(uint32_t nowMs);
+  void selectScrollPageSettingsItem(uint32_t nowMs);
   void openTypographyTuning();
   void selectTypographyTuningItem(uint32_t nowMs);
   void cycleTypographyPreviewSample(int direction);
@@ -552,4 +564,15 @@ class App {
   ReaderMode readerMode_ = ReaderMode::Rsvp;
   HandednessMode handednessMode_ = HandednessMode::Right;
   DisplayManager::TypographyConfig typographyConfig_;
+  // Page Scroll settings
+  uint8_t scrollFontSizeIndex_ = 1;      // 0=small(div3), 1=medium(div2), 2=large(div1)
+  uint8_t scrollLetterSpacing_ = 0;      // extra px between characters (0-4)
+  uint8_t scrollWordSpacingIndex_ = 2;   // 0-4 → 6/8/10/12/14 px
+  uint8_t scrollHSpeedIndex_ = 1;        // 0-2 → multiplier 1/2/4
+  uint8_t scrollVSpeedIndex_ = 0;        // 0-2 → wpm delta 1/5/25
+  // Scroll search state
+  bool scrollSearchActive_ = false;
+  String scrollSearchQuery_;
+  std::vector<size_t> scrollSearchMatches_;
+  size_t scrollSearchMatchIndex_ = 0;
 };
