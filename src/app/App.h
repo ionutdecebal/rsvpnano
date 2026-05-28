@@ -82,6 +82,7 @@ class App {
     SettingsHome,
     SettingsDisplay,
     SettingsPacing,
+    SettingsBattery,
     WifiSettings,
     WifiNetworks,
     TextEntry,
@@ -94,6 +95,12 @@ class App {
     PowerOffConfirm,
     FocusTimerGenres,
     FocusTimerSession,
+  };
+
+  enum class PlayingCpuPreset : uint8_t {
+    HighPerformance = 0,
+    Balanced = 1,
+    PowerSave = 2,
   };
 
   enum class FooterMetricMode : uint8_t {
@@ -237,6 +244,12 @@ class App {
   void selectFocusTimerGenre(uint32_t nowMs);
   void openSettings();
   void selectSettingsItem(uint32_t nowMs);
+  void openBatterySettings();
+  void selectBatterySettingsItem(uint32_t nowMs);
+  String playingCpuPresetLabel() const;
+  String autoDimDelayLabel() const;
+  String autoDimBrightnessLabel() const;
+  uint32_t nominalBatteryRuntimeMinutes() const;
   void openWifiSettings();
   void selectWifiSettingsItem(uint32_t nowMs);
   void openTypographyTuning();
@@ -553,6 +566,9 @@ class App {
   bool wpmFeedbackVisible_ = false;
   bool brightnessToastVisible_ = false;
   bool autoDimActive_ = false;
+  PlayingCpuPreset playingCpuPreset_ = PlayingCpuPreset::Balanced;
+  uint8_t autoDimBrightnessPercent_ = 10;
+  uint32_t autoDimDelayMs_ = 60000;
   bool usingStorageBook_ = false;
   bool storageReady_ = false;
   bool pendingBootBookLoad_ = false;

@@ -58,7 +58,7 @@ constexpr uint32_t kUsbTransferExitHoldMs = 1200;
 constexpr size_t kTimeEstimateBlockWords = 256;
 constexpr size_t kTimeEstimateBlocksPerUpdate = 1;
 constexpr uint32_t kTimeEstimateProgressLogMs = 5000;
-constexpr uint32_t kNominalBatteryRuntimeMinutes = 450;  // ~7.5h with CPU frequency scaling
+constexpr uint32_t kNominalBatteryRuntimeMinutes = 450;  // ~7.5h with CPU frequency scaling (Balanced)
 constexpr uint8_t kBatteryDisplayHysteresisPercent = 2;
 constexpr uint8_t kBatteryRuntimeMinDropPercent = 3;
 constexpr uint32_t kBatteryRuntimeMinElapsedMs = 10UL * 60UL * 1000UL;
@@ -78,8 +78,6 @@ constexpr uint16_t kStandbyLifeCellPixels = 2;
 constexpr uint16_t kStandbyLifeColumns = BoardConfig::DISPLAY_WIDTH / kStandbyLifeCellPixels;
 constexpr uint16_t kStandbyLifeRows = BoardConfig::DISPLAY_HEIGHT / kStandbyLifeCellPixels;
 constexpr uint32_t kChapterTransitionMs = 1400;
-constexpr uint32_t kAutoDimDelayMs = 60000;        // dim after 60s without touch in Paused/Menu
-constexpr uint8_t kAutoDimBrightnessPercent = 10;  // dim level while idle
 constexpr uint32_t kBatteryLabelRefreshIntervalMs = 60000;  // re-display runtime every 60s
 constexpr uint8_t kBrightnessLevels[] = {40, 55, 70, 85, 100};
 constexpr uint8_t kNightBrightnessLevels[] = {35, 40, 45, 50, 55};
@@ -170,6 +168,7 @@ constexpr size_t kSettingsHomeTypographyIndex = 3;
 constexpr size_t kSettingsHomeWifiIndex = 4;
 constexpr size_t kSettingsHomeUpdateIndex = 5;
 constexpr size_t kSettingsHomeFirmwareVersionIndex = 6;
+constexpr size_t kSettingsHomeBatteryIndex = 7;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
@@ -193,6 +192,10 @@ constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
 constexpr size_t kWifiSettingsForgetIndex = 4;
 constexpr size_t kWifiSettingsOtaOwnerIndex = 5;
+
+constexpr size_t kSettingsBatteryCpuPresetIndex = 1;
+constexpr size_t kSettingsBatteryAutoDimDelayIndex = 2;
+constexpr size_t kSettingsBatteryAutoDimLevelIndex = 3;
 
 constexpr size_t kBookPickerBackIndex = 0;
 constexpr size_t kChapterPickerBackIndex = 0;
@@ -241,6 +244,9 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
+constexpr const char *kPrefPlayingCpuPreset = "play_cpu";
+constexpr const char *kPrefAutoDimLevel = "dim_lvl";
+constexpr const char *kPrefAutoDimDelay = "dim_dly";
 constexpr const char *kPrefTimerDurationByGenre[FocusTimer::kGenreCount] = {
     "tmr_dur_0",  // Chores
     "tmr_dur_1",  // RsvpNano (Work)
@@ -720,6 +726,32 @@ void App::begin() {
       pauseMode_ = PauseMode::SentenceEnd;
       break;
   }
+  switch (preferences_.getUChar(kPrefPlayingCpuPreset, static_cast<uint8_t>(playingCpuPreset_))) {
+    case static_cast<uint8_t>(PlayingCpuPreset::HighPerformance):
+      playingCpuPreset_ = PlayingCpuPreset::HighPerformance;
+      break;
+    case static_cast<uint8_t>(PlayingCpuPreset::PowerSave):
+      playingCpuPreset_ = PlayingCpuPreset::PowerSave;
+      break;
+    case static_cast<uint8_t>(PlayingCpuPreset::Balanced):
+    default:
+      playingCpuPreset_ = PlayingCpuPreset::Balanced;
+      break;
+  }
+  {
+    const uint8_t savedDimLevel =
+        preferences_.getUChar(kPrefAutoDimLevel, autoDimBrightnessPercent_);
+    if (savedDimLevel == 10 || savedDimLevel == 20 || savedDimLevel == 30) {
+      autoDimBrightnessPercent_ = savedDimLevel;
+    }
+  }
+  {
+    const uint32_t savedDimDelay = preferences_.getUInt(kPrefAutoDimDelay, autoDimDelayMs_);
+    if (savedDimDelay == 0 || savedDimDelay == 30000 || savedDimDelay == 60000 ||
+        savedDimDelay == 120000) {
+      autoDimDelayMs_ = savedDimDelay;
+    }
+  }
   pacingLongWordDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
   pacingComplexWordDelayMs_ =
@@ -1003,10 +1035,21 @@ void App::applyStateCpuFrequency() {
 
   uint32_t mhz;
   switch (state_) {
-    case AppState::Playing:
-      // 160 MHz is plenty for word display; saves ~25% vs 240 MHz.
-      mhz = 160;
+    case AppState::Playing: {
+      switch (playingCpuPreset_) {
+        case PlayingCpuPreset::HighPerformance:
+          mhz = 240;
+          break;
+        case PlayingCpuPreset::PowerSave:
+          mhz = 80;
+          break;
+        case PlayingCpuPreset::Balanced:
+        default:
+          mhz = 160;
+          break;
+      }
       break;
+    }
     case AppState::Paused:
     case AppState::Menu:
     case AppState::Standby:
@@ -1327,7 +1370,8 @@ void App::applyDisplayPreferences(uint32_t nowMs, bool rerender) {
 
   if (state_ == AppState::Menu) {
     if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-        menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
+        menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+        menuScreen_ == MenuScreen::WifiSettings) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
@@ -1356,7 +1400,8 @@ void App::applyHandednessSettings(uint32_t nowMs, bool rerender) {
 
   if (state_ == AppState::Menu &&
       (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings)) {
+       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+       menuScreen_ == MenuScreen::WifiSettings)) {
     rebuildSettingsMenuItems();
   }
 
@@ -1542,7 +1587,8 @@ void App::cycleUiLanguage(uint32_t nowMs) {
 
   if (state_ == AppState::Menu) {
     if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-        menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
+        menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+        menuScreen_ == MenuScreen::WifiSettings) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
@@ -1783,10 +1829,15 @@ void App::updateAutoDim(uint32_t nowMs) {
     return;
   }
 
+  // autoDimDelayMs_ == 0 means auto-dim is disabled.
+  if (autoDimDelayMs_ == 0) {
+    return;
+  }
+
   if (!autoDimActive_ && lastUserActivityMs_ > 0 &&
-      nowMs - lastUserActivityMs_ >= kAutoDimDelayMs) {
+      nowMs - lastUserActivityMs_ >= autoDimDelayMs_) {
     autoDimActive_ = true;
-    display_.setBrightnessPercent(kAutoDimBrightnessPercent);
+    display_.setBrightnessPercent(autoDimBrightnessPercent_);
     Serial.println("[power] auto-dim active");
   }
 }
@@ -2596,10 +2647,8 @@ void App::moveMenuSelection(int direction) {
   size_t *selectedIndex = &menuSelectedIndex_;
   size_t itemCount = MenuItemCount;
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
-    selectedIndex = &settingsSelectedIndex_;
-    itemCount = settingsMenuItems_.size();
-  } else if (menuScreen_ == MenuScreen::WifiNetworks) {
+      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+      menuScreen_ == MenuScreen::WifiSettings) {
     selectedIndex = &wifiNetworkSelectedIndex_;
     itemCount = wifiNetworkMenuItems_.size();
   } else if (menuScreen_ == MenuScreen::TypographyTuning) {
@@ -2643,8 +2692,8 @@ void App::moveMenuSelection(int direction) {
 
   renderMenu();
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
-    Serial.printf("[settings] selected=%s\n", settingsMenuItems_[settingsSelectedIndex_].c_str());
+      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+      menuScreen_ == MenuScreen::WifiSettings) {
   } else if (menuScreen_ == MenuScreen::WifiNetworks) {
     Serial.printf("[wifi] selected=%s\n", wifiNetworkMenuItems_[wifiNetworkSelectedIndex_].title.c_str());
   } else if (menuScreen_ == MenuScreen::TypographyTuning) {
@@ -2730,7 +2779,8 @@ void App::moveMenuSelection(int direction) {
 
 void App::selectMenuItem(uint32_t nowMs) {
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
+      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+      menuScreen_ == MenuScreen::WifiSettings) {
     selectSettingsItem(nowMs);
     return;
   }
@@ -2860,6 +2910,9 @@ void App::selectSettingsItem(uint32_t nowMs) {
         runFirmwareUpdate(preferredOtaConfig(), false, nowMs);
         return;
       }
+      case kSettingsHomeBatteryIndex:
+        openBatterySettings();
+        return;
       default:
         return;
     }
@@ -2867,6 +2920,11 @@ void App::selectSettingsItem(uint32_t nowMs) {
 
   if (menuScreen_ == MenuScreen::WifiSettings) {
     selectWifiSettingsItem(nowMs);
+    return;
+  }
+
+  if (menuScreen_ == MenuScreen::SettingsBattery) {
+    selectBatterySettingsItem(nowMs);
     return;
   }
 
@@ -3042,6 +3100,88 @@ void App::selectSettingsItem(uint32_t nowMs) {
   renderSettings();
 }
 
+void App::openBatterySettings() {
+  settingsSelectedIndex_ = kSettingsBatteryCpuPresetIndex;
+  menuScreen_ = MenuScreen::SettingsBattery;
+  rebuildSettingsMenuItems();
+  renderSettings();
+}
+
+void App::selectBatterySettingsItem(uint32_t nowMs) {
+  (void)nowMs;
+  switch (settingsSelectedIndex_) {
+    case kSettingsBackIndex:
+      settingsSelectedIndex_ = kSettingsHomeBatteryIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    case kSettingsBatteryCpuPresetIndex: {
+      switch (playingCpuPreset_) {
+        case PlayingCpuPreset::Balanced:
+          playingCpuPreset_ = PlayingCpuPreset::HighPerformance;
+          break;
+        case PlayingCpuPreset::HighPerformance:
+          playingCpuPreset_ = PlayingCpuPreset::PowerSave;
+          break;
+        case PlayingCpuPreset::PowerSave:
+        default:
+          playingCpuPreset_ = PlayingCpuPreset::Balanced;
+          break;
+      }
+      preferences_.putUChar(kPrefPlayingCpuPreset, static_cast<uint8_t>(playingCpuPreset_));
+      applyStateCpuFrequency();
+      // Refresh battery bootstrap label to reflect new nominal runtime.
+      if (!batteryRuntimeEstimateReady_) {
+        batteryLabel_ = currentBatteryLabel();
+        display_.setBatteryLabel(batteryLabel_);
+        lastBatteryLabelRefreshMs_ = nowMs;
+      }
+      Serial.printf("[battery] CPU preset -> %s\n", playingCpuPresetLabel().c_str());
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    }
+    case kSettingsBatteryAutoDimDelayIndex: {
+      if (autoDimDelayMs_ == 0) {
+        autoDimDelayMs_ = 30000;
+      } else if (autoDimDelayMs_ <= 30000) {
+        autoDimDelayMs_ = 60000;
+      } else if (autoDimDelayMs_ <= 60000) {
+        autoDimDelayMs_ = 120000;
+      } else {
+        autoDimDelayMs_ = 0;
+      }
+      preferences_.putUInt(kPrefAutoDimDelay, autoDimDelayMs_);
+      if (autoDimDelayMs_ == 0 && autoDimActive_) {
+        restoreFromAutoDim(nowMs);
+      }
+      Serial.printf("[battery] auto-dim delay -> %s\n", autoDimDelayLabel().c_str());
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    }
+    case kSettingsBatteryAutoDimLevelIndex: {
+      if (autoDimBrightnessPercent_ >= 30) {
+        autoDimBrightnessPercent_ = 10;
+      } else {
+        autoDimBrightnessPercent_ = static_cast<uint8_t>(autoDimBrightnessPercent_ + 10);
+      }
+      preferences_.putUChar(kPrefAutoDimLevel, autoDimBrightnessPercent_);
+      if (autoDimActive_) {
+        display_.setBrightnessPercent(autoDimBrightnessPercent_);
+      }
+      Serial.printf("[battery] auto-dim level -> %u%%\n",
+                    static_cast<unsigned int>(autoDimBrightnessPercent_));
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    }
+    default:
+      return;
+  }
+}
+
 void App::openWifiSettings() {
   settingsSelectedIndex_ = configuredWifiSsid().isEmpty() ? kWifiSettingsChooseIndex
                                                           : kWifiSettingsAutoUpdateIndex;
@@ -3066,6 +3206,11 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
       return;
     case kWifiSettingsAutoUpdateIndex:
       preferences_.putBool(kPrefOtaAuto, !otaAutoCheckEnabled());
+      // Auto OTA toggle affects nominal battery estimate — refresh label if in bootstrap mode.
+      if (!batteryRuntimeEstimateReady_) {
+        batteryLabel_ = currentBatteryLabel();
+        display_.setBatteryLabel(batteryLabel_);
+      }
       rebuildSettingsMenuItems();
       renderSettings();
       return;
@@ -3565,6 +3710,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Wi-Fi");
     settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
     settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
+    settingsMenuItems_.push_back("Battery");
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Display mode: " + themeModeLabel());
@@ -3601,6 +3747,11 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
     settingsMenuItems_.push_back("Forget network");
     settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+  } else if (menuScreen_ == MenuScreen::SettingsBattery) {
+    settingsMenuItems_.push_back(uiText(UiText::Back));
+    settingsMenuItems_.push_back("Playing CPU: " + playingCpuPresetLabel());
+    settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
+    settingsMenuItems_.push_back("Auto-dim level: " + autoDimBrightnessLabel());
   }
 
   if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -3831,7 +3982,8 @@ void App::runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, ui
       delay(1600);
       if (state_ == AppState::Menu &&
           (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-           menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings)) {
+           menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+           menuScreen_ == MenuScreen::WifiSettings)) {
         rebuildSettingsMenuItems();
         renderSettings();
       } else {
@@ -3866,7 +4018,8 @@ void App::runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, ui
   delay(1600);
   if (state_ == AppState::Menu &&
       (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings)) {
+       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+       menuScreen_ == MenuScreen::WifiSettings)) {
     rebuildSettingsMenuItems();
     renderSettings();
   } else {
@@ -5319,8 +5472,8 @@ void App::renderMenu() {
   }
 
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
-      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::WifiSettings) {
-    renderSettings();
+      menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
+      menuScreen_ == MenuScreen::WifiSettings) {
   } else if (menuScreen_ == MenuScreen::WifiNetworks) {
     renderWifiNetworks();
   } else if (menuScreen_ == MenuScreen::TextEntry) {
@@ -5759,12 +5912,63 @@ String App::batteryTimeRemainingLabel() const {
     return formatBatteryTimeRemaining(batteryRuntimeMinutesRemaining_);
   }
 
+  const uint32_t nominal = nominalBatteryRuntimeMinutes();
   const uint32_t estimatedMinutes =
-      (static_cast<uint32_t>(batteryDisplayedPercent_) * kNominalBatteryRuntimeMinutes) / 100UL;
+      (static_cast<uint32_t>(batteryDisplayedPercent_) * nominal) / 100UL;
   return formatBatteryTimeRemaining(estimatedMinutes);
 }
 
 String App::batteryVoltageLabel() const { return String(batteryFilteredVoltage_, 2) + "V"; }
+
+uint32_t App::nominalBatteryRuntimeMinutes() const {
+  uint32_t base;
+  switch (playingCpuPreset_) {
+    case PlayingCpuPreset::HighPerformance:
+      base = 360;  // ~6h — 240 MHz during reading
+      break;
+    case PlayingCpuPreset::PowerSave:
+      base = 540;  // ~9h — 80 MHz throughout
+      break;
+    case PlayingCpuPreset::Balanced:
+    default:
+      base = kNominalBatteryRuntimeMinutes;  // 450 min (~7.5h)
+      break;
+  }
+  // Auto OTA disabled = no periodic Wi-Fi radio wakes → ~20 min saved per cycle.
+  if (!otaAutoCheckEnabled()) {
+    base += 20;
+  }
+  return base;
+}
+
+String App::playingCpuPresetLabel() const {
+  switch (playingCpuPreset_) {
+    case PlayingCpuPreset::HighPerformance:
+      return "High Performance";
+    case PlayingCpuPreset::PowerSave:
+      return "Power Save";
+    case PlayingCpuPreset::Balanced:
+    default:
+      return "Balanced";
+  }
+}
+
+String App::autoDimDelayLabel() const {
+  if (autoDimDelayMs_ == 0) {
+    return "Off";
+  }
+  if (autoDimDelayMs_ <= 30000) {
+    return "30s";
+  }
+  if (autoDimDelayMs_ <= 60000) {
+    return "60s";
+  }
+  return "2min";
+}
+
+String App::autoDimBrightnessLabel() const {
+  return String(autoDimBrightnessPercent_) + "%";
+}
 
 String App::formatBatteryTimeRemaining(uint32_t minutes) const {
   if (minutes < 1) {
