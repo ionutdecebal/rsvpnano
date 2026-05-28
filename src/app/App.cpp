@@ -778,6 +778,7 @@ void App::begin() {
       kTypographyGuideGapMin, kTypographyGuideGapMax));
   darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
   nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
+  cachedOtaAutoCheck_ = otaAutoCheckEnabled();
   applyHandednessSettings(0, false);
   applyDisplayPreferences(0, false);
   applyTypographySettings(0, false);
@@ -3206,6 +3207,7 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
       return;
     case kWifiSettingsAutoUpdateIndex:
       preferences_.putBool(kPrefOtaAuto, !otaAutoCheckEnabled());
+      cachedOtaAutoCheck_ = otaAutoCheckEnabled();
       // Auto OTA toggle affects nominal battery estimate — refresh label if in bootstrap mode.
       if (!batteryRuntimeEstimateReady_) {
         batteryLabel_ = currentBatteryLabel();
@@ -5935,7 +5937,7 @@ uint32_t App::nominalBatteryRuntimeMinutes() const {
       break;
   }
   // Auto OTA disabled = no periodic Wi-Fi radio wakes → ~20 min saved per cycle.
-  if (!otaAutoCheckEnabled()) {
+  if (!cachedOtaAutoCheck_) {
     base += 20;
   }
   return base;

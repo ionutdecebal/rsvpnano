@@ -566,6 +566,7 @@ class App {
   bool wpmFeedbackVisible_ = false;
   bool brightnessToastVisible_ = false;
   bool autoDimActive_ = false;
+  bool cachedOtaAutoCheck_ = false;
   PlayingCpuPreset playingCpuPreset_ = PlayingCpuPreset::Balanced;
   uint8_t autoDimBrightnessPercent_ = 10;
   uint32_t autoDimDelayMs_ = 60000;
