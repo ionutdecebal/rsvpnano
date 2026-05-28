@@ -1051,7 +1051,8 @@ void App::applyStateCpuFrequency() {
       mhz = scrollModeEnabled() ? cpuMhzScroll_ : cpuMhzPlay_;
       break;
     case AppState::Paused:
-      mhz = cpuMhzPaused_;
+      // In scroll mode, Paused is the active reading state (manual swipe scrolling).
+      mhz = scrollModeEnabled() ? cpuMhzScroll_ : cpuMhzPaused_;
       break;
     case AppState::Menu:
       mhz = cpuMhzMenu_;
