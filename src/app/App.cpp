@@ -938,9 +938,45 @@ void App::setState(AppState nextState, uint32_t nowMs) {
     saveReadingPosition(true);
   }
 
+  applyStateCpuFrequency();
+
   ESP_LOGI(kAppTag, "state -> %s", stateName(state_));
   Serial.printf("[app] state -> %s at %lu ms\n", stateName(state_),
                 static_cast<unsigned long>(nowMs));
+}
+
+void App::applyStateCpuFrequency() {
+  // While a background OTA check is running we need the full clock for Wi-Fi/TLS.
+  if (otaCheckInProgress_) {
+    if (getCpuFrequencyMhz() != 240) {
+      setCpuFrequencyMhz(240);
+      Serial.println("[power] CPU -> 240 MHz (OTA active)");
+    }
+    return;
+  }
+
+  uint32_t mhz;
+  switch (state_) {
+    case AppState::Playing:
+      // 160 MHz is plenty for word display; saves ~25% vs 240 MHz.
+      mhz = 160;
+      break;
+    case AppState::Paused:
+    case AppState::Menu:
+    case AppState::Standby:
+      // Idle/UI states: 80 MHz covers SPI display, I2C touch, UART with margin.
+      mhz = 80;
+      break;
+    default:
+      // Booting, CompanionSync, UsbTransfer, Sleeping: keep full speed.
+      mhz = 240;
+      break;
+  }
+
+  if (getCpuFrequencyMhz() != mhz) {
+    setCpuFrequencyMhz(mhz);
+    Serial.printf("[power] CPU -> %u MHz (state=%s)\n", mhz, stateName(state_));
+  }
 }
 
 void App::updateState(uint32_t nowMs) {
@@ -3560,6 +3596,7 @@ void App::pollOtaCheckResult(uint32_t nowMs) {
   OtaCheckResult result;
   while (xQueueReceive(otaCheckQueue_, &result, 0) == pdTRUE) {
     otaCheckInProgress_ = false;
+    applyStateCpuFrequency();
     Serial.printf("[ota] background result code=%u current=%s latest=%s summary=%s detail=%s\n",
                   static_cast<unsigned int>(result.code), result.currentVersion,
                   result.latestVersion, result.summary, result.detail);
@@ -4752,6 +4789,7 @@ void App::wakeFromSleep() {
   menuScreen_ = MenuScreen::Main;
   lastStateLogMs_ = nowMs;
   state_ = AppState::Paused;
+  applyStateCpuFrequency();
 
   const bool displayReady = display_.wakeFromSleep();
   touchInitialized_ = touch_.begin();

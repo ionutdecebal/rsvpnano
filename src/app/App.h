@@ -172,6 +172,7 @@ class App {
   };
 
   void setState(AppState nextState, uint32_t nowMs);
+  void applyStateCpuFrequency();
   void updateState(uint32_t nowMs);
   void updateReader(uint32_t nowMs);
   void updateWpmFeedback(uint32_t nowMs);
