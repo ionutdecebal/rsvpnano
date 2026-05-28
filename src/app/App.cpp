@@ -25,7 +25,7 @@ constexpr uint32_t kOtaCheckTaskStackBytes = 10240;
 constexpr uint32_t kBootSplashMs = 750;
 constexpr uint32_t kWpmFeedbackMs = 900;
 constexpr uint32_t kBrightnessToastMs = 1500;
-constexpr uint32_t kPowerOffHoldMs = 1600;
+constexpr uint32_t kPowerOffHoldMs = 3000;
 constexpr uint32_t kPowerOffReleaseWaitMs = 4000;
 constexpr uint32_t kBatterySampleIntervalMs = 180000;
 constexpr uint32_t kTouchPlayHoldMs = 420;
@@ -150,9 +150,16 @@ enum UpdateConfirmItem : size_t {
   UpdateConfirmItemCount,
 };
 
+enum PowerOffConfirmItem : size_t {
+  PowerOffConfirmNo,
+  PowerOffConfirmYes,
+  PowerOffConfirmItemCount,
+};
+
 constexpr size_t kRestartConfirmHeaderRows = 1;
 constexpr size_t kSdCardRepairConfirmHeaderRows = 1;
 constexpr size_t kUpdateConfirmHeaderRows = 2;
+constexpr size_t kPowerOffConfirmHeaderRows = 1;
 constexpr size_t kSettingsBackIndex = 0;
 constexpr size_t kSettingsHomePacingIndex = 1;
 constexpr size_t kSettingsHomeDisplayIndex = 2;
@@ -1200,7 +1207,7 @@ void App::handlePowerButton(uint32_t nowMs) {
 
   if (powerButton_.isHeld() && nowMs - powerButton_.lastEdgeMs() >= kPowerOffHoldMs) {
     powerButtonLongPressHandled_ = true;
-    enterPowerOff(nowMs);
+    openPowerOffConfirm(nowMs);
     return;
   }
 
@@ -2490,6 +2497,9 @@ void App::moveMenuSelection(int direction) {
   } else if (menuScreen_ == MenuScreen::UpdateConfirm) {
     selectedIndex = &updateConfirmSelectedIndex_;
     itemCount = UpdateConfirmItemCount;
+  } else if (menuScreen_ == MenuScreen::PowerOffConfirm) {
+    selectedIndex = &powerOffConfirmSelectedIndex_;
+    itemCount = PowerOffConfirmItemCount;
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     selectedIndex = &focusTimerGenreSelectedIndex_;
     itemCount = focusTimerGenreMenuItems_.size();
@@ -2543,6 +2553,10 @@ void App::moveMenuSelection(int direction) {
     const String selectedLabel =
         updateConfirmSelectedIndex_ == UpdateConfirmUpdate ? "Update" : "Skip for now";
     Serial.printf("[ota] selected=%s\n", selectedLabel.c_str());
+  } else if (menuScreen_ == MenuScreen::PowerOffConfirm) {
+    const String selectedLabel =
+        powerOffConfirmSelectedIndex_ == PowerOffConfirmYes ? "Power off" : "Cancel";
+    Serial.printf("[power-off] selected=%s\n", selectedLabel.c_str());
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     Serial.printf("[timer] selected genre=%s\n",
                   focusTimerGenreMenuItems_[focusTimerGenreSelectedIndex_].c_str());
@@ -2623,6 +2637,10 @@ void App::selectMenuItem(uint32_t nowMs) {
   }
   if (menuScreen_ == MenuScreen::UpdateConfirm) {
     selectUpdateConfirmItem(nowMs);
+    return;
+  }
+  if (menuScreen_ == MenuScreen::PowerOffConfirm) {
+    selectPowerOffConfirmItem(nowMs);
     return;
   }
   if (menuScreen_ == MenuScreen::FocusTimerGenres) {
@@ -4106,6 +4124,45 @@ void App::selectUpdateConfirmItem(uint32_t nowMs) {
   runFirmwareUpdate(preferredOtaConfig(), false, nowMs);
 }
 
+void App::openPowerOffConfirm(uint32_t nowMs) {
+  powerOffConfirmReturnState_ = state_;
+  powerOffConfirmReturnScreen_ = (state_ == AppState::Menu) ? menuScreen_ : MenuScreen::Main;
+  powerOffConfirmSelectedIndex_ = PowerOffConfirmNo;
+  if (state_ != AppState::Menu) {
+    saveReadingPosition(true);
+  }
+  setState(AppState::Menu, nowMs);
+  menuScreen_ = MenuScreen::PowerOffConfirm;
+  renderPowerOffConfirm();
+}
+
+void App::selectPowerOffConfirmItem(uint32_t nowMs) {
+  if (powerOffConfirmSelectedIndex_ != PowerOffConfirmYes) {
+    Serial.println("[power-off] cancelled by user");
+    const AppState returnState = powerOffConfirmReturnState_;
+    menuScreen_ = powerOffConfirmReturnScreen_;
+    if (returnState == AppState::Menu) {
+      renderMenu();
+    } else {
+      setState(returnState == AppState::Playing ? AppState::Paused : returnState, nowMs);
+    }
+    return;
+  }
+
+  Serial.println("[power-off] confirmed by user");
+  enterPowerOff(nowMs);
+}
+
+void App::renderPowerOffConfirm() {
+  std::vector<String> items;
+  items.reserve(PowerOffConfirmItemCount + kPowerOffConfirmHeaderRows);
+  items.push_back("Power off?");
+  items.push_back("Cancel");
+  items.push_back(uiText(UiText::PowerOff));
+
+  display_.renderMenu(items, powerOffConfirmSelectedIndex_ + kPowerOffConfirmHeaderRows);
+}
+
 void App::enterCompanionSync(uint32_t nowMs) {
   if (blockNetworkActionForOtaCheck("Sync", nowMs)) {
     return;
@@ -5154,6 +5211,8 @@ void App::renderMenu() {
     renderSdCardRepairConfirm();
   } else if (menuScreen_ == MenuScreen::UpdateConfirm) {
     renderUpdateConfirm();
+  } else if (menuScreen_ == MenuScreen::PowerOffConfirm) {
+    renderPowerOffConfirm();
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     renderFocusTimerGenres();
   } else if (menuScreen_ == MenuScreen::FocusTimerSession) {
