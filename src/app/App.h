@@ -119,6 +119,11 @@ class App {
     Instant = 1,
   };
 
+  enum class PlayInputMode : uint8_t {
+    HoldToPlay = 0,
+    TapToPlay  = 1,
+  };
+
   enum class TextEntryPurpose : uint8_t {
     None,
     WifiPassword,
@@ -270,6 +275,7 @@ class App {
   String uiLanguageLabel() const;
   String readerModeLabel() const;
   String pauseModeLabel() const;
+  String playInputModeLabel() const;
   String handednessLabel() const;
   String readerFontSizeLabel() const;
   String readerTypefaceLabel() const;
@@ -546,6 +552,7 @@ class App {
   BatteryLabelMode batteryLabelMode_ = BatteryLabelMode::Percent;
   ScreensaverMode screensaverMode_ = ScreensaverMode::Life;
   PauseMode pauseMode_ = PauseMode::SentenceEnd;
+  PlayInputMode playInputMode_ = PlayInputMode::HoldToPlay;
   bool darkMode_ = true;
   bool nightMode_ = false;
   UiLanguage uiLanguage_ = UiLanguage::English;

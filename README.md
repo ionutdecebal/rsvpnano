@@ -177,10 +177,15 @@ The goal is simple: use `PWR` as menu, back, exit, and power. Use `BOOT` for qui
 
 ### Reader Controls
 
-- Hold the screen: start reading.
-- Release after a hold: pause.
-- Double tap while paused: start locked continuous play.
-- Tap while locked continuous play is running: pause.
+- Play/Pause
+  - **Hold** mode:
+    - Hold the screen: start reading.
+    - Release after a hold: pause.
+    - Double tap while paused: start locked continuous play.
+    - Tap while locked continuous play is running: pause.
+  - **Tap** mode:
+    - Tap the screen while paused: start reading.
+    - Tap the screen while reading: pause.
 - Tap the far-left edge: rewind to the start of the current sentence, or the previous sentence if you are already at the start.
 - Swipe left or right while paused: scrub through nearby text.
 - Tap after scrubbing: return to RSVP view.
@@ -190,7 +195,7 @@ The goal is simple: use `PWR` as menu, back, exit, and power. Use `BOOT` for qui
 - Tap the bottom-right footer label: switch between progress, chapter time remaining, book time remaining, and battery display modes.
 - Tap the top-right battery label: switch between percentage, time remaining, and voltage.
 
-Pause behavior is configurable. In `Settings -> Word pacing`, choose whether taps pause instantly or at the end of the sentence.
+Play/Pause mode and pause behaviour are configurable in `Settings -> Word pacing`. Choose between hold-to-play or tap-to-toggle, and whether pausing stops instantly or waits for the end of the sentence.
 
 ### Main Menu
 
@@ -259,6 +264,7 @@ Settings are grouped by how people actually use the device.
 - RSVP or scroll reading behavior.
 - Reading speeds from 10 WPM upward, with 10 WPM steps below 100 WPM.
 - Instant pause or sentence-end pause.
+- Play/Pause mode: hold to play and release to pause, or tap to toggle.
 - Pacing reset.
 
 `Wi-Fi` includes network setup for RSS and OTA.
