@@ -2555,7 +2555,7 @@ void App::moveMenuSelection(int direction) {
     Serial.printf("[ota] selected=%s\n", selectedLabel.c_str());
   } else if (menuScreen_ == MenuScreen::PowerOffConfirm) {
     const String selectedLabel =
-        powerOffConfirmSelectedIndex_ == PowerOffConfirmYes ? "Power off" : "Cancel";
+        powerOffConfirmSelectedIndex_ == PowerOffConfirmYes ? "Yes" : "Cancel";
     Serial.printf("[power-off] selected=%s\n", selectedLabel.c_str());
   } else if (menuScreen_ == MenuScreen::FocusTimerGenres) {
     Serial.printf("[timer] selected genre=%s\n",
@@ -4158,7 +4158,7 @@ void App::renderPowerOffConfirm() {
   items.reserve(PowerOffConfirmItemCount + kPowerOffConfirmHeaderRows);
   items.push_back("Power off?");
   items.push_back("Cancel");
-  items.push_back(uiText(UiText::PowerOff));
+  items.push_back("Yes");
 
   display_.renderMenu(items, powerOffConfirmSelectedIndex_ + kPowerOffConfirmHeaderRows);
 }
