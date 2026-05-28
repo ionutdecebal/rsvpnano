@@ -2650,6 +2650,9 @@ void App::moveMenuSelection(int direction) {
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
       menuScreen_ == MenuScreen::WifiSettings) {
+    selectedIndex = &settingsSelectedIndex_;
+    itemCount = settingsMenuItems_.size();
+  } else if (menuScreen_ == MenuScreen::WifiNetworks) {
     selectedIndex = &wifiNetworkSelectedIndex_;
     itemCount = wifiNetworkMenuItems_.size();
   } else if (menuScreen_ == MenuScreen::TypographyTuning) {
@@ -2695,6 +2698,7 @@ void App::moveMenuSelection(int direction) {
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
       menuScreen_ == MenuScreen::WifiSettings) {
+    Serial.printf("[settings] selected=%s\n", settingsMenuItems_[settingsSelectedIndex_].c_str());
   } else if (menuScreen_ == MenuScreen::WifiNetworks) {
     Serial.printf("[wifi] selected=%s\n", wifiNetworkMenuItems_[wifiNetworkSelectedIndex_].title.c_str());
   } else if (menuScreen_ == MenuScreen::TypographyTuning) {
