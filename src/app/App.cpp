@@ -5480,6 +5480,7 @@ void App::renderMenu() {
   if (menuScreen_ == MenuScreen::SettingsHome || menuScreen_ == MenuScreen::SettingsDisplay ||
       menuScreen_ == MenuScreen::SettingsPacing || menuScreen_ == MenuScreen::SettingsBattery ||
       menuScreen_ == MenuScreen::WifiSettings) {
+    renderSettings();
   } else if (menuScreen_ == MenuScreen::WifiNetworks) {
     renderWifiNetworks();
   } else if (menuScreen_ == MenuScreen::TextEntry) {
