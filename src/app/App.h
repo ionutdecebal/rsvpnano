@@ -199,6 +199,9 @@ class App {
   void handleBatteryProtection(uint32_t nowMs);
   void showLowBatteryWarning(uint32_t nowMs);
   void updateBatteryWarningOverlay(uint32_t nowMs);
+  void updateAutoDim(uint32_t nowMs);
+  void restoreFromAutoDim(uint32_t nowMs);
+  void updateBatteryRuntimeLabel(uint32_t nowMs);
   void handleTouch(uint32_t nowMs);
   void applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs);
   void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
@@ -442,6 +445,8 @@ class App {
   uint32_t lastBatterySampleMs_ = 0;
   uint32_t batteryRuntimeAnchorMs_ = 0;
   uint32_t lastScrollAnimationRenderMs_ = 0;
+  uint32_t lastBatteryLabelRefreshMs_ = 0;
+  uint32_t lastUserActivityMs_ = 0;
   uint32_t lastCompanionSyncRenderMs_ = 0;
   uint32_t lastReaderTapMs_ = 0;
   uint32_t standbyComboStartedMs_ = 0;
@@ -547,6 +552,7 @@ class App {
   bool contextPreviewWindowValid_ = false;
   bool wpmFeedbackVisible_ = false;
   bool brightnessToastVisible_ = false;
+  bool autoDimActive_ = false;
   bool usingStorageBook_ = false;
   bool storageReady_ = false;
   bool pendingBootBookLoad_ = false;

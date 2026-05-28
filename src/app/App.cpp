@@ -78,6 +78,9 @@ constexpr uint16_t kStandbyLifeCellPixels = 2;
 constexpr uint16_t kStandbyLifeColumns = BoardConfig::DISPLAY_WIDTH / kStandbyLifeCellPixels;
 constexpr uint16_t kStandbyLifeRows = BoardConfig::DISPLAY_HEIGHT / kStandbyLifeCellPixels;
 constexpr uint32_t kChapterTransitionMs = 1400;
+constexpr uint32_t kAutoDimDelayMs = 60000;        // dim after 60s without touch in Paused/Menu
+constexpr uint8_t kAutoDimBrightnessPercent = 10;  // dim level while idle
+constexpr uint32_t kBatteryLabelRefreshIntervalMs = 60000;  // re-display runtime every 60s
 constexpr uint8_t kBrightnessLevels[] = {40, 55, 70, 85, 100};
 constexpr uint8_t kNightBrightnessLevels[] = {35, 40, 45, 50, 55};
 constexpr size_t kBrightnessLevelCount = sizeof(kBrightnessLevels) / sizeof(kBrightnessLevels[0]);
@@ -750,6 +753,7 @@ void App::begin() {
   applyPacingSettings();
   bootStartedMs_ = millis();
   lastStateLogMs_ = bootStartedMs_;
+  lastUserActivityMs_ = bootStartedMs_;
   lastScrollAnimationRenderMs_ = 0;
   Serial.printf("[app] version=%s\n", otaUpdater_.currentVersion().c_str());
 
@@ -858,6 +862,8 @@ void App::update(uint32_t nowMs) {
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
   updateBrightnessToast(nowMs);
+  updateAutoDim(nowMs);
+  updateBatteryRuntimeLabel(nowMs);
   maybeSaveReadingPosition(nowMs);
   updateTimeEstimateBuild(nowMs);
 
@@ -937,6 +943,13 @@ void App::setState(AppState nextState, uint32_t nowMs) {
   }
 
   state_ = nextState;
+
+  // Any state change counts as user activity and clears auto-dim.
+  lastUserActivityMs_ = nowMs;
+  if (autoDimActive_) {
+    autoDimActive_ = false;
+    display_.setBrightnessPercent(currentBrightnessPercent());
+  }
 
   switch (state_) {
     case AppState::Paused:
@@ -1186,6 +1199,7 @@ void App::handleBootButton(uint32_t nowMs) {
   if (button_.isHeld() && !bootButtonLongPressHandled_ &&
       button_.heldDurationMs(nowMs) >= kThemeToggleHoldMs) {
     bootButtonLongPressHandled_ = true;
+    lastUserActivityMs_ = nowMs;
     cycleThemeMode(nowMs);
     return;
   }
@@ -1200,6 +1214,7 @@ void App::handleBootButton(uint32_t nowMs) {
   }
 
   if (button_.lastHoldDurationMs() < kThemeToggleHoldMs) {
+    lastUserActivityMs_ = nowMs;
     cycleBrightness(nowMs);
   }
 }
@@ -1758,6 +1773,67 @@ void App::updateBrightnessToast(uint32_t nowMs) {
   applyDisplayPreferences(nowMs);
 }
 
+void App::updateAutoDim(uint32_t nowMs) {
+  // Only dim when the user is idle in Paused or Menu — never during active reading.
+  const bool dimEligible = (state_ == AppState::Paused || state_ == AppState::Menu);
+  if (!dimEligible) {
+    if (autoDimActive_) {
+      restoreFromAutoDim(nowMs);
+    }
+    return;
+  }
+
+  if (!autoDimActive_ && lastUserActivityMs_ > 0 &&
+      nowMs - lastUserActivityMs_ >= kAutoDimDelayMs) {
+    autoDimActive_ = true;
+    display_.setBrightnessPercent(kAutoDimBrightnessPercent);
+    Serial.println("[power] auto-dim active");
+  }
+}
+
+void App::restoreFromAutoDim(uint32_t nowMs) {
+  if (!autoDimActive_) {
+    return;
+  }
+  autoDimActive_ = false;
+  lastUserActivityMs_ = nowMs;
+  display_.setBrightnessPercent(currentBrightnessPercent());
+  Serial.println("[power] auto-dim restored");
+}
+
+void App::updateBatteryRuntimeLabel(uint32_t nowMs) {
+  if (!batteryPresent_ || !batterySampleInitialized_) {
+    return;
+  }
+  if (batteryLabelMode_ != BatteryLabelMode::TimeRemaining) {
+    return;
+  }
+  if (!batteryRuntimeEstimateReady_) {
+    return;
+  }
+  if (nowMs - lastBatteryLabelRefreshMs_ < kBatteryLabelRefreshIntervalMs) {
+    return;
+  }
+  lastBatteryLabelRefreshMs_ = nowMs;
+
+  // Project remaining time forward from the last ADC sample.
+  const uint32_t elapsedSinceSampleMinutes = (nowMs - lastBatterySampleMs_) / 60000UL;
+  const uint32_t projected = batteryRuntimeMinutesRemaining_ > elapsedSinceSampleMinutes
+                                 ? batteryRuntimeMinutesRemaining_ - elapsedSinceSampleMinutes
+                                 : 0;
+  const String nextLabel = formatBatteryTimeRemaining(projected);
+  if (nextLabel == batteryLabel_) {
+    return;
+  }
+  batteryLabel_ = nextLabel;
+  display_.setBatteryLabel(batteryLabel_);
+  if (state_ == AppState::Paused || state_ == AppState::Playing) {
+    renderActiveReader(nowMs);
+  } else if (state_ == AppState::Menu) {
+    renderMenu();
+  }
+}
+
 void App::updateWpmFeedback(uint32_t nowMs) {
   if (!wpmFeedbackVisible_ || state_ != AppState::Paused) {
     return;
@@ -2008,6 +2084,17 @@ void App::handleTouch(uint32_t nowMs) {
 
   TouchEvent ev;
   if (!touch_.poll(ev)) {
+    return;
+  }
+
+  // Any touch counts as user activity: update idle timer and restore dim if needed.
+  lastUserActivityMs_ = nowMs;
+  if (autoDimActive_) {
+    restoreFromAutoDim(nowMs);
+    // Consume this touch as a wake-up event; cancel outstanding state and skip handling.
+    touch_.cancel();
+    pausedTouch_.active = false;
+    pausedTouchIntent_ = TouchIntent::None;
     return;
   }
 
@@ -4929,6 +5016,7 @@ void App::wakeFromSleep() {
   wpmFeedbackVisible_ = false;
   menuScreen_ = MenuScreen::Main;
   lastStateLogMs_ = nowMs;
+  lastUserActivityMs_ = nowMs;
   state_ = AppState::Paused;
   applyStateCpuFrequency();
 
