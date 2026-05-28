@@ -752,7 +752,7 @@ void App::begin() {
   {
     const uint8_t savedDimLevel =
         preferences_.getUChar(kPrefAutoDimLevel, autoDimBrightnessPercent_);
-    if (savedDimLevel == 10 || savedDimLevel == 20 || savedDimLevel == 30) {
+    if (savedDimLevel == 0 || savedDimLevel == 10 || savedDimLevel == 20 || savedDimLevel == 30) {
       autoDimBrightnessPercent_ = savedDimLevel;
     }
   }
@@ -3180,6 +3180,8 @@ void App::selectBatterySettingsItem(uint32_t nowMs) {
     }
     case kSettingsBatteryAutoDimLevelIndex: {
       if (autoDimBrightnessPercent_ >= 30) {
+        autoDimBrightnessPercent_ = 0;
+      } else if (autoDimBrightnessPercent_ == 0) {
         autoDimBrightnessPercent_ = 10;
       } else {
         autoDimBrightnessPercent_ = static_cast<uint8_t>(autoDimBrightnessPercent_ + 10);
@@ -3780,7 +3782,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
     settingsMenuItems_.push_back("CPU standby: " + cpuMhzLabel(cpuMhzStandby_));
     settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
-    settingsMenuItems_.push_back("Auto-dim level: " + autoDimBrightnessLabel());
+    settingsMenuItems_.push_back("Auto-dim brightness level: " + autoDimBrightnessLabel());
   }
 
   if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -5959,8 +5961,12 @@ uint32_t App::nominalBatteryRuntimeMinutes() const {
     return 0;
   };
   int32_t base = static_cast<int32_t>(kNominalBatteryRuntimeMinutes);  // 450 min at 160 MHz
-  base += static_cast<int32_t>(mhzFactor(cpuMhzPlay_));
-  base += static_cast<int32_t>(mhzFactor(cpuMhzScroll_)) / 4;
+  // Only count the CPU that is actually used for active reading in the current mode.
+  if (scrollModeEnabled()) {
+    base += static_cast<int32_t>(mhzFactor(cpuMhzScroll_));
+  } else {
+    base += static_cast<int32_t>(mhzFactor(cpuMhzPlay_));
+  }
   base += static_cast<int32_t>(mhzFactor(cpuMhzPaused_)) / 4;
   base += static_cast<int32_t>(mhzFactor(cpuMhzMenu_)) / 4;
   base += static_cast<int32_t>(mhzFactor(cpuMhzStandby_)) / 4;
@@ -5988,6 +5994,7 @@ String App::autoDimDelayLabel() const {
 }
 
 String App::autoDimBrightnessLabel() const {
+  if (autoDimBrightnessPercent_ == 0) return "Screen off";
   return String(autoDimBrightnessPercent_) + "%";
 }
 

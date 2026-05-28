@@ -41,15 +41,20 @@ void writeBacklightPwm() {
     return;
   }
 
+  // 0% means fully off — cut power to the backlight entirely.
+  if (gBrightnessPercent == 0) {
+    analogWrite(BoardConfig::PIN_LCD_BACKLIGHT, 255);
+    return;
+  }
+
   // Waveshare drives the LCD backlight as active-low PWM; lower duty is brighter.
   // The backlight LED has a forward-voltage threshold: below ~35% effective duty
   // the LED simply does not emit. Map user range [1,100] → hardware [kMinHw,100]
   // so that even the dimmest user setting stays above the LED cutoff.
   constexpr uint8_t kMinHwBrightnessPercent = 35;
-  const uint8_t brightness = gBrightnessPercent == 0 ? 1 : gBrightnessPercent;
   const uint8_t hwPercent = static_cast<uint8_t>(
       kMinHwBrightnessPercent +
-      (static_cast<uint16_t>(brightness) * (100U - kMinHwBrightnessPercent)) / 100U);
+      (static_cast<uint16_t>(gBrightnessPercent) * (100U - kMinHwBrightnessPercent)) / 100U);
   const uint8_t activeDuty =
       static_cast<uint8_t>((static_cast<uint16_t>(hwPercent) * 255U) / 100U);
   analogWrite(BoardConfig::PIN_LCD_BACKLIGHT, 255 - activeDuty);
