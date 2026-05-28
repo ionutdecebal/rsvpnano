@@ -97,12 +97,6 @@ class App {
     FocusTimerSession,
   };
 
-  enum class PlayingCpuPreset : uint8_t {
-    HighPerformance = 0,
-    Balanced = 1,
-    PowerSave = 2,
-  };
-
   enum class FooterMetricMode : uint8_t {
     Percentage = 0,
     ChapterTime = 1,
@@ -246,7 +240,7 @@ class App {
   void selectSettingsItem(uint32_t nowMs);
   void openBatterySettings();
   void selectBatterySettingsItem(uint32_t nowMs);
-  String playingCpuPresetLabel() const;
+  static String cpuMhzLabel(uint32_t mhz);
   String autoDimDelayLabel() const;
   String autoDimBrightnessLabel() const;
   uint32_t nominalBatteryRuntimeMinutes() const;
@@ -567,7 +561,11 @@ class App {
   bool brightnessToastVisible_ = false;
   bool autoDimActive_ = false;
   bool cachedOtaAutoCheck_ = false;
-  PlayingCpuPreset playingCpuPreset_ = PlayingCpuPreset::Balanced;
+  uint32_t cpuMhzPlay_ = 160;
+  uint32_t cpuMhzScroll_ = 160;
+  uint32_t cpuMhzPaused_ = 80;
+  uint32_t cpuMhzMenu_ = 80;
+  uint32_t cpuMhzStandby_ = 80;
   uint8_t autoDimBrightnessPercent_ = 10;
   uint32_t autoDimDelayMs_ = 60000;
   bool usingStorageBook_ = false;

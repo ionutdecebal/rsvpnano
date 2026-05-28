@@ -166,9 +166,9 @@ constexpr size_t kSettingsHomePacingIndex = 1;
 constexpr size_t kSettingsHomeDisplayIndex = 2;
 constexpr size_t kSettingsHomeTypographyIndex = 3;
 constexpr size_t kSettingsHomeWifiIndex = 4;
-constexpr size_t kSettingsHomeUpdateIndex = 5;
-constexpr size_t kSettingsHomeFirmwareVersionIndex = 6;
-constexpr size_t kSettingsHomeBatteryIndex = 7;
+constexpr size_t kSettingsHomeBatteryIndex = 5;
+constexpr size_t kSettingsHomeUpdateIndex = 6;
+constexpr size_t kSettingsHomeFirmwareVersionIndex = 7;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
@@ -193,9 +193,13 @@ constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
 constexpr size_t kWifiSettingsForgetIndex = 4;
 constexpr size_t kWifiSettingsOtaOwnerIndex = 5;
 
-constexpr size_t kSettingsBatteryCpuPresetIndex = 1;
-constexpr size_t kSettingsBatteryAutoDimDelayIndex = 2;
-constexpr size_t kSettingsBatteryAutoDimLevelIndex = 3;
+constexpr size_t kSettingsBatteryCpuPlayIndex = 1;
+constexpr size_t kSettingsBatteryCpuScrollIndex = 2;
+constexpr size_t kSettingsBatteryCpuPausedIndex = 3;
+constexpr size_t kSettingsBatteryCpuMenuIndex = 4;
+constexpr size_t kSettingsBatteryCpuStandbyIndex = 5;
+constexpr size_t kSettingsBatteryAutoDimDelayIndex = 6;
+constexpr size_t kSettingsBatteryAutoDimLevelIndex = 7;
 
 constexpr size_t kBookPickerBackIndex = 0;
 constexpr size_t kChapterPickerBackIndex = 0;
@@ -244,7 +248,11 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
-constexpr const char *kPrefPlayingCpuPreset = "play_cpu";
+constexpr const char *kPrefCpuPlay = "cpu_play";
+constexpr const char *kPrefCpuScroll = "cpu_scroll";
+constexpr const char *kPrefCpuPaused = "cpu_paused";
+constexpr const char *kPrefCpuMenu = "cpu_menu";
+constexpr const char *kPrefCpuStandby = "cpu_stby";
 constexpr const char *kPrefAutoDimLevel = "dim_lvl";
 constexpr const char *kPrefAutoDimDelay = "dim_dly";
 constexpr const char *kPrefTimerDurationByGenre[FocusTimer::kGenreCount] = {
@@ -726,17 +734,20 @@ void App::begin() {
       pauseMode_ = PauseMode::SentenceEnd;
       break;
   }
-  switch (preferences_.getUChar(kPrefPlayingCpuPreset, static_cast<uint8_t>(playingCpuPreset_))) {
-    case static_cast<uint8_t>(PlayingCpuPreset::HighPerformance):
-      playingCpuPreset_ = PlayingCpuPreset::HighPerformance;
-      break;
-    case static_cast<uint8_t>(PlayingCpuPreset::PowerSave):
-      playingCpuPreset_ = PlayingCpuPreset::PowerSave;
-      break;
-    case static_cast<uint8_t>(PlayingCpuPreset::Balanced):
-    default:
-      playingCpuPreset_ = PlayingCpuPreset::Balanced;
-      break;
+  {
+    constexpr uint32_t kValidMhz[] = {80, 160, 240};
+    auto loadCpuMhz = [&](const char *key, uint32_t def) -> uint32_t {
+      const uint32_t v = preferences_.getUInt(key, def);
+      for (uint32_t m : kValidMhz) {
+        if (v == m) return v;
+      }
+      return def;
+    };
+    cpuMhzPlay_ = loadCpuMhz(kPrefCpuPlay, cpuMhzPlay_);
+    cpuMhzScroll_ = loadCpuMhz(kPrefCpuScroll, cpuMhzScroll_);
+    cpuMhzPaused_ = loadCpuMhz(kPrefCpuPaused, cpuMhzPaused_);
+    cpuMhzMenu_ = loadCpuMhz(kPrefCpuMenu, cpuMhzMenu_);
+    cpuMhzStandby_ = loadCpuMhz(kPrefCpuStandby, cpuMhzStandby_);
   }
   {
     const uint8_t savedDimLevel =
@@ -1036,26 +1047,17 @@ void App::applyStateCpuFrequency() {
 
   uint32_t mhz;
   switch (state_) {
-    case AppState::Playing: {
-      switch (playingCpuPreset_) {
-        case PlayingCpuPreset::HighPerformance:
-          mhz = 240;
-          break;
-        case PlayingCpuPreset::PowerSave:
-          mhz = 80;
-          break;
-        case PlayingCpuPreset::Balanced:
-        default:
-          mhz = 160;
-          break;
-      }
+    case AppState::Playing:
+      mhz = scrollModeEnabled() ? cpuMhzScroll_ : cpuMhzPlay_;
       break;
-    }
     case AppState::Paused:
+      mhz = cpuMhzPaused_;
+      break;
     case AppState::Menu:
+      mhz = cpuMhzMenu_;
+      break;
     case AppState::Standby:
-      // Idle/UI states: 80 MHz covers SPI display, I2C touch, UART with margin.
-      mhz = 80;
+      mhz = cpuMhzStandby_;
       break;
     default:
       // Booting, CompanionSync, UsbTransfer, Sleeping: keep full speed.
@@ -3106,7 +3108,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
 }
 
 void App::openBatterySettings() {
-  settingsSelectedIndex_ = kSettingsBatteryCpuPresetIndex;
+  settingsSelectedIndex_ = kSettingsBatteryCpuPlayIndex;
   menuScreen_ = MenuScreen::SettingsBattery;
   rebuildSettingsMenuItems();
   renderSettings();
@@ -3114,6 +3116,13 @@ void App::openBatterySettings() {
 
 void App::selectBatterySettingsItem(uint32_t nowMs) {
   (void)nowMs;
+
+  auto cycleCpuMhz = [](uint32_t current) -> uint32_t {
+    if (current <= 80) return 160;
+    if (current <= 160) return 240;
+    return 80;
+  };
+
   switch (settingsSelectedIndex_) {
     case kSettingsBackIndex:
       settingsSelectedIndex_ = kSettingsHomeBatteryIndex;
@@ -3121,32 +3130,36 @@ void App::selectBatterySettingsItem(uint32_t nowMs) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
-    case kSettingsBatteryCpuPresetIndex: {
-      switch (playingCpuPreset_) {
-        case PlayingCpuPreset::Balanced:
-          playingCpuPreset_ = PlayingCpuPreset::HighPerformance;
-          break;
-        case PlayingCpuPreset::HighPerformance:
-          playingCpuPreset_ = PlayingCpuPreset::PowerSave;
-          break;
-        case PlayingCpuPreset::PowerSave:
-        default:
-          playingCpuPreset_ = PlayingCpuPreset::Balanced;
-          break;
-      }
-      preferences_.putUChar(kPrefPlayingCpuPreset, static_cast<uint8_t>(playingCpuPreset_));
+    case kSettingsBatteryCpuPlayIndex:
+      cpuMhzPlay_ = cycleCpuMhz(cpuMhzPlay_);
+      preferences_.putUInt(kPrefCpuPlay, cpuMhzPlay_);
       applyStateCpuFrequency();
-      // Refresh battery bootstrap label to reflect new nominal runtime.
-      if (!batteryRuntimeEstimateReady_) {
-        batteryLabel_ = currentBatteryLabel();
-        display_.setBatteryLabel(batteryLabel_);
-        lastBatteryLabelRefreshMs_ = nowMs;
-      }
-      Serial.printf("[battery] CPU preset -> %s\n", playingCpuPresetLabel().c_str());
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
-    }
+      Serial.printf("[battery] CPU play -> %u MHz\n", cpuMhzPlay_);
+      break;
+    case kSettingsBatteryCpuScrollIndex:
+      cpuMhzScroll_ = cycleCpuMhz(cpuMhzScroll_);
+      preferences_.putUInt(kPrefCpuScroll, cpuMhzScroll_);
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU scroll -> %u MHz\n", cpuMhzScroll_);
+      break;
+    case kSettingsBatteryCpuPausedIndex:
+      cpuMhzPaused_ = cycleCpuMhz(cpuMhzPaused_);
+      preferences_.putUInt(kPrefCpuPaused, cpuMhzPaused_);
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU paused -> %u MHz\n", cpuMhzPaused_);
+      break;
+    case kSettingsBatteryCpuMenuIndex:
+      cpuMhzMenu_ = cycleCpuMhz(cpuMhzMenu_);
+      preferences_.putUInt(kPrefCpuMenu, cpuMhzMenu_);
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU menu -> %u MHz\n", cpuMhzMenu_);
+      break;
+    case kSettingsBatteryCpuStandbyIndex:
+      cpuMhzStandby_ = cycleCpuMhz(cpuMhzStandby_);
+      preferences_.putUInt(kPrefCpuStandby, cpuMhzStandby_);
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU standby -> %u MHz\n", cpuMhzStandby_);
+      break;
     case kSettingsBatteryAutoDimDelayIndex: {
       if (autoDimDelayMs_ == 0) {
         autoDimDelayMs_ = 30000;
@@ -3162,9 +3175,7 @@ void App::selectBatterySettingsItem(uint32_t nowMs) {
         restoreFromAutoDim(nowMs);
       }
       Serial.printf("[battery] auto-dim delay -> %s\n", autoDimDelayLabel().c_str());
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
+      break;
     }
     case kSettingsBatteryAutoDimLevelIndex: {
       if (autoDimBrightnessPercent_ >= 30) {
@@ -3178,13 +3189,20 @@ void App::selectBatterySettingsItem(uint32_t nowMs) {
       }
       Serial.printf("[battery] auto-dim level -> %u%%\n",
                     static_cast<unsigned int>(autoDimBrightnessPercent_));
-      rebuildSettingsMenuItems();
-      renderSettings();
-      return;
+      break;
     }
     default:
       return;
   }
+
+  // Refresh battery bootstrap label to reflect new nominal runtime.
+  if (!batteryRuntimeEstimateReady_) {
+    batteryLabel_ = currentBatteryLabel();
+    display_.setBatteryLabel(batteryLabel_);
+    lastBatteryLabelRefreshMs_ = nowMs;
+  }
+  rebuildSettingsMenuItems();
+  renderSettings();
 }
 
 void App::openWifiSettings() {
@@ -3714,9 +3732,9 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Display));
     settingsMenuItems_.push_back(uiText(UiText::TypographyTune));
     settingsMenuItems_.push_back("Wi-Fi");
+    settingsMenuItems_.push_back("Battery");
     settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
     settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
-    settingsMenuItems_.push_back("Battery");
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Display mode: " + themeModeLabel());
@@ -3755,7 +3773,11 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
   } else if (menuScreen_ == MenuScreen::SettingsBattery) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
-    settingsMenuItems_.push_back("Playing CPU: " + playingCpuPresetLabel());
+    settingsMenuItems_.push_back("CPU play: " + cpuMhzLabel(cpuMhzPlay_));
+    settingsMenuItems_.push_back("CPU scroll: " + cpuMhzLabel(cpuMhzScroll_));
+    settingsMenuItems_.push_back("CPU paused: " + cpuMhzLabel(cpuMhzPaused_));
+    settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
+    settingsMenuItems_.push_back("CPU standby: " + cpuMhzLabel(cpuMhzStandby_));
     settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
     settingsMenuItems_.push_back("Auto-dim level: " + autoDimBrightnessLabel());
   }
@@ -5928,36 +5950,27 @@ String App::batteryTimeRemainingLabel() const {
 String App::batteryVoltageLabel() const { return String(batteryFilteredVoltage_, 2) + "V"; }
 
 uint32_t App::nominalBatteryRuntimeMinutes() const {
-  uint32_t base;
-  switch (playingCpuPreset_) {
-    case PlayingCpuPreset::HighPerformance:
-      base = 360;  // ~6h — 240 MHz during reading
-      break;
-    case PlayingCpuPreset::PowerSave:
-      base = 540;  // ~9h — 80 MHz throughout
-      break;
-    case PlayingCpuPreset::Balanced:
-    default:
-      base = kNominalBatteryRuntimeMinutes;  // 450 min (~7.5h)
-      break;
-  }
-  // Auto OTA disabled = no periodic Wi-Fi radio wakes → ~20 min saved per cycle.
+  // Weighted estimate: play CPU dominates (~60%), others contribute ~10% each.
+  // Base at 160 MHz play = 450 min.
+  auto mhzFactor = [](uint32_t mhz) -> int32_t {
+    if (mhz <= 80) return 90;    // extra minutes saved vs 160
+    if (mhz >= 240) return -60;  // extra minutes lost vs 160
+    return 0;
+  };
+  int32_t base = static_cast<int32_t>(kNominalBatteryRuntimeMinutes);  // 450 min at 160 MHz
+  base += static_cast<int32_t>(mhzFactor(cpuMhzPlay_));
+  base += static_cast<int32_t>(mhzFactor(cpuMhzScroll_)) / 4;
+  base += static_cast<int32_t>(mhzFactor(cpuMhzPaused_)) / 4;
+  base += static_cast<int32_t>(mhzFactor(cpuMhzMenu_)) / 4;
+  base += static_cast<int32_t>(mhzFactor(cpuMhzStandby_)) / 4;
   if (!cachedOtaAutoCheck_) {
     base += 20;
   }
-  return base;
+  return static_cast<uint32_t>(base < 60 ? 60 : base);
 }
 
-String App::playingCpuPresetLabel() const {
-  switch (playingCpuPreset_) {
-    case PlayingCpuPreset::HighPerformance:
-      return "High Performance";
-    case PlayingCpuPreset::PowerSave:
-      return "Power Save";
-    case PlayingCpuPreset::Balanced:
-    default:
-      return "Balanced";
-  }
+String App::cpuMhzLabel(uint32_t mhz) {
+  return String(mhz) + " MHz";
 }
 
 String App::autoDimDelayLabel() const {
