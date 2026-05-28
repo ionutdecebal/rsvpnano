@@ -3774,9 +3774,9 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
   } else if (menuScreen_ == MenuScreen::SettingsBattery) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
-    settingsMenuItems_.push_back("CPU play: " + cpuMhzLabel(cpuMhzPlay_));
-    settingsMenuItems_.push_back("CPU scroll: " + cpuMhzLabel(cpuMhzScroll_));
-    settingsMenuItems_.push_back("CPU paused: " + cpuMhzLabel(cpuMhzPaused_));
+    settingsMenuItems_.push_back("CPU RSVP mode: " + cpuMhzLabel(cpuMhzPlay_));
+    settingsMenuItems_.push_back("CPU scroll mode: " + cpuMhzLabel(cpuMhzScroll_));
+    settingsMenuItems_.push_back("CPU paused (affects scroll in RSVP): " + cpuMhzLabel(cpuMhzPaused_));
     settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
     settingsMenuItems_.push_back("CPU standby: " + cpuMhzLabel(cpuMhzStandby_));
     settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
