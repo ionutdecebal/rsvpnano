@@ -22,4 +22,7 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
   app.update(now);
+  // Yield to the RTOS idle task so the CPU is not 100% busy-spinning.
+  // All timing in update() is millis()-based so 1 ms is imperceptible.
+  delay(1);
 }
