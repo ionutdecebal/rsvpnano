@@ -1615,6 +1615,11 @@ void App::cycleReaderMode(uint32_t nowMs) {
   Serial.printf("[display] reader mode=%s\n", readerModeLabel().c_str());
   invalidateContextPreviewWindow();
 
+  // CPU frequency and battery estimate both depend on reader mode — refresh both immediately.
+  applyStateCpuFrequency();
+  batteryLabel_ = currentBatteryLabel();
+  display_.setBatteryLabel(batteryLabel_);
+
   if (state_ == AppState::Menu) {
     rebuildSettingsMenuItems();
     renderSettings();
@@ -5961,13 +5966,16 @@ uint32_t App::nominalBatteryRuntimeMinutes() const {
     return 0;
   };
   int32_t base = static_cast<int32_t>(kNominalBatteryRuntimeMinutes);  // 450 min at 160 MHz
-  // Only count the CPU that is actually used for active reading in the current mode.
+  // Weight only the CPUs that are actually applied in the current mode by applyStateCpuFrequency().
+  // Scroll mode: both Playing and Paused use cpuMhzScroll_ — cpuMhzPlay_/cpuMhzPaused_ unused.
+  // RSVP mode:   Playing→cpuMhzPlay_, Paused→cpuMhzPaused_ — cpuMhzScroll_ unused.
+  // Menu and Standby apply in both modes.
   if (scrollModeEnabled()) {
     base += static_cast<int32_t>(mhzFactor(cpuMhzScroll_));
   } else {
     base += static_cast<int32_t>(mhzFactor(cpuMhzPlay_));
+    base += static_cast<int32_t>(mhzFactor(cpuMhzPaused_)) / 4;
   }
-  base += static_cast<int32_t>(mhzFactor(cpuMhzPaused_)) / 4;
   base += static_cast<int32_t>(mhzFactor(cpuMhzMenu_)) / 4;
   base += static_cast<int32_t>(mhzFactor(cpuMhzStandby_)) / 4;
   if (!cachedOtaAutoCheck_) {
