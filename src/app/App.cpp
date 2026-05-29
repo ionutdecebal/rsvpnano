@@ -195,6 +195,7 @@ constexpr const char *kPrefWpm = "wpm";
 constexpr const char *kPrefBrightness = "bright";
 constexpr const char *kPrefDarkMode = "dark";
 constexpr const char *kPrefNightMode = "night";
+constexpr const char *kPrefYellowMode = "yellow_md";
 constexpr const char *kPrefUiLanguage = "ui_lang";
 constexpr const char *kPrefReaderMode = "read_mode";
 constexpr const char *kPrefHandedness = "handed";
@@ -712,6 +713,7 @@ void App::begin() {
       kTypographyGuideGapMin, kTypographyGuideGapMax));
   darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
   nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
+  yellowModeEnabled_ = preferences_.getBool(kPrefYellowMode, yellowModeEnabled_);
   applyHandednessSettings(0, false);
   applyDisplayPreferences(0, false);
   applyTypographySettings(0, false);
@@ -1235,6 +1237,7 @@ uint8_t App::currentBrightnessPercent() const {
 void App::applyDisplayPreferences(uint32_t nowMs, bool rerender) {
   display_.setDarkMode(darkMode_);
   display_.setNightMode(nightMode_);
+  display_.setYellowMode(yellowModeEnabled_);
   display_.setBrightnessPercent(currentBrightnessPercent());
 
   if (!rerender) {
@@ -1384,6 +1387,7 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
       kTypographyGuideGapMin, kTypographyGuideGapMax));
   darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
   nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
+  yellowModeEnabled_ = preferences_.getBool(kPrefYellowMode, yellowModeEnabled_);
 
   reader_.setWpm(preferences_.getUShort(kPrefWpm, reader_.wpm()));
   applyReaderUiOrientation();
@@ -1432,16 +1436,25 @@ void App::cycleBrightness() {
 }
 
 void App::cycleThemeMode(uint32_t nowMs) {
-  if (nightMode_) {
-    nightMode_ = false;
+  // Cycle display modes as standalone options:
+  // Dark -> Light -> Night -> Yellow -> Dark
+  if (yellowModeEnabled_) {
+    yellowModeEnabled_ = false;
     darkMode_ = true;
+    nightMode_ = false;
+  } else if (nightMode_) {
+    yellowModeEnabled_ = true;
+    darkMode_ = false;
+    nightMode_ = false;
   } else if (darkMode_) {
     darkMode_ = false;
+    nightMode_ = false;
   } else {
     darkMode_ = true;
     nightMode_ = true;
   }
 
+  preferences_.putBool(kPrefYellowMode, yellowModeEnabled_);
   preferences_.putBool(kPrefDarkMode, darkMode_);
   preferences_.putBool(kPrefNightMode, nightMode_);
   Serial.printf("[display] theme=%s\n", themeModeLabel().c_str());
@@ -3688,6 +3701,9 @@ String App::firmwareUpdateMenuLabel() const { return "Firmware update"; }
 String App::uiText(UiText key) const { return Localization::text(uiLanguage_, key); }
 
 String App::themeModeLabel() const {
+  if (yellowModeEnabled_) {
+    return "Yellow";
+  }
   if (nightMode_) {
     return uiText(UiText::Night);
   }

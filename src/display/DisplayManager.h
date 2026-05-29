@@ -63,6 +63,7 @@ class DisplayManager {
   void setBrightnessPercent(uint8_t percent);
   void setDarkMode(bool darkMode);
   void setNightMode(bool nightMode);
+  void setYellowMode(bool enabled);
   void setUiOrientation(BoardConfig::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
   void setTypographyConfig(const TypographyConfig &config);
@@ -195,6 +196,7 @@ class DisplayManager {
   uint8_t brightnessPercent_ = 100;
   bool darkMode_ = true;
   bool nightMode_ = false;
+  bool yellowMode_ = false;
   BoardConfig::UiOrientation uiOrientation_ =
       BoardConfig::UI_ROTATED_180 ? BoardConfig::UiOrientation::LandscapeFlipped
                                   : BoardConfig::UiOrientation::Landscape;

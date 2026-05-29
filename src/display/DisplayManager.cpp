@@ -31,8 +31,11 @@ constexpr uint16_t kPureWhite = 0xFFFF;
 constexpr uint16_t kDarkWordColor = 0xFFFF;
 constexpr uint16_t kLightWordColor = 0x0000;
 constexpr uint16_t kFocusLetterColor = 0xF800;
+constexpr uint16_t kYellowModeFocusColor = 0x001F;
 constexpr uint16_t kNightWordColor = 0xFCE0;
 constexpr uint16_t kNightFocusColor = 0xFA80;
+constexpr uint16_t kYellowModeNightFocusColor = 0x7D7F;
+constexpr uint16_t kYellowModeBackground = 0xFF44;
 constexpr uint16_t kDarkMenuDimColor = 0x8410;
 constexpr uint16_t kLightMenuDimColor = 0x6B4D;
 constexpr uint16_t kDarkFooterColor = 0x528A;
@@ -902,6 +905,16 @@ void DisplayManager::setNightMode(bool nightMode) {
   lastRenderKey_ = "";
 }
 
+void DisplayManager::setYellowMode(bool enabled) {
+  if (yellowMode_ == enabled) {
+    return;
+  }
+
+  yellowMode_ = enabled;
+  tickerPlaybackFrameActive_ = false;
+  lastRenderKey_ = "";
+}
+
 void DisplayManager::setUiOrientation(BoardConfig::UiOrientation orientation) {
   if (uiOrientation_ == orientation) {
     return;
@@ -1065,6 +1078,9 @@ uint16_t DisplayManager::backgroundColor() const {
   if (nightMode_) {
     return kTrueBlack;
   }
+  if (yellowMode_) {
+    return kYellowModeBackground;
+  }
   return darkMode_ ? kTrueBlack : kPureWhite;
 }
 
@@ -1072,10 +1088,16 @@ uint16_t DisplayManager::wordColor() const {
   if (nightMode_) {
     return kNightWordColor;
   }
+  if (yellowMode_) {
+    return kLightWordColor;
+  }
   return darkMode_ ? kDarkWordColor : kLightWordColor;
 }
 
 uint16_t DisplayManager::focusColor() const {
+  if (yellowMode_) {
+    return nightMode_ ? kYellowModeNightFocusColor : kYellowModeFocusColor;
+  }
   if (nightMode_) {
     return kNightFocusColor;
   }
@@ -1086,12 +1108,18 @@ uint16_t DisplayManager::dimColor() const {
   if (nightMode_) {
     return blendOverBackground(wordColor(), kNightDimAlpha);
   }
+  if (yellowMode_) {
+    return kLightMenuDimColor;
+  }
   return darkMode_ ? kDarkMenuDimColor : kLightMenuDimColor;
 }
 
 uint16_t DisplayManager::footerColor() const {
   if (nightMode_) {
     return blendOverBackground(wordColor(), kNightFooterAlpha);
+  }
+  if (yellowMode_) {
+    return kLightFooterColor;
   }
   return darkMode_ ? kDarkFooterColor : kLightFooterColor;
 }
