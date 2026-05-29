@@ -2,7 +2,7 @@
 
 RSVP Nano is an open-source ESP32-S3 reading device that shows text one word at a time using RSVP, Rapid Serial Visual Presentation. It is designed for small screens, SD card libraries, fast reading, and a simple browser-first workflow for converting and uploading books.
 
-This README is written for the current release, `v0.0.5`.
+This README is written for the current release, `v0.1.166-noogi`.
 
 ## What You Need
 
@@ -168,8 +168,8 @@ OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the devic
 - `PWR` short press on the main menu: return to the reader.
 - `PWR` short press in most submenus: go back to the main menu.
 - `PWR` hold in Companion Sync, USB Transfer, and Focus Timer: exit that page.
-- `PWR` hold from the normal reader or main menu: power off.
-- `BOOT` short press: cycle brightness.
+- `PWR` hold from the normal reader or main menu: power-off confirmation dialog. Confirm with `PWR` again or wait 1.6 seconds to proceed; any other action cancels.
+- `BOOT` short press: cycle brightness (with live on-screen toast showing current level).
 - `BOOT` hold: cycle display theme.
 - Press `PWR` + `BOOT` together: enter standby. Press either button to wake after the short standby grace period.
 
@@ -230,14 +230,27 @@ Settings are grouped by how people actually use the device.
 
 `Display` includes:
 
-- Reading mode.
+- Reading mode (RSVP or Scroll).
 - Left/right handed layout.
 - Display theme.
-- Brightness.
+- Brightness with live toast feedback.
+- Chapter label visibility toggle (independent per reading mode).
 - Footer and battery label behavior.
 - Optional battery, chapter, and book percentage labels while actively reading.
 - Standby display mode: Life, Maze, Voronoi, or Screen off.
 - Language.
+
+`Battery` includes:
+
+- **CPU RSVP mode**: CPU frequency for RSVP word-by-word reading (80/160/240 MHz). Default: 160 MHz.
+- **CPU scroll mode**: CPU frequency for scroll-mode active reading (80/160/240 MHz). Default: 160 MHz.
+- **CPU paused**: CPU frequency for pause state in RSVP mode (80/160/240 MHz). Default: 80 MHz. Affects manual scroll speed in RSVP.
+- **CPU menu**: CPU frequency for menu navigation (80/160/240 MHz). Default: 80 MHz.
+- **CPU standby**: CPU frequency for standby/screensaver (40/80/160/240 MHz). Default: 80 MHz. 40 MHz may affect screensaver animations.
+- **Auto-dim delay**: Off / 30s / 60s / 2min. Automatically reduces screen brightness after user inactivity.
+- **Auto-dim brightness level**: 0% (Screen off) / 10% / 20% / 30%. Brightness level applied when auto-dim activates.
+
+Battery estimate updates instantly on reading-mode change and reflects the actual CPU frequency mix used. Nominal runtime: 450 minutes at 160 MHz, adjusted by selected CPU frequencies and OTA settings.
 
 `Typography` includes:
 
@@ -263,7 +276,9 @@ Settings are grouped by how people actually use the device.
 
 `Wi-Fi` includes network setup for RSS and OTA.
 
-`Firmware update` checks GitHub Releases and installs newer firmware when available.
+`Firmware update` checks GitHub Releases and installs newer firmware when available. Displays current firmware version and build timestamp.
+
+`About` displays device information including firmware version, hardware platform, and uptime.
 
 ### Companion Sync
 
@@ -303,12 +318,12 @@ RSS checks can continue in the background, while installable firmware updates st
 The Focus Timer uses the device orientation to guide work and break blocks.
 
 1. Open `Focus Timer`.
-2. Choose a timer category.
+2. Choose a timer category (configurable duration per category).
 3. Place or flip the device as prompted.
 4. Follow the on-screen timer.
 5. Hold `PWR` to exit the timer page.
 
-Touch-and-hold during an active timer cancels the current timer block.
+Touch-and-hold during an active timer cancels the current timer block. Timer settings are saved per genre/category.
 
 ### SD Card Check
 
@@ -390,7 +405,26 @@ web/firmware/manifest.json
 
 ## Project Status
 
-`v0.0.5` builds on the first public firmware release with the long-book reading system, safer SD-card handling, clearer RSS and loading feedback, improved Latin-script support, reader chrome toggles, battery protection, and standby display options.
+`v0.1.166-noogi` adds comprehensive battery optimization and power management:
+
+**Battery and Power:**
+- **Per-context CPU scaling**: 5 configurable CPU frequencies (RSVP mode, Scroll mode, Paused, Menu, Standby) to balance performance and power consumption.
+- **Auto-dim**: Automatic brightness reduction after inactivity, with user-selectable delay and brightness level (0% to fully power off the backlight).
+- **Accurate battery estimate**: Real-time runtime prediction that reflects the actual CPU mix in use, updates instantly on mode change.
+- **Standby low-power option**: 40 MHz option for extended standby life (may affect screensaver animation smoothness).
+- **Backlight PWM fix**: Proper voltage clamping to prevent screen dimming below 35% brightness threshold.
+- **Power-off confirmation**: 1.6s hold on PWR button shows a confirmation dialog to prevent accidental shutdown.
+- **Scroll-mode CPU awareness**: CPU settings for each reading mode are tracked independently; changing Scroll CPU in RSVP mode has no effect on battery estimate.
+
+**Display and UI:**
+- **Brightness live feedback**: Toast notification shows current brightness percentage when adjusted via `BOOT` button.
+- **Firmware version in Settings**: `About` page displays current firmware version, build timestamp, and device uptime.
+- **Chapter label management**: Per-reading-mode toggle for chapter label visibility in footer chrome.
+
+**Focus Timer:**
+- Configurable timer duration per category/genre (settings persist across sessions).
+
+Earlier `v0.1.x-noogi` releases introduced the battery optimization framework, fixed settings menu scrolling, and added these granular controls.
 
 The next areas of work are:
 
