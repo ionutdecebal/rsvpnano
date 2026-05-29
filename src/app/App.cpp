@@ -3793,7 +3793,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
     settingsMenuItems_.push_back(
         "CPU standby: " + cpuMhzLabel(cpuMhzStandby_) +
-        (cpuMhzStandby_ <= 40 ? " (Might cause issues with screensaver animations)" : ""));
+        (cpuMhzStandby_ <= 40 ? " (Might affect animations)" : ""));
     settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
     settingsMenuItems_.push_back("Auto-dim brightness level: " + autoDimBrightnessLabel());
   }
