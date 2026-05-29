@@ -735,7 +735,7 @@ void App::begin() {
       break;
   }
   {
-    constexpr uint32_t kValidMhz[] = {80, 160, 240};
+    constexpr uint32_t kValidMhz[] = {40, 80, 160, 240};
     auto loadCpuMhz = [&](const char *key, uint32_t def) -> uint32_t {
       const uint32_t v = preferences_.getUInt(key, def);
       for (uint32_t m : kValidMhz) {
@@ -3128,6 +3128,12 @@ void App::selectBatterySettingsItem(uint32_t nowMs) {
     if (current <= 160) return 240;
     return 80;
   };
+  auto cycleCpuMhzStandby = [](uint32_t current) -> uint32_t {
+    if (current <= 40) return 80;
+    if (current <= 80) return 160;
+    if (current <= 160) return 240;
+    return 40;
+  };
 
   switch (settingsSelectedIndex_) {
     case kSettingsBackIndex:
@@ -3161,7 +3167,7 @@ void App::selectBatterySettingsItem(uint32_t nowMs) {
       Serial.printf("[battery] CPU menu -> %u MHz\n", cpuMhzMenu_);
       break;
     case kSettingsBatteryCpuStandbyIndex:
-      cpuMhzStandby_ = cycleCpuMhz(cpuMhzStandby_);
+      cpuMhzStandby_ = cycleCpuMhzStandby(cpuMhzStandby_);
       preferences_.putUInt(kPrefCpuStandby, cpuMhzStandby_);
       applyStateCpuFrequency();
       Serial.printf("[battery] CPU standby -> %u MHz\n", cpuMhzStandby_);
@@ -3785,7 +3791,9 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("CPU scroll mode: " + cpuMhzLabel(cpuMhzScroll_));
     settingsMenuItems_.push_back("CPU paused (affects scroll in RSVP): " + cpuMhzLabel(cpuMhzPaused_));
     settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
-    settingsMenuItems_.push_back("CPU standby: " + cpuMhzLabel(cpuMhzStandby_));
+    settingsMenuItems_.push_back(
+        "CPU standby: " + cpuMhzLabel(cpuMhzStandby_) +
+        (cpuMhzStandby_ <= 40 ? " (Might cause issues with screensaver animations)" : ""));
     settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
     settingsMenuItems_.push_back("Auto-dim brightness level: " + autoDimBrightnessLabel());
   }
