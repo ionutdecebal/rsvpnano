@@ -44,8 +44,8 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-      - name: Run Gradle assemble and tests
-        run: bash ./gradlew :conversionCore:testDebugUnitTest :conversionCore:publishWebConverterJs :shared:check :androidApp:assembleDebug --no-daemon
+      - name: Run Gradle release assemble and tests
+        run: bash ./gradlew :conversionCore:testReleaseUnitTest :conversionCore:publishWebConverterJs :shared:testReleaseUnitTest :androidApp:assembleRelease --no-daemon
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4
@@ -58,6 +58,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: android-debug-apk
-          path: RSVPNanoCompanion/androidApp/build/outputs/apk/debug/*.apk
+          name: android-release-apk
+          path: RSVPNanoCompanion/androidApp/build/outputs/apk/release/*.apk
           if-no-files-found: error
