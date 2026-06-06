@@ -30,6 +30,39 @@ constexpr uint8_t kMaxItemsPerFeed = 5;
 constexpr uint8_t kMaxArticlesPerCheck = 12;
 constexpr uint8_t kMaxFeedRedirects = 3;
 
+bool directoryExists(const char *path) {
+  File dir = SD_MMC.open(path);
+  const bool exists = dir && dir.isDirectory();
+  if (dir) {
+    dir.close();
+  }
+  return exists;
+}
+
+bool fileExists(const char *path) {
+  File file = SD_MMC.open(path);
+  const bool exists = file && !file.isDirectory();
+  if (file) {
+    file.close();
+  }
+  return exists;
+}
+
+bool ensureDirectory(const char *path) {
+  if (directoryExists(path)) {
+    return true;
+  }
+  if (fileExists(path)) {
+    Serial.printf("[rss] path is a file, not a directory: %s\n", path);
+    return false;
+  }
+  return SD_MMC.mkdir(path) || directoryExists(path);
+}
+
+bool ensureArticleDirectory() {
+  return ensureDirectory(kBooksPath) && ensureDirectory(kArticleFilesPath);
+}
+
 String trimCopy(String value) {
   value.trim();
   return value;
@@ -879,8 +912,10 @@ bool RssFeedManager::parseNextItem(const String &feedBody, size_t &searchStart, 
 }
 
 bool RssFeedManager::saveItem(const FeedItem &item, Preferences &preferences, Result &result) {
-  SD_MMC.mkdir(kBooksPath);
-  SD_MMC.mkdir(kArticleFilesPath);
+  if (!ensureArticleDirectory()) {
+    Serial.println("[rss] article folder unavailable");
+    return false;
+  }
   const String finalPath = String(kArticleFilesPath) + "/" + filenameForItem(item);
   const String tmpPath = finalPath + ".tmp";
   SD_MMC.remove(tmpPath);

@@ -74,6 +74,40 @@ constexpr uint8_t kMinTypographyGuideGap = 2;
 constexpr uint8_t kMaxTypographyGuideGap = 8;
 constexpr uint8_t kDefaultTypographyGuideGap = 5;
 
+bool directoryExists(const char *path) {
+  File dir = SD_MMC.open(path);
+  const bool exists = dir && dir.isDirectory();
+  if (dir) {
+    dir.close();
+  }
+  return exists;
+}
+
+bool fileExists(const char *path) {
+  File file = SD_MMC.open(path);
+  const bool exists = file && !file.isDirectory();
+  if (file) {
+    file.close();
+  }
+  return exists;
+}
+
+bool ensureDirectory(const char *path) {
+  if (directoryExists(path)) {
+    return true;
+  }
+  if (fileExists(path)) {
+    Serial.printf("[sync] path is a file, not a directory: %s\n", path);
+    return false;
+  }
+  return SD_MMC.mkdir(path) || directoryExists(path);
+}
+
+bool ensureLibraryDirectories() {
+  return ensureDirectory(kBooksPath) && ensureDirectory(kBookFilesPath) &&
+         ensureDirectory(kArticleFilesPath);
+}
+
 const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
 <head>
@@ -948,8 +982,10 @@ void CompanionSyncManager::handleBookUpload() {
     category.toLowerCase();
     const char *targetDirectory = category == "article" ? kArticleFilesPath : kBookFilesPath;
 
-    SD_MMC.mkdir(kBooksPath);
-    SD_MMC.mkdir(targetDirectory);
+    if (!ensureLibraryDirectories()) {
+      uploadError_ = "Library folders unavailable";
+      return;
+    }
     uploadFinalPath_ = String(targetDirectory) + "/" + filename;
     uploadTmpPath_ = uploadFinalPath_ + ".tmp";
     SD_MMC.remove(uploadTmpPath_);

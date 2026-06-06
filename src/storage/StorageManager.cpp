@@ -179,10 +179,23 @@ bool directoryExists(const char *path) {
   return exists;
 }
 
+bool fileExists(const String &path) {
+  File file = SD_MMC.open(path);
+  const bool exists = file && !file.isDirectory();
+  if (file) {
+    file.close();
+  }
+  return exists;
+}
+
 bool ensureDirectory(const char *path) {
   if (directoryExists(path)) {
     Serial.printf("[sd-check] directory exists: %s\n", path);
     return true;
+  }
+  if (fileExists(String(path))) {
+    Serial.printf("[sd-check] path is a file, not a directory: %s\n", path);
+    return false;
   }
   Serial.printf("[sd-check] creating directory: %s\n", path);
   const bool mkdirOk = SD_MMC.mkdir(path);
@@ -190,6 +203,19 @@ bool ensureDirectory(const char *path) {
   Serial.printf("[sd-check] mkdir path=%s ok=%u existsAfter=%u\n", path, mkdirOk ? 1 : 0,
                 existsAfter ? 1 : 0);
   return mkdirOk || existsAfter;
+}
+
+bool ensureLibraryFolderLayout() {
+  return ensureDirectory(kBooksPath) && ensureDirectory(kBookFilesPath) &&
+         ensureDirectory(kArticleFilesPath) && ensureDirectory("/config");
+}
+
+String parentDirectoryForPath(const String &path) {
+  const int separator = path.lastIndexOf('/');
+  if (separator <= 0) {
+    return "/";
+  }
+  return path.substring(0, separator);
 }
 
 String cardTypeLabel(uint8_t cardType) {
@@ -501,6 +527,11 @@ size_t countUnsupportedBookFiles() {
 }
 
 bool writeDiagnosticProbeFile(const char *directoryPath) {
+  if (!directoryExists(directoryPath)) {
+    Serial.printf("[sd-check] write probe skipped, not a directory: %s\n", directoryPath);
+    return false;
+  }
+
   String path = String(directoryPath);
   if (!path.endsWith("/")) {
     path += "/";
@@ -2456,6 +2487,15 @@ bool StorageManager::buildIndexedBook(const String &path, BookMetadata &metadata
   const String dataPath = indexedDataPathFor(path);
   const String tmpIndexPath = indexedTempPathFor(indexPath);
   const String tmpDataPath = indexedTempPathFor(dataPath);
+  const String sidecarDirectory = parentDirectoryForPath(path);
+  if (!directoryExists(sidecarDirectory.c_str())) {
+    source.close();
+    Serial.printf("[storage-index] sidecar parent missing/not directory: %s\n",
+                  sidecarDirectory.c_str());
+    notifyStatus("Index failed", label.c_str(), "Folder missing", 100);
+    return false;
+  }
+
   SD_MMC.remove(tmpIndexPath);
   SD_MMC.remove(tmpDataPath);
 
@@ -2925,11 +2965,12 @@ bool StorageManager::repairSdCardFolders() {
   const bool rootWritable = writeDiagnosticProbeFile("/");
   Serial.printf("[sd-check] root write probe=%u\n", rootWritable ? 1 : 0);
 
-  const bool booksOk = ensureDirectory(kBooksPath);
-  const bool bookFilesOk = booksOk && ensureDirectory(kBookFilesPath);
-  const bool articleFilesOk = booksOk && ensureDirectory(kArticleFilesPath);
-  const bool configOk = ensureDirectory("/config");
-  const bool ok = rootWritable && booksOk && bookFilesOk && articleFilesOk && configOk;
+  const bool foldersOk = ensureLibraryFolderLayout();
+  const bool booksOk = directoryExists(kBooksPath);
+  const bool bookFilesOk = directoryExists(kBookFilesPath);
+  const bool articleFilesOk = directoryExists(kArticleFilesPath);
+  const bool configOk = directoryExists("/config");
+  const bool ok = rootWritable && foldersOk;
   if (ok) {
     Serial.println("[sd-check] repaired v0.0.4 folder layout");
   } else {
