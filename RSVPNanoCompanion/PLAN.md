@@ -110,7 +110,7 @@ Deferred work:
 
 ## Priority 4: Conversion And Parity
 
-- [x] Conversion contract is documented in `docs/conversion-spec.md`.
+- [x] Conversion contract is documented in `RSVPNanoCompanion/docs/conversion-spec.md`.
 - [x] `:conversionCore` supports `.rsvp`, `.epub`, `.txt`, `.md`, `.markdown`, `.html`, `.htm`, and `.xhtml`.
 - [x] `:conversionCore` EPUB conversion supports ZIP parsing through Korlibs compression.
 - [x] EPUB2 NCX and EPUB3 nav TOC chapter labels are preferred when available.

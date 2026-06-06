@@ -10,8 +10,8 @@ import urllib.request
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
+ROOT = Path(__file__).resolve().parents[2]
+WEB_FIRMWARE_DIR = ROOT / "RSVPNanoCompanion" / "web" / "firmware"
 MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest.json"
 DEFAULT_REPO = "ionutdecebal/rsvpnano"
 DEFAULT_ASSETS = ("rsvp-nano.bin", "rsvp-nano-ota.bin")
@@ -95,7 +95,7 @@ def write_manifest(version: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Populate web/firmware from the latest published GitHub Release."
+        description="Populate RSVPNanoCompanion/web/firmware from the latest published GitHub Release."
     )
     parser.add_argument(
         "--repo",

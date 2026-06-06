@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
+ROOT = Path(__file__).resolve().parents[2]
+WEB_FIRMWARE_DIR = ROOT / "RSVPNanoCompanion" / "web" / "firmware"
 BOOT_APP0_GLOB = "framework-arduinoespressif32*/tools/partitions/boot_app0.bin"
 
 EXPORTS = {
