@@ -12,6 +12,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  pages: write
 
 jobs:
   firmware:
@@ -36,7 +38,7 @@ jobs:
         run: pip install platformio
 
       - name: Export firmware assets
-        run: python3 RSVPNanoCompanion/tools/export_web_firmware.py --version "${{ steps.version.outputs.value }}"
+        run: python3 tools/export_web_firmware.py --version "${{ steps.version.outputs.value }}"
 
       - name: Write release notes
         env:
@@ -55,6 +57,19 @@ jobs:
           NOTES
           fi
 
+      - name: Verify release tag target
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.value }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            TAG_SHA="$(git rev-list -n 1 "${RELEASE_TAG}")"
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "::error::${RELEASE_TAG} points at ${TAG_SHA}, but this workflow checked out ${GITHUB_SHA}."
+              echo "::error::Use a fresh tag name or run the workflow from the branch that owns the existing tag."
+              exit 1
+            fi
+          fi
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -62,13 +77,29 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
-              RSVPNanoCompanion/web/firmware/rsvp-nano.bin \
-              RSVPNanoCompanion/web/firmware/rsvp-nano-ota.bin \
+              web/firmware/rsvp-nano.bin \
+              web/firmware/rsvp-nano-ota.bin \
               --clobber
           else
             gh release create "$RELEASE_TAG" \
-              RSVPNanoCompanion/web/firmware/rsvp-nano.bin \
-              RSVPNanoCompanion/web/firmware/rsvp-nano-ota.bin \
+              web/firmware/rsvp-nano.bin \
+              web/firmware/rsvp-nano-ota.bin \
               --title "$RELEASE_TAG" \
-              --notes-file release-notes.md
+              --notes-file release-notes.md \
+              --target "$GITHUB_SHA"
           fi
+
+      - name: Configure GitHub Pages
+        if: github.repository == 'ionutdecebal/rsvpnano'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: github.repository == 'ionutdecebal/rsvpnano'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy GitHub Pages
+        if: github.repository == 'ionutdecebal/rsvpnano'
+        id: deployment
+        uses: actions/deploy-pages@v4
