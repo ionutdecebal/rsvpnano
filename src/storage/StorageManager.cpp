@@ -2,6 +2,7 @@
 
 #include <SD_MMC.h>
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -39,6 +40,26 @@ constexpr int kSdFrequenciesKhz[] = {
     10000,
     SDMMC_FREQ_PROBING,
 };
+
+void logFsErrno(const char *tag, const char *operation, const String &path, int error) {
+  if (error != 0) {
+    Serial.printf("[%s] %s failed path=%s errno=%d (%s)\n", tag, operation, path.c_str(), error,
+                  std::strerror(error));
+  } else {
+    Serial.printf("[%s] %s failed path=%s errno=0\n", tag, operation, path.c_str());
+  }
+}
+
+void logFsErrno(const char *tag, const char *operation, const String &from, const String &to,
+                int error) {
+  if (error != 0) {
+    Serial.printf("[%s] %s failed from=%s to=%s errno=%d (%s)\n", tag, operation, from.c_str(),
+                  to.c_str(), error, std::strerror(error));
+  } else {
+    Serial.printf("[%s] %s failed from=%s to=%s errno=0\n", tag, operation, from.c_str(),
+                  to.c_str());
+  }
+}
 
 bool hasBookWordLimit() { return kMaxBookWords > 0; }
 
@@ -198,10 +219,15 @@ bool ensureDirectory(const char *path) {
     return false;
   }
   Serial.printf("[sd-check] creating directory: %s\n", path);
+  errno = 0;
   const bool mkdirOk = SD_MMC.mkdir(path);
+  const int mkdirErrno = errno;
   const bool existsAfter = directoryExists(path);
   Serial.printf("[sd-check] mkdir path=%s ok=%u existsAfter=%u\n", path, mkdirOk ? 1 : 0,
                 existsAfter ? 1 : 0);
+  if (!mkdirOk && !existsAfter) {
+    logFsErrno("sd-check", "mkdir", String(path), mkdirErrno);
+  }
   return mkdirOk || existsAfter;
 }
 
@@ -539,16 +565,24 @@ bool writeDiagnosticProbeFile(const char *directoryPath) {
   path += ".sdcheck.tmp";
   Serial.printf("[sd-check] write probe path=%s\n", path.c_str());
   SD_MMC.remove(path);
+  errno = 0;
   File file = SD_MMC.open(path, FILE_WRITE);
+  const int openErrno = errno;
   if (!file) {
     Serial.printf("[sd-check] write probe open failed: %s\n", path.c_str());
+    logFsErrno("sd-check", "open FILE_WRITE", path, openErrno);
     return false;
   }
   const size_t written = file.print("rsvp-nano sd check\n");
   file.close();
+  errno = 0;
   const bool removed = SD_MMC.remove(path);
+  const int removeErrno = errno;
   Serial.printf("[sd-check] write probe result path=%s written=%u removed=%u\n",
                 path.c_str(), static_cast<unsigned int>(written), removed ? 1 : 0);
+  if (!removed) {
+    logFsErrno("sd-check", "remove", path, removeErrno);
+  }
   return written > 0 && removed;
 }
 
@@ -2499,9 +2533,19 @@ bool StorageManager::buildIndexedBook(const String &path, BookMetadata &metadata
   SD_MMC.remove(tmpIndexPath);
   SD_MMC.remove(tmpDataPath);
 
+  errno = 0;
   File indexFile = SD_MMC.open(tmpIndexPath, FILE_WRITE);
+  const int indexOpenErrno = errno;
+  errno = 0;
   File dataFile = SD_MMC.open(tmpDataPath, FILE_WRITE);
+  const int dataOpenErrno = errno;
   if (!indexFile || !dataFile) {
+    if (!indexFile) {
+      logFsErrno("storage-index", "open index FILE_WRITE", tmpIndexPath, indexOpenErrno);
+    }
+    if (!dataFile) {
+      logFsErrno("storage-index", "open data FILE_WRITE", tmpDataPath, dataOpenErrno);
+    }
     if (indexFile) {
       indexFile.close();
     }
@@ -2696,9 +2740,24 @@ bool StorageManager::buildIndexedBook(const String &path, BookMetadata &metadata
 
   SD_MMC.remove(indexPath);
   SD_MMC.remove(dataPath);
-  const bool renamed =
-      SD_MMC.rename(tmpIndexPath, indexPath) && SD_MMC.rename(tmpDataPath, dataPath);
+  errno = 0;
+  const bool indexRenamed = SD_MMC.rename(tmpIndexPath, indexPath);
+  const int indexRenameErrno = errno;
+  bool dataRenamed = false;
+  int dataRenameErrno = 0;
+  if (indexRenamed) {
+    errno = 0;
+    dataRenamed = SD_MMC.rename(tmpDataPath, dataPath);
+    dataRenameErrno = errno;
+  }
+  const bool renamed = indexRenamed && dataRenamed;
   if (!renamed) {
+    if (!indexRenamed) {
+      logFsErrno("storage-index", "rename index", tmpIndexPath, indexPath, indexRenameErrno);
+    }
+    if (indexRenamed && !dataRenamed) {
+      logFsErrno("storage-index", "rename data", tmpDataPath, dataPath, dataRenameErrno);
+    }
     SD_MMC.remove(tmpIndexPath);
     SD_MMC.remove(tmpDataPath);
     SD_MMC.remove(indexPath);
