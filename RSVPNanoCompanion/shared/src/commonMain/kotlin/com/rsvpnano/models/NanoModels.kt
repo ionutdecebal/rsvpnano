@@ -97,6 +97,8 @@ data class NanoSettings(
         val readingBattery: Boolean = true,
         val readingChapter: Boolean = false,
         val readingProgress: Boolean = false,
+        val screensaver: Int = NanoSettingsSchema.SCREENSAVER_LIFE,
+        val standbyTimerIndex: Int = NanoSettingsSchema.STANDBY_TIMER_NEVER,
         val language: Int,
         val phantomWords: Boolean,
         val fontSizeIndex: Int,
@@ -183,6 +185,15 @@ data class NanoSettings(
     fun withReadingProgress(value: Boolean): NanoSettings =
         copy(display = display.copy(readingProgress = value))
 
+    fun withScreensaver(value: Int): NanoSettings =
+        copy(display = display.copy(screensaver = NanoSettingsSchema.coerceScreensaver(value)))
+
+    fun withStandbyTimerIndex(value: Int): NanoSettings =
+        copy(display = display.copy(standbyTimerIndex = NanoSettingsSchema.coerceStandbyTimerIndex(value)))
+
+    fun withLanguage(value: Int): NanoSettings =
+        copy(display = display.copy(language = NanoSettingsSchema.coerceLanguage(value)))
+
     fun withAppearance(darkMode: Boolean, nightMode: Boolean): NanoSettings =
         copy(display = display.copy(darkMode = darkMode, nightMode = nightMode))
 
@@ -241,6 +252,10 @@ object NanoSettingsSchema {
     const val BATTERY_PERCENT = "percent"
     const val BATTERY_TIME_REMAINING = "time_remaining"
     const val BATTERY_VOLTAGE = "voltage"
+    const val SCREENSAVER_LIFE = 0
+    const val SCREENSAVER_MAZE = 2
+    const val SCREENSAVER_VORONOI = 3
+    const val SCREENSAVER_SCREEN_OFF = 6
     const val TYPEFACE_STANDARD = "standard"
     const val TYPEFACE_ATKINSON = "atkinson"
     const val TYPEFACE_OPEN_DYSLEXIC = "open_dyslexic"
@@ -255,6 +270,13 @@ object NanoSettingsSchema {
     const val PACING_MS_STEP = 50
     const val BRIGHTNESS_MIN = 0
     const val BRIGHTNESS_MAX = 4
+    const val STANDBY_TIMER_NEVER = 0
+    const val STANDBY_TIMER_1_MIN = 1
+    const val STANDBY_TIMER_5_MIN = 2
+    const val STANDBY_TIMER_10_MIN = 3
+    const val STANDBY_TIMER_30_MIN = 4
+    const val LANGUAGE_MIN = 0
+    const val LANGUAGE_MAX = 5
     const val FONT_SIZE_MIN = 0
     const val FONT_SIZE_MAX = 2
     const val TRACKING_MIN = -2
@@ -285,6 +307,21 @@ object NanoSettingsSchema {
 
     fun coerceBrightnessIndex(value: Int): Int =
         value.coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
+
+    fun coerceScreensaver(value: Int): Int =
+        when (value) {
+            SCREENSAVER_MAZE,
+            SCREENSAVER_VORONOI,
+            SCREENSAVER_SCREEN_OFF
+            -> value
+            else -> SCREENSAVER_LIFE
+        }
+
+    fun coerceStandbyTimerIndex(value: Int): Int =
+        value.coerceIn(STANDBY_TIMER_NEVER, STANDBY_TIMER_30_MIN)
+
+    fun coerceLanguage(value: Int): Int =
+        value.coerceIn(LANGUAGE_MIN, LANGUAGE_MAX)
 
     fun coerceFontSizeIndex(value: Int): Int =
         value.coerceIn(FONT_SIZE_MIN, FONT_SIZE_MAX)

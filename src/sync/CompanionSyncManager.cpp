@@ -1,5 +1,7 @@
 #include "sync/CompanionSyncManager.h"
 
+#include "app/Localization.h"
+
 #include <ESPmDNS.h>
 #include <SD_MMC.h>
 #include <WiFi.h>
@@ -30,6 +32,8 @@ constexpr const char *kPrefHandedness = "handed";
 constexpr const char *kPrefPhantomWords = "phantom_on";
 constexpr const char *kPrefFooterMetricMode = "prog_md";
 constexpr const char *kPrefBatteryLabelMode = "bat_md";
+constexpr const char *kPrefScreensaverMode = "scrn_sv";
+constexpr const char *kPrefStandbyTimer = "stby_tmr";
 constexpr const char *kPrefReaderBatteryVisible = "read_bat";
 constexpr const char *kPrefReaderChapterVisible = "read_ch";
 constexpr const char *kPrefReaderProgressVisible = "read_pct";
@@ -52,7 +56,7 @@ constexpr uint16_t kMinWpm = 10;
 constexpr uint16_t kMaxWpm = 1000;
 constexpr uint8_t kDefaultBrightness = 3;
 constexpr uint8_t kMaxBrightness = 4;
-constexpr uint8_t kMaxUiLanguage = 1;
+constexpr uint8_t kMaxUiLanguage = static_cast<uint8_t>(Localization::UiLanguage::Count) - 1;
 constexpr uint8_t kMaxReaderMode = 1;
 constexpr uint8_t kMaxHandedness = 1;
 constexpr uint8_t kMaxFooterMetric = 2;
@@ -73,6 +77,11 @@ constexpr uint8_t kDefaultTypographyGuideWidth = 30;
 constexpr uint8_t kMinTypographyGuideGap = 2;
 constexpr uint8_t kMaxTypographyGuideGap = 8;
 constexpr uint8_t kDefaultTypographyGuideGap = 5;
+constexpr uint8_t kScreensaverLife = 0;
+constexpr uint8_t kScreensaverMaze = 2;
+constexpr uint8_t kScreensaverVoronoi = 3;
+constexpr uint8_t kScreensaverScreenOff = 6;
+constexpr uint8_t kMaxStandbyTimerIndex = 4;
 
 const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
@@ -330,6 +339,11 @@ int clampInt(int value, int minValue, int maxValue) {
     return maxValue;
   }
   return value;
+}
+
+bool isValidScreensaverMode(int value) {
+  return value == kScreensaverLife || value == kScreensaverMaze ||
+         value == kScreensaverVoronoi || value == kScreensaverScreenOff;
 }
 
 String enumLabel(uint8_t value, const char *const *labels, size_t count, uint8_t fallback = 0) {
@@ -1034,6 +1048,12 @@ String CompanionSyncManager::settingsJson() {
       clampInt(preferences_.getUChar(kPrefFooterMetricMode, 0), 0, kMaxFooterMetric));
   const uint8_t batteryLabel = static_cast<uint8_t>(
       clampInt(preferences_.getUChar(kPrefBatteryLabelMode, 0), 0, kMaxBatteryLabel));
+  int screensaver = preferences_.getUChar(kPrefScreensaverMode, kScreensaverLife);
+  if (!isValidScreensaverMode(screensaver)) {
+    screensaver = kScreensaverLife;
+  }
+  const uint8_t standbyTimer = static_cast<uint8_t>(
+      clampInt(preferences_.getUChar(kPrefStandbyTimer, 0), 0, kMaxStandbyTimerIndex));
   const uint8_t language =
       static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefUiLanguage, 0), 0, kMaxUiLanguage));
   const uint8_t fontSize = static_cast<uint8_t>(
@@ -1090,6 +1110,8 @@ String CompanionSyncManager::settingsJson() {
           String(preferences_.getBool(kPrefReaderChapterVisible, false) ? "true" : "false");
   body += ",\"readingProgress\":" +
           String(preferences_.getBool(kPrefReaderProgressVisible, false) ? "true" : "false");
+  body += ",\"screensaver\":" + String(screensaver);
+  body += ",\"standbyTimerIndex\":" + String(standbyTimer);
   body += ",\"language\":" + String(language);
   body += ",\"phantomWords\":" +
           String(preferences_.getBool(kPrefPhantomWords, true) ? "true" : "false");
@@ -1229,6 +1251,20 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
   }
   if (readJsonBool(body, "readingProgress", boolValue)) {
     preferences_.putBool(kPrefReaderProgressVisible, boolValue);
+  }
+  if (readJsonInt(body, "screensaver", intValue)) {
+    if (!isValidScreensaverMode(intValue)) {
+      error = "screensaver is out of range";
+      return false;
+    }
+    preferences_.putUChar(kPrefScreensaverMode, static_cast<uint8_t>(intValue));
+  }
+  if (readJsonInt(body, "standbyTimerIndex", intValue)) {
+    if (intValue < 0 || intValue > kMaxStandbyTimerIndex) {
+      error = "standbyTimerIndex is out of range";
+      return false;
+    }
+    preferences_.putUChar(kPrefStandbyTimer, static_cast<uint8_t>(intValue));
   }
   if (readJsonInt(body, "language", intValue)) {
     if (intValue < 0 || intValue > kMaxUiLanguage) {

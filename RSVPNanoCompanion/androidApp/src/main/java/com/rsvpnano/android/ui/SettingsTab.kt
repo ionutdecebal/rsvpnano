@@ -255,7 +255,7 @@ fun SettingsTab(
                 item {
                     SectionCard(
                         title = "Display",
-                        subtitle = "Screen mode, brightness, and reader status labels.",
+                        subtitle = "Screen mode, standby behavior, and reader status labels.",
                     ) {
                         ChoiceRow(
                             label = "Display mode",
@@ -305,6 +305,48 @@ fun SettingsTab(
                                 NanoSettingsSchema.BATTERY_VOLTAGE to "Voltage",
                             ),
                             onSelected = { label -> onUpdateSettings { it.withBatteryLabel(label) } },
+                        )
+                        ChoiceRow(
+                            label = "Screensaver",
+                            selected = settings.display.screensaver.toString(),
+                            options = listOf(
+                                NanoSettingsSchema.SCREENSAVER_LIFE.toString() to "Life",
+                                NanoSettingsSchema.SCREENSAVER_MAZE.toString() to "Maze",
+                                NanoSettingsSchema.SCREENSAVER_VORONOI.toString() to "Voronoi",
+                                NanoSettingsSchema.SCREENSAVER_SCREEN_OFF.toString() to "Screen off",
+                            ),
+                            onSelected = { mode ->
+                                onUpdateSettings { it.withScreensaver(mode.toIntOrNull() ?: NanoSettingsSchema.SCREENSAVER_LIFE) }
+                            },
+                        )
+                        ChoiceRow(
+                            label = "Standby timer",
+                            selected = settings.display.standbyTimerIndex.toString(),
+                            options = listOf(
+                                NanoSettingsSchema.STANDBY_TIMER_NEVER.toString() to "Never",
+                                NanoSettingsSchema.STANDBY_TIMER_1_MIN.toString() to "1 min",
+                                NanoSettingsSchema.STANDBY_TIMER_5_MIN.toString() to "5 min",
+                                NanoSettingsSchema.STANDBY_TIMER_10_MIN.toString() to "10 min",
+                                NanoSettingsSchema.STANDBY_TIMER_30_MIN.toString() to "30 min",
+                            ),
+                            onSelected = { index ->
+                                onUpdateSettings { it.withStandbyTimerIndex(index.toIntOrNull() ?: NanoSettingsSchema.STANDBY_TIMER_NEVER) }
+                            },
+                        )
+                        ChoiceRow(
+                            label = "Language",
+                            selected = settings.display.language.toString(),
+                            options = listOf(
+                                "0" to "English",
+                                "1" to "Espanol",
+                                "2" to "Francais",
+                                "3" to "Deutsch",
+                                "4" to "Romana",
+                                "5" to "Polski",
+                            ),
+                            onSelected = { language ->
+                                onUpdateSettings { it.withLanguage(language.toIntOrNull() ?: 0) }
+                            },
                         )
                         SwitchRow(
                             label = "Battery while reading",

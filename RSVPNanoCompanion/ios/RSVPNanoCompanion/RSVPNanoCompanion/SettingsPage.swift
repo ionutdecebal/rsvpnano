@@ -90,6 +90,9 @@ struct SettingsPage: View {
                 }
                 .disabled(connection.isBusy)
 
+                Toggle("Accurate time estimate", isOn: accurateTimeEstimateBinding(for: settings))
+                    .disabled(connection.isBusy)
+
                 sliderSetting("Base Speed", value: wpmBinding(for: settings), range: 10...1000, step: 1, label: "\(settings.reading.wpm) WPM")
                 sliderSetting("Long Words", value: pacingLongBinding(for: settings), range: 0...600, step: 50, label: "\(settings.reading.pacing.longWordMs) ms")
                 sliderSetting("Complexity", value: pacingComplexBinding(for: settings), range: 0...600, step: 50, label: "\(settings.reading.pacing.complexWordMs) ms")
@@ -161,6 +164,42 @@ struct SettingsPage: View {
                 }
                 .disabled(connection.isBusy)
 
+                VStack(alignment: .leading, spacing: 8) {
+                    settingsControlLabel("Screensaver")
+                    Picker("Screensaver", selection: screensaverBinding(for: settings)) {
+                        Text("Life").tag(0)
+                        Text("Maze").tag(2)
+                        Text("Voronoi").tag(3)
+                        Text("Screen off").tag(6)
+                    }
+                }
+                .disabled(connection.isBusy)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    settingsControlLabel("Standby Timer")
+                    Picker("Standby Timer", selection: standbyTimerBinding(for: settings)) {
+                        Text("Never").tag(0)
+                        Text("1 min").tag(1)
+                        Text("5 min").tag(2)
+                        Text("10 min").tag(3)
+                        Text("30 min").tag(4)
+                    }
+                }
+                .disabled(connection.isBusy)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    settingsControlLabel("Language")
+                    Picker("Language", selection: languageBinding(for: settings)) {
+                        Text("English").tag(0)
+                        Text("Espanol").tag(1)
+                        Text("Francais").tag(2)
+                        Text("Deutsch").tag(3)
+                        Text("Romana").tag(4)
+                        Text("Polski").tag(5)
+                    }
+                }
+                .disabled(connection.isBusy)
+
                 Toggle("Battery while reading", isOn: readingBatteryBinding(for: settings))
                     .disabled(connection.isBusy)
 
@@ -173,7 +212,7 @@ struct SettingsPage: View {
         } header: {
             Text("Display")
         } footer: {
-            Text("Screen mode, brightness, and reader status labels.")
+            Text("Screen mode, standby behavior, and reader status labels.")
         }
     }
 

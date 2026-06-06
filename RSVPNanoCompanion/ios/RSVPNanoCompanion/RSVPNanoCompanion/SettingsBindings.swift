@@ -56,6 +56,16 @@ extension SettingsPage {
         )
     }
 
+    func accurateTimeEstimateBinding(for settings: NanoSettings) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.deviceSettings?.reading.accurateTimeEstimate ?? settings.reading.accurateTimeEstimate },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withAccurateTimeEstimate(value: value))
+            }
+        )
+    }
+
     func pacingLongBinding(for settings: NanoSettings) -> Binding<Int> {
         Binding(
             get: { viewModel.deviceSettings?.reading.pacing.longWordMs ?? settings.reading.pacing.longWordMs },
@@ -122,6 +132,36 @@ extension SettingsPage {
             set: { value in
                 guard let current = viewModel.deviceSettings else { return }
                 viewModel.saveSettings(current.withBatteryLabel(value: value))
+            }
+        )
+    }
+
+    func screensaverBinding(for settings: NanoSettings) -> Binding<Int> {
+        Binding(
+            get: { viewModel.deviceSettings?.display.screensaver ?? settings.display.screensaver },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withScreensaver(value: Int32(value)))
+            }
+        )
+    }
+
+    func standbyTimerBinding(for settings: NanoSettings) -> Binding<Int> {
+        Binding(
+            get: { Int(viewModel.deviceSettings?.display.standbyTimerIndex ?? settings.display.standbyTimerIndex) },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withStandbyTimerIndex(value: Int32(value)))
+            }
+        )
+    }
+
+    func languageBinding(for settings: NanoSettings) -> Binding<Int> {
+        Binding(
+            get: { Int(viewModel.deviceSettings?.display.language ?? settings.display.language) },
+            set: { value in
+                guard let current = viewModel.deviceSettings else { return }
+                viewModel.saveSettings(current.withLanguage(value: Int32(value)))
             }
         )
     }
