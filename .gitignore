@@ -23,7 +23,7 @@ tools/*.rsvp
 *.ridx
 *.rdat
 web/firmware/*.bin
-RSVPNanoCompanion/web/generated/
+web/generated/
 .cache/
 build/
 **/build/

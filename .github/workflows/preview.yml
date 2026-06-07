@@ -1,0 +1,123 @@
+name: Preview firmware
+
+on:
+  push:
+    tags:
+      - "preview-*"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Preview tag/release name, for example preview-sd-fix"
+        required: true
+        default: "preview-manual"
+      label:
+        description: "Optional release title"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set preview metadata
+        id: preview
+        env:
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+          LABEL: ${{ inputs.label }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            CHANNEL="$DISPATCH_CHANNEL"
+          else
+            CHANNEL="$GITHUB_REF_NAME"
+          fi
+
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BUILD_SHA="$(git rev-parse HEAD)"
+
+          if ! echo "$CHANNEL" | grep -Eq '^preview-[A-Za-z0-9._-]+$'; then
+            echo "::error::Preview channel must look like preview-name, got: ${CHANNEL}"
+            exit 1
+          fi
+
+          VERSION="${CHANNEL}-${SHORT_SHA}"
+
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${BUILD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$LABEL" ]; then
+            echo "title=${LABEL}" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=Preview ${CHANNEL}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Export firmware assets
+        run: python3 tools/export_web_firmware.py --version "${{ steps.preview.outputs.version }}"
+
+      - name: Write preview release notes
+        run: |
+          cat > release-notes.md <<NOTES
+          Preview firmware build.
+
+          Tag/channel: \`${{ steps.preview.outputs.channel }}\`
+          Commit: \`${{ steps.preview.outputs.commit_sha }}\`
+          Build version: \`${{ steps.preview.outputs.version }}\`
+
+          Assets:
+          - \`rsvp-nano.bin\` is the full browser-flasher image for fresh installs.
+          - \`rsvp-nano-ota.bin\` is the app-only binary used by OTA updates.
+          NOTES
+
+      - name: Move preview tag to this commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
+          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -f "$RELEASE_TAG" "$BUILD_SHA"
+          git push origin "refs/tags/${RELEASE_TAG}" --force
+
+      - name: Publish or update preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
+          RELEASE_TITLE: ${{ steps.preview.outputs.title }}
+          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
+          FULL_BIN: web/firmware/rsvp-nano.bin
+          OTA_BIN: web/firmware/rsvp-nano-ota.bin
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md \
+              --target "$BUILD_SHA" \
+              --prerelease
+          else
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md \
+              --target "$BUILD_SHA" \
+              --prerelease
+          fi
+
+          gh release upload "$RELEASE_TAG" \
+            "$FULL_BIN" \
+            "$OTA_BIN" \
+            --clobber
