@@ -47,6 +47,7 @@ const BLOCK_TAGS = new Set([
 
 const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 const SKIP_TAGS = new Set(["head", "math", "nav", "script", "style", "svg"]);
+const INLINE_CHAPTER_PATTERN = /^(chapter|part|book)\s+([0-9]+|[ivxlcdm]+)\b/i;
 const ASCII_REPLACEMENTS = {
   "\u00A0": " ",
   "\u1680": " ",
@@ -982,18 +983,23 @@ async function epubEventsAndMetadata(file, mode) {
   const JSZip = await loadJsZip();
   const zip = await JSZip.loadAsync(file);
   const opfPath = await containerRootfile(zip);
-  const { title, author, spinePaths } = await parsePackage(zip, opfPath, mode);
+  const { title, author, spinePaths, tocTitles } = await parsePackage(zip, opfPath, mode);
 
   const events = [];
   for (let index = 0; index < spinePaths.length; index += 1) {
     const spinePath = spinePaths[index];
     const chapterMarkup = await readZipText(zip, spinePath);
-    const chapterEvents = htmlEvents(chapterMarkup, mode);
+    let chapterEvents = htmlEvents(chapterMarkup, mode);
     if (!chapterEvents.some(([kind]) => kind === "text")) {
       continue;
     }
     if (!chapterEvents.some(([kind]) => kind === "chapter")) {
-      chapterEvents.unshift(["chapter", fallbackChapterTitle(spinePath, index + 1, mode)]);
+      const tocTitle = tocTitles.get(spinePath);
+      if (tocTitle) {
+        chapterEvents.unshift(["chapter", tocTitle]);
+      } else {
+        chapterEvents = inferredChapterEvents(chapterEvents, mode);
+      }
     }
     events.push(...chapterEvents);
   }
@@ -1034,6 +1040,7 @@ async function parsePackage(zip, opfPath, mode) {
 
   const manifest = new Map();
   const manifestContentPaths = [];
+  let spineTocId = "";
 
   for (const node of Array.from(doc.getElementsByTagName("*"))) {
     if (localName(node) !== "item") {
@@ -1050,10 +1057,18 @@ async function parsePackage(zip, opfPath, mode) {
     manifest.set(itemId, {
       path: resolvedPath,
       mediaType,
+      properties: node.getAttribute("properties") || "",
     });
 
     if (isContentDocument(resolvedPath, mediaType)) {
       manifestContentPaths.push(resolvedPath);
+    }
+  }
+
+  for (const node of Array.from(doc.getElementsByTagName("*"))) {
+    if (localName(node) === "spine") {
+      spineTocId = node.getAttribute("toc") || "";
+      break;
     }
   }
 
@@ -1077,7 +1092,8 @@ async function parsePackage(zip, opfPath, mode) {
     throw new Error("EPUB spine does not contain readable XHTML/HTML documents.");
   }
 
-  return { title, author, spinePaths: readingOrder };
+  const tocTitles = await parseTocTitles(zip, manifest, spineTocId, mode);
+  return { title, author, spinePaths: readingOrder, tocTitles };
 }
 
 function firstNodeText(doc, name, mode) {
@@ -1110,6 +1126,137 @@ function isContentDocument(path, mediaType) {
     loweredPath.endsWith(".html") ||
     loweredPath.endsWith(".htm")
   );
+}
+
+function hasToken(value, token) {
+  return value
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .includes(token);
+}
+
+function isNavDocument(path, mediaType, properties) {
+  return (
+    hasToken(properties, "nav") ||
+    (isContentDocument(path, mediaType) &&
+      (path.split("/").pop() || "").toLowerCase() === "nav.xhtml")
+  );
+}
+
+function isNcxDocument(path, mediaType) {
+  return mediaType.toLowerCase() === "application/x-dtbncx+xml" || path.toLowerCase().endsWith(".ncx");
+}
+
+async function parseTocTitles(zip, manifest, spineTocId, mode) {
+  const titles = new Map();
+  const navPaths = Array.from(manifest.values())
+    .filter((item) => isNavDocument(item.path, item.mediaType, item.properties))
+    .map((item) => item.path);
+
+  for (const navPath of navPaths) {
+    try {
+      for (const [path, title] of await parseNavToc(zip, navPath, mode)) {
+        titles.set(path, title);
+      }
+    } catch (error) {
+      console.warn(`Skipping EPUB navigation document ${navPath}:`, error);
+    }
+  }
+
+  const ncxPaths = [];
+  if (spineTocId && manifest.has(spineTocId)) {
+    ncxPaths.push(manifest.get(spineTocId).path);
+  }
+  for (const item of manifest.values()) {
+    if (isNcxDocument(item.path, item.mediaType) && !ncxPaths.includes(item.path)) {
+      ncxPaths.push(item.path);
+    }
+  }
+
+  for (const ncxPath of ncxPaths) {
+    try {
+      for (const [path, title] of await parseNcxToc(zip, ncxPath, mode)) {
+        if (!titles.has(path)) {
+          titles.set(path, title);
+        }
+      }
+    } catch (error) {
+      console.warn(`Skipping EPUB NCX TOC ${ncxPath}:`, error);
+    }
+  }
+
+  return titles;
+}
+
+async function parseNavToc(zip, navPath, mode) {
+  const navXml = await readZipText(zip, navPath);
+  const doc = parseXmlDocument(navXml, "EPUB navigation document");
+  const navs = Array.from(doc.getElementsByTagName("*")).filter((node) => localName(node) === "nav");
+  const targets = navs.filter(hasTocType);
+  const selected = targets.length > 0 ? targets : navs.slice(0, 1);
+  const titles = new Map();
+
+  for (const nav of selected) {
+    for (const node of Array.from(nav.getElementsByTagName("*"))) {
+      if (localName(node) !== "a") {
+        continue;
+      }
+      const href = node.getAttribute("href") || "";
+      const title = cleanText(node.textContent || "", mode);
+      if (href && title && !titles.has(zipJoin(navPath, href))) {
+        titles.set(zipJoin(navPath, href), title);
+      }
+    }
+  }
+
+  return titles;
+}
+
+function hasTocType(node) {
+  return (
+    hasToken(node.getAttribute("epub:type") || "", "toc") ||
+    hasToken(node.getAttributeNS("http://www.idpf.org/2007/ops", "type") || "", "toc") ||
+    hasToken(node.getAttribute("type") || "", "toc") ||
+    hasToken(node.getAttribute("properties") || "", "toc")
+  );
+}
+
+async function parseNcxToc(zip, ncxPath, mode) {
+  const ncxXml = await readZipText(zip, ncxPath);
+  const doc = parseXmlDocument(ncxXml, "EPUB NCX TOC");
+  const titles = new Map();
+
+  for (const node of Array.from(doc.getElementsByTagName("*"))) {
+    if (localName(node) !== "navpoint") {
+      continue;
+    }
+    const title = findDescendantText(node, "text", mode);
+    const src = findDescendantAttr(node, "content", "src");
+    if (title && src && !titles.has(zipJoin(ncxPath, src))) {
+      titles.set(zipJoin(ncxPath, src), title);
+    }
+  }
+
+  return titles;
+}
+
+function findDescendantText(node, wantedName, mode) {
+  for (const child of Array.from(node.getElementsByTagName("*"))) {
+    if (localName(child) === wantedName) {
+      return cleanText(child.textContent || "", mode);
+    }
+  }
+  return "";
+}
+
+function findDescendantAttr(node, wantedName, attrName) {
+  for (const child of Array.from(node.getElementsByTagName("*"))) {
+    if (localName(child) === wantedName) {
+      return child.getAttribute(attrName) || "";
+    }
+  }
+  return "";
 }
 
 function parseXmlDocument(text, label) {
@@ -1190,12 +1337,6 @@ function collapseZipPath(path) {
     parts.push(part);
   }
   return parts.join("/");
-}
-
-function fallbackChapterTitle(path, index, mode) {
-  const base = stripExtension(path.split("/").pop() || `chapter-${index}`);
-  const cleaned = cleanText(base.replace(/[_-]+/g, " "), mode);
-  return cleaned || `Chapter ${index}`;
 }
 
 function htmlEventsAndTitle(markup, fallbackTitle, mode) {
@@ -1323,6 +1464,100 @@ function looksLikeChapter(line, mode) {
   }
 
   return null;
+}
+
+function inlineChapterSplit(text, mode) {
+  const trimmed = cleanText(text, mode);
+  if (!trimmed) {
+    return null;
+  }
+
+  const match = trimmed.match(INLINE_CHAPTER_PATTERN);
+  if (!match || match.index !== 0) {
+    return null;
+  }
+
+  const remainder = cleanText(trimmed.slice(match[0].length).replace(/^[:.\-\s]+/, ""), mode);
+  if (
+    trimmed.length <= 72 &&
+    trimmed.split(/\s+/).length <= 12 &&
+    looksLikeTitleSuffix(remainder)
+  ) {
+    return [trimmed, ""];
+  }
+
+  const title = cleanText(match[0].replace(/[:.\-\s]+$/, ""), mode);
+  return title ? [title, remainder] : null;
+}
+
+function looksLikeTitleSuffix(text) {
+  if (!text) {
+    return true;
+  }
+  if (text.includes(":")) {
+    return true;
+  }
+
+  const letters = Array.from(text).filter((char) => /[A-Za-z]/.test(char));
+  if (letters.length > 0) {
+    const uppercase = letters.filter((char) => char.toUpperCase() === char).length;
+    if (uppercase / letters.length >= 0.55) {
+      return true;
+    }
+  }
+
+  const titleWords = new Set([
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+  ]);
+  const words = text.match(/[A-Za-z0-9']+/g) || [];
+  return (
+    words.length > 0 &&
+    words.every((word) => /^[A-Z]/.test(word) || titleWords.has(word.toLowerCase()) || /^\d+$/.test(word))
+  );
+}
+
+function inferredChapterEvents(events, mode) {
+  const inferred = [];
+  let lastChapter = "";
+  for (const [kind, value] of events) {
+    if (kind !== "text") {
+      inferred.push([kind, value]);
+      if (kind === "chapter") {
+        lastChapter = value;
+      }
+      continue;
+    }
+
+    const split = inlineChapterSplit(value, mode);
+    if (!split) {
+      inferred.push([kind, value]);
+      continue;
+    }
+
+    const [chapter, remainder] = split;
+    if (chapter !== lastChapter) {
+      inferred.push(["chapter", chapter]);
+      lastChapter = chapter;
+    }
+    if (remainder) {
+      inferred.push(["text", remainder]);
+    }
+  }
+  return inferred;
 }
 
 class RsvpWriter {
