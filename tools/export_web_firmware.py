@@ -19,7 +19,13 @@ EXPORTS = {
         "binary": "rsvp-nano.bin",
         "ota_binary": "rsvp-nano-ota.bin",
         "manifest": "manifest.json",
-        "label": "RSVP Nano firmware",
+        "label": "RSVP Nano firmware (Waveshare 3.49B rev1)",
+    },
+    "waveshare_esp32s3_usb_msc_rev2": {
+        "binary": "rsvp-nano-rev2.bin",
+        "ota_binary": "rsvp-nano-rev2-ota.bin",
+        "manifest": "manifest-rev2.json",
+        "label": "RSVP Nano firmware (Waveshare 3.49B rev2)",
     },
 }
 
@@ -130,7 +136,7 @@ def main() -> int:
     parser.add_argument("--version", default=git_version(), help="Version string for manifests.")
     args = parser.parse_args()
 
-    pio = pio_command()
+    pio = None if args.skip_build else pio_command()
     WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
     for env, export in EXPORTS.items():

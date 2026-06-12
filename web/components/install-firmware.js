@@ -13,6 +13,21 @@ function timeAgo(ts) {
 
 class InstallFirmware extends HTMLElement {
   connectedCallback() {
+    const firmwareOptions = [
+      {
+        manifest: "firmware/manifest.json",
+        title: "Waveshare 3.49B rev1",
+        badge: "Default",
+        note: "Use this build first. It keeps the standard GPIO8 backlight profile.",
+      },
+      {
+        manifest: "firmware/manifest-rev2.json",
+        title: "Waveshare 3.49B rev2",
+        badge: "GPIO42",
+        note: "Use this if the default build flashes but brightness does not change.",
+      },
+    ];
+
     this.innerHTML = `
       <section class="card install-steps" id="install-section">
         <button class="section-header" id="install-toggle" type="button" aria-expanded="true">
@@ -35,19 +50,22 @@ class InstallFirmware extends HTMLElement {
             </ol>
           </div>
           <div class="section-body-inner">
-            <div class="install-option">
+            ${firmwareOptions.map((option) => `
+            <div class="install-option" data-manifest="${option.manifest}" data-title="${option.title}">
               <div class="install-option-head">
-                <strong class="fw-version"></strong>
-                <span class="latest-badge"><span class="pulse-dot"></span>Latest Release</span>
+                <strong class="fw-version">${option.title}</strong>
+                <span class="latest-badge"><span class="pulse-dot"></span>${option.badge}</span>
               </div>
+              <p>${option.note}</p>
               <ul class="feature-list"></ul>
-              <esp-web-install-button manifest="firmware/manifest.json">
+              <esp-web-install-button manifest="${option.manifest}">
                 <button slot="activate">Install Firmware</button>
                 <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
                 <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
               </esp-web-install-button>
               <p class="install-warning">Important: keep the device plugged in until the installer says it's done.</p>
             </div>
+            `).join("")}
           </div>
         </div>
       </section>
@@ -68,16 +86,26 @@ class InstallFirmware extends HTMLElement {
     this._autoCollapse();
     this._observeInstallDialog();
 
-    fetch("firmware/manifest.json")
-      .then(r => r.json())
-      .then(m => {
-        this._fwVersion = m.version;
-        this.querySelector(".fw-version").textContent = "Version " + m.version;
-        if (m.features) {
-          const ul = this.querySelector(".feature-list");
-          ul.innerHTML = m.features.map(f => "<li>" + f + "</li>").join("");
-        }
-        this._updateButtonText();
+    this.querySelectorAll(".install-option").forEach((option) => {
+      option.querySelector('button[slot="activate"]').addEventListener("click", () => {
+        this._activeInstall = {
+          title: option.dataset.title,
+          version: option.dataset.version,
+        };
+      });
+
+      fetch(option.dataset.manifest)
+        .then(r => r.json())
+        .then(m => {
+          option.dataset.version = m.version;
+          option.querySelector(".fw-version").textContent =
+            option.dataset.title + " - " + m.version;
+          if (m.features) {
+            const ul = option.querySelector(".feature-list");
+            ul.innerHTML = m.features.map(f => "<li>" + f + "</li>").join("");
+          }
+          this._updateButtonText();
+        });
       });
   }
 
@@ -108,10 +136,13 @@ class InstallFirmware extends HTMLElement {
   _updateButtonText() {
     try {
       const data = JSON.parse(localStorage.getItem(FLASH_KEY));
-      if (data && data.version && this._fwVersion && data.version !== this._fwVersion) {
-        const btn = this.querySelector('button[slot="activate"]');
-        if (btn) btn.textContent = "Update Firmware";
-      }
+      this.querySelectorAll(".install-option").forEach((option) => {
+        const btn = option.querySelector('button[slot="activate"]');
+        const version = option.dataset.version;
+        if (btn && data && data.version && version && data.version !== version) {
+          btn.textContent = "Update Firmware";
+        }
+      });
     } catch (e) {}
   }
 
@@ -131,7 +162,8 @@ class InstallFirmware extends HTMLElement {
                 saved = true;
                 clearInterval(pollTimer);
                 localStorage.setItem(FLASH_KEY, JSON.stringify({
-                  version: this._fwVersion,
+                  version: this._activeInstall?.version,
+                  title: this._activeInstall?.title,
                   timestamp: Date.now(),
                 }));
                 this._showFlashHistory();

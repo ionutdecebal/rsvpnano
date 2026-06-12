@@ -2,6 +2,16 @@
 
 #include <Arduino.h>
 
+#if defined(RSVP_BOARD_WAVESHARE_3_49B_REV1) && \
+    defined(RSVP_BOARD_WAVESHARE_3_49B_REV2)
+#error "Select only one RSVP board profile"
+#endif
+
+#if !defined(RSVP_BOARD_WAVESHARE_3_49B_REV1) && \
+    !defined(RSVP_BOARD_WAVESHARE_3_49B_REV2)
+#define RSVP_BOARD_WAVESHARE_3_49B_REV1
+#endif
+
 namespace BoardConfig {
 
 enum class UiOrientation : uint8_t {
@@ -22,7 +32,14 @@ constexpr int PIN_LCD_DATA1 = 12;
 constexpr int PIN_LCD_DATA2 = 13;
 constexpr int PIN_LCD_DATA3 = 14;
 constexpr int PIN_LCD_RST = 21;
+
+#if defined(RSVP_BOARD_WAVESHARE_3_49B_REV1)
 constexpr int PIN_LCD_BACKLIGHT = 8;
+#elif defined(RSVP_BOARD_WAVESHARE_3_49B_REV2)
+constexpr int PIN_LCD_BACKLIGHT = 42;
+#else
+#error "Unsupported RSVP board profile"
+#endif
 
 constexpr int PANEL_NATIVE_WIDTH = 172;
 constexpr int PANEL_NATIVE_HEIGHT = 640;
@@ -39,7 +56,7 @@ constexpr int PIN_TOUCH_SDA = 17;
 constexpr int PIN_TOUCH_SCL = 18;
 
 constexpr int TCA9554_ADDRESS = 0x20;
-constexpr uint8_t TCA9554_PIN_BATTERY_ADC_ENABLE = 1;
+constexpr uint8_t TCA9554_PIN_BACKLIGHT_ENABLE = 1;
 constexpr uint8_t TCA9554_PIN_SYS_EN = 6;
 constexpr uint8_t TCA9554_PIN_AUDIO_ENABLE = 7;
 

@@ -34,7 +34,11 @@ uint8_t gBrightnessPercent = 100;
 void writeBacklightPwm() {
   pinMode(BoardConfig::PIN_LCD_BACKLIGHT, OUTPUT);
   analogWriteResolution(8);
-  analogWriteFrequency(50000);
+  // AP3032 CTRL PWM dimming:
+  // Datasheet recommends high-frequency PWM to avoid audio noise,
+  // and the figure labels the control signal around/up to 25 kHz.
+  // Use 25 kHz instead of 50 kHz for better board compatibility.
+  analogWriteFrequency(25000);
 
   if (!gBacklightOn) {
     analogWrite(BoardConfig::PIN_LCD_BACKLIGHT, 255);
