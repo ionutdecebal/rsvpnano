@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/MenuRepeat.h"
 #include "board/BoardConfig.h"
 
 #ifndef RSVP_USB_TRANSFER_ENABLED
@@ -168,6 +169,7 @@ constexpr size_t kSettingsDisplayReaderBatteryIndex = 7;
 constexpr size_t kSettingsDisplayReaderChapterIndex = 8;
 constexpr size_t kSettingsDisplayReaderProgressIndex = 9;
 constexpr size_t kSettingsDisplayLanguageIndex = 10;
+constexpr size_t kSettingsDisplayMenuRepeatIndex = 11;
 constexpr size_t kSettingsPacingReadingModeIndex = 1;
 constexpr size_t kSettingsPacingPauseModeIndex = 2;
 constexpr size_t kSettingsPacingWpmIndex = 3;
@@ -225,6 +227,7 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
+constexpr const char *kPrefMenuRepeatMs = "menu_rpt";
 constexpr size_t kReaderFontSizeCount = 3;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -309,6 +312,11 @@ int nextCyclicSetting(int value, int minValue, int maxValue, int step = 1) {
     next = minValue;
   }
   return next;
+}
+
+String menuRepeatDelayLabel(uint16_t delayMs) {
+  delayMs = MenuRepeat::sanitizeDelayMs(delayMs);
+  return delayMs == 0 ? String("Off") : String(delayMs) + " ms";
 }
 
 uint16_t nextReaderWpmSetting(uint16_t value) {
@@ -636,6 +644,8 @@ void App::begin() {
   if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
     readerFontSizeIndex_ = 0;
   }
+  menuRepeatDelayMs_ = MenuRepeat::sanitizeDelayMs(
+      preferences_.getUShort(kPrefMenuRepeatMs, MenuRepeat::kDefaultDelayMs));
   switch (preferences_.getUChar(kPrefFooterMetricMode,
                                 static_cast<uint8_t>(footerMetricMode_))) {
     case static_cast<uint8_t>(FooterMetricMode::ChapterTime):
@@ -1302,6 +1312,8 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
   if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
     readerFontSizeIndex_ = 0;
   }
+  menuRepeatDelayMs_ = MenuRepeat::sanitizeDelayMs(
+      preferences_.getUShort(kPrefMenuRepeatMs, MenuRepeat::kDefaultDelayMs));
 
   switch (preferences_.getUChar(kPrefFooterMetricMode,
                                 static_cast<uint8_t>(footerMetricMode_))) {
@@ -2203,6 +2215,10 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     pausedTouch_.lastY = event.y;
     pausedTouch_.startMs = nowMs;
     pausedTouch_.lastMs = nowMs;
+    menuRepeatGestureConsumed_ = false;
+    menuRepeatMoved_ = false;
+    menuRepeatDirection_ = 0;
+    menuRepeatNextMs_ = 0;
     return;
   }
 
@@ -2214,21 +2230,54 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   pausedTouch_.lastY = event.y;
   pausedTouch_.lastMs = nowMs;
 
-  if (event.phase != TouchPhase::End) {
-    return;
-  }
-
-  pausedTouch_.active = false;
-
   const int deltaX = static_cast<int>(pausedTouch_.lastX) - static_cast<int>(pausedTouch_.startX);
   const int deltaY = static_cast<int>(pausedTouch_.lastY) - static_cast<int>(pausedTouch_.startY);
   const int absDeltaX = abs(deltaX);
   const int absDeltaY = abs(deltaY);
 
+  if (event.phase != TouchPhase::End) {
+    if (menuScreen_ == MenuScreen::TextEntry || menuRepeatDelayMs_ == 0) {
+      return;
+    }
+
+    const int repeatDirection =
+        MenuRepeat::directionForDrag(deltaX, deltaY, kSwipeThresholdPx, kAxisBiasPx);
+    if (repeatDirection == 0) {
+      menuRepeatDirection_ = 0;
+      return;
+    }
+
+    if (!menuRepeatGestureConsumed_ || repeatDirection != menuRepeatDirection_ ||
+        nowMs >= menuRepeatNextMs_) {
+      menuRepeatGestureConsumed_ = true;
+      menuRepeatMoved_ = moveMenuSelection(repeatDirection, false) || menuRepeatMoved_;
+      menuRepeatDirection_ = repeatDirection;
+      menuRepeatNextMs_ = nowMs + menuRepeatDelayMs_;
+    }
+    return;
+  }
+
+  pausedTouch_.active = false;
+  menuRepeatDirection_ = 0;
+
   if (menuScreen_ == MenuScreen::TextEntry) {
     if (absDeltaX <= static_cast<int>(kTapSlopPx) && absDeltaY <= static_cast<int>(kTapSlopPx)) {
       handleTextEntryTap(event.x, event.y, nowMs);
     }
+    return;
+  }
+
+  if (menuRepeatGestureConsumed_) {
+    const bool quickEdgeSwipe =
+        !menuRepeatMoved_ && (nowMs - pausedTouch_.startMs) < menuRepeatDelayMs_;
+    const int releaseDirection =
+        MenuRepeat::directionForDrag(deltaX, deltaY, kSwipeThresholdPx, kAxisBiasPx);
+    if (quickEdgeSwipe && releaseDirection != 0) {
+      moveMenuSelection(releaseDirection, true);
+    }
+    menuRepeatGestureConsumed_ = false;
+    menuRepeatMoved_ = false;
+    menuRepeatNextMs_ = 0;
     return;
   }
 
@@ -2241,7 +2290,7 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
 
   if (absDeltaY >= static_cast<int>(kSwipeThresholdPx) &&
       absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
-    moveMenuSelection(deltaY < 0 ? -1 : 1);
+    moveMenuSelection(deltaY < 0 ? -1 : 1, true);
     return;
   }
 
@@ -2400,9 +2449,9 @@ void App::selectFocusTimerGenre(uint32_t nowMs) {
   renderFocusTimerSession();
 }
 
-void App::moveMenuSelection(int direction) {
+bool App::moveMenuSelection(int direction, bool wrap) {
   if (direction == 0 || menuScreen_ == MenuScreen::TextEntry) {
-    return;
+    return false;
   }
 
   size_t *selectedIndex = &menuSelectedIndex_;
@@ -2438,16 +2487,14 @@ void App::moveMenuSelection(int direction) {
   }
 
   if (itemCount == 0) {
-    return;
+    return false;
   }
 
-  const int next = static_cast<int>(*selectedIndex) + direction;
-  if (next < 0) {
-    *selectedIndex = itemCount - 1;
-  } else if (next >= static_cast<int>(itemCount)) {
-    *selectedIndex = 0;
-  } else {
-    *selectedIndex = static_cast<size_t>(next);
+  const MenuRepeat::MoveResult move =
+      MenuRepeat::movedIndex(*selectedIndex, itemCount, direction, wrap);
+  *selectedIndex = move.index;
+  if (!move.changed) {
+    return false;
   }
 
   renderMenu();
@@ -2531,6 +2578,8 @@ void App::moveMenuSelection(int direction) {
     }
     Serial.printf("[menu] selected=%s\n", selectedLabel.c_str());
   }
+
+  return true;
 }
 
 void App::selectMenuItem(uint32_t nowMs) {
@@ -2763,6 +2812,12 @@ void App::selectSettingsItem(uint32_t nowMs) {
         return;
       case kSettingsDisplayLanguageIndex:
         cycleUiLanguage(nowMs);
+        return;
+      case kSettingsDisplayMenuRepeatIndex:
+        menuRepeatDelayMs_ = MenuRepeat::nextDelayMs(menuRepeatDelayMs_);
+        preferences_.putUShort(kPrefMenuRepeatMs, menuRepeatDelayMs_);
+        rebuildSettingsMenuItems();
+        renderSettings();
         return;
       default:
         return;
@@ -3375,6 +3430,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Reading percent: " +
                                  onOffLabel(readerProgressVisibleWhilePlaying_));
     settingsMenuItems_.push_back(uiText(UiText::Language) + ": " + uiLanguageLabel());
+    settingsMenuItems_.push_back("Menu repeat: " + menuRepeatDelayLabel(menuRepeatDelayMs_));
   } else if (menuScreen_ == MenuScreen::SettingsPacing) {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Reading mode: " + readerModeLabel());
