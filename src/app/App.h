@@ -9,6 +9,7 @@
 
 #include "app/AppState.h"
 #include "app/Localization.h"
+#include "app/MenuRepeat.h"
 #include "audio/AudioManager.h"
 #include "display/DisplayManager.h"
 #include "input/ButtonHandler.h"
@@ -221,7 +222,7 @@ class App {
   void renderContextBrowsePreview(size_t currentIndex, uint16_t scrollProgressPermille);
   void applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs);
   void applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs);
-  void moveMenuSelection(int direction);
+  bool moveMenuSelection(int direction, bool wrap);
   void selectMenuItem(uint32_t nowMs);
   void openFocusTimer();
   void updateFocusTimer(uint32_t nowMs);
@@ -455,6 +456,7 @@ class App {
   size_t focusTimerGenreSelectedIndex_ = 0;
   uint8_t brightnessLevelIndex_ = 4;
   uint8_t readerFontSizeIndex_ = 0;
+  uint16_t menuRepeatDelayMs_ = MenuRepeat::kDefaultDelayMs;
   uint16_t pacingLongWordDelayMs_ = 200;
   uint16_t pacingComplexWordDelayMs_ = 200;
   uint16_t pacingPunctuationDelayMs_ = 200;
@@ -510,6 +512,8 @@ class App {
   uint16_t lastReaderTapY_ = 0;
   bool touchInitialized_ = false;
   bool touchPlayHeld_ = false;
+  bool menuRepeatGestureConsumed_ = false;
+  bool menuRepeatMoved_ = false;
   bool playLocked_ = false;
   bool pauseAtSentenceEndRequested_ = false;
   bool lastReaderTapValid_ = false;
@@ -533,6 +537,8 @@ class App {
   bool usingStorageBook_ = false;
   bool storageReady_ = false;
   bool pendingBootBookLoad_ = false;
+  int menuRepeatDirection_ = 0;
+  uint32_t menuRepeatNextMs_ = 0;
   bool pendingBootBookLegacyFallback_ = false;
   bool batteryPresent_ = false;
   bool batterySampleInitialized_ = false;
