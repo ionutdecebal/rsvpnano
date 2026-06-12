@@ -1,0 +1,64 @@
+name: CI - iOS
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    paths:
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradlew'
+      - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
+      - 'RSVPNanoCompanion/shared/**'
+      - 'RSVPNanoCompanion/ios/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradlew'
+      - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
+      - 'RSVPNanoCompanion/shared/**'
+      - 'RSVPNanoCompanion/ios/**'
+      - '.github/workflows/**'
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run shared tests
+        run: bash ./gradlew :conversionCore:compileKotlinIosX64 :conversionCore:compileKotlinIosSimulatorArm64 :shared:check --no-daemon
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+      - name: Build shared XCFramework
+        run: bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
+      - name: Build iOS app release
+        run: |
+          xcodebuild \
+            -project RSVPNanoCompanion/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj \
+            -scheme RSVPNanoCompanion \
+            -configuration Release \
+            -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Upload shared artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-xcframework
+          path: RSVPNanoCompanion/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework

@@ -2,6 +2,10 @@
 .gradle/
 .kotlin/
 .local/
+build/
+**/build/
+**/.gradle/
+**/.kotlin/
 .derivedData
 *.xcuserstate
 xcuserdata/
@@ -17,6 +21,7 @@ __pycache__/
 .vscode/ipch
 tools/*.epub
 tools/*.rsvp
+RSVPNanoCompanion/testdata/conversion/from-nano/
 *.rsvp.tmp
 *.rsvp.failed
 *.rsvp.converting
@@ -26,8 +31,4 @@ web/firmware/*.bin
 RSVPNanoCompanion/web/generated/
 web/generated/
 .cache/
-build/
-**/build/
-**/.gradle/
-**/.kotlin/
 compile_commands.json

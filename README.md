@@ -10,7 +10,7 @@ This README is written for the current release, `v0.0.5`.
 - A USB-C data cable.
 - A microSD card.
 - Chrome or Edge on a desktop computer for browser flashing and the web converter.
-- Optional: an iPhone companion app installed from Xcode while TestFlight approval is pending.
+- Optional: native iOS or Android companion apps built locally while public distribution is pending.
 
 ## Quick Start
 
@@ -124,17 +124,22 @@ The web companion has pages for:
 - `RSS`: manage RSS feed URLs.
 - `Help`: quick notes for connection, conversion, SD cards, and RSS.
 
-The web companion is the best option for Android, desktop, and anyone who does not have the iPhone app.
+The web companion remains the easiest option from desktop browsers and for anyone who does not have
+a native companion app installed.
 
-### Option 4: iPhone Companion App
+### Option 4: Native Companion Apps
 
-The iPhone app supports companion sync, article editing, share-sheet saving, RSS feed management, device settings, and library progress.
+The iOS and Android companion apps support companion sync, article drafts, share/import flows, RSS
+feed management, device settings, and library progress.
 
-TestFlight and App Store distribution are waiting on Apple Developer account approval. Until that is approved, the app can be installed temporarily from a Mac with Xcode.
+Public app distribution is not set up yet. The iOS app can be installed from a Mac with Xcode, and
+the Android app can be built and installed with Android Studio or the Android SDK.
 
 See:
 
-[`ios/RSVPNanoCompanion/README.md`](ios/RSVPNanoCompanion/README.md)
+[`RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md)
+
+[`RSVPNanoCompanion/androidApp/README.md`](RSVPNanoCompanion/androidApp/README.md)
 
 ## Home Wi-Fi, RSS, And OTA
 
@@ -324,15 +329,15 @@ If the old folder layout needs repair, the device now asks before changing the c
 
 The current renderer is best for English and European Latin-script languages. Complex scripts still need additional font and shaping work.
 
-## iPhone App Status
+## Companion App Status
 
-The iPhone companion app is working, but public distribution is waiting on Apple Developer account approval.
+The native companion apps are working locally, but public distribution is not set up yet.
 
 Current app features include:
 
 - Library view for books and articles.
 - Article drafts, editing, preview, and sync.
-- Safari and Chrome share flow.
+- Share/import flows.
 - Fetch article title and text where available.
 - Device settings editor.
 - RSS feed management.
@@ -340,13 +345,9 @@ Current app features include:
 
 Temporary install instructions are in:
 
-[`ios/RSVPNanoCompanion/README.md`](ios/RSVPNanoCompanion/README.md)
+[`RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md)
 
-## Android App
-
-The web companion works today from Android browsers.
-
-A future native Android app is planned. Help from Android developers would be very welcome, especially around sharing URLs/articles into the app, local draft storage, and syncing with the device companion API.
+[`RSVPNanoCompanion/androidApp/README.md`](RSVPNanoCompanion/androidApp/README.md)
 
 ## Build From Source
 
@@ -368,10 +369,10 @@ Monitor serial output:
 pio device monitor
 ```
 
-The iPhone app lives in:
+The iOS app lives in:
 
 ```text
-ios/RSVPNanoCompanion
+RSVPNanoCompanion/ios/RSVPNanoCompanion
 ```
 
 Open the Xcode project from that folder when installing the app locally.
@@ -399,8 +400,8 @@ web/firmware/manifest-rev2.json
 
 The next areas of work are:
 
-- TestFlight and unlisted App Store distribution after Apple Developer approval.
-- Better Android support, ideally with a native app.
+- Public app distribution.
+- More Android/iOS device testing and polish.
 - More capable article extraction for sites that do not expose full RSS content.
 - A fuller browser-hosted companion experience for desktop and Android users.
 - More font and script support.

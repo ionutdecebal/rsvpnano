@@ -154,6 +154,10 @@ def zip_join(base: str, href: str) -> str:
     return posixpath.normpath(posixpath.join(posixpath.dirname(base), decoded))
 
 
+def normalize_zip_path(path: str) -> str:
+    return path.replace("\\", "/").lstrip("/")
+
+
 def read_text_file(path: Path) -> str:
     data = path.read_bytes()
     for encoding in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
@@ -194,6 +198,12 @@ def iter_clean_words(text: str):
     for raw in re.split(r"\s+", clean_text(text)):
         token = raw.strip(TRIMMABLE_EDGE_CHARS)
         if token and any(ch.isalnum() for ch in token):
+            yield token
+
+
+def iter_output_tokens(text: str):
+    for token in re.split(r"\s+", clean_text(text)):
+        if token:
             yield token
 
 
@@ -238,7 +248,9 @@ class RsvpWriter:
             self.lines.append("@para")
 
     def add_text(self, text: str) -> bool:
-        for word in iter_clean_words(text):
+        readable_words = list(iter_clean_words(text))
+        readable_index = 0
+        for word in iter_output_tokens(text):
             if self.max_words > 0 and self.word_count >= self.max_words:
                 return False
 
@@ -248,7 +260,9 @@ class RsvpWriter:
 
             self._line_words.append(word)
             self._line_length = len(word) if self._line_length == 0 else self._line_length + 1 + len(word)
-            self.word_count += 1
+            if readable_index < len(readable_words) and word == readable_words[readable_index]:
+                self.word_count += 1
+                readable_index += 1
 
         return True
 
@@ -378,20 +392,29 @@ def container_rootfile(epub: zipfile.ZipFile) -> str:
     raise ValueError("EPUB container.xml does not name an OPF package file")
 
 
-def parse_package(epub: zipfile.ZipFile, opf_path: str) -> tuple[str, str, list[str]]:
+def parse_package(
+    epub: zipfile.ZipFile, opf_path: str
+) -> tuple[str, str, list[str], dict[str, list[tuple[str, str]]]]:
     package_xml = read_zip_text(epub, opf_path)
     root = ET.fromstring(package_xml)
     title = first_child_text(root, "title")
     author = first_child_text(root, "creator")
 
     manifest: dict[str, tuple[str, str]] = {}
+    nav_paths: list[str] = []
+    ncx_paths: list[str] = []
     for node in root.iter():
         if local_name(node.tag) == "item":
             item_id = node.attrib.get("id")
             href = node.attrib.get("href")
             media_type = node.attrib.get("media-type", "")
             if item_id and href:
-                manifest[item_id] = (zip_join(opf_path, href), media_type)
+                resolved_path = zip_join(opf_path, href)
+                manifest[item_id] = (resolved_path, media_type)
+                if media_type.lower() == "application/x-dtbncx+xml":
+                    ncx_paths.append(resolved_path)
+                if "nav" in node.attrib.get("properties", "").split():
+                    nav_paths.append(resolved_path)
 
     spine_paths: list[str] = []
     for node in root.iter():
@@ -411,7 +434,150 @@ def parse_package(epub: zipfile.ZipFile, opf_path: str) -> tuple[str, str, list[
     if not spine_paths:
         raise ValueError("EPUB spine does not contain readable XHTML/HTML documents")
 
-    return title, author, spine_paths
+    package_version = root.attrib.get("version", "")
+    return title, author, spine_paths, toc_titles_by_path(epub, title, package_version, nav_paths, ncx_paths)
+
+
+def toc_titles_by_path(
+    epub: zipfile.ZipFile,
+    title: str,
+    package_version: str,
+    nav_paths: list[str],
+    ncx_paths: list[str],
+) -> dict[str, list[tuple[str, str]]]:
+    primary = (
+        [(path, html_nav_toc_titles) for path in nav_paths]
+        if package_version.startswith("3")
+        else [(path, ncx_toc_titles) for path in ncx_paths]
+    )
+    fallback = (
+        [(path, ncx_toc_titles) for path in ncx_paths]
+        if package_version.startswith("3")
+        else [(path, html_nav_toc_titles) for path in nav_paths]
+    )
+
+    for path, parser in primary:
+        try:
+            titles = parser(read_zip_text(epub, path), path, title)
+        except Exception:
+            titles = {}
+        if titles:
+            return titles
+
+    for path, parser in fallback:
+        try:
+            titles = parser(read_zip_text(epub, path), path, title)
+        except Exception:
+            titles = {}
+        if titles:
+            return titles
+
+    return {}
+
+
+def ncx_toc_titles(xml: str, toc_path: str, book_title: str) -> dict[str, list[tuple[str, str]]]:
+    root = ET.fromstring(xml)
+    titles: dict[str, list[tuple[str, str]]] = {}
+    for nav_point in root.iter():
+        if local_name(nav_point.tag) != "navPoint":
+            continue
+
+        label = ""
+        src = ""
+        for child in nav_point.iter():
+            name = local_name(child.tag)
+            if name == "text" and not label:
+                label = clean_text("".join(child.itertext()))
+            elif name == "content" and not src:
+                src = child.attrib.get("src", "")
+
+        if src and is_content_toc_title(label, book_title):
+            titles.setdefault(toc_path_key(toc_path, src), []).append((label, toc_path_fragment(src)))
+    return titles
+
+
+def html_nav_toc_titles(markup: str, toc_path: str, book_title: str) -> dict[str, list[tuple[str, str]]]:
+    parser = HtmlTocExtractor(book_title)
+    parser.feed(markup)
+    parser.close()
+    titles: dict[str, list[tuple[str, str]]] = {}
+    for href, title in parser.links:
+        titles.setdefault(toc_path_key(toc_path, href), []).append((title, toc_path_fragment(href)))
+    return titles
+
+
+class HtmlTocExtractor(HTMLParser):
+    def __init__(self, book_title: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self.book_title = book_title
+        self.links: list[tuple[str, str]] = []
+        self._in_toc_nav = False
+        self._nav_depth = 0
+        self._href: str | None = None
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attrs_dict = {key.lower(): value or "" for key, value in attrs}
+        tag = tag.lower()
+        if tag == "nav" and (
+            attrs_dict.get("epub:type") == "toc" or attrs_dict.get("type") == "toc"
+        ):
+            self._in_toc_nav = True
+            self._nav_depth = 1
+            return
+        if self._in_toc_nav and tag == "nav":
+            self._nav_depth += 1
+        if self._in_toc_nav and tag == "a":
+            self._href = attrs_dict.get("href", "")
+            self._parts = []
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self._in_toc_nav and tag == "a" and self._href:
+            label = clean_text(" ".join(self._parts))
+            if is_content_toc_title(label, self.book_title):
+                self.links.append((self._href, label))
+            self._href = None
+            self._parts = []
+            return
+        if self._in_toc_nav and tag == "nav":
+            self._nav_depth -= 1
+            if self._nav_depth <= 0:
+                self._in_toc_nav = False
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._parts.append(data)
+
+
+def toc_path_key(toc_path: str, href: str) -> str:
+    href = href.split("#", 1)[0].split("?", 1)[0]
+    return normalize_zip_path(zip_join(toc_path, href)).lower()
+
+
+def toc_path_fragment(href: str) -> str:
+    if "#" not in href:
+        return ""
+    return html.unescape(urllib.parse.unquote(href.split("#", 1)[1].split("?", 1)[0])).strip()
+
+
+def is_content_toc_title(value: str, book_title: str) -> bool:
+    cleaned = clean_text(value)
+    lowered = cleaned.lower()
+    normalized = normalized_toc_label(cleaned)
+    normalized_title = normalized_toc_label(book_title)
+    return (
+        bool(cleaned)
+        and lowered not in {"contents", "cover", "title page"}
+        and normalized != "tableofcontents"
+        and (not normalized_title or normalized != normalized_title)
+        and (not normalized_title or not normalized_title.startswith(normalized))
+        and any(char.isalnum() for char in cleaned)
+    )
+
+
+def normalized_toc_label(value: str) -> str:
+    return "".join(char.lower() for char in clean_text(value) if char.isalnum())
 
 
 def fallback_chapter_title(path: str, index: int) -> str:
@@ -423,18 +589,191 @@ def fallback_chapter_title(path: str, index: int) -> str:
 def epub_events_and_metadata(path: Path) -> tuple[str, str, list[tuple[str, str]]]:
     events: list[tuple[str, str]] = []
     with zipfile.ZipFile(path) as epub:
+        if any(normalize_zip_path(name).lower() == "meta-inf/encryption.xml" for name in epub.namelist()):
+            raise ValueError("This EPUB could not be converted locally")
         opf_path = container_rootfile(epub)
-        title, author, spine_paths = parse_package(epub, opf_path)
+        title, author, spine_paths, toc_titles = parse_package(epub, opf_path)
 
         for index, spine_path in enumerate(spine_paths, start=1):
-            chapter_events = html_events(read_zip_text(epub, spine_path))
+            toc_entries = toc_titles.get(normalize_zip_path(spine_path).lower(), [])
+            chapter_events = html_events(with_toc_anchor_chapters(read_zip_text(epub, spine_path), toc_entries))
             if not any(kind == "text" for kind, _ in chapter_events):
                 continue
-            if not any(kind == "chapter" for kind, _ in chapter_events):
+            toc_labels = [label for label, _fragment in toc_entries]
+            if toc_labels:
+                chapter_events = apply_toc_titles(chapter_events, toc_labels, title)
+            elif toc_titles:
+                if is_generated_table_of_contents(chapter_events) or is_book_title_page(chapter_events, title):
+                    continue
+            elif not any(kind == "chapter" for kind, _ in chapter_events):
                 chapter_events.insert(0, ("chapter", fallback_chapter_title(spine_path, index)))
             events.extend(chapter_events)
 
     return title or path.stem, author, events
+
+
+def with_toc_anchor_chapters(markup: str, toc_entries: list[tuple[str, str]]) -> str:
+    result = markup
+    for label, fragment in toc_entries:
+        if not fragment:
+            continue
+        marker = f"<h1>{html.escape(label)}</h1>"
+        attr_pattern = rf"""\s(?:id|name)\s*=\s*(['"]){re.escape(fragment)}\1"""
+
+        heading_match = next(
+            (
+                match
+                for match in re.finditer(
+                    r"""<((?:[A-Za-z_][\w.-]*:)?h[1-6])\b([^>]*)>.*?</\1>""",
+                    result,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+                if re.search(attr_pattern, match.group(2), flags=re.IGNORECASE)
+            ),
+            None,
+        )
+        if heading_match:
+            result = result[: heading_match.start()] + marker + result[heading_match.end() :]
+            continue
+
+        tag_match = next(
+            (
+                match
+                for match in re.finditer(r"""<([A-Za-z_][\w.:-]*)([^>]*)>""", result, flags=re.IGNORECASE)
+                if re.search(attr_pattern, match.group(2), flags=re.IGNORECASE)
+            ),
+            None,
+        )
+        if tag_match:
+            result = result[: tag_match.start()] + marker + tag_match.group(0) + result[tag_match.end() :]
+    return result
+
+
+def apply_toc_titles(
+    events: list[tuple[str, str]], toc_titles: list[str], book_title: str
+) -> list[tuple[str, str]]:
+    result = remove_chapter_matching(events, book_title)
+
+    if len(toc_titles) == 1:
+        result = remove_chapter_matching(result, toc_titles[0])
+        result = remove_first_chapter_prefix_of(result, toc_titles[0])
+        result = remove_first_chapter(result)
+        result.insert(0, ("chapter", toc_titles[0]))
+        result = remove_chapters_after_first(result)
+        return result
+
+    output: list[tuple[str, str]] = []
+    toc_index = 0
+    for kind, value in result:
+        if kind == "chapter":
+            if toc_index < len(toc_titles):
+                output.append(("chapter", toc_titles[toc_index]))
+                toc_index += 1
+            continue
+        output.append((kind, value))
+
+    while toc_index < len(toc_titles):
+        output.append(("chapter", toc_titles[toc_index]))
+        toc_index += 1
+    return output
+
+
+def remove_first_chapter(events: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    result = list(events)
+    for index, (kind, _value) in enumerate(result):
+        if kind == "chapter":
+            del result[index]
+            break
+    return result
+
+
+def remove_first_chapter_matching(events: list[tuple[str, str]], title: str) -> list[tuple[str, str]]:
+    normalized = clean_text(title).lower()
+    result = list(events)
+    for index, (kind, value) in enumerate(result):
+        if kind == "chapter" and clean_text(value).lower() == normalized:
+            del result[index]
+            break
+    return result
+
+
+def remove_first_chapter_prefix_of(events: list[tuple[str, str]], title: str) -> list[tuple[str, str]]:
+    normalized = clean_text(title).lower()
+    result = list(events)
+    for index, (kind, value) in enumerate(result):
+        chapter = clean_text(value).lower()
+        if kind == "chapter" and normalized.startswith(f"{chapter} "):
+            del result[index]
+            break
+    return result
+
+
+def remove_chapter_matching(events: list[tuple[str, str]], title: str) -> list[tuple[str, str]]:
+    normalized = clean_text(title).lower()
+    normalized_toc = normalized_toc_label(title)
+    if not normalized:
+        return events
+    return [
+        (kind, value)
+        for kind, value in events
+        if not (
+            kind == "chapter"
+            and (clean_text(value).lower() == normalized or normalized_toc_label(value) == normalized_toc)
+        )
+    ]
+
+
+def remove_chapters_after_first(events: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    result: list[tuple[str, str]] = []
+    seen_first = False
+    for kind, value in events:
+        if kind != "chapter":
+            result.append((kind, value))
+        elif not seen_first:
+            result.append((kind, value))
+            seen_first = True
+    return result
+
+
+def is_generated_table_of_contents(events: list[tuple[str, str]]) -> bool:
+    first_chapter = next((value for kind, value in events if kind == "chapter"), "")
+    normalized = clean_text(first_chapter).lower()
+    if normalized not in {"contents", "table of contents"}:
+        return False
+    link_like_count = 0
+    text_count = 0
+    for kind, value in events:
+        if kind != "text":
+            continue
+        text_count += 1
+        cleaned = clean_text(value).lower()
+        if re.fullmatch(r"[ivxlcdm]+|[ivxlcdm]+\s+.+", cleaned):
+            link_like_count += 1
+        if link_like_count >= 20:
+            return True
+    return text_count >= 4
+
+
+def is_book_title_page(events: list[tuple[str, str]], book_title: str) -> bool:
+    normalized_title = normalized_toc_label(book_title)
+    normalized_chapter = next(
+        (
+            normalized_toc_label(value)
+            for kind, value in events
+            if kind == "chapter"
+            and normalized_toc_label(value)
+            and normalized_title.startswith(normalized_toc_label(value))
+        ),
+        "",
+    )
+    text_count = sum(1 for kind, _value in events if kind == "text")
+    return (
+        bool(normalized_title)
+        and bool(normalized_chapter)
+        and normalized_title.startswith(normalized_chapter)
+        and (normalized_title == normalized_chapter or len(normalized_chapter) >= 8)
+        and text_count <= 25
+    )
 
 
 def events_for_file(path: Path) -> tuple[str, str, list[tuple[str, str]]]:

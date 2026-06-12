@@ -1,0 +1,17 @@
+@rsvp 1
+@title Basic HTML Vector
+@source basic-html-input.html
+
+@chapter Chapter One
+Hello reader & friend.
+
+@para
+Inline punctuation !
+
+@chapter Chapter Two
+
+@para
+@@directive-looking text stays readable.
+
+@para
+Footer note.
