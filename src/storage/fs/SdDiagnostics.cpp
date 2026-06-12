@@ -96,12 +96,7 @@ namespace SdDiagnostics {
 
         size_t buildFrequencyProbeOrder(FrequencyList& frequencies) {
             size_t count = 0;
-            const int preferredFrequencyKhz =
-                isSupportedFrequency(sMountedFrequencyKhz) ? sMountedFrequencyKhz : readCachedFrequencyKhz();
-            if (preferredFrequencyKhz != 0 && count < frequencies.size()) {
-                frequencies[count++] = preferredFrequencyKhz;
-                Serial.printf("[sd-check] trying cached SD frequency first: %d kHz\n", preferredFrequencyKhz);
-            }
+            const int cachedFrequencyKhz = readCachedFrequencyKhz();
 
             for (int candidate: kSdFrequenciesKhz) {
                 const bool alreadyQueued = std::find(frequencies.begin(), frequencies.begin() + count, candidate)
@@ -109,6 +104,10 @@ namespace SdDiagnostics {
                 if (!alreadyQueued && count < frequencies.size()) {
                     frequencies[count++] = candidate;
                 }
+            }
+            if (cachedFrequencyKhz != 0) {
+                Serial.printf("[sd-check] cached SD frequency %d kHz; probing highest stable frequency first\n",
+                              cachedFrequencyKhz);
             }
             return count;
         }
