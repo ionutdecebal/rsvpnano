@@ -170,12 +170,13 @@ constexpr size_t kSettingsDisplayReaderChapterIndex = 8;
 constexpr size_t kSettingsDisplayReaderProgressIndex = 9;
 constexpr size_t kSettingsDisplayLanguageIndex = 10;
 constexpr size_t kSettingsPacingReadingModeIndex = 1;
-constexpr size_t kSettingsPacingPauseModeIndex = 2;
-constexpr size_t kSettingsPacingWpmIndex = 3;
-constexpr size_t kSettingsPacingLongWordsIndex = 4;
-constexpr size_t kSettingsPacingComplexityIndex = 5;
-constexpr size_t kSettingsPacingPunctuationIndex = 6;
-constexpr size_t kSettingsPacingResetIndex = 7;
+constexpr size_t kSettingsPacingPauseModeIndex   = 2;
+constexpr size_t kSettingsPacingPlayModeIndex    = 3;
+constexpr size_t kSettingsPacingWpmIndex         = 4;
+constexpr size_t kSettingsPacingLongWordsIndex   = 5;
+constexpr size_t kSettingsPacingComplexityIndex  = 6;
+constexpr size_t kSettingsPacingPunctuationIndex = 7;
+constexpr size_t kSettingsPacingResetIndex       = 8;
 constexpr size_t kWifiSettingsNetworkIndex = 1;
 constexpr size_t kWifiSettingsChooseIndex = 2;
 constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
@@ -216,6 +217,7 @@ constexpr const char *kPrefPacingLongMs = "pace_lms";
 constexpr const char *kPrefPacingComplexMs = "pace_cms";
 constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
 constexpr const char *kPrefPauseMode = "pause_md";
+constexpr const char *kPrefPlayInputMode = "play_md";
 constexpr const char *kPrefAccurateTime = "time_est_a";
 constexpr const char *kPrefTypographyTracking = "type_trk";
 constexpr const char *kPrefTypographyAnchor = "type_anc";
@@ -685,6 +687,15 @@ void App::begin() {
     case static_cast<uint8_t>(PauseMode::SentenceEnd):
     default:
       pauseMode_ = PauseMode::SentenceEnd;
+      break;
+  }
+  switch (preferences_.getUChar(kPrefPlayInputMode,
+                                static_cast<uint8_t>(PlayInputMode::HoldToPlay))) {
+    case static_cast<uint8_t>(PlayInputMode::TapToPlay):
+      playInputMode_ = PlayInputMode::TapToPlay;
+      break;
+    default:
+      playInputMode_ = PlayInputMode::HoldToPlay;
       break;
   }
   pacingLongWordDelayMs_ =
@@ -1357,6 +1368,15 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
       pauseMode_ = PauseMode::SentenceEnd;
       break;
   }
+  switch (preferences_.getUChar(kPrefPlayInputMode,
+                                static_cast<uint8_t>(PlayInputMode::HoldToPlay))) {
+    case static_cast<uint8_t>(PlayInputMode::TapToPlay):
+      playInputMode_ = PlayInputMode::TapToPlay;
+      break;
+    default:
+      playInputMode_ = PlayInputMode::HoldToPlay;
+      break;
+  }
 
   pacingLongWordDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
@@ -2000,6 +2020,9 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
         if (playLocked_ || pauseAtSentenceEndRequested_) {
           resetReaderTapTracking();
           requestReaderPauseAtSentenceEnd(nowMs);
+        } else if (playInputMode_ == PlayInputMode::TapToPlay) {
+          resetReaderTapTracking();
+          requestReaderPauseAtSentenceEnd(nowMs);
         } else {
           handleReaderTap(event.x, event.y, nowMs);
         }
@@ -2010,7 +2033,8 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     return;
   }
 
-  if (!previewBrowseMode && !ended && pausedTouchIntent_ == TouchIntent::None &&
+  if (playInputMode_ == PlayInputMode::HoldToPlay &&
+      !previewBrowseMode && !ended && pausedTouchIntent_ == TouchIntent::None &&
       pressDurationMs >= kTouchPlayHoldMs && tapLike) {
     resetReaderTapTracking();
     touchPlayHeld_ = true;
@@ -2088,6 +2112,11 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
       resetReaderTapTracking();
       contextViewVisible_ = false;
       renderActiveReader(nowMs);
+    } else if (tapLike && playInputMode_ == PlayInputMode::TapToPlay) {
+      resetReaderTapTracking();
+      wpmFeedbackVisible_ = false;
+      playLocked_ = true;
+      setState(AppState::Playing, nowMs);
     } else if (tapLike) {
       handleReaderTap(event.x, event.y, nowMs);
     } else {
@@ -2794,6 +2823,14 @@ void App::selectSettingsItem(uint32_t nowMs) {
       rebuildSettingsMenuItems();
       renderSettings();
       return;
+    case kSettingsPacingPlayModeIndex:
+      playInputMode_ = playInputMode_ == PlayInputMode::HoldToPlay
+                           ? PlayInputMode::TapToPlay : PlayInputMode::HoldToPlay;
+      preferences_.putUChar(kPrefPlayInputMode, static_cast<uint8_t>(playInputMode_));
+      Serial.printf("[settings] play input mode=%s\n", playInputModeLabel().c_str());
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
     case kSettingsPacingWpmIndex:
       reader_.setWpm(nextReaderWpmSetting(reader_.wpm()));
       preferences_.putUShort(kPrefWpm, reader_.wpm());
@@ -3381,6 +3418,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Back));
     settingsMenuItems_.push_back("Reading mode: " + readerModeLabel());
     settingsMenuItems_.push_back("Pause behaviour: " + pauseModeLabel());
+    settingsMenuItems_.push_back("Play/Pause: " + playInputModeLabel());
     settingsMenuItems_.push_back("Base speed: " + String(reader_.wpm()) + " WPM");
     settingsMenuItems_.push_back(uiText(UiText::LongWords) + ": " +
                                  pacingDelayLabel(pacingLongWordDelayMs_));
@@ -3726,6 +3764,10 @@ String App::readerModeLabel() const {
 
 String App::pauseModeLabel() const {
   return pauseMode_ == PauseMode::Instant ? "Instant" : "Sentence";
+}
+
+String App::playInputModeLabel() const {
+  return playInputMode_ == PlayInputMode::TapToPlay ? "Tap" : "Hold";
 }
 
 String App::handednessLabel() const {
