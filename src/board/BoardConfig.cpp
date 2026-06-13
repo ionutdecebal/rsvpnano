@@ -443,7 +443,7 @@ void configureSystemWire() {
 constexpr uint8_t kTca9554OutputReg = 0x01;
 constexpr uint8_t kTca9554ConfigReg = 0x03;
 bool gBatteryPowerHoldEnabled = false;
-bool gBatteryAdcPathEnabled = false;
+bool gBacklightEnableConfigured = false;
 constexpr float kBatteryDividerRatio = 3.0f;
 constexpr float kBatteryVoltageOffset = 0.0f;
 
@@ -508,29 +508,18 @@ void holdBatteryPowerIfAvailable() {
   Serial.println("[board] Battery power hold enabled");
 }
 
-void enableBatteryAdcPathIfAvailable() {
-  if (gBatteryAdcPathEnabled) {
+void enableBacklightIfAvailable() {
+  if (gBacklightEnableConfigured) {
     return;
   }
 
-  if (!configureTca9554OutputPin(TCA9554_PIN_BATTERY_ADC_ENABLE, false)) {
-    Serial.println("[board] TCA9554 battery ADC gate not configured");
+  if (!configureTca9554OutputPin(TCA9554_PIN_BACKLIGHT_ENABLE, true)) {
+    Serial.println("[board] TCA9554 backlight enable not configured");
     return;
   }
 
-  gBatteryAdcPathEnabled = true;
-  Serial.println("[board] Battery ADC path enabled");
-}
-
-void disableBatteryAdcPathIfAvailable() {
-  if (!configureTca9554OutputPin(TCA9554_PIN_BATTERY_ADC_ENABLE, true)) {
-    if (gBatteryAdcPathEnabled) {
-      Serial.println("[board] TCA9554 battery ADC gate disable failed");
-    }
-    return;
-  }
-
-  gBatteryAdcPathEnabled = false;
+  gBacklightEnableConfigured = true;
+  Serial.println("[board] Backlight enable configured");
 }
 
 void configureTouchResetIfAvailable() { pulseDirectTouchResetPin(12, 12); }
@@ -597,7 +586,7 @@ void begin() {
   Wire1.setClock(300000);
   Wire1.setTimeOut(10);
   holdBatteryPowerIfAvailable();
-  disableBatteryAdcPathIfAvailable();
+  enableBacklightIfAvailable();
 
   pinMode(PIN_BATTERY_ADC, INPUT);
   analogReadResolution(12);
@@ -723,7 +712,6 @@ bool readBatteryStatus(BatteryStatus &status) {
   return true;
 
 #elif defined(RSVP_BOARD_WAVESHARE_ESP32S3_TOUCH_LCD_349)
-  enableBatteryAdcPathIfAvailable();
   delay(12);
 
   constexpr uint8_t kMaxSamples = 24;
@@ -761,8 +749,6 @@ bool readBatteryStatus(BatteryStatus &status) {
         static_cast<float>(trimmedTotal) / static_cast<float>(std::max<uint8_t>(1, trimmedSamples));
     status.voltage = (pinMillivolts * kBatteryDividerRatio / 1000.0f) + kBatteryVoltageOffset;
   }
-  disableBatteryAdcPathIfAvailable();
-
   status.present = status.voltage >= 2.5f && status.voltage <= 4.6f;
   if (!status.present) {
     status.percent = 0;

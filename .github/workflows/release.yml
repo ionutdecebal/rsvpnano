@@ -110,6 +110,9 @@ jobs:
           - `rsvp-nano.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
           - `rsvp-nano-ota.bin` is the legacy app-only OTA binary for existing Touch LCD 3.49 devices.
           - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
+          - `rsvp-nano-rev2.bin` is the full browser-flasher image for Touch LCD 3.49 rev2 boards.
+          - `rsvp-nano-rev2-ota.bin` is the legacy app-only OTA binary for Touch LCD 3.49 rev2 boards.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin` is the Touch LCD 3.49 rev2 OTA binary.
           - `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` is the Touch AMOLED 2.41 OTA binary.
           NOTES
           fi
@@ -124,6 +127,9 @@ jobs:
             web/firmware/rsvp-nano.bin \
             web/firmware/rsvp-nano-ota.bin \
             web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
+            web/firmware/rsvp-nano-rev2.bin \
+            web/firmware/rsvp-nano-rev2-ota.bin \
+            web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin \
             web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin \
             --title "$RELEASE_TAG" \
             --notes-file release-notes.md \

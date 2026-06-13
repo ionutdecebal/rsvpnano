@@ -1,0 +1,25 @@
+{
+  "name": "RSVP Nano Rev2",
+  "version": "v0.0.5",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "features": [
+    "Books and articles library",
+    "Device-hosted web companion",
+    "RSS feed downloads",
+    "USB SD-card transfer mode",
+    "GPIO42 backlight profile"
+  ],
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": false,
+      "parts": [
+        {
+          "path": "rsvp-nano-rev2.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

@@ -13,12 +13,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WEB_FIRMWARE_DIR = ROOT / "web" / "firmware"
 MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest.json"
+REV2_MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest-rev2.json"
 DEFAULT_REPO = "ionutdecebal/rsvpnano"
-DEFAULT_ASSETS = (
+DEFAULT_REQUIRED_ASSETS = (
     "rsvp-nano.bin",
     "rsvp-nano-ota.bin",
     "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin",
+)
+DEFAULT_OPTIONAL_ASSETS = (
+    "rsvp-nano-rev2.bin",
+    "rsvp-nano-rev2-ota.bin",
+    "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
 )
 DEFAULT_MANIFEST = {
     "name": "RSVP Nano",
@@ -32,6 +38,31 @@ DEFAULT_MANIFEST = {
             "parts": [
                 {
                     "path": "rsvp-nano.bin",
+                    "offset": 0,
+                }
+            ],
+        }
+    ],
+}
+DEFAULT_REV2_MANIFEST = {
+    "name": "RSVP Nano Rev2",
+    "version": "dev",
+    "new_install_prompt_erase": True,
+    "new_install_improv_wait_time": 0,
+    "features": [
+        "Books and articles library",
+        "Device-hosted web companion",
+        "RSS feed downloads",
+        "USB SD-card transfer mode",
+        "GPIO42 backlight profile",
+    ],
+    "builds": [
+        {
+            "chipFamily": "ESP32-S3",
+            "improv": False,
+            "parts": [
+                {
+                    "path": "rsvp-nano-rev2.bin",
                     "offset": 0,
                 }
             ],
@@ -79,23 +110,32 @@ def latest_release(repo: str) -> dict:
     return fetch_json(f"https://api.github.com/repos/{repo}/releases/latest")
 
 
-def find_asset(release: dict, name: str) -> dict:
+def find_asset(release: dict, name: str, required: bool = True) -> dict | None:
     for asset in release.get("assets", []):
         if asset.get("name") == name:
             return asset
-    raise SystemExit(f"Latest release is missing required asset: {name}")
+    if required:
+        raise SystemExit(f"Latest release is missing required asset: {name}")
+    return None
 
 
-def load_manifest() -> dict:
-    if not MANIFEST_PATH.exists():
-        return json.loads(json.dumps(DEFAULT_MANIFEST))
-    return json.loads(MANIFEST_PATH.read_text())
+def load_manifest(path: Path, fallback: dict) -> dict:
+    if not path.exists():
+        return json.loads(json.dumps(fallback))
+    return json.loads(path.read_text())
 
 
-def write_manifest(version: str) -> None:
-    manifest = load_manifest()
+def write_manifest(version: str, include_rev2: bool) -> None:
+    manifest = load_manifest(MANIFEST_PATH, DEFAULT_MANIFEST)
     manifest["version"] = version
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    if include_rev2:
+        rev2_manifest = load_manifest(REV2_MANIFEST_PATH, DEFAULT_REV2_MANIFEST)
+        rev2_manifest["version"] = version
+        REV2_MANIFEST_PATH.write_text(json.dumps(rev2_manifest, indent=2) + "\n")
+    elif REV2_MANIFEST_PATH.exists():
+        REV2_MANIFEST_PATH.unlink()
 
 
 def main() -> int:
@@ -120,19 +160,46 @@ def main() -> int:
     if not tag_name:
         raise SystemExit("Latest release is missing tag_name.")
 
-    requested_assets = tuple(args.assets) if args.assets else DEFAULT_ASSETS
     WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
-    for asset_name in requested_assets:
-        asset = find_asset(release, asset_name)
-        url = str(asset.get("browser_download_url", "")).strip()
-        if not url:
-            raise SystemExit(f"Release asset is missing browser_download_url: {asset_name}")
-        destination = WEB_FIRMWARE_DIR / asset_name
-        print(f"Downloading {asset_name} from {tag_name} -> {destination}")
-        download_file(url, destination)
+    if args.assets:
+        requested_assets = tuple(args.assets)
+        include_rev2 = any("rev2" in asset_name for asset_name in requested_assets)
+        for asset_name in requested_assets:
+            asset = find_asset(release, asset_name)
+            url = str(asset.get("browser_download_url", "")).strip()
+            if not url:
+                raise SystemExit(f"Release asset is missing browser_download_url: {asset_name}")
+            destination = WEB_FIRMWARE_DIR / asset_name
+            print(f"Downloading {asset_name} from {tag_name} -> {destination}")
+            download_file(url, destination)
+    else:
+        for asset_name in DEFAULT_REQUIRED_ASSETS:
+            asset = find_asset(release, asset_name)
+            url = str(asset.get("browser_download_url", "")).strip()
+            if not url:
+                raise SystemExit(f"Release asset is missing browser_download_url: {asset_name}")
+            destination = WEB_FIRMWARE_DIR / asset_name
+            print(f"Downloading {asset_name} from {tag_name} -> {destination}")
+            download_file(url, destination)
 
-    write_manifest(tag_name)
+        include_rev2 = True
+        for asset_name in DEFAULT_OPTIONAL_ASSETS:
+            asset = find_asset(release, asset_name, required=False)
+            if asset is None:
+                print(f"Skipping optional release asset not present in {tag_name}: {asset_name}")
+                include_rev2 = False
+                continue
+            url = str(asset.get("browser_download_url", "")).strip()
+            if not url:
+                print(f"Skipping optional release asset with no download URL: {asset_name}")
+                include_rev2 = False
+                continue
+            destination = WEB_FIRMWARE_DIR / asset_name
+            print(f"Downloading {asset_name} from {tag_name} -> {destination}")
+            download_file(url, destination)
+
+    write_manifest(tag_name, include_rev2)
     print(f"Web firmware updated to release {tag_name}")
     return 0
 

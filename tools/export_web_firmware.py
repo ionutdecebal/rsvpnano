@@ -19,7 +19,13 @@ FLASH_EXPORTS = (
         "env": "waveshare_esp32s3_usb_msc",
         "binary": "rsvp-nano.bin",
         "manifest": "manifest.json",
-        "label": "RSVP Nano firmware",
+        "label": "RSVP Nano Touch LCD 3.49 rev1 firmware",
+    },
+    {
+        "env": "waveshare_esp32s3_usb_msc_rev2",
+        "binary": "rsvp-nano-rev2.bin",
+        "manifest": "manifest-rev2.json",
+        "label": "RSVP Nano Touch LCD 3.49 rev2 firmware",
     },
 )
 
@@ -33,6 +39,16 @@ OTA_EXPORTS = (
         "env": "waveshare_esp32s3_usb_msc",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin",
         "label": "RSVP Nano Touch LCD 3.49 OTA firmware",
+    },
+    {
+        "env": "waveshare_esp32s3_usb_msc_rev2",
+        "binary": "rsvp-nano-rev2-ota.bin",
+        "label": "RSVP Nano Touch LCD 3.49 rev2 OTA firmware (legacy asset)",
+    },
+    {
+        "env": "waveshare_esp32s3_usb_msc_rev2",
+        "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
+        "label": "RSVP Nano Touch LCD 3.49 rev2 OTA firmware",
     },
     {
         "env": "waveshare_esp32s3_touch_amoled_241",
@@ -148,7 +164,7 @@ def main() -> int:
     parser.add_argument("--version", default=git_version(), help="Version string for manifests.")
     args = parser.parse_args()
 
-    pio = pio_command()
+    pio = None if args.skip_build else pio_command()
     WEB_FIRMWARE_DIR.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_build:
@@ -163,6 +179,7 @@ def main() -> int:
             }
         )
         for env in required_envs:
+            assert pio is not None
             run([pio, "run", "-e", env], args.version)
 
     for export in FLASH_EXPORTS:

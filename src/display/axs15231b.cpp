@@ -34,7 +34,8 @@ uint8_t gBrightnessPercent = 100;
 void writeBacklightPwm() {
   pinMode(BoardConfig::PIN_LCD_BACKLIGHT, OUTPUT);
   analogWriteResolution(8);
-  analogWriteFrequency(50000);
+  // The AP3032 backlight driver examples use a 25 kHz PWM control signal.
+  analogWriteFrequency(25000);
 
   if (!gBacklightOn) {
     analogWrite(BoardConfig::PIN_LCD_BACKLIGHT, 255);

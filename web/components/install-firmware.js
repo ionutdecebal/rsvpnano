@@ -1,5 +1,22 @@
 const FLASH_KEY = "rsvpnano_last_flash";
 
+const FIRMWARE_OPTIONS = [
+  {
+    manifest: "firmware/manifest.json",
+    title: "Waveshare 3.49 rev1",
+    badge: "Default",
+    note: "Use this build first. It keeps the standard GPIO8 backlight profile.",
+    defaultOption: true,
+  },
+  {
+    manifest: "firmware/manifest-rev2.json",
+    title: "Waveshare 3.49 rev2",
+    badge: "GPIO42",
+    note: "Use this if the device boots but brightness or backlight control does not respond.",
+    defaultOption: false,
+  },
+];
+
 function timeAgo(ts) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return "just now";
@@ -13,6 +30,7 @@ function timeAgo(ts) {
 
 class InstallFirmware extends HTMLElement {
   connectedCallback() {
+    const firmwareOptions = FIRMWARE_OPTIONS.map((option, index) => ({ ...option, index }));
     this.innerHTML = `
       <section class="card step-card" id="install-section">
         <button class="step-card-toggle" id="install-toggle" type="button" aria-expanded="true" aria-controls="install-content">
@@ -38,28 +56,33 @@ class InstallFirmware extends HTMLElement {
             </ol>
           </div>
           <div class="section-body-inner">
-            <div class="install-option">
-              <div class="install-option-head">
-                <strong class="fw-version"></strong>
-                <span class="latest-badge"><span class="pulse-dot"></span>Latest Release</span>
-              </div>
-              <ul class="feature-list"></ul>
-              <div id="uptodate-badge" class="uptodate-badge" hidden>
-                <span class="uptodate-left">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  Up to date
-                </span>
-                <span class="uptodate-right">
-                  <span id="uptodate-version"></span>
-                  <span id="uptodate-ago"></span>
-                </span>
-              </div>
-              <esp-web-install-button manifest="firmware/manifest.json">
-                <button id="firmware-install-btn" slot="activate">Install Firmware</button>
-                <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
-                <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
-              </esp-web-install-button>
-              <p class="install-warning">Important: keep the device plugged in until the installer says it's done.</p>
+            <div class="install-options">
+              ${firmwareOptions.map((option) => `
+                <div class="install-option" data-option-index="${option.index}">
+                  <div class="install-option-head">
+                    <strong class="fw-version">${option.title}</strong>
+                    <span class="latest-badge"><span class="pulse-dot"></span>${option.badge}</span>
+                  </div>
+                  <p class="install-option-note">${option.note}</p>
+                  <ul class="feature-list"></ul>
+                  <div class="uptodate-badge" hidden>
+                    <span class="uptodate-left">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      Up to date
+                    </span>
+                    <span class="uptodate-right">
+                      <span class="uptodate-version"></span>
+                      <span class="uptodate-ago"></span>
+                    </span>
+                  </div>
+                  <esp-web-install-button manifest="${option.manifest}">
+                    <button slot="activate">Install Firmware</button>
+                    <span slot="unsupported">Use Chrome or Edge on desktop with Web Serial support.</span>
+                    <span slot="not-allowed">This page must be opened over HTTPS or localhost.</span>
+                  </esp-web-install-button>
+                  <p class="install-warning">Important: keep the device plugged in until the installer says it's done.</p>
+                </div>
+              `).join("")}
             </div>
           </div>
         </div>
@@ -68,7 +91,29 @@ class InstallFirmware extends HTMLElement {
 
     this._section = this.querySelector("#install-section");
     this._historyEl = this.querySelector("#flash-history");
-    this._installBtn = this.querySelector("#firmware-install-btn");
+    this._optionViews = firmwareOptions.map((option) => {
+      const root = this.querySelector(`[data-option-index="${option.index}"]`);
+      const button = root.querySelector('button[slot="activate"]');
+      const espButton = button.closest("esp-web-install-button");
+      const view = {
+        ...option,
+        root,
+        button,
+        espButton,
+        versionLabel: root.querySelector(".fw-version"),
+        featureList: root.querySelector(".feature-list"),
+        uptodateBadge: root.querySelector(".uptodate-badge"),
+        uptodateVersion: root.querySelector(".uptodate-version"),
+        uptodateAgo: root.querySelector(".uptodate-ago"),
+        version: "",
+      };
+
+      button.addEventListener("click", () => {
+        this._activeInstall = view;
+      });
+
+      return view;
+    });
 
     const toggle = this.querySelector("#install-toggle");
     const content = this.querySelector("#install-content");
@@ -83,18 +128,23 @@ class InstallFirmware extends HTMLElement {
     this._autoCollapse();
     this._observeInstallDialog();
 
-    fetch("firmware/manifest.json", { cache: "no-store" })
-      .then(r => r.json())
-      .then(m => {
-        this._fwVersion = m.version;
-        this.querySelector(".fw-version").textContent = "Version " + m.version;
-        if (m.features) {
-          const ul = this.querySelector(".feature-list");
-          ul.innerHTML = m.features.map(f => "<li>" + f + "</li>").join("");
-        }
-        this._refreshInstallButton();
-        this._showFlashHistory();
-      });
+    this._optionViews.forEach((view) => {
+      fetch(view.manifest, { cache: "no-store" })
+        .then(r => r.json())
+        .then(m => {
+          view.version = m.version;
+          view.versionLabel.textContent = view.title + " - " + m.version;
+          if (m.features) {
+            view.featureList.innerHTML = m.features.map(f => "<li>" + f + "</li>").join("");
+          }
+          this._refreshInstallButtons();
+          this._showFlashHistory();
+        })
+        .catch(() => {
+          view.root.hidden = true;
+          this._showFlashHistory();
+        });
+    });
   }
 
   _readFlashData() {
@@ -105,6 +155,21 @@ class InstallFirmware extends HTMLElement {
     }
   }
 
+  _viewForFlashData(data) {
+    if (!data) return null;
+    if (data.manifest) {
+      const manifestMatch = this._optionViews.find((view) => view.manifest === data.manifest);
+      if (manifestMatch) return manifestMatch;
+    }
+    return this._optionViews.find((view) => view.defaultOption) || this._optionViews[0] || null;
+  }
+
+  _isSameInstallOption(data, view) {
+    if (!data || !view) return false;
+    if (data.manifest) return data.manifest === view.manifest;
+    return view.defaultOption;
+  }
+
   _showFlashHistory() {
     const data = this._readFlashData();
     if (!data || !data.timestamp) {
@@ -113,13 +178,15 @@ class InstallFirmware extends HTMLElement {
       return;
     }
 
-    const hasUpdate = data.version && this._fwVersion && data.version !== this._fwVersion;
+    const view = this._viewForFlashData(data);
+    const hasUpdate = data.version && view?.version && data.version !== view.version;
     if (hasUpdate) {
       this._historyEl.textContent = "Update available";
       this._historyEl.classList.add("update-available");
     } else {
       const versionLabel = data.version ? data.version + " " : "";
-      this._historyEl.textContent = versionLabel + "flashed " + timeAgo(data.timestamp);
+      const titleLabel = data.title ? data.title + " " : "";
+      this._historyEl.textContent = titleLabel + versionLabel + "flashed " + timeAgo(data.timestamp);
       this._historyEl.classList.remove("update-available");
     }
   }
@@ -133,61 +200,59 @@ class InstallFirmware extends HTMLElement {
     }
   }
 
-  _refreshInstallButton() {
+  _refreshInstallButtons() {
     const data = this._readFlashData();
-    const uptodateBadge = this.querySelector("#uptodate-badge");
-    const espButton = this._installBtn?.closest("esp-web-install-button");
-    if (!this._installBtn || !uptodateBadge || !espButton) return;
+    this._optionViews.forEach((view) => this._refreshInstallButton(view, data));
+  }
 
-    const isUpToDate = data?.version && this._fwVersion && data.version === this._fwVersion;
-    const hasUpdate = data?.version && this._fwVersion && data.version !== this._fwVersion;
+  _refreshInstallButton(view, data) {
+    if (!view.button || !view.uptodateBadge || !view.espButton) return;
+
+    const sameOption = this._isSameInstallOption(data, view);
+    const isUpToDate = sameOption && data?.version && view.version && data.version === view.version;
+    const hasUpdate = sameOption && data?.version && view.version && data.version !== view.version;
 
     if (isUpToDate) {
-      uptodateBadge.hidden = false;
-      espButton.hidden = true;
-      const utdVersion = this.querySelector("#uptodate-version");
-      const utdAgo = this.querySelector("#uptodate-ago");
-      if (utdVersion) utdVersion.textContent = data.version;
-      if (utdAgo) utdAgo.textContent = timeAgo(data.timestamp);
+      view.uptodateBadge.hidden = false;
+      view.espButton.hidden = true;
+      view.uptodateVersion.textContent = data.version;
+      view.uptodateAgo.textContent = timeAgo(data.timestamp);
 
-      let reinstallLink = this.querySelector("#uptodate-reinstall");
-      if (!reinstallLink) {
-        reinstallLink = document.createElement("button");
-        reinstallLink.id = "uptodate-reinstall";
-        reinstallLink.className = "uptodate-reinstall";
-        reinstallLink.addEventListener("click", () => {
-          espButton.style.position = "absolute";
-          espButton.style.opacity = "0";
-          espButton.style.pointerEvents = "none";
-          espButton.hidden = false;
-          this._installBtn.click();
-          espButton.hidden = true;
-          espButton.style.position = "";
-          espButton.style.opacity = "";
-          espButton.style.pointerEvents = "";
+      if (!view.reinstallLink) {
+        view.reinstallLink = document.createElement("button");
+        view.reinstallLink.className = "uptodate-reinstall";
+        view.reinstallLink.addEventListener("click", () => {
+          view.espButton.style.position = "absolute";
+          view.espButton.style.opacity = "0";
+          view.espButton.style.pointerEvents = "none";
+          view.espButton.hidden = false;
+          view.button.click();
+          view.espButton.hidden = true;
+          view.espButton.style.position = "";
+          view.espButton.style.opacity = "";
+          view.espButton.style.pointerEvents = "";
         });
-        uptodateBadge.insertAdjacentElement("afterend", reinstallLink);
+        view.uptodateBadge.insertAdjacentElement("afterend", view.reinstallLink);
       }
-      reinstallLink.textContent = "Install Firmware · " + this._fwVersion;
-      reinstallLink.hidden = false;
+      view.reinstallLink.textContent = "Install Firmware · " + view.version;
+      view.reinstallLink.hidden = false;
     } else {
-      uptodateBadge.hidden = true;
-      espButton.hidden = false;
-      const reinstallLink = this.querySelector("#uptodate-reinstall");
-      if (reinstallLink) reinstallLink.hidden = true;
+      view.uptodateBadge.hidden = true;
+      view.espButton.hidden = false;
+      if (view.reinstallLink) view.reinstallLink.hidden = true;
 
       if (hasUpdate) {
-        this._installBtn.innerHTML =
+        view.button.innerHTML =
           '<span>' +
           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>' +
           "Update Firmware</span>" +
-          '<span class="btn-version"><span>' + this._fwVersion + "</span>" +
+          '<span class="btn-version"><span>' + view.version + "</span>" +
           "<span>" + timeAgo(data.timestamp) + "</span></span>";
       } else {
-        const versionTag = this._fwVersion
-          ? '<span class="btn-version">' + this._fwVersion + "</span>"
+        const versionTag = view.version
+          ? '<span class="btn-version">' + view.version + "</span>"
           : "";
-        this._installBtn.innerHTML = "<span>Install Firmware</span>" + versionTag;
+        view.button.innerHTML = "<span>Install Firmware</span>" + versionTag;
       }
     }
   }
@@ -206,14 +271,17 @@ class InstallFirmware extends HTMLElement {
             const msg = node.shadowRoot.querySelector("ewt-page-message");
             if (!msg || !msg.label || String(msg.label).indexOf("complete") === -1) return;
 
+            const active = this._activeInstall || this._optionViews.find((view) => view.defaultOption);
             saved = true;
             clearInterval(pollTimer);
             localStorage.setItem(FLASH_KEY, JSON.stringify({
-              version: this._fwVersion,
+              version: active?.version,
+              title: active?.title,
+              manifest: active?.manifest,
               timestamp: Date.now(),
             }));
             this._showFlashHistory();
-            this._refreshInstallButton();
+            this._refreshInstallButtons();
           }, 500);
 
           setTimeout(() => clearInterval(pollTimer), 600000);

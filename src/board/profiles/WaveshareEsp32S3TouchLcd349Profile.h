@@ -1,6 +1,12 @@
+#if defined(RSVP_BOARD_WAVESHARE_ESP32S3_TOUCH_LCD_349_REV2)
+constexpr const char *BOARD_ID = "waveshare_esp32s3_touch_lcd_3_49_rev2";
+constexpr const char *BOARD_LABEL = "Waveshare ESP32-S3-Touch-LCD-3.49 rev2";
+constexpr const char *OTA_ASSET_NAME = "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin";
+#else
 constexpr const char *BOARD_ID = "waveshare_esp32s3_touch_lcd_3_49";
-constexpr const char *BOARD_LABEL = "Waveshare ESP32-S3-Touch-LCD-3.49";
+constexpr const char *BOARD_LABEL = "Waveshare ESP32-S3-Touch-LCD-3.49 rev1";
 constexpr const char *OTA_ASSET_NAME = "rsvp-nano-ota.bin";
+#endif
 constexpr DisplayDriverKind DISPLAY_DRIVER = DisplayDriverKind::Axs15231b;
 constexpr TouchControllerKind TOUCH_CONTROLLER = TouchControllerKind::Axs15231b;
 constexpr StorageBusKind STORAGE_BUS = StorageBusKind::SdMmc1Bit;
@@ -40,7 +46,11 @@ constexpr int PIN_LCD_DATA1 = 12;
 constexpr int PIN_LCD_DATA2 = 13;
 constexpr int PIN_LCD_DATA3 = 14;
 constexpr int PIN_LCD_RST = 21;
+#if defined(RSVP_BOARD_WAVESHARE_ESP32S3_TOUCH_LCD_349_REV2)
+constexpr int PIN_LCD_BACKLIGHT = 42;
+#else
 constexpr int PIN_LCD_BACKLIGHT = 8;
+#endif
 
 constexpr int PANEL_NATIVE_WIDTH = 172;
 constexpr int PANEL_NATIVE_HEIGHT = 640;
@@ -86,7 +96,7 @@ constexpr uint32_t TOUCH_RECOVERY_RETRY_MS = 1000;
 constexpr uint32_t TOUCH_RECOVERY_EVENT_IGNORE_MS = 0;
 
 constexpr int TCA9554_ADDRESS = 0x20;
-constexpr uint8_t TCA9554_PIN_BATTERY_ADC_ENABLE = 1;
+constexpr uint8_t TCA9554_PIN_BACKLIGHT_ENABLE = 1;
 constexpr uint8_t TCA9554_PIN_SYS_EN = 6;
 constexpr uint8_t TCA9554_PIN_AUDIO_ENABLE = 7;
 
