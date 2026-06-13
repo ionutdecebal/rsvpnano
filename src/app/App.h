@@ -264,6 +264,7 @@ class App {
   String otaOwnerLabel();
   String pacingDelayLabel(uint16_t delayMs) const;
   String firmwareUpdateMenuLabel() const;
+  String firmwareVersionLabel() const;
   String themeModeLabel() const;
   String phantomWordsLabel() const;
   String focusHighlightLabel() const;
