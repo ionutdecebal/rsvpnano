@@ -228,23 +228,25 @@ constexpr size_t kSettingsDisplayChapterLabelIndex = 4;
 constexpr size_t kSettingsDisplayFooterIndex = 5;
 constexpr size_t kSettingsDisplayBatteryIndex = 6;
 constexpr size_t kSettingsDisplayScreensaverIndex = 7;
-constexpr size_t kSettingsDisplayReaderBatteryIndex = 8;
-constexpr size_t kSettingsDisplayReaderChapterIndex = 9;
-constexpr size_t kSettingsDisplayReaderProgressIndex = 10;
-constexpr size_t kSettingsDisplayLanguageIndex = 11;
-constexpr size_t kSettingsDisplayMenuRepeatIndex = 12;
+constexpr size_t kSettingsDisplayStandbyTimerIndex = 8;
+constexpr size_t kSettingsDisplayReaderBatteryIndex = 9;
+constexpr size_t kSettingsDisplayReaderChapterIndex = 10;
+constexpr size_t kSettingsDisplayReaderProgressIndex = 11;
+constexpr size_t kSettingsDisplayLanguageIndex = 12;
+constexpr size_t kSettingsDisplayMenuRepeatIndex = 13;
 constexpr size_t kSettingsDisplayRestructuredThemeIndex = 1;
 constexpr size_t kSettingsDisplayRestructuredBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayRestructuredHandednessIndex = 3;
 constexpr size_t kSettingsDisplayRestructuredLanguageIndex = 4;
 constexpr size_t kSettingsDisplayRestructuredScreensaverIndex = 5;
-constexpr size_t kSettingsDisplayRestructuredChapterLabelIndex = 6;
-constexpr size_t kSettingsDisplayRestructuredFooterIndex = 7;
-constexpr size_t kSettingsDisplayRestructuredBatteryIndex = 8;
-constexpr size_t kSettingsDisplayRestructuredReaderBatteryIndex = 9;
-constexpr size_t kSettingsDisplayRestructuredReaderChapterIndex = 10;
-constexpr size_t kSettingsDisplayRestructuredReaderProgressIndex = 11;
-constexpr size_t kSettingsDisplayRestructuredMenuRepeatIndex = 12;
+constexpr size_t kSettingsDisplayRestructuredStandbyTimerIndex = 6;
+constexpr size_t kSettingsDisplayRestructuredChapterLabelIndex = 7;
+constexpr size_t kSettingsDisplayRestructuredFooterIndex = 8;
+constexpr size_t kSettingsDisplayRestructuredBatteryIndex = 9;
+constexpr size_t kSettingsDisplayRestructuredReaderBatteryIndex = 10;
+constexpr size_t kSettingsDisplayRestructuredReaderChapterIndex = 11;
+constexpr size_t kSettingsDisplayRestructuredReaderProgressIndex = 12;
+constexpr size_t kSettingsDisplayRestructuredMenuRepeatIndex = 13;
 constexpr size_t kSettingsPacingReadingModeIndex = 1;
 constexpr size_t kSettingsPacingPauseModeIndex = 2;
 constexpr size_t kSettingsPacingWpmIndex = 3;
@@ -315,6 +317,7 @@ constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
 constexpr const char *kPrefMenuRepeatMs = "menu_rpt";
+constexpr const char *kPrefStandbyTimer = "stby_tmr";
 constexpr const char *kPrefTimerDurationByGenre[FocusTimer::kGenreCount] = {
     "tmr_dur_0",
     "tmr_dur_1",
@@ -889,6 +892,10 @@ void App::begin() {
   }
   menuRepeatDelayMs_ = MenuRepeat::sanitizeDelayMs(
       preferences_.getUShort(kPrefMenuRepeatMs, MenuRepeat::kDefaultDelayMs));
+  standbyTimerIndex_ = preferences_.getUChar(kPrefStandbyTimer, standbyTimerIndex_);
+  if (standbyTimerIndex_ > 4) {
+    standbyTimerIndex_ = 0;
+  }
   switch (preferences_.getUChar(kPrefFooterMetricMode,
                                 static_cast<uint8_t>(footerMetricMode_))) {
     case static_cast<uint8_t>(FooterMetricMode::ChapterTime):
@@ -971,6 +978,7 @@ void App::begin() {
   applyTypographySettings(0, false);
   applyPacingSettings();
   bootStartedMs_ = millis();
+  lastActivityMs_ = bootStartedMs_;
   lastStateLogMs_ = bootStartedMs_;
   lastScrollAnimationRenderMs_ = 0;
   Serial.printf("[app] version=%s\n", otaUpdater_.currentVersion().c_str());
@@ -1033,6 +1041,9 @@ void App::update(uint32_t nowMs) {
   button_.updateFromState(readLogicalBootButtonHeld(), nowMs);
   powerButton_.updateFromState(readFirmwarePowerButtonHeld(), nowMs);
   keyButton_.update(nowMs);
+  if (button_.isHeld() || powerButton_.isHeld() || keyButton_.isHeld()) {
+    lastActivityMs_ = nowMs;
+  }
   const bool standbyComboConsumed = handleStandbyCombo(nowMs);
   if (!standbyComboConsumed) {
     handleBootButton(nowMs);
@@ -1084,6 +1095,10 @@ void App::update(uint32_t nowMs) {
   updateBrightnessToast(nowMs);
   maybeSaveReadingPosition(nowMs);
   updateTimeEstimateBuild(nowMs);
+  updateIdleStandby(nowMs);
+  if (state_ == AppState::Standby) {
+    return;
+  }
 
   if (batteryChanged && (state_ == AppState::Paused || state_ == AppState::Playing)) {
     renderActiveReader(nowMs);
@@ -1097,6 +1112,33 @@ void App::update(uint32_t nowMs) {
     Serial.printf("[app] state=%s ms=%lu\n", stateName(state_),
                   static_cast<unsigned long>(nowMs));
   }
+}
+
+void App::updateIdleStandby(uint32_t nowMs) {
+  if (state_ == AppState::Standby || state_ == AppState::Sleeping || powerOffStarted_) {
+    return;
+  }
+
+  bool idle = state_ == AppState::Paused || state_ == AppState::Menu;
+  if (state_ == AppState::Menu && menuScreen_ == MenuScreen::FocusTimerSession) {
+    idle = false;
+  }
+  if (otaCheckInProgress_) {
+    idle = false;
+  }
+
+  if (!idle) {
+    lastActivityMs_ = nowMs;
+    return;
+  }
+
+  const uint32_t timeoutMs = standbyTimerMs();
+  if (timeoutMs == 0 || nowMs - lastActivityMs_ < timeoutMs) {
+    return;
+  }
+
+  Serial.println("[app] standby idle timeout reached");
+  enterStandby(nowMs);
 }
 
 const char *App::stateName(AppState state) const {
@@ -1841,6 +1883,10 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
   }
   menuRepeatDelayMs_ = MenuRepeat::sanitizeDelayMs(
       preferences_.getUShort(kPrefMenuRepeatMs, MenuRepeat::kDefaultDelayMs));
+  standbyTimerIndex_ = preferences_.getUChar(kPrefStandbyTimer, standbyTimerIndex_);
+  if (standbyTimerIndex_ > 4) {
+    standbyTimerIndex_ = 0;
+  }
 
   switch (preferences_.getUChar(kPrefFooterMetricMode,
                                 static_cast<uint8_t>(footerMetricMode_))) {
@@ -2493,6 +2539,7 @@ void App::handleTouch(uint32_t nowMs) {
   if (!touch_.poll(ev)) {
     return;
   }
+  lastActivityMs_ = nowMs;
 
   Serial.printf("[touch] phase=%s touched=%u x=%u y=%u gesture=%u state=%s\n",
                 touchPhaseName(ev.phase), ev.touched ? 1 : 0, ev.x, ev.y, ev.gesture,
@@ -3631,6 +3678,13 @@ void App::selectSettingsItem(uint32_t nowMs) {
         rebuildSettingsMenuItems();
         renderSettings();
         return;
+      case kSettingsDisplayStandbyTimerIndex:
+        standbyTimerIndex_ = static_cast<uint8_t>((standbyTimerIndex_ + 1) % 5);
+        preferences_.putUChar(kPrefStandbyTimer, standbyTimerIndex_);
+        lastActivityMs_ = nowMs;
+        rebuildSettingsMenuItems();
+        renderSettings();
+        return;
       case kSettingsDisplayReaderBatteryIndex:
         readerBatteryVisibleWhilePlaying_ = !readerBatteryVisibleWhilePlaying_;
         preferences_.putBool(kPrefReaderBatteryVisible, readerBatteryVisibleWhilePlaying_);
@@ -3806,6 +3860,13 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
             break;
         }
         preferences_.putUChar(kPrefScreensaverMode, static_cast<uint8_t>(screensaverMode_));
+        rebuildSettingsMenuItems();
+        renderSettings();
+        return;
+      case kSettingsDisplayRestructuredStandbyTimerIndex:
+        standbyTimerIndex_ = static_cast<uint8_t>((standbyTimerIndex_ + 1) % 5);
+        preferences_.putUChar(kPrefStandbyTimer, standbyTimerIndex_);
+        lastActivityMs_ = nowMs;
         rebuildSettingsMenuItems();
         renderSettings();
         return;
@@ -4533,6 +4594,7 @@ void App::rebuildSettingsMenuItems() {
       settingsMenuItems_.push_back("L/R hand: " + handednessLabel());
       settingsMenuItems_.push_back(uiText(UiText::Language) + ": " + uiLanguageLabel());
       settingsMenuItems_.push_back("Screen saver: " + screensaverModeLabel());
+      settingsMenuItems_.push_back("Standby timer: " + standbyTimerLabel());
       settingsMenuItems_.push_back("Chapter label: " + onOffLabel(chapterLabelEnabled_));
       settingsMenuItems_.push_back("Progress label: " + footerMetricModeLabel());
       settingsMenuItems_.push_back("Battery label: " + batteryLabelModeLabel());
@@ -4591,6 +4653,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Footer label: " + footerMetricModeLabel());
     settingsMenuItems_.push_back("Battery label: " + batteryLabelModeLabel());
     settingsMenuItems_.push_back("Screensaver: " + screensaverModeLabel());
+    settingsMenuItems_.push_back("Standby timer: " + standbyTimerLabel());
     settingsMenuItems_.push_back("Reading battery: " +
                                  onOffLabel(readerBatteryVisibleWhilePlaying_));
     settingsMenuItems_.push_back("Reading chapter: " +
@@ -5559,6 +5622,7 @@ void App::exitStandby(uint32_t nowMs) {
   pauseAtSentenceEndRequested_ = false;
   batteryWarningOverlayVisible_ = false;
   standbyButtonsReleased_ = false;
+  lastActivityMs_ = nowMs;
 
   AppState nextState = standbyReturnState_;
   if (nextState == AppState::Booting || nextState == AppState::Playing ||
@@ -6946,6 +7010,38 @@ String App::screensaverModeLabel() const {
     case ScreensaverMode::Life:
     default:
       return "Life";
+  }
+}
+
+String App::standbyTimerLabel() const {
+  switch (standbyTimerIndex_) {
+    case 1:
+      return "1 min";
+    case 2:
+      return "5 min";
+    case 3:
+      return "10 min";
+    case 4:
+      return "30 min";
+    case 0:
+    default:
+      return "Never";
+  }
+}
+
+uint32_t App::standbyTimerMs() const {
+  switch (standbyTimerIndex_) {
+    case 1:
+      return 60UL * 1000UL;
+    case 2:
+      return 5UL * 60UL * 1000UL;
+    case 3:
+      return 10UL * 60UL * 1000UL;
+    case 4:
+      return 30UL * 60UL * 1000UL;
+    case 0:
+    default:
+      return 0;
   }
 }
 

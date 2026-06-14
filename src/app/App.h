@@ -179,6 +179,7 @@ class App {
 
   void setState(AppState nextState, uint32_t nowMs);
   void updateState(uint32_t nowMs);
+  void updateIdleStandby(uint32_t nowMs);
   void updateReader(uint32_t nowMs);
   void updateWpmFeedback(uint32_t nowMs);
   void updateBrightnessToast(uint32_t nowMs);
@@ -389,6 +390,8 @@ class App {
   String footerMetricModeLabel() const;
   String batteryLabelModeLabel() const;
   String screensaverModeLabel() const;
+  String standbyTimerLabel() const;
+  uint32_t standbyTimerMs() const;
   String batteryTimeRemainingLabel() const;
   String batteryVoltageLabel() const;
   String formatBatteryTimeRemaining(uint32_t minutes) const;
@@ -466,6 +469,7 @@ class App {
   uint32_t powerButtonEventArmMs_ = 0;
   uint32_t wpmFeedbackUntilMs_ = 0;
   uint32_t brightnessToastUntilMs_ = 0;
+  uint32_t lastActivityMs_ = 0;
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
   uint32_t batteryRuntimeAnchorMs_ = 0;
@@ -504,6 +508,7 @@ class App {
   uint8_t bootButtonTapCount_ = 0;
   uint8_t brightnessLevelIndex_ = 4;
   uint8_t readerFontSizeIndex_ = 0;
+  uint8_t standbyTimerIndex_ = 0;
   uint16_t menuRepeatDelayMs_ = MenuRepeat::kDefaultDelayMs;
   uint16_t pacingLongWordDelayMs_ = 200;
   uint16_t pacingComplexWordDelayMs_ = 200;
