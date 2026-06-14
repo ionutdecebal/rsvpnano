@@ -47,6 +47,10 @@ class InstallFirmware extends HTMLElement {
     ];
     const hardwareLinks = [
       {
+        title: "Waveshare Touch LCD 3.49",
+        url: "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal",
+      },
+      {
         title: "Waveshare Touch AMOLED 1.8",
         url: "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal",
       },
