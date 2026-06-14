@@ -53,6 +53,13 @@ constexpr const char *kPrefPauseMode = "pause_md";
 constexpr const char *kPrefAccurateTime = "time_est_a";
 constexpr const char *kPrefMenuRepeatMs = "menu_rpt";
 constexpr const char *kPrefStandbyTimer = "stby_tmr";
+constexpr const char *kPrefCpuPlay = "cpu_play";
+constexpr const char *kPrefCpuScroll = "cpu_scroll";
+constexpr const char *kPrefCpuPaused = "cpu_paused";
+constexpr const char *kPrefCpuMenu = "cpu_menu";
+constexpr const char *kPrefCpuStandby = "cpu_stby";
+constexpr const char *kPrefAutoDimLevel = "dim_lvl";
+constexpr const char *kPrefAutoDimDelay = "dim_dly";
 constexpr const char *kPrefTimerDurationByGenre[] = {
     "tmr_dur_0",
     "tmr_dur_1",

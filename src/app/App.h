@@ -79,7 +79,6 @@ class App {
 
   enum class TouchIntent {
     None,
-    PlayHold,
     Scrub,
     BrowseScroll,
     Wpm,
@@ -91,6 +90,7 @@ class App {
     SettingsHome,
     SettingsDisplay,
     SettingsPacing,
+    SettingsBattery,
     WifiSettings,
     WifiNetworkSettings,
     WifiNetworks,
@@ -185,6 +185,7 @@ class App {
   };
 
   void setState(AppState nextState, uint32_t nowMs);
+  void applyStateCpuFrequency();
   void updateState(uint32_t nowMs);
   void updateIdleStandby(uint32_t nowMs);
   void updateReader(uint32_t nowMs);
@@ -194,11 +195,7 @@ class App {
   void handleBootButton(uint32_t nowMs);
   void handlePowerButton(uint32_t nowMs);
   void handleKeyButton(uint32_t nowMs);
-  bool handleStandbyCombo(uint32_t nowMs);
-  void registerBootButtonTap(uint32_t nowMs);
-  void processPendingBootButtonTap(uint32_t nowMs);
   void executeBootButtonSingleTap(uint32_t nowMs);
-  void clearBootButtonTapSequence();
   void toggleMenuFromPowerButton(uint32_t nowMs);
   void toggleReaderPlaybackFromShortcut(uint32_t nowMs);
   void openMainMenu(uint32_t nowMs);
@@ -217,20 +214,21 @@ class App {
   void handleBatteryProtection(uint32_t nowMs);
   void showLowBatteryWarning(uint32_t nowMs);
   void updateBatteryWarningOverlay(uint32_t nowMs);
+  void updateAutoDim(uint32_t nowMs);
+  void restoreFromAutoDim(uint32_t nowMs);
+  void updateBatteryRuntimeLabel(uint32_t nowMs);
   void handleTouch(uint32_t nowMs);
   void applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs);
   bool handleTopEdgeMenuSwipe(const TouchEvent &event, uint32_t nowMs, int deltaX, int deltaY,
                               bool ended);
   bool handleBottomEdgeQuickSettingsSwipe(const TouchEvent &event, uint32_t nowMs, int deltaX,
                                           int deltaY, bool ended);
-  void handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handleBatteryBadgeTap(uint16_t x, uint16_t y, uint32_t nowMs);
   bool handlePreviousSentenceTap(uint16_t x, uint16_t y, uint32_t nowMs);
   void requestReaderPauseAtSentenceEnd(uint32_t nowMs);
   void finalizeReaderPause(uint32_t nowMs);
   bool shouldFinalizeReaderPause(uint32_t nowMs) const;
-  void resetReaderTapTracking();
   bool isFooterMetricTap(uint16_t x, uint16_t y) const;
   bool isBatteryBadgeTap(uint16_t x, uint16_t y) const;
   bool isPreviousSentenceTap(uint16_t x, uint16_t y) const;
@@ -263,6 +261,12 @@ class App {
   void openSettings();
   void selectSettingsItem(uint32_t nowMs);
   void selectRestructuredSettingsItem(uint32_t nowMs);
+  void openBatterySettings();
+  void selectBatterySettingsItem(uint32_t nowMs);
+  static String cpuMhzLabel(uint32_t mhz);
+  String autoDimDelayLabel() const;
+  String autoDimBrightnessLabel() const;
+  uint32_t nominalBatteryRuntimeMinutes() const;
   void openWifiSettings();
   void openWifiNetworkSettings();
   void selectWifiSettingsItem(uint32_t nowMs);
@@ -483,11 +487,9 @@ class App {
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
   uint32_t batteryRuntimeAnchorMs_ = 0;
+  uint32_t lastBatteryLabelRefreshMs_ = 0;
   uint32_t lastScrollAnimationRenderMs_ = 0;
   uint32_t lastCompanionSyncRenderMs_ = 0;
-  uint32_t lastReaderTapMs_ = 0;
-  uint32_t lastBootButtonTapMs_ = 0;
-  uint32_t standbyComboStartedMs_ = 0;
   uint32_t standbyEnteredMs_ = 0;
   uint32_t lastStandbyFrameMs_ = 0;
   uint32_t lastKeyButtonTapMs_ = 0;
@@ -514,7 +516,6 @@ class App {
   size_t quickSyncSelectedIndex_ = 0;
   size_t focusTimerGenreSelectedIndex_ = 0;
   uint8_t standbyTimerIndex_ = 0;
-  uint8_t bootButtonTapCount_ = 0;
   uint8_t brightnessLevelIndex_ = 4;
   uint8_t readerFontSizeIndex_ = 0;
   uint16_t menuRepeatDelayMs_ = MenuRepeat::kDefaultDelayMs;
@@ -561,20 +562,23 @@ class App {
   uint8_t batteryDisplayedPercent_ = 0;
   uint8_t batteryRuntimeAnchorPercent_ = 0;
   uint32_t batteryRuntimeMinutesRemaining_ = 0;
+  uint32_t cpuMhzPlay_ = 160;
+  uint32_t cpuMhzScroll_ = 160;
+  uint32_t cpuMhzPaused_ = 80;
+  uint32_t cpuMhzMenu_ = 80;
+  uint32_t cpuMhzStandby_ = 80;
+  uint8_t autoDimBrightnessPercent_ = 10;
+  uint32_t autoDimDelayMs_ = 60000;
   TextEntrySession textEntrySession_;
-  uint16_t lastReaderTapX_ = 0;
-  uint16_t lastReaderTapY_ = 0;
   bool touchInitialized_ = false;
-  bool touchPlayHeld_ = false;
   bool menuRepeatGestureConsumed_ = false;
   bool menuRepeatMoved_ = false;
   bool playLocked_ = false;
   bool pauseAtSentenceEndRequested_ = false;
   bool brightnessToastVisible_ = false;
-  bool lastReaderTapValid_ = false;
+  bool autoDimActive_ = false;
   bool bootButtonReleasedSinceBoot_ = false;
   bool bootButtonLongPressHandled_ = false;
-  bool bootButtonTapPending_ = false;
   bool powerButtonReleasedSinceBoot_ = false;
   bool powerButtonLongPressHandled_ = false;
   bool keyButtonReleasedSinceBoot_ = false;
@@ -582,8 +586,6 @@ class App {
   bool keyButtonTapArmed_ = false;
   bool bookPickerArticlesOnly_ = false;
   bool powerOffStarted_ = false;
-  bool standbyComboActive_ = false;
-  bool standbyComboHandled_ = false;
   bool standbyButtonsReleased_ = false;
   bool standbyScreenOffActive_ = false;
   bool chapterTransitionVisible_ = false;

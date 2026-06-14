@@ -33,7 +33,7 @@ What is not yet considered safe or complete:
 
 - OTA is not board-aware yet
 - Longer burn-in testing is still needed
-- USB MSC behavior on this target has not been fully validated
+- USB MSC transfer is enabled, but still needs hardware burn-in on this target
 
 ## Key Architectural Changes
 
@@ -168,13 +168,13 @@ Current limitation:
    - battery reporting
    - long reading session stability
    - brightness and dark-mode behavior
-2. Validate whether USB transfer mode needs any `2.41`-specific handling.
+2. Hardware-test USB transfer mode for any `2.41`-specific handling.
 3. Consider adding board metadata verification to OTA as a second safety layer.
 
 ## Build Targets
 
 - `waveshare_esp32s3`
-- `waveshare_esp32s3_usb_msc`
+- `waveshare_esp32s3_rev2`
 - `waveshare_esp32s3_touch_amoled_241`
 
 ## Practical Advice For Future Ports

@@ -84,11 +84,15 @@ This first-pass port targets the Waveshare `ESP32-S3-Touch-AMOLED-2.16` on the
 
 ## Button Mapping Notes
 
-- `BOOT` keeps the existing app brightness shortcut on short press
+- `PWR` tap opens/closes the main menu and backs out of submenus
+- `PWR` hold powers off from the reader/menu, or exits full-screen utility pages
+- `BOOT` short press cycles brightness
+- `BOOT` hold cycles theme
+- `KEY` short press toggles reader play/pause, using the configured pause mode
+- `KEY` hold starts standby/screensaver
+- Swipe down from the top edge opens/closes the main menu
+- Swipe up from the bottom edge opens quick settings for brightness, theme, focus timer, and sync
 - `PWR` uses the PMU-backed power button behavior instead of a GPIO fallback
-- `KEY` is wired as the extra reader shortcut button:
-  - tap starts reader playback / auto-scroll
-  - tap again cancels playback
 
 ## Build Verification
 
@@ -97,7 +101,7 @@ Verified locally:
 - `waveshare_esp32s3_touch_amoled_216`
 - `waveshare_esp32s3_touch_amoled_241`
 - `waveshare_esp32s3`
-- `waveshare_esp32s3_usb_msc`
+- `waveshare_esp32s3_rev2`
 
 ## Expected First Hardware Checks
 

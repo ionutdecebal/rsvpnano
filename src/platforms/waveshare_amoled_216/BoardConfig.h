@@ -23,19 +23,14 @@ constexpr bool IMU_RELEASE_BUS_BEFORE_READ = true;
 constexpr uint8_t IMU_I2C_ADDRESS = 0x6B;
 constexpr bool SWAP_APP_BOOT_AND_POWER_BUTTONS = false;
 constexpr bool APP_POWER_BUTTON_USES_PMU_EVENTS = false;
-constexpr bool POWER_BUTTON_SHORT_TOGGLES_STANDBY = false;
-constexpr bool ENABLE_STANDBY_BUTTON_COMBO = true;
 constexpr bool BOOT_BUTTON_WAKES_STANDBY = true;
-constexpr bool ENABLE_TOP_EDGE_MENU_SWIPE = false;
-constexpr bool ENABLE_BOTTOM_EDGE_QUICK_SETTINGS_SWIPE = false;
-constexpr bool READER_SINGLE_TAP_PAUSES_WHILE_LOCKED = true;
+constexpr bool ENABLE_TOP_EDGE_MENU_SWIPE = true;
+constexpr bool ENABLE_BOTTOM_EDGE_QUICK_SETTINGS_SWIPE = true;
 constexpr bool FIRMWARE_POWER_BUTTON_ENABLED = true;
 constexpr bool BOOT_BUTTON_TOGGLES_READER = false;
 constexpr bool BOOT_BUTTON_BACKS_OUT_OF_MENU = false;
-constexpr bool BOOT_BUTTON_TRIPLE_STARTS_STANDBY = false;
 constexpr bool BOOT_BUTTON_HOLD_STARTS_STANDBY = false;
-constexpr bool TOUCH_READER_PLAYBACK_ENABLED = true;
-constexpr bool ENABLE_RESTRUCTURED_MENU = false;
+constexpr bool ENABLE_RESTRUCTURED_MENU = true;
 
 // BOOT is a standard ESP32 GPIO button, PWR is handled by the AXP2101 PMU, and the board exposes
 // an additional custom-function button on GPIO18.

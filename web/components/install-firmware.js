@@ -16,15 +16,47 @@ class InstallFirmware extends HTMLElement {
     const firmwareOptions = [
       {
         manifest: "firmware/manifest.json",
-        title: "Waveshare 3.49B rev1",
+        title: "Waveshare Touch LCD 3.49 rev1",
         badge: "Default",
         note: "Use this build first. It keeps the standard GPIO8 backlight profile.",
       },
       {
         manifest: "firmware/manifest-rev2.json",
-        title: "Waveshare 3.49B rev2",
+        title: "Waveshare Touch LCD 3.49 rev2",
         badge: "GPIO42",
         note: "Use this if the default build flashes but brightness does not change.",
+      },
+      {
+        manifest: "firmware/manifest-esp32-s3-touch-amoled-1.8.json",
+        title: "Waveshare Touch AMOLED 1.8",
+        badge: "AMOLED",
+        note: "Use this for the compact 1.8 inch AMOLED board.",
+      },
+      {
+        manifest: "firmware/manifest-esp32-s3-touch-amoled-2.16.json",
+        title: "Waveshare Touch AMOLED 2.16",
+        badge: "AMOLED",
+        note: "Use this for the three-button 2.16 inch AMOLED board.",
+      },
+      {
+        manifest: "firmware/manifest-esp32-s3-touch-amoled-2.41.json",
+        title: "Waveshare Touch AMOLED 2.41",
+        badge: "AMOLED",
+        note: "Use this for the 2.41 inch AMOLED board.",
+      },
+    ];
+    const hardwareLinks = [
+      {
+        title: "Waveshare Touch AMOLED 1.8",
+        url: "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal",
+      },
+      {
+        title: "Waveshare Touch AMOLED 2.16",
+        url: "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal",
+      },
+      {
+        title: "Waveshare Touch AMOLED 2.41",
+        url: "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal",
       },
     ];
 
@@ -53,7 +85,27 @@ class InstallFirmware extends HTMLElement {
             </ol>
           </div>
           <div class="section-body-inner">
-            ${firmwareOptions.map((option) => `
+            <div class="device-picker">
+              <label class="device-select-label" for="firmware-device-select">Device to flash</label>
+              <select class="device-select" id="firmware-device-select">
+                ${firmwareOptions.map((option) => `
+                <option value="${option.manifest}">${option.title}</option>
+                `).join("")}
+              </select>
+              <p class="install-option-note">Choose the board that matches the device connected over USB.</p>
+            </div>
+            <div class="affiliate-links">
+              <p class="affiliate-disclosure">
+                Hardware links below are affiliate links. Buying through them may support RSVP Nano at no extra cost to you.
+              </p>
+              <div class="affiliate-link-list">
+                ${hardwareLinks.map((link) => `
+                <a href="${link.url}" target="_blank" rel="sponsored noopener">${link.title}</a>
+                `).join("")}
+              </div>
+            </div>
+            <div class="install-options">
+              ${firmwareOptions.map((option) => `
             <div class="install-option" data-manifest="${option.manifest}" data-title="${option.title}">
               <div class="install-option-head">
                 <strong class="fw-version">${option.title}</strong>
@@ -78,7 +130,8 @@ class InstallFirmware extends HTMLElement {
               </esp-web-install-button>
               <p class="install-warning">Important: keep the device plugged in until the installer says it's done.</p>
             </div>
-            `).join("")}
+              `).join("")}
+            </div>
           </div>
         </div>
       </section>
@@ -86,6 +139,7 @@ class InstallFirmware extends HTMLElement {
 
     this._section = this.querySelector("#install-section");
     this._historyEl = this.querySelector("#flash-history");
+    this._deviceSelect = this.querySelector("#firmware-device-select");
 
     const toggle = this.querySelector("#install-toggle");
     const content = this.querySelector("#install-content");
@@ -94,6 +148,16 @@ class InstallFirmware extends HTMLElement {
       this._section.classList.toggle("is-collapsed", collapsed);
       toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
       content.hidden = collapsed;
+    });
+
+    const lastFlash = this._readFlashData();
+    const initialManifest =
+      lastFlash?.manifest && firmwareOptions.some((option) => option.manifest === lastFlash.manifest)
+        ? lastFlash.manifest
+        : firmwareOptions[0].manifest;
+    this._setSelectedManifest(initialManifest);
+    this._deviceSelect.addEventListener("change", () => {
+      this._setSelectedManifest(this._deviceSelect.value);
     });
 
     this._showFlashHistory();
@@ -110,8 +174,12 @@ class InstallFirmware extends HTMLElement {
       });
 
       fetch(option.dataset.manifest, { cache: "no-store" })
-        .then(r => r.json())
-        .then(m => {
+        .then((r) => {
+          if (!r.ok) throw new Error("Manifest unavailable");
+          return r.json();
+        })
+        .then((m) => {
+          option.dataset.available = "true";
           option.dataset.version = m.version;
           option.querySelector(".fw-version").textContent =
             option.dataset.title + " - " + m.version;
@@ -121,7 +189,24 @@ class InstallFirmware extends HTMLElement {
           }
           this._refreshInstallOption(option);
           this._showFlashHistory();
+        })
+        .catch(() => {
+          option.dataset.available = "false";
+          option.querySelector(".fw-version").textContent =
+            option.dataset.title + " - unavailable";
+          const ul = option.querySelector(".feature-list");
+          ul.innerHTML = "<li>Not available in the latest published release yet.</li>";
+          this._refreshInstallOption(option);
         });
+    });
+  }
+
+  _setSelectedManifest(manifest) {
+    if (this._deviceSelect.value !== manifest) {
+      this._deviceSelect.value = manifest;
+    }
+    this.querySelectorAll(".install-option").forEach((option) => {
+      option.hidden = option.dataset.manifest !== manifest;
     });
   }
 
@@ -185,13 +270,22 @@ class InstallFirmware extends HTMLElement {
     if (!installBtn || !uptodateBadge || !espButton) return;
 
     const version = option.dataset.version;
+    const available = option.dataset.available !== "false";
     const sameFirmware = data?.manifest
       ? data.manifest === option.dataset.manifest
       : data?.title === option.dataset.title;
     const isUpToDate = sameFirmware && data?.version && version && data.version === version;
     const hasUpdate = sameFirmware && data?.version && version && data.version !== version;
 
-    if (isUpToDate) {
+    if (!available) {
+      uptodateBadge.hidden = true;
+      espButton.hidden = false;
+      const reinstallLink = option.querySelector(".uptodate-reinstall");
+      if (reinstallLink) reinstallLink.hidden = true;
+      installBtn.disabled = true;
+      installBtn.innerHTML = "<span>Not in latest release</span>";
+    } else if (isUpToDate) {
+      installBtn.disabled = false;
       uptodateBadge.hidden = false;
       espButton.hidden = true;
       const utdVersion = option.querySelector(".uptodate-version");
@@ -219,6 +313,7 @@ class InstallFirmware extends HTMLElement {
       reinstallLink.textContent = "Install Firmware · " + version;
       reinstallLink.hidden = false;
     } else {
+      installBtn.disabled = false;
       uptodateBadge.hidden = true;
       espButton.hidden = false;
       const reinstallLink = option.querySelector(".uptodate-reinstall");

@@ -270,6 +270,70 @@
         gap: 12px;
       }
 
+      .device-picker {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .device-select-label {
+        color: var(--ink);
+        font: 800 0.78rem/1.2 ui-sans-serif, system-ui, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .device-select {
+        width: 100%;
+        min-height: 48px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.72);
+        font: 800 0.95rem/1.2 ui-sans-serif, system-ui, sans-serif;
+      }
+
+      .affiliate-links {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 16px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .affiliate-disclosure {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+
+      .affiliate-link-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .affiliate-link-list a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        color: var(--accent-deep);
+        background: rgba(255, 250, 241, 0.78);
+        font: 800 0.82rem/1 ui-sans-serif, system-ui, sans-serif;
+        text-decoration: none;
+      }
+
+      .affiliate-link-list a:hover {
+        color: #fffaf1;
+        background: var(--accent);
+      }
+
       .install-option {
         display: grid;
         gap: 12px;
@@ -426,6 +490,12 @@
 
       button[slot="activate"]:hover {
         background: var(--accent-deep);
+      }
+
+      button[slot="activate"]:disabled {
+        cursor: not-allowed;
+        opacity: 0.58;
+        box-shadow: none;
       }
 
       .warning {

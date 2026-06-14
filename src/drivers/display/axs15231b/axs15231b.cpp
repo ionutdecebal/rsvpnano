@@ -42,10 +42,21 @@ void writeBacklightPwm(Axs15231b::Context &context) {
     return;
   }
 
-  // Waveshare drives the LCD backlight as active-low PWM; lower duty is brighter.
-  const uint8_t brightness = context.brightnessPercent == 0 ? 1 : context.brightnessPercent;
+  if (context.brightnessPercent == 0) {
+    analogWrite(Board::Config::PIN_LCD_BACKLIGHT, 255);
+    return;
+  }
+
+  // Waveshare drives the LCD backlight as active-low PWM. Keep nonzero levels
+  // above the LED cutoff so very low user percentages do not look fully off.
+  constexpr uint8_t kMinHardwareBrightnessPercent = 35;
+  const uint8_t hardwarePercent = static_cast<uint8_t>(
+      kMinHardwareBrightnessPercent +
+      (static_cast<uint16_t>(context.brightnessPercent) *
+       (100U - kMinHardwareBrightnessPercent)) /
+          100U);
   const uint8_t activeDuty =
-      static_cast<uint8_t>((static_cast<uint16_t>(brightness) * 255U) / 100U);
+      static_cast<uint8_t>((static_cast<uint16_t>(hardwarePercent) * 255U) / 100U);
   analogWrite(Board::Config::PIN_LCD_BACKLIGHT, 255 - activeDuty);
 }
 
@@ -134,9 +145,7 @@ void init(Context &context) {
 void setBacklight(Context &context, bool on) { ::setBacklight(context, on); }
 
 void setBrightnessPercent(Context &context, uint8_t percent) {
-  if (percent == 0) {
-    percent = 1;
-  } else if (percent > 100) {
+  if (percent > 100) {
     percent = 100;
   }
 

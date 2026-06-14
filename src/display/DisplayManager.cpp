@@ -55,6 +55,12 @@ constexpr int kReaderChromeMarginTop = Board::Config::READER_CHROME_MARGIN_TOP;
 constexpr int kReaderChromeMarginBottom = Board::Config::READER_CHROME_MARGIN_BOTTOM;
 constexpr int kReaderBatteryMarginX = Board::Config::READER_BATTERY_MARGIN_X;
 constexpr int kReaderBatteryMarginTop = Board::Config::READER_BATTERY_MARGIN_TOP;
+constexpr int kEdgeMenuHintMaxWidth = 34;
+constexpr int kEdgeMenuHintMinWidth = 22;
+constexpr int kEdgeMenuHintHeight = 3;
+constexpr int kEdgeMenuHintInset = 3;
+constexpr uint8_t kEdgeMenuHintAlpha = 72;
+constexpr uint8_t kNightEdgeMenuHintAlpha = 88;
 constexpr int kCompactMenuRowHeight = 22;
 constexpr int kCompactMenuX = 28;
 constexpr int kLibraryRowHeight = 38;
@@ -259,7 +265,8 @@ bool shouldDrawInvertedGlyph(char c) {
 String readerChromeKey(const DisplayManager::ReaderChrome &chrome) {
   return String(chrome.showBattery ? 1 : 0) + String(chrome.showChapter ? 1 : 0) +
          String(chrome.showProgress ? 1 : 0) +
-         String(chrome.showPreviousSentenceHint ? 1 : 0);
+         String(chrome.showPreviousSentenceHint ? 1 : 0) +
+         String(chrome.showEdgeMenuHints ? 1 : 0);
 }
 
 int baseGlyphHeightForTypeface(DisplayManager::ReaderTypeface typeface) {
@@ -885,9 +892,7 @@ void DisplayManager::setBrightnessOverlay(const String &text) {
 }
 
 void DisplayManager::setBrightnessPercent(uint8_t percent) {
-  if (percent == 0) {
-    percent = 1;
-  } else if (percent > 100) {
+  if (percent > 100) {
     percent = 100;
   }
 
@@ -1690,6 +1695,29 @@ void DisplayManager::drawPreviousSentenceHint() {
   drawTinyTextAt("<<", kReaderChromeMarginX, kReaderChromeMarginTop, footerColor(), kTinyScale);
 }
 
+void DisplayManager::drawEdgeMenuHints(int logicalWidth, int logicalHeight,
+                                       const ReaderChrome &chrome) {
+  if (!chrome.showEdgeMenuHints) {
+    return;
+  }
+
+  const int handleWidth =
+      std::min(kEdgeMenuHintMaxWidth, std::max(kEdgeMenuHintMinWidth, logicalWidth / 7));
+  const int x = std::max(0, (logicalWidth - handleWidth) / 2);
+  const uint16_t color =
+      blendOverBackground(wordColor(), nightMode_ ? kNightEdgeMenuHintAlpha : kEdgeMenuHintAlpha);
+
+  auto drawHandle = [&](int y) {
+    fillVirtualRect(x + 1, y, handleWidth - 2, 1, color);
+    fillVirtualRect(x, y + 1, handleWidth, kEdgeMenuHintHeight - 2, color);
+    fillVirtualRect(x + 1, y + kEdgeMenuHintHeight - 1, handleWidth - 2, 1, color);
+  };
+
+  drawHandle(kEdgeMenuHintInset);
+  drawHandle(std::max(kEdgeMenuHintInset,
+                      logicalHeight - kEdgeMenuHintInset - kEdgeMenuHintHeight));
+}
+
 void DisplayManager::drawFooter(const String &chapterLabel, const String &statusLabel,
                                 const ReaderChrome &chrome) {
   if (!chrome.showChapter && !chrome.showProgress) {
@@ -1981,6 +2009,7 @@ void DisplayManager::renderRsvpWord(const String &word, const String &chapterLab
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge(virtualWidth, virtualHeight);
   }
@@ -2026,6 +2055,7 @@ void DisplayManager::renderRsvpWordWithWpm(const String &word, uint16_t wpm,
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2084,6 +2114,7 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
     if (chrome.showPreviousSentenceHint) {
       drawPreviousSentenceHint();
     }
+    drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (chrome.showBattery) {
       drawBatteryBadge();
     }
@@ -2129,6 +2160,7 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2152,7 +2184,8 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
   }
 
   const bool canUseBandOnly = !showFooter && overlayText.isEmpty() &&
-                              !chrome.showPreviousSentenceHint && tickerPlaybackFrameActive_;
+                              !chrome.showPreviousSentenceHint && !chrome.showEdgeMenuHints &&
+                              tickerPlaybackFrameActive_;
   const String chromeKey = readerChromeKey(chrome);
   String renderKey;
   renderKey.reserve(96 + chromeKey.length() + chapterLabel.length() + overlayText.length() +
@@ -2266,6 +2299,7 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
     if (chrome.showPreviousSentenceHint) {
       drawPreviousSentenceHint();
     }
+    drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (!canUseBandOnly) {
       if (chrome.showBattery) {
         drawBatteryBadge();
@@ -2352,6 +2386,7 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (!canUseBandOnly) {
     if (chrome.showBattery) {
       drawBatteryBadge();
@@ -2523,6 +2558,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
     if (chrome.showPreviousSentenceHint) {
       drawPreviousSentenceHint();
     }
+    drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (chrome.showBattery) {
       drawBatteryBadge();
     }
@@ -2571,6 +2607,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2756,6 +2793,7 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }

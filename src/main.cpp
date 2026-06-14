@@ -23,4 +23,5 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
   app.update(now);
+  delay(1);
 }

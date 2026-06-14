@@ -33,12 +33,14 @@ class DisplayManager {
         : showBattery(true),
           showChapter(true),
           showProgress(true),
-          showPreviousSentenceHint(true) {}
+          showPreviousSentenceHint(true),
+          showEdgeMenuHints(false) {}
 
     bool showBattery;
     bool showChapter;
     bool showProgress;
     bool showPreviousSentenceHint;
+    bool showEdgeMenuHints;
   };
 
   struct LibraryItem {
@@ -174,6 +176,7 @@ class DisplayManager {
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
   void drawBrightnessToastBadge(int logicalWidth, int logicalHeight);
   void drawPreviousSentenceHint();
+  void drawEdgeMenuHints(int logicalWidth, int logicalHeight, const ReaderChrome &chrome);
   void drawFooter(const String &chapterLabel, const String &statusLabel,
                   const ReaderChrome &chrome);
   void drawRsvpAnchorGuide(int anchorX, int textY, int textHeight);

@@ -38,8 +38,7 @@ This board was added as a separate target on the `v0.0.5` multi-board integratio
   - `BOOT` short: toggle reader play/pause, using the configured instant or sentence-end pause mode
   - `BOOT` short in menus: back/close
   - `BOOT` short in Wi-Fi Sync: exit sync
-  - `BOOT` triple press: start standby/screensaver
-  - `BOOT` long: theme
+  - `BOOT` long: start standby/screensaver
   - `BOOT` from standby: wake the app after the short standby grace period
   - swipe down from the top edge: open/close menu
   - swipe up from the bottom edge: quick settings for brightness, theme, focus timer, and sync
@@ -49,7 +48,7 @@ This board was added as a separate target on the `v0.0.5` multi-board integratio
   - articles contains back, browse articles, and update RSS
   - settings contains display, word pacing, typography tune, Wi-Fi, firmware update, and SD card check
   - Wi-Fi contains a nested network submenu for choose/forget network, plus Auto OTA and OTA Owner
-  - touch hold/double-tap playback gestures are disabled; `BOOT` owns reader play/pause
+  - touch playback gestures are disabled; `BOOT` owns reader play/pause
   - `PWR` from soft-off: wake the app after a sustained confirmation window
 - The old BOOT/PWR swap experiment is no longer active on this board.
 - The `1.8` now uses recoverable soft-off for both USB and battery: the app saves state, blanks/sleeps the display, ends storage/touch, skips AXP2101 shutdown, and waits for `PWR`.

@@ -33,16 +33,12 @@ constexpr uint32_t kSoftOffWakePollMs = 15;
 constexpr uint32_t kSoftOffArmQuietMs = 250;
 constexpr uint32_t kSoftOffWakeConfirmMs = Board::Config::SOFT_OFF_WAKE_CONFIRM_MS;
 constexpr uint32_t kBatterySampleIntervalMs = 180000;
-constexpr uint32_t kTouchPlayHoldMs = 420;
 constexpr uint32_t kPreviewBrowseHoldMs = 240;
-constexpr uint32_t kReaderDoubleTapWindowMs = 520;
-constexpr uint32_t kBootButtonMultiTapWindowMs = 420;
 constexpr uint32_t kThemeToggleHoldMs = 900;
 constexpr uint32_t kScrollAnimationFrameMs = 16;
 constexpr uint16_t kSwipeThresholdPx = 40;
 constexpr uint16_t kAxisBiasPx = 12;
 constexpr uint16_t kTapSlopPx = 26;
-constexpr uint16_t kReaderDoubleTapSlopPx = 92;
 constexpr uint16_t kPreviousSentenceTapWidthPx = 96;
 constexpr uint16_t kPreviousSentenceTapHeightPx = 60;
 constexpr uint16_t kFooterMetricTapWidthPx = 220;
@@ -74,10 +70,11 @@ constexpr uint32_t kUsbTransferExitHoldMs = 1200;
 constexpr size_t kTimeEstimateBlockWords = 256;
 constexpr size_t kTimeEstimateBlocksPerUpdate = 1;
 constexpr uint32_t kTimeEstimateProgressLogMs = 5000;
-constexpr uint32_t kNominalBatteryRuntimeMinutes = 330;
+constexpr uint32_t kNominalBatteryRuntimeMinutes = 450;
 constexpr uint8_t kBatteryDisplayHysteresisPercent = 2;
 constexpr uint8_t kBatteryRuntimeMinDropPercent = 3;
 constexpr uint32_t kBatteryRuntimeMinElapsedMs = 10UL * 60UL * 1000UL;
+constexpr uint32_t kBatteryLabelRefreshIntervalMs = 60UL * 1000UL;
 constexpr uint32_t kBatteryPlayingSampleIntervalMs = 10UL * 60UL * 1000UL;
 constexpr uint32_t kBatteryLowSampleIntervalMs = 60UL * 1000UL;
 constexpr uint32_t kBatteryLowWarningRepeatMs = 5UL * 60UL * 1000UL;
@@ -212,15 +209,17 @@ constexpr size_t kSettingsHomePacingIndex = 1;
 constexpr size_t kSettingsHomeDisplayIndex = 2;
 constexpr size_t kSettingsHomeTypographyIndex = 3;
 constexpr size_t kSettingsHomeWifiIndex = 4;
-constexpr size_t kSettingsHomeUpdateIndex = 5;
-constexpr size_t kSettingsHomeFirmwareVersionIndex = 6;
+constexpr size_t kSettingsHomeBatteryIndex = 5;
+constexpr size_t kSettingsHomeUpdateIndex = 6;
+constexpr size_t kSettingsHomeFirmwareVersionIndex = 7;
 constexpr size_t kSettingsHomeRestructuredDisplayIndex = 1;
 constexpr size_t kSettingsHomeRestructuredPacingIndex = 2;
 constexpr size_t kSettingsHomeRestructuredTypographyIndex = 3;
 constexpr size_t kSettingsHomeRestructuredWifiIndex = 4;
-constexpr size_t kSettingsHomeRestructuredUpdateIndex = 5;
-constexpr size_t kSettingsHomeRestructuredFirmwareVersionIndex = 6;
-constexpr size_t kSettingsHomeRestructuredSdCardIndex = 7;
+constexpr size_t kSettingsHomeRestructuredBatteryIndex = 5;
+constexpr size_t kSettingsHomeRestructuredUpdateIndex = 6;
+constexpr size_t kSettingsHomeRestructuredFirmwareVersionIndex = 7;
+constexpr size_t kSettingsHomeRestructuredSdCardIndex = 8;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
@@ -268,6 +267,13 @@ constexpr size_t kWifiSettingsRestructuredAutoUpdateIndex = 2;
 constexpr size_t kWifiSettingsRestructuredOtaOwnerIndex = 3;
 constexpr size_t kWifiNetworkSettingsChooseIndex = 1;
 constexpr size_t kWifiNetworkSettingsForgetIndex = 2;
+constexpr size_t kSettingsBatteryCpuPlayIndex = 1;
+constexpr size_t kSettingsBatteryCpuScrollIndex = 2;
+constexpr size_t kSettingsBatteryCpuPausedIndex = 3;
+constexpr size_t kSettingsBatteryCpuMenuIndex = 4;
+constexpr size_t kSettingsBatteryCpuStandbyIndex = 5;
+constexpr size_t kSettingsBatteryAutoDimDelayIndex = 6;
+constexpr size_t kSettingsBatteryAutoDimLevelIndex = 7;
 
 constexpr size_t kBookPickerBackIndex = 0;
 constexpr size_t kChapterPickerBackIndex = 0;
@@ -353,6 +359,23 @@ uint32_t hashBookPath(const String &path) {
 
 int clampIntSetting(int value, int minValue, int maxValue) {
   return std::max(minValue, std::min(maxValue, value));
+}
+
+bool isValidCpuMhz(uint32_t mhz, bool allow40Mhz) {
+  return mhz == 80 || mhz == 160 || mhz == 240 || (allow40Mhz && mhz == 40);
+}
+
+uint32_t sanitizeCpuMhz(uint32_t mhz, uint32_t fallback, bool allow40Mhz = false) {
+  return isValidCpuMhz(mhz, allow40Mhz) ? mhz : fallback;
+}
+
+uint8_t sanitizeAutoDimBrightness(uint8_t percent, uint8_t fallback) {
+  return percent == 0 || percent == 10 || percent == 20 || percent == 30 ? percent : fallback;
+}
+
+uint32_t sanitizeAutoDimDelayMs(uint32_t delayMs, uint32_t fallback) {
+  return delayMs == 0 || delayMs == 30000 || delayMs == 60000 || delayMs == 120000 ? delayMs
+                                                                                     : fallback;
 }
 
 int nextCyclicSetting(int value, int minValue, int maxValue, int step = 1) {
@@ -695,7 +718,6 @@ void App::begin() {
   keyButton_.begin();
   bootButtonReleasedSinceBoot_ = !button_.isHeld();
   bootButtonLongPressHandled_ = false;
-  clearBootButtonTapSequence();
   powerButtonReleasedSinceBoot_ =
       !Board::Config::FIRMWARE_POWER_BUTTON_ENABLED
           ? true
@@ -793,7 +815,20 @@ void App::begin() {
       pauseMode_ = PauseMode::SentenceEnd;
       break;
   }
-  standbyTimerIndex_ = preferences_.getUChar(kPrefStandbyTimer, 0);
+  cpuMhzPlay_ = sanitizeCpuMhz(preferences_.getUInt(kPrefCpuPlay, cpuMhzPlay_), cpuMhzPlay_);
+  cpuMhzScroll_ =
+      sanitizeCpuMhz(preferences_.getUInt(kPrefCpuScroll, cpuMhzScroll_), cpuMhzScroll_);
+  cpuMhzPaused_ =
+      sanitizeCpuMhz(preferences_.getUInt(kPrefCpuPaused, cpuMhzPaused_), cpuMhzPaused_);
+  cpuMhzMenu_ = sanitizeCpuMhz(preferences_.getUInt(kPrefCpuMenu, cpuMhzMenu_), cpuMhzMenu_);
+  cpuMhzStandby_ = sanitizeCpuMhz(preferences_.getUInt(kPrefCpuStandby, cpuMhzStandby_),
+                                  cpuMhzStandby_, true);
+  autoDimBrightnessPercent_ = sanitizeAutoDimBrightness(
+      preferences_.getUChar(kPrefAutoDimLevel, autoDimBrightnessPercent_),
+      autoDimBrightnessPercent_);
+  autoDimDelayMs_ =
+      sanitizeAutoDimDelayMs(preferences_.getUInt(kPrefAutoDimDelay, autoDimDelayMs_),
+                             autoDimDelayMs_);
   pacingLongWordDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
   pacingComplexWordDelayMs_ =
@@ -891,13 +926,11 @@ void App::update(uint32_t nowMs) {
   keyButton_.update(nowMs);
   if (button_.isHeld() || powerButton_.isHeld() || keyButton_.isHeld()) {
     lastActivityMs_ = nowMs;
+    restoreFromAutoDim(nowMs);
   }
-  const bool standbyComboConsumed = handleStandbyCombo(nowMs);
-  if (!standbyComboConsumed) {
-    handleBootButton(nowMs);
-    handlePowerButton(nowMs);
-    handleKeyButton(nowMs);
-  }
+  handleBootButton(nowMs);
+  handlePowerButton(nowMs);
+  handleKeyButton(nowMs);
   if (powerOffStarted_) {
     return;
   }
@@ -941,6 +974,8 @@ void App::update(uint32_t nowMs) {
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
   updateBrightnessToast(nowMs);
+  updateAutoDim(nowMs);
+  updateBatteryRuntimeLabel(nowMs);
   maybeSaveReadingPosition(nowMs);
   updateTimeEstimateBuild(nowMs);
   updateIdleStandby(nowMs);
@@ -959,24 +994,6 @@ void App::update(uint32_t nowMs) {
     ESP_LOGI(kAppTag, "state=%s", stateName(state_));
     Serial.printf("[app] state=%s ms=%lu\n", stateName(state_),
                   static_cast<unsigned long>(nowMs));
-  }
-
-  bool isIdle = (state_ == AppState::Paused || state_ == AppState::Menu);
-  if (state_ == AppState::Menu && menuScreen_ == MenuScreen::FocusTimerSession) {
-    isIdle = false;
-  }
-  if (otaCheckInProgress_) {
-    isIdle = false;
-  }
-
-  if (isIdle) {
-    const uint32_t timeoutMs = standbyTimerMs();
-    if (timeoutMs > 0 && nowMs - lastActivityMs_ >= timeoutMs) {
-      Serial.println("[app] standby idle timeout reached");
-      enterStandby(nowMs);
-    }
-  } else if (state_ != AppState::Standby && state_ != AppState::Sleeping) {
-    lastActivityMs_ = nowMs;
   }
 }
 
@@ -1043,8 +1060,8 @@ const char *App::touchPhaseName(TouchPhase phase) const {
 
 bool App::isSettingsMenuScreen(MenuScreen screen) const {
   return screen == MenuScreen::SettingsHome || screen == MenuScreen::SettingsDisplay ||
-         screen == MenuScreen::SettingsPacing || screen == MenuScreen::WifiSettings ||
-         screen == MenuScreen::WifiNetworkSettings;
+         screen == MenuScreen::SettingsPacing || screen == MenuScreen::SettingsBattery ||
+         screen == MenuScreen::WifiSettings || screen == MenuScreen::WifiNetworkSettings;
 }
 
 void App::setState(AppState nextState, uint32_t nowMs) {
@@ -1065,16 +1082,16 @@ void App::setState(AppState nextState, uint32_t nowMs) {
     wpmFeedbackVisible_ = false;
   }
   if (nextState != AppState::Playing) {
-    touchPlayHeld_ = false;
     playLocked_ = false;
     pauseAtSentenceEndRequested_ = false;
     chapterTransitionVisible_ = false;
   }
-  if (nextState != AppState::Paused && nextState != AppState::Playing) {
-    resetReaderTapTracking();
-  }
-
   state_ = nextState;
+  lastActivityMs_ = nowMs;
+  if (autoDimActive_) {
+    autoDimActive_ = false;
+    display_.setBrightnessPercent(currentBrightnessPercent());
+  }
 
   switch (state_) {
     case AppState::Paused:
@@ -1109,9 +1126,50 @@ void App::setState(AppState nextState, uint32_t nowMs) {
     saveReadingPosition(true);
   }
 
+  applyStateCpuFrequency();
+
   ESP_LOGI(kAppTag, "state -> %s", stateName(state_));
   Serial.printf("[app] state -> %s at %lu ms\n", stateName(state_),
                 static_cast<unsigned long>(nowMs));
+}
+
+void App::applyStateCpuFrequency() {
+  if (otaCheckInProgress_) {
+    if (getCpuFrequencyMhz() != 240) {
+      setCpuFrequencyMhz(240);
+      Serial.println("[power] CPU -> 240 MHz (OTA active)");
+    }
+    return;
+  }
+
+  uint32_t mhz = 240;
+  switch (state_) {
+    case AppState::Playing:
+      mhz = scrollModeEnabled() ? cpuMhzScroll_ : cpuMhzPlay_;
+      break;
+    case AppState::Paused:
+      mhz = scrollModeEnabled() ? cpuMhzScroll_ : cpuMhzPaused_;
+      break;
+    case AppState::Menu:
+      mhz = cpuMhzMenu_;
+      break;
+    case AppState::Standby:
+      mhz = cpuMhzStandby_;
+      break;
+    case AppState::Booting:
+    case AppState::CompanionSync:
+    case AppState::UsbTransfer:
+    case AppState::Sleeping:
+    default:
+      mhz = 240;
+      break;
+  }
+
+  if (getCpuFrequencyMhz() != mhz) {
+    setCpuFrequencyMhz(mhz);
+    Serial.printf("[power] CPU -> %u MHz (state=%s)\n", static_cast<unsigned int>(mhz),
+                  stateName(state_));
+  }
 }
 
 void App::updateState(uint32_t nowMs) {
@@ -1120,8 +1178,7 @@ void App::updateState(uint32_t nowMs) {
       return;
     }
 
-    setState((touchPlayHeld_ || playLocked_ || pauseAtSentenceEndRequested_) ? AppState::Playing
-                                                                              : AppState::Paused,
+    setState((playLocked_ || pauseAtSentenceEndRequested_) ? AppState::Playing : AppState::Paused,
              nowMs);
     return;
   }
@@ -1141,7 +1198,7 @@ void App::updateState(uint32_t nowMs) {
     return;
   }
 
-  if (touchPlayHeld_ || playLocked_ || pauseAtSentenceEndRequested_) {
+  if (playLocked_ || pauseAtSentenceEndRequested_) {
     setState(AppState::Playing, nowMs);
     return;
   }
@@ -1201,109 +1258,6 @@ void App::maybeSaveReadingPosition(uint32_t nowMs) {
   saveReadingPosition(false);
 }
 
-bool App::handleStandbyCombo(uint32_t nowMs) {
-  if (!Board::Config::ENABLE_STANDBY_BUTTON_COMBO ||
-      !Board::Config::FIRMWARE_POWER_BUTTON_ENABLED) {
-    return false;
-  }
-
-  if (state_ == AppState::Booting || state_ == AppState::UsbTransfer ||
-      state_ == AppState::CompanionSync ||
-      state_ == AppState::Sleeping || powerOffStarted_ || !bootButtonReleasedSinceBoot_ ||
-      !powerButtonReleasedSinceBoot_) {
-    return false;
-  }
-
-  const bool bothHeld = button_.isHeld() && powerButton_.isHeld();
-  if (state_ == AppState::Standby) {
-    const bool pastGrace = nowMs - standbyEnteredMs_ >= kStandbyWakeGraceMs;
-    if (!bothHeld && !button_.isHeld() && !powerButton_.isHeld() && pastGrace) {
-      standbyButtonsReleased_ = true;
-    }
-
-    if (bothHeld) {
-      if (standbyButtonsReleased_) {
-        bootButtonLongPressHandled_ = true;
-        powerButtonLongPressHandled_ = true;
-        exitStandby(nowMs);
-      }
-      return true;
-    }
-
-    if (standbyComboActive_) {
-      standbyComboActive_ = false;
-      standbyComboHandled_ = false;
-      bootButtonLongPressHandled_ = false;
-      powerButtonLongPressHandled_ = false;
-      return true;
-    }
-
-    return false;
-  }
-
-  if (bothHeld) {
-    if (!standbyComboActive_) {
-      standbyComboActive_ = true;
-      standbyComboHandled_ = true;
-      standbyComboStartedMs_ = nowMs;
-      bootButtonLongPressHandled_ = true;
-      powerButtonLongPressHandled_ = true;
-      enterStandby(nowMs);
-    }
-    return true;
-  }
-
-  if (standbyComboActive_) {
-    standbyComboActive_ = false;
-    standbyComboHandled_ = false;
-    bootButtonLongPressHandled_ = false;
-    powerButtonLongPressHandled_ = false;
-    return true;
-  }
-
-  return false;
-}
-
-void App::clearBootButtonTapSequence() {
-  bootButtonTapPending_ = false;
-  bootButtonTapCount_ = 0;
-  lastBootButtonTapMs_ = 0;
-}
-
-void App::registerBootButtonTap(uint32_t nowMs) {
-  if (!Board::Config::BOOT_BUTTON_TRIPLE_STARTS_STANDBY) {
-    executeBootButtonSingleTap(nowMs);
-    return;
-  }
-
-  if (!bootButtonTapPending_ ||
-      nowMs - lastBootButtonTapMs_ > kBootButtonMultiTapWindowMs) {
-    bootButtonTapCount_ = 0;
-  }
-
-  lastBootButtonTapMs_ = nowMs;
-  bootButtonTapPending_ = true;
-  if (bootButtonTapCount_ < 3) {
-    ++bootButtonTapCount_;
-  }
-
-  if (bootButtonTapCount_ >= 3) {
-    clearBootButtonTapSequence();
-    Serial.println("[button] BOOT triple press -> standby");
-    enterStandby(nowMs);
-  }
-}
-
-void App::processPendingBootButtonTap(uint32_t nowMs) {
-  if (!bootButtonTapPending_ || button_.isHeld() ||
-      nowMs - lastBootButtonTapMs_ < kBootButtonMultiTapWindowMs) {
-    return;
-  }
-
-  clearBootButtonTapSequence();
-  executeBootButtonSingleTap(nowMs);
-}
-
 void App::executeBootButtonSingleTap(uint32_t nowMs) {
   if (state_ == AppState::Menu && Board::Config::BOOT_BUTTON_BACKS_OUT_OF_MENU) {
     if (menuScreen_ == MenuScreen::Main || menuScreen_ == MenuScreen::QuickSettings) {
@@ -1326,6 +1280,7 @@ void App::executeBootButtonSingleTap(uint32_t nowMs) {
     } else if (Board::Config::ENABLE_RESTRUCTURED_MENU &&
                (menuScreen_ == MenuScreen::SettingsDisplay ||
                 menuScreen_ == MenuScreen::SettingsPacing ||
+                menuScreen_ == MenuScreen::SettingsBattery ||
                 menuScreen_ == MenuScreen::WifiSettings ||
                 menuScreen_ == MenuScreen::TypographyTuning)) {
       if (menuScreen_ == MenuScreen::SettingsDisplay) {
@@ -1333,6 +1288,8 @@ void App::executeBootButtonSingleTap(uint32_t nowMs) {
       } else if (menuScreen_ == MenuScreen::SettingsPacing) {
         flushPendingTimeEstimateRebuild();
         settingsSelectedIndex_ = kSettingsHomeRestructuredPacingIndex;
+      } else if (menuScreen_ == MenuScreen::SettingsBattery) {
+        settingsSelectedIndex_ = kSettingsHomeRestructuredBatteryIndex;
       } else if (menuScreen_ == MenuScreen::WifiSettings) {
         settingsSelectedIndex_ = kSettingsHomeRestructuredWifiIndex;
       } else {
@@ -1359,7 +1316,6 @@ void App::executeBootButtonSingleTap(uint32_t nowMs) {
 void App::handleBootButton(uint32_t nowMs) {
   if (state_ == AppState::Standby) {
     if (!Board::Config::BOOT_BUTTON_WAKES_STANDBY) {
-      clearBootButtonTapSequence();
       return;
     }
 
@@ -1368,7 +1324,6 @@ void App::handleBootButton(uint32_t nowMs) {
       standbyButtonsReleased_ = true;
     }
     if (standbyButtonsReleased_ && button_.wasPressedEvent()) {
-      clearBootButtonTapSequence();
       bootButtonLongPressHandled_ = true;
       exitStandby(nowMs);
     }
@@ -1377,7 +1332,6 @@ void App::handleBootButton(uint32_t nowMs) {
 
   if (state_ == AppState::Booting || state_ == AppState::UsbTransfer ||
       state_ == AppState::Sleeping || powerOffStarted_) {
-    clearBootButtonTapSequence();
     return;
   }
 
@@ -1389,7 +1343,6 @@ void App::handleBootButton(uint32_t nowMs) {
   }
 
   if (state_ == AppState::CompanionSync) {
-    clearBootButtonTapSequence();
     if (!Board::Config::BOOT_BUTTON_BACKS_OUT_OF_MENU || !button_.wasReleasedEvent()) {
       return;
     }
@@ -1400,11 +1353,8 @@ void App::handleBootButton(uint32_t nowMs) {
     return;
   }
 
-  processPendingBootButtonTap(nowMs);
-
   if (button_.isHeld() && !bootButtonLongPressHandled_ &&
       button_.heldDurationMs(nowMs) >= kThemeToggleHoldMs) {
-    clearBootButtonTapSequence();
     bootButtonLongPressHandled_ = true;
     if (Board::Config::BOOT_BUTTON_HOLD_STARTS_STANDBY) {
       Serial.println("[button] BOOT hold -> standby");
@@ -1421,15 +1371,13 @@ void App::handleBootButton(uint32_t nowMs) {
 
   if (bootButtonLongPressHandled_) {
     bootButtonLongPressHandled_ = false;
-    clearBootButtonTapSequence();
     return;
   }
 
   if (button_.lastHoldDurationMs() < kThemeToggleHoldMs) {
     if (Board::Config::BOOT_BUTTON_TOGGLES_READER ||
-        Board::Config::BOOT_BUTTON_BACKS_OUT_OF_MENU ||
-        Board::Config::BOOT_BUTTON_TRIPLE_STARTS_STANDBY) {
-      registerBootButtonTap(nowMs);
+        Board::Config::BOOT_BUTTON_BACKS_OUT_OF_MENU) {
+      executeBootButtonSingleTap(nowMs);
     } else {
       cycleBrightness(nowMs);
     }
@@ -1559,13 +1507,6 @@ void App::handlePowerButton(uint32_t nowMs) {
     return;
   }
 
-  if (Board::Config::POWER_BUTTON_SHORT_TOGGLES_STANDBY) {
-    if (state_ != AppState::Booting && state_ != AppState::Sleeping) {
-      enterStandby(nowMs);
-    }
-    return;
-  }
-
   toggleMenuFromPowerButton(nowMs);
 }
 
@@ -1582,6 +1523,9 @@ void App::handleKeyButton(uint32_t nowMs) {
         !keyButton_.isHeld() && nowMs - standbyEnteredMs_ >= kStandbyWakeGraceMs) {
       standbyButtonsReleased_ = true;
     }
+    if (keyButtonLongPressHandled_ && !keyButton_.isHeld()) {
+      keyButtonLongPressHandled_ = false;
+    }
     if (standbyButtonsReleased_ && keyButton_.wasPressedEvent()) {
       keyButtonLongPressHandled_ = true;
       exitStandby(nowMs);
@@ -1595,14 +1539,29 @@ void App::handleKeyButton(uint32_t nowMs) {
     return;
   }
 
+  if (keyButtonLongPressHandled_ && keyButton_.isHeld()) {
+    return;
+  }
+
+  if (keyButton_.isHeld() && keyButton_.heldDurationMs(nowMs) >= kThemeToggleHoldMs) {
+    keyButtonLongPressHandled_ = true;
+    Serial.println("[button] KEY hold -> standby");
+    enterStandby(nowMs);
+    return;
+  }
+
   if (!keyButton_.wasReleasedEvent()) {
+    return;
+  }
+
+  if (keyButtonLongPressHandled_) {
+    keyButtonLongPressHandled_ = false;
     return;
   }
 
   if (state_ == AppState::Playing) {
     pauseAtSentenceEndRequested_ = false;
     playLocked_ = false;
-    touchPlayHeld_ = false;
     setState(AppState::Paused, nowMs);
     return;
   }
@@ -1643,7 +1602,6 @@ void App::toggleMenuFromPowerButton(uint32_t nowMs) {
 void App::openMainMenu(uint32_t nowMs) {
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
   menuScreen_ = MenuScreen::Main;
   menuSelectedIndex_ = MenuResume;
   wpmFeedbackVisible_ = false;
@@ -1657,7 +1615,6 @@ void App::openMainMenu(uint32_t nowMs) {
 void App::openQuickSettings(uint32_t nowMs) {
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
   wpmFeedbackVisible_ = false;
   contextViewVisible_ = false;
   quickSettingsSelectedIndex_ = QuickSettingsBrightness;
@@ -1807,6 +1764,21 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
       pauseMode_ = PauseMode::SentenceEnd;
       break;
   }
+
+  cpuMhzPlay_ = sanitizeCpuMhz(preferences_.getUInt(kPrefCpuPlay, cpuMhzPlay_), cpuMhzPlay_);
+  cpuMhzScroll_ =
+      sanitizeCpuMhz(preferences_.getUInt(kPrefCpuScroll, cpuMhzScroll_), cpuMhzScroll_);
+  cpuMhzPaused_ =
+      sanitizeCpuMhz(preferences_.getUInt(kPrefCpuPaused, cpuMhzPaused_), cpuMhzPaused_);
+  cpuMhzMenu_ = sanitizeCpuMhz(preferences_.getUInt(kPrefCpuMenu, cpuMhzMenu_), cpuMhzMenu_);
+  cpuMhzStandby_ = sanitizeCpuMhz(preferences_.getUInt(kPrefCpuStandby, cpuMhzStandby_),
+                                  cpuMhzStandby_, true);
+  autoDimBrightnessPercent_ = sanitizeAutoDimBrightness(
+      preferences_.getUChar(kPrefAutoDimLevel, autoDimBrightnessPercent_),
+      autoDimBrightnessPercent_);
+  autoDimDelayMs_ =
+      sanitizeAutoDimDelayMs(preferences_.getUInt(kPrefAutoDimDelay, autoDimDelayMs_),
+                             autoDimDelayMs_);
 
   pacingLongWordDelayMs_ =
       loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
@@ -2100,7 +2072,6 @@ void App::showLowBatteryWarning(uint32_t nowMs) {
   lastLowBatteryWarningMs_ = nowMs;
   batteryWarningOverlayVisible_ = true;
   batteryWarningRestoreAtMs_ = nowMs + kBatteryWarningVisibleMs;
-  touchPlayHeld_ = false;
   playLocked_ = false;
   pauseAtSentenceEndRequested_ = false;
   wpmFeedbackVisible_ = false;
@@ -2160,7 +2131,66 @@ void App::updateBrightnessToast(uint32_t nowMs) {
   }
 }
 
-void App::resetReaderTapTracking() { lastReaderTapValid_ = false; }
+void App::updateAutoDim(uint32_t nowMs) {
+  const bool dimEligible = state_ == AppState::Paused || state_ == AppState::Menu;
+  if (!dimEligible) {
+    restoreFromAutoDim(nowMs);
+    return;
+  }
+
+  if (autoDimDelayMs_ == 0) {
+    restoreFromAutoDim(nowMs);
+    return;
+  }
+
+  if (!autoDimActive_ && lastActivityMs_ > 0 && nowMs - lastActivityMs_ >= autoDimDelayMs_) {
+    autoDimActive_ = true;
+    display_.setBrightnessPercent(autoDimBrightnessPercent_);
+    Serial.printf("[power] auto-dim active -> %u%%\n",
+                  static_cast<unsigned int>(autoDimBrightnessPercent_));
+  }
+}
+
+void App::restoreFromAutoDim(uint32_t nowMs) {
+  if (!autoDimActive_) {
+    return;
+  }
+
+  autoDimActive_ = false;
+  lastActivityMs_ = nowMs;
+  display_.setBrightnessPercent(currentBrightnessPercent());
+  Serial.println("[power] auto-dim restored");
+}
+
+void App::updateBatteryRuntimeLabel(uint32_t nowMs) {
+  if (!batteryPresent_ || !batterySampleInitialized_ ||
+      batteryLabelMode_ != BatteryLabelMode::TimeRemaining || !batteryRuntimeEstimateReady_) {
+    return;
+  }
+
+  if (nowMs - lastBatteryLabelRefreshMs_ < kBatteryLabelRefreshIntervalMs) {
+    return;
+  }
+  lastBatteryLabelRefreshMs_ = nowMs;
+
+  const uint32_t elapsedSinceSampleMinutes = (nowMs - lastBatterySampleMs_) / 60000UL;
+  const uint32_t projectedMinutes =
+      batteryRuntimeMinutesRemaining_ > elapsedSinceSampleMinutes
+          ? batteryRuntimeMinutesRemaining_ - elapsedSinceSampleMinutes
+          : 0;
+  const String nextLabel = formatBatteryTimeRemaining(projectedMinutes);
+  if (nextLabel == batteryLabel_) {
+    return;
+  }
+
+  batteryLabel_ = nextLabel;
+  display_.setBatteryLabel(batteryLabel_);
+  if (state_ == AppState::Paused || state_ == AppState::Playing) {
+    renderActiveReader(nowMs);
+  } else if (state_ == AppState::Menu) {
+    renderMenu();
+  }
+}
 
 bool App::isFooterMetricTap(uint16_t x, uint16_t y) const {
   return x >= Board::Config::DISPLAY_WIDTH - kReaderChromeMarginXPx - kFooterMetricTapWidthPx &&
@@ -2186,6 +2216,7 @@ DisplayManager::ReaderChrome App::readerChrome() const {
   chrome.showChapter = chapterLabelEnabled_ && (!reading || readerChapterVisibleWhilePlaying_);
   chrome.showProgress = !reading || readerProgressVisibleWhilePlaying_;
   chrome.showPreviousSentenceHint = !contextViewVisible_ || scrollModeEnabled();
+  chrome.showEdgeMenuHints = !reading;
   return chrome;
 }
 
@@ -2210,7 +2241,6 @@ bool App::handlePreviousSentenceTap(uint16_t x, uint16_t y, uint32_t nowMs) {
     return false;
   }
 
-  resetReaderTapTracking();
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
   wpmFeedbackVisible_ = false;
@@ -2247,7 +2277,6 @@ bool App::handleFooterMetricTap(uint16_t x, uint16_t y, uint32_t nowMs) {
   }
 
   preferences_.putUChar(kPrefFooterMetricMode, static_cast<uint8_t>(footerMetricMode_));
-  resetReaderTapTracking();
   renderActiveReader(nowMs);
   const char *modeName = "percent";
   switch (footerMetricMode_) {
@@ -2286,7 +2315,6 @@ bool App::handleBatteryBadgeTap(uint16_t x, uint16_t y, uint32_t nowMs) {
   preferences_.putUChar(kPrefBatteryLabelMode, static_cast<uint8_t>(batteryLabelMode_));
   batteryLabel_ = currentBatteryLabel();
   display_.setBatteryLabel(batteryLabel_);
-  resetReaderTapTracking();
   renderActiveReader(nowMs);
   const char *modeName = "percent";
   if (batteryLabelMode_ == BatteryLabelMode::TimeRemaining) {
@@ -2298,43 +2326,12 @@ bool App::handleBatteryBadgeTap(uint16_t x, uint16_t y, uint32_t nowMs) {
   return true;
 }
 
-void App::handleReaderTap(uint16_t x, uint16_t y, uint32_t nowMs) {
-  const bool recentTap =
-      lastReaderTapValid_ && nowMs - lastReaderTapMs_ <= kReaderDoubleTapWindowMs;
-  const bool sameRegion =
-      recentTap &&
-      abs(static_cast<int>(x) - static_cast<int>(lastReaderTapX_)) <=
-          static_cast<int>(kReaderDoubleTapSlopPx) &&
-      abs(static_cast<int>(y) - static_cast<int>(lastReaderTapY_)) <=
-          static_cast<int>(kReaderDoubleTapSlopPx);
-
-  if (sameRegion) {
-    resetReaderTapTracking();
-    toggleReaderPlaybackFromShortcut(nowMs);
-    Serial.printf("[touch] reader double tap state=%s\n", stateName(state_));
-    return;
-  }
-
-  if (recentTap) {
-    Serial.printf("[touch] double tap miss dx=%d dy=%d dt=%lu\n",
-                  static_cast<int>(x) - static_cast<int>(lastReaderTapX_),
-                  static_cast<int>(y) - static_cast<int>(lastReaderTapY_),
-                  static_cast<unsigned long>(nowMs - lastReaderTapMs_));
-  }
-
-  lastReaderTapValid_ = true;
-  lastReaderTapMs_ = nowMs;
-  lastReaderTapX_ = x;
-  lastReaderTapY_ = y;
-}
-
 void App::requestReaderPauseAtSentenceEnd(uint32_t nowMs) {
   if (state_ != AppState::Playing) {
     return;
   }
 
   playLocked_ = false;
-  touchPlayHeld_ = false;
   if (pauseMode_ == PauseMode::Instant) {
     pauseAtSentenceEndRequested_ = false;
     setState(AppState::Paused, nowMs);
@@ -2381,7 +2378,6 @@ bool App::shouldFinalizeReaderPause(uint32_t nowMs) const {
 void App::finalizeReaderPause(uint32_t nowMs) {
   pauseAtSentenceEndRequested_ = false;
   playLocked_ = false;
-  touchPlayHeld_ = false;
   setState(AppState::Paused, nowMs);
 }
 
@@ -2396,8 +2392,6 @@ void App::handleTouch(uint32_t nowMs) {
     Input::Touch::cancel();
     pausedTouch_.active = false;
     pausedTouchIntent_ = TouchIntent::None;
-    touchPlayHeld_ = false;
-    resetReaderTapTracking();
     return;
   }
 
@@ -2406,6 +2400,7 @@ void App::handleTouch(uint32_t nowMs) {
     return;
   }
   lastActivityMs_ = nowMs;
+  restoreFromAutoDim(nowMs);
 
   Serial.printf("[touch] phase=%s touched=%u x=%u y=%u gesture=%u state=%s\n",
                 touchPhaseName(ev.phase), ev.touched ? 1 : 0, ev.x, ev.y, ev.gesture,
@@ -2422,15 +2417,6 @@ void App::handleTouch(uint32_t nowMs) {
 }
 
 void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
-  if (event.phase == TouchPhase::End && touchPlayHeld_) {
-    resetReaderTapTracking();
-    pausedTouch_.active = false;
-    pausedTouchIntent_ = TouchIntent::None;
-    touchPlayHeld_ = false;
-    requestReaderPauseAtSentenceEnd(nowMs);
-    return;
-  }
-
   if (event.phase == TouchPhase::Start) {
     pausedTouch_.active = true;
     pausedTouchIntent_ = TouchIntent::None;
@@ -2476,16 +2462,6 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   }
 
   if (state_ == AppState::Playing) {
-    if (Board::Config::TOUCH_READER_PLAYBACK_ENABLED && tapLike &&
-        pressDurationMs >= kTouchPlayHoldMs) {
-      resetReaderTapTracking();
-      pausedTouch_.active = false;
-      pausedTouchIntent_ = TouchIntent::None;
-      requestReaderPauseAtSentenceEnd(nowMs);
-      Serial.println("[touch] reader hold pause");
-      return;
-    }
-
     if (ended) {
       pausedTouch_.active = false;
       pausedTouchIntent_ = TouchIntent::None;
@@ -2499,46 +2475,20 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
         if (handlePreviousSentenceTap(event.x, event.y, nowMs)) {
           return;
         }
-        if (Board::Config::TOUCH_READER_PLAYBACK_ENABLED &&
-            Board::Config::READER_SINGLE_TAP_PAUSES_WHILE_LOCKED &&
-            (playLocked_ || pauseAtSentenceEndRequested_)) {
-          resetReaderTapTracking();
-          requestReaderPauseAtSentenceEnd(nowMs);
-        } else if (Board::Config::TOUCH_READER_PLAYBACK_ENABLED) {
-          handleReaderTap(event.x, event.y, nowMs);
-        } else {
-          resetReaderTapTracking();
-        }
-      } else {
-        resetReaderTapTracking();
       }
     }
-    return;
-  }
-
-  if (Board::Config::TOUCH_READER_PLAYBACK_ENABLED && !previewBrowseMode && !ended &&
-      pausedTouchIntent_ == TouchIntent::None &&
-      pressDurationMs >= kTouchPlayHoldMs && tapLike) {
-    resetReaderTapTracking();
-    touchPlayHeld_ = true;
-    pausedTouchIntent_ = TouchIntent::PlayHold;
-    wpmFeedbackVisible_ = false;
-    setState(AppState::Playing, nowMs);
     return;
   }
 
   if (pausedTouchIntent_ == TouchIntent::None) {
     if (absDeltaX >= static_cast<int>(kSwipeThresholdPx) &&
         absDeltaX > absDeltaY + static_cast<int>(kAxisBiasPx)) {
-      resetReaderTapTracking();
       pausedTouchIntent_ = TouchIntent::Scrub;
     } else if (previewBrowseMode && !ended && pressDurationMs >= kPreviewBrowseHoldMs &&
                absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
-      resetReaderTapTracking();
       pausedTouchIntent_ = TouchIntent::BrowseScroll;
     } else if (!previewBrowseMode && absDeltaY >= static_cast<int>(kSwipeThresholdPx) &&
                absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx)) {
-      resetReaderTapTracking();
       pausedTouchIntent_ = TouchIntent::Wpm;
     }
   }
@@ -2592,13 +2542,8 @@ void App::applyPausedTouchGesture(const TouchEvent &event, uint32_t nowMs) {
       return;
     }
     if (tapLike && previewBrowseMode) {
-      resetReaderTapTracking();
       contextViewVisible_ = false;
       renderActiveReader(nowMs);
-    } else if (tapLike && Board::Config::TOUCH_READER_PLAYBACK_ENABLED) {
-      handleReaderTap(event.x, event.y, nowMs);
-    } else {
-      resetReaderTapTracking();
     }
   }
 }
@@ -2622,8 +2567,6 @@ bool App::handleTopEdgeMenuSwipe(const TouchEvent &event, uint32_t nowMs, int de
 
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
-  resetReaderTapTracking();
   openMainMenu(nowMs);
   Serial.printf("[touch] top-edge menu swipe x=%u y=%u dy=%d\n", event.x, event.y, deltaY);
   return true;
@@ -2650,8 +2593,6 @@ bool App::handleBottomEdgeQuickSettingsSwipe(const TouchEvent &event, uint32_t n
 
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
-  resetReaderTapTracking();
   openQuickSettings(nowMs);
   Serial.printf("[touch] bottom-edge quick settings swipe x=%u y=%u dy=%d\n", event.x,
                 event.y, deltaY);
@@ -3452,6 +3393,9 @@ void App::selectSettingsItem(uint32_t nowMs) {
       case kSettingsHomeWifiIndex:
         openWifiSettings();
         return;
+      case kSettingsHomeBatteryIndex:
+        openBatterySettings();
+        return;
       case kSettingsHomeUpdateIndex: {
         runFirmwareUpdate(preferredOtaConfig(), false, nowMs);
         return;
@@ -3463,6 +3407,11 @@ void App::selectSettingsItem(uint32_t nowMs) {
 
   if (menuScreen_ == MenuScreen::WifiSettings) {
     selectWifiSettingsItem(nowMs);
+    return;
+  }
+
+  if (menuScreen_ == MenuScreen::SettingsBattery) {
+    selectBatterySettingsItem(nowMs);
     return;
   }
 
@@ -3676,6 +3625,9 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
       case kSettingsHomeRestructuredWifiIndex:
         openWifiSettings();
         return;
+      case kSettingsHomeRestructuredBatteryIndex:
+        openBatterySettings();
+        return;
       case kSettingsHomeRestructuredUpdateIndex:
         runFirmwareUpdate(preferredOtaConfig(), false, nowMs);
         return;
@@ -3866,6 +3818,11 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
     return;
   }
 
+  if (menuScreen_ == MenuScreen::SettingsBattery) {
+    selectBatterySettingsItem(nowMs);
+    return;
+  }
+
   if (menuScreen_ == MenuScreen::WifiSettings) {
     switch (settingsSelectedIndex_) {
       case kSettingsBackIndex:
@@ -3912,6 +3869,127 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
         return;
     }
   }
+}
+
+void App::openBatterySettings() {
+  settingsSelectedIndex_ = kSettingsBatteryCpuPlayIndex;
+  menuScreen_ = MenuScreen::SettingsBattery;
+  rebuildSettingsMenuItems();
+  renderSettings();
+}
+
+void App::selectBatterySettingsItem(uint32_t nowMs) {
+  auto cycleCpuMhz = [](uint32_t current) -> uint32_t {
+    if (current <= 80) {
+      return 160;
+    }
+    if (current <= 160) {
+      return 240;
+    }
+    return 80;
+  };
+  auto cycleCpuMhzStandby = [](uint32_t current) -> uint32_t {
+    if (current <= 40) {
+      return 80;
+    }
+    if (current <= 80) {
+      return 160;
+    }
+    if (current <= 160) {
+      return 240;
+    }
+    return 40;
+  };
+  auto refreshBatteryRuntimeLabel = [&]() {
+    batteryRuntimeEstimateReady_ = false;
+    lastBatteryLabelRefreshMs_ = 0;
+    batteryLabel_ = currentBatteryLabel();
+    display_.setBatteryLabel(batteryLabel_);
+  };
+
+  switch (settingsSelectedIndex_) {
+    case kSettingsBackIndex:
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredBatteryIndex
+                                   : kSettingsHomeBatteryIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    case kSettingsBatteryCpuPlayIndex:
+      cpuMhzPlay_ = cycleCpuMhz(cpuMhzPlay_);
+      preferences_.putUInt(kPrefCpuPlay, cpuMhzPlay_);
+      refreshBatteryRuntimeLabel();
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU RSVP -> %u MHz\n", static_cast<unsigned int>(cpuMhzPlay_));
+      break;
+    case kSettingsBatteryCpuScrollIndex:
+      cpuMhzScroll_ = cycleCpuMhz(cpuMhzScroll_);
+      preferences_.putUInt(kPrefCpuScroll, cpuMhzScroll_);
+      refreshBatteryRuntimeLabel();
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU scroll -> %u MHz\n", static_cast<unsigned int>(cpuMhzScroll_));
+      break;
+    case kSettingsBatteryCpuPausedIndex:
+      cpuMhzPaused_ = cycleCpuMhz(cpuMhzPaused_);
+      preferences_.putUInt(kPrefCpuPaused, cpuMhzPaused_);
+      refreshBatteryRuntimeLabel();
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU paused -> %u MHz\n", static_cast<unsigned int>(cpuMhzPaused_));
+      break;
+    case kSettingsBatteryCpuMenuIndex:
+      cpuMhzMenu_ = cycleCpuMhz(cpuMhzMenu_);
+      preferences_.putUInt(kPrefCpuMenu, cpuMhzMenu_);
+      refreshBatteryRuntimeLabel();
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU menu -> %u MHz\n", static_cast<unsigned int>(cpuMhzMenu_));
+      break;
+    case kSettingsBatteryCpuStandbyIndex:
+      cpuMhzStandby_ = cycleCpuMhzStandby(cpuMhzStandby_);
+      preferences_.putUInt(kPrefCpuStandby, cpuMhzStandby_);
+      refreshBatteryRuntimeLabel();
+      applyStateCpuFrequency();
+      Serial.printf("[battery] CPU standby -> %u MHz\n",
+                    static_cast<unsigned int>(cpuMhzStandby_));
+      break;
+    case kSettingsBatteryAutoDimDelayIndex:
+      if (autoDimDelayMs_ == 0) {
+        autoDimDelayMs_ = 30000;
+      } else if (autoDimDelayMs_ <= 30000) {
+        autoDimDelayMs_ = 60000;
+      } else if (autoDimDelayMs_ <= 60000) {
+        autoDimDelayMs_ = 120000;
+      } else {
+        autoDimDelayMs_ = 0;
+      }
+      preferences_.putUInt(kPrefAutoDimDelay, autoDimDelayMs_);
+      if (autoDimDelayMs_ == 0) {
+        restoreFromAutoDim(nowMs);
+      }
+      lastActivityMs_ = nowMs;
+      Serial.printf("[battery] auto-dim delay -> %s\n", autoDimDelayLabel().c_str());
+      break;
+    case kSettingsBatteryAutoDimLevelIndex:
+      if (autoDimBrightnessPercent_ >= 30) {
+        autoDimBrightnessPercent_ = 0;
+      } else if (autoDimBrightnessPercent_ == 0) {
+        autoDimBrightnessPercent_ = 10;
+      } else {
+        autoDimBrightnessPercent_ = static_cast<uint8_t>(autoDimBrightnessPercent_ + 10);
+      }
+      preferences_.putUChar(kPrefAutoDimLevel, autoDimBrightnessPercent_);
+      if (autoDimActive_) {
+        display_.setBrightnessPercent(autoDimBrightnessPercent_);
+      }
+      Serial.printf("[battery] auto-dim level -> %u%%\n",
+                    static_cast<unsigned int>(autoDimBrightnessPercent_));
+      break;
+    default:
+      return;
+  }
+
+  rebuildSettingsMenuItems();
+  renderSettings();
 }
 
 void App::openWifiSettings() {
@@ -4449,6 +4527,7 @@ void App::rebuildSettingsMenuItems() {
       settingsMenuItems_.push_back(uiText(UiText::WordPacing));
       settingsMenuItems_.push_back(uiText(UiText::TypographyTune));
       settingsMenuItems_.push_back("Wi-Fi");
+      settingsMenuItems_.push_back("Battery");
       settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
       settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
       settingsMenuItems_.push_back("SD card check");
@@ -4488,6 +4567,19 @@ void App::rebuildSettingsMenuItems() {
                                    storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
       settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
       settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+    } else if (menuScreen_ == MenuScreen::SettingsBattery) {
+      settingsMenuItems_.push_back(uiText(UiText::Back));
+      settingsMenuItems_.push_back("CPU RSVP: " + cpuMhzLabel(cpuMhzPlay_));
+      settingsMenuItems_.push_back("CPU scroll: " + cpuMhzLabel(cpuMhzScroll_));
+      settingsMenuItems_.push_back("CPU paused: " + cpuMhzLabel(cpuMhzPaused_));
+      settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
+      String standbyLabel = "CPU standby: " + cpuMhzLabel(cpuMhzStandby_);
+      if (cpuMhzStandby_ <= 40) {
+        standbyLabel += " (slow anim)";
+      }
+      settingsMenuItems_.push_back(standbyLabel);
+      settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
+      settingsMenuItems_.push_back("Auto-dim level: " + autoDimBrightnessLabel());
     } else if (menuScreen_ == MenuScreen::WifiNetworkSettings) {
       settingsMenuItems_.push_back(uiText(UiText::Back));
       settingsMenuItems_.push_back("Choose network: " +
@@ -4507,6 +4599,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Display));
     settingsMenuItems_.push_back(uiText(UiText::TypographyTune));
     settingsMenuItems_.push_back("Wi-Fi");
+    settingsMenuItems_.push_back("Battery");
     settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
     settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
   } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
@@ -4547,6 +4640,19 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
     settingsMenuItems_.push_back("Forget network");
     settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+  } else if (menuScreen_ == MenuScreen::SettingsBattery) {
+    settingsMenuItems_.push_back(uiText(UiText::Back));
+    settingsMenuItems_.push_back("CPU RSVP: " + cpuMhzLabel(cpuMhzPlay_));
+    settingsMenuItems_.push_back("CPU scroll: " + cpuMhzLabel(cpuMhzScroll_));
+    settingsMenuItems_.push_back("CPU paused: " + cpuMhzLabel(cpuMhzPaused_));
+    settingsMenuItems_.push_back("CPU menu: " + cpuMhzLabel(cpuMhzMenu_));
+    String standbyLabel = "CPU standby: " + cpuMhzLabel(cpuMhzStandby_);
+    if (cpuMhzStandby_ <= 40) {
+      standbyLabel += " (slow anim)";
+    }
+    settingsMenuItems_.push_back(standbyLabel);
+    settingsMenuItems_.push_back("Auto-dim delay: " + autoDimDelayLabel());
+    settingsMenuItems_.push_back("Auto-dim level: " + autoDimBrightnessLabel());
   }
 
   if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -4664,11 +4770,13 @@ bool App::startBackgroundOtaCheck(const OtaUpdater::Config &config) {
   params->resultQueue = otaCheckQueue_;
 
   otaCheckInProgress_ = true;
+  applyStateCpuFrequency();
   BaseType_t created = xTaskCreatePinnedToCore(otaCheckTask, "ota_check",
                                                kOtaCheckTaskStackBytes, params, 1, nullptr, 0);
   if (created != pdPASS) {
     Serial.printf("[ota] background task create failed: %ld\n", static_cast<long>(created));
     otaCheckInProgress_ = false;
+    applyStateCpuFrequency();
     delete params;
     return false;
   }
@@ -4713,6 +4821,7 @@ void App::pollOtaCheckResult(uint32_t nowMs) {
   OtaCheckResult result;
   while (xQueueReceive(otaCheckQueue_, &result, 0) == pdTRUE) {
     otaCheckInProgress_ = false;
+    applyStateCpuFrequency();
     Serial.printf("[ota] background result code=%u current=%s latest=%s summary=%s detail=%s\n",
                   static_cast<unsigned int>(result.code), result.currentVersion,
                   result.latestVersion, result.summary, result.detail);
@@ -5198,7 +5307,6 @@ void App::openPowerOffConfirm(uint32_t nowMs) {
   powerOffConfirmSelectedIndex_ = PowerOffConfirmNo;
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
   wpmFeedbackVisible_ = false;
   contextViewVisible_ = false;
 
@@ -5471,7 +5579,6 @@ void App::enterStandby(uint32_t nowMs) {
 
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
   playLocked_ = false;
   pauseAtSentenceEndRequested_ = false;
   contextViewVisible_ = false;
@@ -5491,7 +5598,6 @@ void App::exitStandby(uint32_t nowMs) {
 
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
   playLocked_ = false;
   pauseAtSentenceEndRequested_ = false;
   batteryWarningOverlayVisible_ = false;
@@ -5602,7 +5708,6 @@ void App::enterPowerOff(uint32_t nowMs) {
   saveReadingPosition(true);
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
-  touchPlayHeld_ = false;
   contextViewVisible_ = false;
   wpmFeedbackVisible_ = false;
   menuScreen_ = MenuScreen::Main;
@@ -5739,7 +5844,6 @@ void App::wakeFromSleep(bool fullPeripheralReset) {
   keyButton_.begin();
   bootButtonReleasedSinceBoot_ = !button_.isHeld();
   bootButtonLongPressHandled_ = false;
-  clearBootButtonTapSequence();
   powerButtonReleasedSinceBoot_ =
       !Board::Config::FIRMWARE_POWER_BUTTON_ENABLED
           ? true
@@ -5789,6 +5893,7 @@ void App::wakeFromSleep(bool fullPeripheralReset) {
   if (displayReady) {
     renderActiveReader(nowMs);
   }
+  applyStateCpuFrequency();
 }
 
 bool App::restoreSavedBook(uint32_t nowMs) {
@@ -6628,11 +6733,55 @@ String App::batteryTimeRemainingLabel() const {
   }
 
   const uint32_t estimatedMinutes =
-      (static_cast<uint32_t>(batteryDisplayedPercent_) * kNominalBatteryRuntimeMinutes) / 100UL;
+      (static_cast<uint32_t>(batteryDisplayedPercent_) * nominalBatteryRuntimeMinutes()) / 100UL;
   return formatBatteryTimeRemaining(estimatedMinutes);
 }
 
 String App::batteryVoltageLabel() const { return String(batteryFilteredVoltage_, 2) + "V"; }
+
+uint32_t App::nominalBatteryRuntimeMinutes() const {
+  auto mhzFactor = [](uint32_t mhz) -> int32_t {
+    if (mhz <= 80) {
+      return 90;
+    }
+    if (mhz >= 240) {
+      return -60;
+    }
+    return 0;
+  };
+
+  int32_t minutes = static_cast<int32_t>(kNominalBatteryRuntimeMinutes);
+  if (scrollModeEnabled()) {
+    minutes += mhzFactor(cpuMhzScroll_);
+  } else {
+    minutes += mhzFactor(cpuMhzPlay_);
+    minutes += mhzFactor(cpuMhzPaused_) / 4;
+  }
+  minutes += mhzFactor(cpuMhzMenu_) / 4;
+  minutes += mhzFactor(cpuMhzStandby_) / 4;
+  return static_cast<uint32_t>(std::max<int32_t>(60, minutes));
+}
+
+String App::cpuMhzLabel(uint32_t mhz) { return String(static_cast<unsigned int>(mhz)) + " MHz"; }
+
+String App::autoDimDelayLabel() const {
+  if (autoDimDelayMs_ == 0) {
+    return "Off";
+  }
+  if (autoDimDelayMs_ <= 30000) {
+    return "30s";
+  }
+  if (autoDimDelayMs_ <= 60000) {
+    return "60s";
+  }
+  return "2min";
+}
+
+String App::autoDimBrightnessLabel() const {
+  return autoDimBrightnessPercent_ == 0
+             ? String("Screen off")
+             : String(static_cast<unsigned int>(autoDimBrightnessPercent_)) + "%";
+}
 
 String App::formatBatteryTimeRemaining(uint32_t minutes) const {
   if (minutes < 1) {
