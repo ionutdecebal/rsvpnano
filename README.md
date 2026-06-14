@@ -356,6 +356,10 @@ Firmware builds with PlatformIO:
 pio run
 ```
 
+The default firmware target is for Waveshare ESP32-S3-Touch-LCD-3.49 rev1 boards. For V2
+boards with the LCD backlight PWM on GPIO42 and reset on the TCA9554 expander, build or
+upload `waveshare_esp32s3_usb_msc_rev2` or `waveshare_esp32s3_rev2`.
+
 Upload to a connected device:
 
 ```bash

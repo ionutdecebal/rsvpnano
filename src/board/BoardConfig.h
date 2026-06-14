@@ -2,6 +2,18 @@
 
 #include <Arduino.h>
 
+#ifndef RSVP_LCD_BACKLIGHT_PIN
+#define RSVP_LCD_BACKLIGHT_PIN 8
+#endif
+
+#ifndef RSVP_LCD_RST_PIN
+#define RSVP_LCD_RST_PIN 21
+#endif
+
+#ifndef RSVP_TCA9554_LCD_RST_PIN
+#define RSVP_TCA9554_LCD_RST_PIN -1
+#endif
+
 namespace BoardConfig {
 
 enum class UiOrientation : uint8_t {
@@ -21,8 +33,11 @@ constexpr int PIN_LCD_DATA0 = 11;
 constexpr int PIN_LCD_DATA1 = 12;
 constexpr int PIN_LCD_DATA2 = 13;
 constexpr int PIN_LCD_DATA3 = 14;
-constexpr int PIN_LCD_RST = 21;
-constexpr int PIN_LCD_BACKLIGHT = 8;
+constexpr int PIN_LCD_RST = RSVP_LCD_RST_PIN;
+constexpr int PIN_LCD_BACKLIGHT = RSVP_LCD_BACKLIGHT_PIN;
+static_assert(PIN_LCD_BACKLIGHT >= 0, "LCD backlight pin must be configured");
+static_assert(PIN_LCD_RST >= 0 || RSVP_TCA9554_LCD_RST_PIN >= 0,
+              "LCD reset pin must be configured");
 
 constexpr int PANEL_NATIVE_WIDTH = 172;
 constexpr int PANEL_NATIVE_HEIGHT = 640;
@@ -39,7 +54,8 @@ constexpr int PIN_TOUCH_SDA = 17;
 constexpr int PIN_TOUCH_SCL = 18;
 
 constexpr int TCA9554_ADDRESS = 0x20;
-constexpr uint8_t TCA9554_PIN_BATTERY_ADC_ENABLE = 1;
+constexpr uint8_t TCA9554_PIN_BACKLIGHT_ENABLE = 1;
+constexpr int TCA9554_PIN_LCD_RST = RSVP_TCA9554_LCD_RST_PIN;
 constexpr uint8_t TCA9554_PIN_SYS_EN = 6;
 constexpr uint8_t TCA9554_PIN_AUDIO_ENABLE = 7;
 
@@ -58,6 +74,7 @@ struct BatteryStatus {
 
 void begin();
 void lightSleepUntilBootButton();
+void resetLcdPanel();
 void holdBacklightOffForDeepSleep();
 bool readBatteryStatus(BatteryStatus &status);
 bool releaseBatteryPowerHold();

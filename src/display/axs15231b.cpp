@@ -85,13 +85,7 @@ void setColumnWindow(uint16_t x1, uint16_t x2) {
 void axs15231bInit() {
   setBacklight(false);
 
-  pinMode(BoardConfig::PIN_LCD_RST, OUTPUT);
-  digitalWrite(BoardConfig::PIN_LCD_RST, HIGH);
-  delay(30);
-  digitalWrite(BoardConfig::PIN_LCD_RST, LOW);
-  delay(250);
-  digitalWrite(BoardConfig::PIN_LCD_RST, HIGH);
-  delay(30);
+  BoardConfig::resetLcdPanel();
 
   if (!gBusReady) {
     spi_bus_config_t busConfig = {};
