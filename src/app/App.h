@@ -179,6 +179,7 @@ class App {
   void updateState(uint32_t nowMs);
   void updateReader(uint32_t nowMs);
   void updateWpmFeedback(uint32_t nowMs);
+  void updateBrightnessToast(uint32_t nowMs);
   void maybeSaveReadingPosition(uint32_t nowMs);
   void handleBootButton(uint32_t nowMs);
   void handlePowerButton(uint32_t nowMs);
@@ -191,7 +192,7 @@ class App {
   void toggleMenuFromPowerButton(uint32_t nowMs);
   void toggleReaderPlaybackFromShortcut(uint32_t nowMs);
   void openMainMenu(uint32_t nowMs);
-  void cycleBrightness();
+  void cycleBrightness(uint32_t nowMs);
   void cycleThemeMode(uint32_t nowMs);
   void cycleUiLanguage(uint32_t nowMs);
   void cycleReaderMode(uint32_t nowMs);
@@ -457,6 +458,7 @@ class App {
   uint32_t lastStateLogMs_ = 0;
   uint32_t powerButtonEventArmMs_ = 0;
   uint32_t wpmFeedbackUntilMs_ = 0;
+  uint32_t brightnessToastUntilMs_ = 0;
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
   uint32_t batteryRuntimeAnchorMs_ = 0;
@@ -551,6 +553,7 @@ class App {
   bool touchPlayHeld_ = false;
   bool playLocked_ = false;
   bool pauseAtSentenceEndRequested_ = false;
+  bool brightnessToastVisible_ = false;
   bool lastReaderTapValid_ = false;
   bool bootButtonReleasedSinceBoot_ = false;
   bool bootButtonLongPressHandled_ = false;

@@ -875,6 +875,16 @@ void DisplayManager::setBatteryLabel(const String &label) {
   lastRenderKey_ = "";
 }
 
+void DisplayManager::setBrightnessOverlay(const String &text) {
+  if (brightnessOverlayText_ == text) {
+    return;
+  }
+
+  brightnessOverlayText_ = text;
+  tickerPlaybackFrameActive_ = false;
+  lastRenderKey_ = "";
+}
+
 void DisplayManager::setBrightnessPercent(uint8_t percent) {
   if (percent == 0) {
     percent = 1;
@@ -1646,6 +1656,36 @@ void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight) {
   drawTinyTextAt(batteryLabel_, x, y, footerColor(), kTinyScale);
 }
 
+void DisplayManager::drawBrightnessToastBadge(int logicalWidth, int logicalHeight) {
+  if (brightnessOverlayText_.isEmpty()) {
+    return;
+  }
+
+  const int iconSize = 11;
+  const int iconGap = 8;
+  const int textWidth = measureTinyTextWidth(brightnessOverlayText_, kTinyScale);
+  const int badgeWidth = iconSize + iconGap + textWidth;
+  const int x = std::max(kReaderBatteryMarginX, logicalWidth - kReaderBatteryMarginX - badgeWidth);
+  const int y = std::min(std::max(kReaderBatteryMarginTop + 22, kReaderBatteryMarginTop),
+                         std::max(kReaderBatteryMarginTop, logicalHeight - iconSize - 2));
+  const uint16_t color = footerColor();
+  const int iconX = x;
+  const int iconY = y + 2;
+  const int centerX = iconX + iconSize / 2;
+  const int centerY = iconY + iconSize / 2;
+
+  fillVirtualRect(centerX - 2, centerY - 2, 5, 5, color);
+  fillVirtualRect(centerX, iconY, 1, 2, color);
+  fillVirtualRect(centerX, iconY + iconSize - 2, 1, 2, color);
+  fillVirtualRect(iconX, centerY, 2, 1, color);
+  fillVirtualRect(iconX + iconSize - 2, centerY, 2, 1, color);
+  fillVirtualRect(iconX + 2, iconY + 2, 1, 1, color);
+  fillVirtualRect(iconX + iconSize - 3, iconY + 2, 1, 1, color);
+  fillVirtualRect(iconX + 2, iconY + iconSize - 3, 1, 1, color);
+  fillVirtualRect(iconX + iconSize - 3, iconY + iconSize - 3, 1, 1, color);
+  drawTinyTextAt(brightnessOverlayText_, x + iconSize + iconGap, y, color, kTinyScale);
+}
+
 void DisplayManager::drawPreviousSentenceHint() {
   drawTinyTextAt("<<", kReaderChromeMarginX, kReaderChromeMarginTop, footerColor(), kTinyScale);
 }
@@ -1802,6 +1842,7 @@ void DisplayManager::applyBrightness() {
 
 void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHeight) {
   tickerPlaybackFrameActive_ = false;
+  drawBrightnessToastBadge(virtualWidth, virtualHeight);
   for (int nativeYStart = 0; nativeYStart < kPanelNativeHeight;
        nativeYStart += kMaxChunkPhysicalRows) {
     const int nativeRows = std::min(kMaxChunkPhysicalRows, kPanelNativeHeight - nativeYStart);

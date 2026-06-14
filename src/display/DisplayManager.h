@@ -60,6 +60,7 @@ class DisplayManager {
 
   bool begin();
   void setBatteryLabel(const String &label);
+  void setBrightnessOverlay(const String &text);
   void setBrightnessPercent(uint8_t percent);
   void setDarkMode(bool darkMode);
   void setNightMode(bool nightMode);
@@ -171,6 +172,7 @@ class DisplayManager {
                                    int width, int xOffset);
   void drawBatteryBadge();
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
+  void drawBrightnessToastBadge(int logicalWidth, int logicalHeight);
   void drawPreviousSentenceHint();
   void drawFooter(const String &chapterLabel, const String &statusLabel,
                   const ReaderChrome &chrome);
@@ -202,4 +204,5 @@ class DisplayManager {
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;
+  String brightnessOverlayText_;
 };

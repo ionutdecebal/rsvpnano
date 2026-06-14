@@ -24,6 +24,7 @@ static const char *kAppTag = "app";
 constexpr uint32_t kOtaCheckTaskStackBytes = 10240;
 constexpr uint32_t kBootSplashMs = 750;
 constexpr uint32_t kWpmFeedbackMs = 900;
+constexpr uint32_t kBrightnessToastMs = 1500;
 constexpr uint32_t kPowerOffHoldMs = 1600;
 constexpr uint32_t kPowerOffReleaseWaitMs = 4000;
 constexpr uint32_t kSoftOffReleaseWaitMs = 1200;
@@ -1062,6 +1063,7 @@ void App::update(uint32_t nowMs) {
   updateReader(nowMs);
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
+  updateBrightnessToast(nowMs);
   maybeSaveReadingPosition(nowMs);
   updateTimeEstimateBuild(nowMs);
 
@@ -1423,7 +1425,7 @@ void App::executeBootButtonSingleTap(uint32_t nowMs) {
     return;
   }
 
-  cycleBrightness();
+  cycleBrightness(nowMs);
 }
 
 void App::handleBootButton(uint32_t nowMs) {
@@ -1501,7 +1503,7 @@ void App::handleBootButton(uint32_t nowMs) {
         BoardConfig::BOOT_BUTTON_TRIPLE_STARTS_STANDBY) {
       registerBootButtonTap(nowMs);
     } else {
-      cycleBrightness();
+      cycleBrightness(nowMs);
     }
   }
 }
@@ -1930,7 +1932,7 @@ void App::applyTypographySettings(uint32_t nowMs, bool rerender) {
   }
 }
 
-void App::cycleBrightness() {
+void App::cycleBrightness(uint32_t nowMs) {
   brightnessLevelIndex_ = static_cast<uint8_t>((brightnessLevelIndex_ + 1) % kBrightnessLevelCount);
   preferences_.putUChar(kPrefBrightness, brightnessLevelIndex_);
   const uint8_t percent = currentBrightnessPercent();
@@ -1938,7 +1940,10 @@ void App::cycleBrightness() {
                 static_cast<unsigned int>(brightnessLevelIndex_ + 1),
                 static_cast<unsigned int>(kBrightnessLevelCount),
                 static_cast<unsigned int>(percent));
-  applyDisplayPreferences(millis());
+  brightnessToastVisible_ = true;
+  brightnessToastUntilMs_ = nowMs + kBrightnessToastMs;
+  display_.setBrightnessOverlay(String(static_cast<unsigned int>(percent)) + "%");
+  applyDisplayPreferences(nowMs);
 }
 
 void App::cycleThemeMode(uint32_t nowMs) {
@@ -2200,6 +2205,19 @@ void App::updateWpmFeedback(uint32_t nowMs) {
 
   wpmFeedbackVisible_ = false;
   renderActiveReader(nowMs);
+}
+
+void App::updateBrightnessToast(uint32_t nowMs) {
+  if (!brightnessToastVisible_ || nowMs < brightnessToastUntilMs_) {
+    return;
+  }
+
+  brightnessToastVisible_ = false;
+  display_.setBrightnessOverlay("");
+  if (state_ == AppState::Menu || state_ == AppState::Paused || state_ == AppState::Playing ||
+      state_ == AppState::Booting) {
+    applyDisplayPreferences(nowMs);
+  }
 }
 
 void App::resetReaderTapTracking() { lastReaderTapValid_ = false; }
@@ -3360,7 +3378,7 @@ void App::selectArticlesItem(uint32_t nowMs) {
 void App::selectQuickSettingsItem(uint32_t nowMs) {
   switch (quickSettingsSelectedIndex_) {
     case QuickSettingsBrightness:
-      cycleBrightness();
+      cycleBrightness(nowMs);
       return;
     case QuickSettingsTheme:
       cycleThemeMode(nowMs);
@@ -3471,7 +3489,7 @@ void App::selectSettingsItem(uint32_t nowMs) {
         cycleThemeMode(nowMs);
         return;
       case kSettingsDisplayBrightnessIndex:
-        cycleBrightness();
+        cycleBrightness(nowMs);
         return;
       case kSettingsDisplayHandednessIndex:
         cycleHandednessMode(nowMs);
@@ -3681,7 +3699,7 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
         cycleThemeMode(nowMs);
         return;
       case kSettingsDisplayRestructuredBrightnessIndex:
-        cycleBrightness();
+        cycleBrightness(nowMs);
         return;
       case kSettingsDisplayRestructuredHandednessIndex:
         cycleHandednessMode(nowMs);
