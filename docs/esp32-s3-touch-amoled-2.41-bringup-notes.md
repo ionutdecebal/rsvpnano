@@ -1,187 +1,107 @@
 # ESP32-S3 Touch AMOLED 2.41 Bring-Up Notes
 
-## Purpose
+## Target
 
-This note captures the current state of the Waveshare `ESP32-S3-Touch-AMOLED-2.41` port so we can
-return to it safely later, or repeat the process on similar boards without rediscovering the same
-hardware quirks.
-
-## Checkpoint Context
-
-- Original bring-up started on local `main` at `v0.0.3`
-- Port checkpoint branch: `checkpoint/esp32s3-amoled-241-v003-base`
-- Current integrated branch: `integration/esp32s3-amoled-241-v005`
-- Current repo base: upstream `v0.0.5`
-- Current working port target: `waveshare_esp32s3_touch_amoled_241`
-- Original preserved target: `waveshare_esp32s3`
+- PlatformIO env: `waveshare_esp32s3_touch_amoled_241`
+- Platform folder: `src/platforms/waveshare_amoled_241`
+- Private board facts: `src/platforms/waveshare_amoled_241/WaveshareAmoled241.h`
+- Display driver: `src/drivers/display/rm690b0`
+- Touch driver: `src/drivers/touch/ft6336`
+- IMU driver: `src/drivers/imu/qmi8658`
 
 ## Current Hardware Status
 
-What is working on the `2.41` board now:
+Previously validated behavior on the 2.41 board:
 
-- Display initializes and renders correctly
-- Touch input works and follows display orientation
-- Colors are correct
-- Layout aligns with the visible panel area
-- Fixed on-screen stripe artifacts are gone
-- Battery hold and battery ADC path are wired for this board
-- SD card loading works on the `2.41`, including with the original device's SD card
-- Shared dual-target repo structure is in place
-- Deep-sleep power path now keeps the battery-hold GPIO latched instead of dropping board power
+- Display initializes and renders.
+- Touch input works and follows display orientation.
+- Colors are correct after removing the extra RGB565 byte swap.
+- Layout aligns with the visible panel area.
+- Fixed on-screen stripe artifacts were resolved by board-specific transfer chunk sizing.
+- SD card loading works on the 2.41.
+- Battery hold and ADC paths are wired for this board.
 
-What is not yet considered safe or complete:
+Still needs manual validation after the board/input refactor:
 
-- OTA is not board-aware yet
-- Longer burn-in testing is still needed
-- USB MSC behavior on this target has not been fully validated
+- Soft-off and wake behavior on battery.
+- USB MSC behavior.
+- Long reading session stability.
+- OTA asset selection on a real release.
 
-## Key Architectural Changes
+## Hardware Assumptions
 
-- Added multi-target board selection through `BoardConfig`
-- Added board profiles under `src/board/profiles/`
-- Preserved the existing `3.49` board as its own target
-- Added a new display abstraction layer in `src/display/BoardDisplay.*`
-- Added RM690B0 display support in `src/display/rm690b0.*`
-- Added FT6336 touch support in `src/input/TouchHandler.*`
-- Added board-specific display transfer chunk sizing
+- Panel native geometry: `450x600`
+- App/UI geometry: `600x450`
+- Touch controller: `FT6336`
+- Display controller: `RM690B0`
+- I2C: `GPIO47/48`
+- Touch reset: `GPIO3`
+- Battery hold: `GPIO16`
+- Battery ADC: `GPIO17`
+- SDMMC pins: `GPIO4/5/6`
 
-## 2.41 Board Assumptions
+These facts live in `WaveshareAmoled241.h` and are consumed only by the platform implementation.
 
-Current `2.41` profile values live in
-`src/board/profiles/WaveshareEsp32S3TouchAmoled241Profile.h`.
+## Current Implementation Shape
 
-Important assumptions:
+- `BoardDisplay.cpp` owns board power/rail sequencing and calls the RM690B0 driver.
+- `BoardInput.cpp` exposes raw logical controls and FT6336 touch contacts.
+- `Input::poll` owns debounce, press duration, touch tracking, and app-facing gestures.
+- `BoardPower.cpp` owns battery hold, battery ADC, sleep, wake, and power behavior.
+- `BoardStorage.cpp` owns SD bus setup and card-frequency probing.
+- `BoardImu.cpp` binds the QMI8658 driver to the board I2C bus.
 
-- Panel native geometry is `450x600`
-- App display geometry is `600x450`
-- Touch controller is `FT6336`
-- Display controller is `RM690B0`
-- I2C is shared on `GPIO47/48`
-- Touch reset is `GPIO3`
-- Battery hold is direct GPIO on `GPIO16`
-- Battery ADC is `GPIO17`
-- SDMMC pins are `GPIO4/5/6`
+The shared app does not include platform or chip-driver headers directly.
 
-## Bring-Up Problems We Hit
+## Bring-Up Lessons
 
-### 1. Rotation confusion
+### Rotation
 
-Waveshare demo orientation assumptions did not match the observed hardware behavior exactly.
+Keep panel memory in native portrait-style geometry and let the shared display/input mapping layer
+perform the landscape presentation. Avoid rotating both in the panel driver and in app mapping.
 
-What finally worked:
+### Color Format
 
-- Keep panel memory in native portrait-style geometry
-- Let the shared app mapping layer perform the quarter-turn into landscape
-- Keep touch mapping aligned to the app orientation instead of chasing panel rotation in two places
+The app already byte-swaps RGB565 before sending pixels to the panel. The RM690B0 path must not add a
+second swap.
 
-Lesson:
+### Panel Addressing
 
-- Do not try to rotate in both the panel driver and the shared display mapper at the same time
+The `16px` RM690B0 column offset belongs in panel addressing, not in app layout code.
 
-### 2. Incorrect colors
+### Transfer Chunking
 
-Symptom:
+The fixed black stripe artifacts were caused by visible seams between display flush bands on the
+rotated panel path. The 2.41 target uses a larger board-specific transfer buffer to avoid those seams.
 
-- Red anchor letter appeared blue
-- Gray UI elements appeared greenish
+## Input Behavior
 
-Cause:
-
-- The app already byte-swaps RGB565 before sending pixels to the panel
-- An additional swap in the RM690B0 driver caused double-swapping
-
-Fix:
-
-- Remove the extra swap from the RM690B0 path
-
-Lesson:
-
-- Always trace the full pixel pipeline before touching display color format code
-
-### 3. Cropped layout and footer drift
-
-Symptom:
-
-- Top `100%` label clipped by the edge
-- Footer elements appeared slightly too high
-
-Fix:
-
-- Add a `16px` RM690B0 column offset in `setColumnWindow()`
-
-Lesson:
-
-- If the entire rendered scene is shifted, fix panel addressing first rather than rewriting UI
-  layout math
-
-### 4. Fixed black stripe artifacts
-
-Symptom:
-
-- Thin black stripes stayed in fixed screen positions while words moved underneath
-
-Most important finding:
-
-- This was not primarily a color or content-rendering problem
-- The stripes were caused by visible seams between display flush bands on the rotated panel path
-
-Fix that solved it:
-
-- Make display transfer chunk size board-specific
-- Increase the `2.41` target transfer buffer from `16KB` to `48KB`
-
-Where:
-
-- `src/board/profiles/WaveshareEsp32S3TouchAmoled241Profile.h`
-- `src/display/DisplayManager.cpp`
-
-Lesson:
-
-- On rotated panels, native-row chunk boundaries can appear as fixed vertical bands
-- If artifacts stay fixed while content scrolls, investigate transport chunking before deeper UI
-  logic
+The platform maps physical hardware to logical input controls, and the app handles the resulting
+events by state. The old board-config button-policy flags and `PWR` + `BOOT` standby combo are no
+longer used.
 
 ## OTA Separation
 
-OTA defaults are now split by board so the `3.49` and `2.41` do not pull the same release asset.
+The 2.41 release asset name is:
 
-Current behavior:
+```text
+rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin
+```
 
-- The `3.49` keeps using the legacy OTA asset name `rsvp-nano-ota.bin`
-- The `2.41` uses its own OTA asset name
-  `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin`
-- The release workflow publishes both OTA binaries from fixed build environments
-- The updater now rejects obvious cross-board overrides such as pointing a `2.41` at the legacy
-  `3.49` OTA asset name
+The updater rejects obvious cross-board asset overrides by name. Embedded board metadata would still
+be a stronger future guard.
 
-Current limitation:
+## Hardware Test Checklist
 
-- The updater still trusts the asset naming convention rather than verifying embedded board metadata
-- A deliberately custom `asset_name` that does not match the known board patterns could still bypass
-  this guard
+- Display orientation, colors, brightness, sleep, and wake.
+- Touch alignment, edge gestures, and failed-read recovery.
+- SD load behavior and index creation.
+- Battery reporting.
+- Soft-off and wake on USB and battery.
+- USB transfer mode.
+- Long reading session stability.
 
-## Recommended Next Steps
+## Current Verification
 
-1. Run broader hardware QA on the `2.41`:
-   - sleep and wake on battery
-   - SD load behavior
-   - battery reporting
-   - long reading session stability
-   - brightness and dark-mode behavior
-2. Validate whether USB transfer mode needs any `2.41`-specific handling.
-3. Consider adding board metadata verification to OTA as a second safety layer.
-
-## Build Targets
-
-- `waveshare_esp32s3`
-- `waveshare_esp32s3_usb_msc`
-- `waveshare_esp32s3_touch_amoled_241`
-
-## Practical Advice For Future Ports
-
-- Split board specifics before touching rendering logic
-- Keep one shared app codebase and compile per-board targets
-- Treat display geometry, panel memory geometry, and UI orientation as separate concerns
-- Trace the pixel format path before touching RGB/BGR or byte-swap logic
-- If artifacts are fixed on the glass, suspect transport or addressing before app layout
-- Protect the old board path with separate build targets from day one
+This target was not part of the most recent successful representative build pair. It should be
+included in the next full PlatformIO matrix run before merging.

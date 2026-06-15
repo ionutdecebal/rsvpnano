@@ -175,16 +175,22 @@ OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the devic
 
 ### Hardware Buttons
 
-- `PWR` short press from the reader: open the main menu.
-- `PWR` short press on the main menu: return to the reader.
-- `PWR` short press in most submenus: go back to the main menu.
-- `PWR` hold in Companion Sync, USB Transfer, and Focus Timer: exit that page.
-- `PWR` hold from the normal reader or main menu: power off.
-- `BOOT` short press: cycle brightness.
-- `BOOT` hold: cycle display theme.
-- Press `PWR` + `BOOT` together: enter standby. Press either button to wake after the short standby grace period.
+Physical buttons are translated by each board build into logical app inputs. The app handles those
+logical inputs by state, so boards can use different wiring without spreading button policy through
+the reader code.
 
-The goal is simple: use `PWR` as menu, back, exit, and power. Use `BOOT` for quick display changes.
+- `PWR` short press from the reader: open the main menu.
+- `PWR` short press in menus: select the highlighted item.
+- `PWR` hold in Companion Sync and USB Transfer: exit that page.
+- `PWR` hold from normal reader states: open the power-off confirmation, or enter standby when power-off is not available from that state.
+- `BOOT` short press in menus: go back.
+- `BOOT` short press while reading is playing or paused: cycle the display theme.
+- `BOOT` short press from other reader states: cycle brightness.
+- `BOOT` hold or triple press from standby-capable states: enter standby.
+- `KEY` short press on boards with a separate key button: toggle reader playback.
+
+The old `PWR` + `BOOT` standby combo is no longer used. Standby wakes from logical button or touch
+events after the short standby grace period.
 
 ### Reader Controls
 
@@ -221,7 +227,7 @@ USB transfer
 Power off
 ```
 
-Swipe up or down to move through the menu. Tap to select. Press `PWR` to go back.
+Swipe up or down to move through the menu. Tap or press `PWR` to select. Press `BOOT` to go back.
 
 ### Books And Articles
 
@@ -233,7 +239,7 @@ Both pages show readable titles, progress, and saved position where available. S
 
 ### Chapters
 
-The `Chapters` page lists chapter markers from the current book when available. Select a chapter to jump to it. Press `PWR` to return to the main menu.
+The `Chapters` page lists chapter markers from the current book when available. Select a chapter to jump to it. Press `BOOT` to return to the main menu.
 
 ### Settings
 
@@ -358,13 +364,13 @@ Temporary install instructions are in:
 Firmware builds with PlatformIO:
 
 ```bash
-pio run
+pio run -e waveshare_esp32s3
 ```
 
 Upload to a connected device:
 
 ```bash
-pio run -t upload
+pio run -e waveshare_esp32s3 -t upload
 ```
 
 Monitor serial output:
@@ -372,6 +378,20 @@ Monitor serial output:
 ```bash
 pio device monitor
 ```
+
+Current firmware environments:
+
+- `waveshare_esp32s3`: Touch LCD 3.49 rev1.
+- `waveshare_esp32s3_rev2`: Touch LCD 3.49 rev2.
+- `waveshare_esp32s3_usb_msc`: Touch LCD 3.49 rev1 USB transfer build.
+- `waveshare_esp32s3_usb_msc_rev2`: Touch LCD 3.49 rev2 USB transfer build.
+- `waveshare_esp32s3_touch_amoled_18`: Touch AMOLED 1.8.
+- `waveshare_esp32s3_touch_amoled_216`: Touch AMOLED 2.16.
+- `waveshare_esp32s3_touch_amoled_241`: Touch AMOLED 2.41.
+
+Board-independent app code uses the stable `src/board` API and `src/input/Input.*`. Board-specific
+wiring, rails, buses, and chip choices live under `src/platforms/<board>`, while reusable chip code
+lives under `src/drivers`.
 
 The iOS app lives in:
 
@@ -395,9 +415,9 @@ web/firmware/rsvp-nano-ota.bin
 web/firmware/rsvp-nano-rev2.bin
 web/firmware/rsvp-nano-rev2-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin
-web/firmware/rsvp-nano-rev2.bin
-web/firmware/rsvp-nano-rev2-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin
 web/firmware/manifest.json
 web/firmware/manifest-rev2.json
