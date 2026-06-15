@@ -11,6 +11,7 @@ enum class UiLanguage : uint8_t {
 	German,
 	Romanian,
 	Polish,
+	Russian,
 	Count,
 };
 

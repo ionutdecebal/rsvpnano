@@ -3,7 +3,7 @@
 # Keep ascii_only=true until the firmware font/rendering path supports accented glyphs reliably.
 schema_version = 1
 default_language = "English"
-ascii_only = true
+ascii_only = false
 language_order = [
 	"English",
 	"Spanish",
@@ -11,6 +11,7 @@ language_order = [
 	"German",
 	"Romanian",
 	"Polish",
+	"Russian",
 ]
 
 [languages.English]
@@ -37,6 +38,10 @@ name = "Romana"
 code = "pl"
 name = "Polski"
 
+[languages.Russian]
+code = "ru"
+name = "Русский"
+
 # Main menu
 [[strings]]
 key = "Resume"
@@ -47,6 +52,7 @@ French = "Reprendre"
 German = "Weiter"
 Romanian = "Continua"
 Polish = "Wznow"
+Russian = "Продолжить"
 
 [[strings]]
 key = "Chapters"
@@ -57,6 +63,7 @@ French = "Chapitres"
 German = "Kapitel"
 Romanian = "Capitole"
 Polish = "Rozdzialy"
+Russian = "Главы"
 
 [[strings]]
 key = "Library"
@@ -67,6 +74,7 @@ French = "Bibliotheque"
 German = "Bibliothek"
 Romanian = "Biblioteca"
 Polish = "Biblioteka"
+Russian = "Библиотека"
 
 [[strings]]
 key = "Settings"
@@ -77,6 +85,7 @@ French = "Reglages"
 German = "Optionen"
 Romanian = "Setari"
 Polish = "Ustawienia"
+Russian = "Настройки"
 
 [[strings]]
 key = "UsbTransfer"
@@ -87,6 +96,7 @@ French = "USB"
 German = "USB"
 Romanian = "USB"
 Polish = "USB"
+Russian = "USB"
 
 [[strings]]
 key = "PowerOff"
@@ -97,6 +107,7 @@ French = "Eteindre"
 German = "Ausschalten"
 Romanian = "Oprire"
 Polish = "Wylacz"
+Russian = "Выключить"
 
 
 # Shared navigation and settings categories
@@ -109,6 +120,7 @@ French = "Retour"
 German = "Zuruck"
 Romanian = "Inapoi"
 Polish = "Wroc"
+Russian = "Назад"
 
 [[strings]]
 key = "Display"
@@ -119,6 +131,7 @@ French = "Affichage"
 German = "Anzeige"
 Romanian = "Afisaj"
 Polish = "Ekran"
+Russian = "Экран"
 
 [[strings]]
 key = "TypographyTune"
@@ -129,6 +142,7 @@ French = "Typographie"
 German = "Typografie"
 Romanian = "Tipografie"
 Polish = "Typografia"
+Russian = "Типографика"
 
 [[strings]]
 key = "WordPacing"
@@ -139,6 +153,7 @@ French = "Rythme mots"
 German = "Lesetempo"
 Romanian = "Ritm cuvinte"
 Polish = "Tempo slow"
+Russian = "Темп слов"
 
 
 # Display and reading settings
@@ -151,6 +166,7 @@ French = "Theme"
 German = "Thema"
 Romanian = "Tema"
 Polish = "Motyw"
+Russian = "Тема"
 
 [[strings]]
 key = "Brightness"
@@ -161,6 +177,7 @@ French = "Luminosite"
 German = "Helligkeit"
 Romanian = "Luminoz."
 Polish = "Jasnosc"
+Russian = "Яркость"
 
 [[strings]]
 key = "Language"
@@ -171,6 +188,7 @@ French = "Langue"
 German = "Sprache"
 Romanian = "Limba"
 Polish = "Jezyk"
+Russian = "Язык"
 
 [[strings]]
 key = "ReadingMode"
@@ -181,6 +199,7 @@ French = "Mode lecture"
 German = "Lesemodus"
 Romanian = "Mod citire"
 Polish = "Tryb czyt."
+Russian = "Режим чтения"
 
 
 # Word pacing settings
@@ -193,6 +212,7 @@ French = "Mots longs"
 German = "Lange Worter"
 Romanian = "Cuvinte lungi"
 Polish = "Dlugie slowa"
+Russian = "Длинные слова"
 
 [[strings]]
 key = "Complexity"
@@ -203,6 +223,7 @@ French = "Complexite"
 German = "Komplexitat"
 Romanian = "Complexitate"
 Polish = "Zlozonosc"
+Russian = "Сложность"
 
 [[strings]]
 key = "Punctuation"
@@ -213,6 +234,7 @@ French = "Ponctuation"
 German = "Zeichen"
 Romanian = "Punctuatie"
 Polish = "Interpunk."
+Russian = "Пунктуация"
 
 [[strings]]
 key = "ResetPacing"
@@ -223,6 +245,7 @@ French = "Reinit. rythme"
 German = "Tempo zuruck"
 Romanian = "Reset ritm"
 Polish = "Reset tempa"
+Russian = "Сброс темпа"
 
 
 # Theme and toggle values
@@ -235,6 +258,7 @@ French = "Nuit"
 German = "Nacht"
 Romanian = "Noapte"
 Polish = "Noc"
+Russian = "Ночь"
 
 [[strings]]
 key = "Dark"
@@ -245,6 +269,7 @@ French = "Sombre"
 German = "Dunkel"
 Romanian = "Inchis"
 Polish = "Ciemny"
+Russian = "Тёмная"
 
 [[strings]]
 key = "Light"
@@ -255,6 +280,7 @@ French = "Clair"
 German = "Hell"
 Romanian = "Deschis"
 Polish = "Jasny"
+Russian = "Светлая"
 
 [[strings]]
 key = "On"
@@ -265,6 +291,7 @@ French = "Oui"
 German = "Ein"
 Romanian = "Pornit"
 Polish = "Tak"
+Russian = "Вкл"
 
 [[strings]]
 key = "Off"
@@ -275,6 +302,7 @@ French = "Non"
 German = "Aus"
 Romanian = "Oprit"
 Polish = "Nie"
+Russian = "Выкл"
 
 
 # Typography settings
@@ -287,6 +315,7 @@ French = "Taille"
 German = "Schriftgrad"
 Romanian = "Marime"
 Polish = "Rozmiar"
+Russian = "Размер"
 
 [[strings]]
 key = "Typeface"
@@ -297,6 +326,7 @@ French = "Police"
 German = "Schriftart"
 Romanian = "Font"
 Polish = "Kroj"
+Russian = "Шрифт"
 
 [[strings]]
 key = "PhantomWords"
@@ -307,6 +337,7 @@ French = "Mots fantomes"
 German = "Phantomworter"
 Romanian = "Cuvinte fantoma"
 Polish = "Slowa widma"
+Russian = "Слова-тени"
 
 [[strings]]
 key = "RedHighlight"
@@ -317,6 +348,7 @@ French = "Accent rouge"
 German = "Rotfokus"
 Romanian = "Accent rosu"
 Polish = "Czerwony"
+Russian = "Красный"
 
 [[strings]]
 key = "Tracking"
@@ -327,6 +359,7 @@ French = "Espacement"
 German = "Laufweite"
 Romanian = "Spatiere"
 Polish = "Odstepy"
+Russian = "Трекинг"
 
 [[strings]]
 key = "Anchor"
@@ -337,6 +370,7 @@ French = "Ancre"
 German = "Anker"
 Romanian = "Ancora"
 Polish = "Kotwica"
+Russian = "Якорь"
 
 [[strings]]
 key = "GuideWidth"
@@ -347,6 +381,7 @@ French = "Largeur guide"
 German = "Guidebreite"
 Romanian = "Latime ghid"
 Polish = "Szer. guide"
+Russian = "Ширина гида"
 
 [[strings]]
 key = "GuideGap"
@@ -357,6 +392,7 @@ French = "Ecart guide"
 German = "Guidespalt"
 Romanian = "Spatiu ghid"
 Polish = "Przerwa guide"
+Russian = "Зазор гида"
 
 [[strings]]
 key = "Reset"
@@ -367,6 +403,7 @@ French = "Reinit."
 German = "Zurucksetzen"
 Romanian = "Resetare"
 Polish = "Reset"
+Russian = "Сброс"
 
 [[strings]]
 key = "Typography"
@@ -377,6 +414,7 @@ French = "Typographie"
 German = "Typografie"
 Romanian = "Tipografie"
 Polish = "Typografia"
+Russian = "Типографика"
 
 
 # Sample screen hints
@@ -389,6 +427,7 @@ French = "toucher sortie"
 German = "tippen zum Ende"
 Romanian = "atinge iesire"
 Polish = "dotknij wyjscie"
+Russian = "коснись выход"
 
 [[strings]]
 key = "TapToReset"
@@ -399,6 +438,7 @@ French = "toucher reinit."
 German = "tippen zum Reset"
 Romanian = "atinge reset"
 Polish = "dotknij reset"
+Russian = "коснись сброс"
 
 [[strings]]
 key = "TapChangeSample"
@@ -409,6 +449,7 @@ French = "Touchez change  G/D echant."
 German = "Tippen aendern  L/R Probe"
 Romanian = "Atinge schimba  S/D proba"
 Polish = "Dotknij zmien  L/R probka"
+Russian = "Тап смена  Л/П пример"
 
 [[strings]]
 key = "TapExitSample"
@@ -419,6 +460,7 @@ French = "Touchez sortie  G/D echant."
 German = "Tippen zuruck  L/R Probe"
 Romanian = "Atinge iesi  S/D proba"
 Polish = "Dotknij wyjdz  L/R probka"
+Russian = "Тап выход  Л/П пример"
 
 [[strings]]
 key = "TapToggleSample"
@@ -429,6 +471,7 @@ French = "Touchez option  G/D echant."
 German = "Tippen schalten  L/R Probe"
 Romanian = "Atinge comuta  S/D proba"
 Polish = "Dotknij przel.  L/R probka"
+Russian = "Тап вкл  Л/П пример"
 
 [[strings]]
 key = "TapCycleSample"
@@ -439,6 +482,7 @@ French = "Touchez cycle  G/D echant."
 German = "Tippen wechseln  L/R Probe"
 Romanian = "Atinge ciclu  S/D proba"
 Polish = "Dotknij cykl  L/R probka"
+Russian = "Тап цикл  Л/П пример"
 
 
 # Book and restart flow
@@ -451,6 +495,7 @@ French = "Livre actuel"
 German = "Aktuelles Buch"
 Romanian = "Cartea curenta"
 Polish = "Biezaca ksiazka"
+Russian = "Текущая книга"
 
 [[strings]]
 key = "Start"
@@ -461,6 +506,7 @@ French = "Debut"
 German = "Start"
 Romanian = "Inceput"
 Polish = "Start"
+Russian = "Начало"
 
 [[strings]]
 key = "StartOfBook"
@@ -471,6 +517,7 @@ French = "Debut du livre"
 German = "Buchanfang"
 Romanian = "Inceputul cartii"
 Polish = "Poczatek ksiazki"
+Russian = "Начало книги"
 
 [[strings]]
 key = "RestartBook"
@@ -481,6 +528,7 @@ French = "Relancer livre"
 German = "Buch neu"
 Romanian = "Reporneste cartea"
 Polish = "Restart ksiazki"
+Russian = "Заново книгу"
 
 [[strings]]
 key = "AreYouSure"
@@ -491,6 +539,7 @@ French = "Confirmer ?"
 German = "Sicher?"
 Romanian = "Sigur?"
 Polish = "Na pewno?"
+Russian = "Вы уверены?"
 
 [[strings]]
 key = "NoKeepPlace"
@@ -501,6 +550,7 @@ French = "Non, garder"
 German = "Nein, merken"
 Romanian = "Nu, pastreaza"
 Polish = "Nie, zostaw"
+Russian = "Нет, оставить"
 
 [[strings]]
 key = "YesRestart"
@@ -511,6 +561,7 @@ French = "Oui, relancer"
 German = "Ja, neu"
 Romanian = "Da, reporneste"
 Polish = "Tak, restart"
+Russian = "Да, заново"
 
 [[strings]]
 key = "NoSamples"
@@ -521,6 +572,7 @@ French = "Aucun exemple"
 German = "Keine Proben"
 Romanian = "Fara probe"
 Polish = "Brak probek"
+Russian = "Нет образцов"
 
 
 # Common option labels
@@ -533,6 +585,7 @@ French = "Grand"
 German = "Gross"
 Romanian = "Mare"
 Polish = "Duzy"
+Russian = "Большой"
 
 [[strings]]
 key = "Medium"
@@ -543,6 +596,7 @@ French = "Moyen"
 German = "Mittel"
 Romanian = "Mediu"
 Polish = "Sredni"
+Russian = "Средний"
 
 [[strings]]
 key = "Small"
@@ -553,6 +607,7 @@ French = "Petit"
 German = "Klein"
 Romanian = "Mic"
 Polish = "Maly"
+Russian = "Маленький"
 
 [[strings]]
 key = "Standard"
@@ -563,6 +618,7 @@ French = "Standard"
 German = "Standard"
 Romanian = "Standard"
 Polish = "Standard"
+Russian = "Стандарт"
 
 
 # Reading mode and time estimate options
@@ -575,6 +631,7 @@ French = "RSVP"
 German = "RSVP"
 Romanian = "RSVP"
 Polish = "RSVP"
+Russian = "RSVP"
 
 [[strings]]
 key = "ScrollMode"
@@ -585,6 +642,7 @@ French = "Defilement page"
 German = "Seiten-Scroll"
 Romanian = "Derulare pagina"
 Polish = "Scroll strony"
+Russian = "Прокрутка"
 
 [[strings]]
 key = "TimeEstimate"
@@ -595,6 +653,7 @@ French = "Temps restant"
 German = "Restzeit"
 Romanian = "Timp ramas"
 Polish = "Pozostaly czas"
+Russian = "Оценка врем."
 
 [[strings]]
 key = "TimeEstimateAccurate"
@@ -605,6 +664,7 @@ French = "Precis"
 German = "Genau"
 Romanian = "Exact"
 Polish = "Dokladny"
+Russian = "Точно"
 
 [[strings]]
 key = "TimeEstimateFast"
@@ -615,3 +675,4 @@ French = "Rapide"
 German = "Schnell"
 Romanian = "Rapid"
 Polish = "Szybki"
+Russian = "Быстро"

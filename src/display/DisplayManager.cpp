@@ -367,6 +367,49 @@ constexpr TinyGlyph kTinyGlyphs[] = {
     {'_', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F}},
 };
 
+// Tiny 5x7 uppercase Cyrillic glyphs for Russian UI text. Bit 4 is the leftmost column,
+// matching kTinyGlyphs. Lowercase and yo/short-i are folded to these in tinyCyrillicRows().
+struct TinyCyrillicGlyph {
+  uint16_t cp;
+  uint8_t rows[kTinyGlyphHeight];
+};
+
+constexpr TinyCyrillicGlyph kTinyCyrillicGlyphs[] = {
+    {0x0401, {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}},  // YO -> E
+    {0x0410, {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},  // A
+    {0x0411, {0x1F, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x1E}},  // BE
+    {0x0412, {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},  // VE
+    {0x0413, {0x1F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10}},  // GHE
+    {0x0414, {0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x1F, 0x11}},  // DE
+    {0x0415, {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}},  // IE
+    {0x0416, {0x15, 0x15, 0x0E, 0x1F, 0x0E, 0x15, 0x15}},  // ZHE
+    {0x0417, {0x0E, 0x11, 0x01, 0x06, 0x01, 0x11, 0x0E}},  // ZE
+    {0x0418, {0x11, 0x11, 0x13, 0x15, 0x19, 0x11, 0x11}},  // I
+    {0x0419, {0x11, 0x11, 0x13, 0x15, 0x19, 0x11, 0x11}},  // SHORT I -> I
+    {0x041A, {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}},  // KA
+    {0x041B, {0x0F, 0x09, 0x09, 0x09, 0x09, 0x09, 0x11}},  // EL
+    {0x041C, {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}},  // EM
+    {0x041D, {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},  // EN
+    {0x041E, {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},  // O
+    {0x041F, {0x1F, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}},  // PE
+    {0x0420, {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},  // ER
+    {0x0421, {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}},  // ES
+    {0x0422, {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},  // TE
+    {0x0423, {0x11, 0x11, 0x11, 0x0F, 0x01, 0x11, 0x0E}},  // U
+    {0x0424, {0x04, 0x0E, 0x15, 0x15, 0x15, 0x0E, 0x04}},  // EF
+    {0x0425, {0x11, 0x0A, 0x04, 0x04, 0x04, 0x0A, 0x11}},  // HA
+    {0x0426, {0x11, 0x11, 0x11, 0x11, 0x11, 0x1F, 0x01}},  // TSE
+    {0x0427, {0x11, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x01}},  // CHE
+    {0x0428, {0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x1F}},  // SHA
+    {0x0429, {0x15, 0x15, 0x15, 0x15, 0x15, 0x1F, 0x01}},  // SHCHA
+    {0x042A, {0x18, 0x08, 0x08, 0x0E, 0x09, 0x09, 0x0E}},  // HARD SIGN
+    {0x042B, {0x11, 0x11, 0x11, 0x1D, 0x15, 0x15, 0x1D}},  // YERU
+    {0x042C, {0x10, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x1E}},  // SOFT SIGN
+    {0x042D, {0x0E, 0x11, 0x01, 0x07, 0x01, 0x11, 0x0E}},  // E
+    {0x042E, {0x12, 0x15, 0x15, 0x1D, 0x15, 0x15, 0x12}},  // YU
+    {0x042F, {0x0F, 0x11, 0x11, 0x0F, 0x05, 0x09, 0x11}},  // YA
+};
+
 ReaderGlyph serifGlyphForByte(uint8_t value) {
   if (value < kEmbeddedSerifFirstChar || value > kEmbeddedSerifLastChar) {
     value = static_cast<uint8_t>('?');
@@ -484,6 +527,43 @@ const uint8_t *tinyRowsFor(char c) {
   }
 
   return kTinyGlyphs[0].rows;
+}
+
+// Tiny rows for an uppercase/lowercase Cyrillic codepoint, or nullptr if unsupported.
+const uint8_t *tinyCyrillicRows(uint32_t codepoint) {
+  if (codepoint == 0x0451) {
+    codepoint = 0x0401;  // yo -> YO
+  } else if (codepoint >= 0x0430 && codepoint <= 0x044F) {
+    codepoint -= 0x20;  // a-ya -> A-YA (covers short-i)
+  }
+
+  for (const TinyCyrillicGlyph &glyph : kTinyCyrillicGlyphs) {
+    if (glyph.cp == codepoint) {
+      return glyph.rows;
+    }
+  }
+  return nullptr;
+}
+
+// If text starting at index begins a 2-byte UTF-8 Cyrillic glyph we can render, return its tiny
+// rows and set byteLen=2. Otherwise return nullptr and set byteLen=1 (treat as one ASCII byte).
+// Only valid 2-byte Cyrillic sequences are consumed, so single-byte Latin-1 display text (book
+// chrome) is unaffected.
+const uint8_t *tinyCyrillicAt(const String &text, size_t index, size_t &byteLen) {
+  const uint8_t b0 = LatinText::byteValue(text[index]);
+  if ((b0 & 0xE0) == 0xC0 && index + 1 < text.length()) {
+    const uint8_t b1 = LatinText::byteValue(text[index + 1]);
+    if ((b1 & 0xC0) == 0x80) {
+      const uint32_t codepoint = (static_cast<uint32_t>(b0 & 0x1F) << 6) | (b1 & 0x3F);
+      const uint8_t *rows = tinyCyrillicRows(codepoint);
+      if (rows != nullptr) {
+        byteLen = 2;
+        return rows;
+      }
+    }
+  }
+  byteLen = 1;
+  return nullptr;
 }
 
 uint16_t panelColor(uint16_t rgb565) {
@@ -1198,7 +1278,15 @@ int DisplayManager::measureTinyTextWidth(const String &text, int scale) const {
   if (text.isEmpty()) {
     return 0;
   }
-  return static_cast<int>(text.length()) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale -
+  size_t glyphCount = 0;
+  size_t i = 0;
+  while (i < text.length()) {
+    size_t byteLen = 1;
+    tinyCyrillicAt(text, i, byteLen);
+    i += byteLen;
+    ++glyphCount;
+  }
+  return static_cast<int>(glyphCount) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale -
          kTinyGlyphSpacing * scale;
 }
 
@@ -1259,11 +1347,21 @@ String DisplayManager::fitTinyText(const String &text, int maxWidth, int scale) 
     return text;
   }
 
-  String fitted = text;
   const String ellipsis = "...";
-  while (!fitted.isEmpty() && measureTinyTextWidth(fitted + ellipsis, scale) > maxWidth) {
-    fitted.remove(fitted.length() - 1);
+  // Grow the prefix one whole glyph at a time so multi-byte Cyrillic is never split.
+  size_t fitEnd = 0;
+  size_t i = 0;
+  while (i < text.length()) {
+    size_t byteLen = 1;
+    tinyCyrillicAt(text, i, byteLen);
+    if (measureTinyTextWidth(text.substring(0, i + byteLen) + ellipsis, scale) > maxWidth) {
+      break;
+    }
+    i += byteLen;
+    fitEnd = i;
   }
+
+  String fitted = text.substring(0, fitEnd);
   while (!fitted.isEmpty() && fitted[fitted.length() - 1] == ' ') {
     fitted.remove(fitted.length() - 1, 1);
   }
@@ -1553,7 +1651,10 @@ void DisplayManager::drawSerifTextScaledAt(const String &text, int x, int y, uin
 }
 
 void DisplayManager::drawTinyGlyph(int x, int y, char c, uint16_t color, int scale) {
-  const uint8_t *rows = tinyRowsFor(c);
+  drawTinyRows(x, y, tinyRowsFor(c), color, scale);
+}
+
+void DisplayManager::drawTinyRows(int x, int y, const uint8_t *rows, uint16_t color, int scale) {
   const uint16_t panel = panelColor(color);
 
   for (int row = 0; row < kTinyGlyphHeight; ++row) {
@@ -1583,11 +1684,19 @@ void DisplayManager::drawTinyGlyph(int x, int y, char c, uint16_t color, int sca
 void DisplayManager::drawTinyTextAt180(const String &text, int x, int y, uint16_t color,
                                        int scale) {
   const uint16_t panel = panelColor(color);
-  const int count = static_cast<int>(text.length());
+  std::vector<const uint8_t *> glyphs;
+  size_t i = 0;
+  while (i < text.length()) {
+    size_t byteLen = 1;
+    const uint8_t *cyrillic = tinyCyrillicAt(text, i, byteLen);
+    glyphs.push_back(cyrillic != nullptr ? cyrillic : tinyRowsFor(text[i]));
+    i += byteLen;
+  }
+  const int count = static_cast<int>(glyphs.size());
   for (int charIndex = 0; charIndex < count; ++charIndex) {
     const int charBaseX =
         x + (count - 1 - charIndex) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
-    const uint8_t *rows = tinyRowsFor(text[charIndex]);
+    const uint8_t *rows = glyphs[charIndex];
     for (int row = 0; row < kTinyGlyphHeight; ++row) {
       const int dstRow = kTinyGlyphHeight - 1 - row;
       for (int col = 0; col < kTinyGlyphWidth; ++col) {
@@ -1615,8 +1724,16 @@ void DisplayManager::drawTinyTextAt180(const String &text, int x, int y, uint16_
 
 void DisplayManager::drawTinyTextAt(const String &text, int x, int y, uint16_t color, int scale) {
   int cursorX = x;
-  for (size_t i = 0; i < text.length(); ++i) {
-    drawTinyGlyph(cursorX, y, text[i], color, scale);
+  size_t i = 0;
+  while (i < text.length()) {
+    size_t byteLen = 1;
+    const uint8_t *cyrillic = tinyCyrillicAt(text, i, byteLen);
+    if (cyrillic != nullptr) {
+      drawTinyRows(cursorX, y, cyrillic, color, scale);
+    } else {
+      drawTinyGlyph(cursorX, y, text[i], color, scale);
+    }
+    i += byteLen;
     cursorX += (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
   }
 }
