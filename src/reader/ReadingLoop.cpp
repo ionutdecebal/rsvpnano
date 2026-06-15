@@ -1,7 +1,6 @@
 #include "reader/ReadingLoop.h"
 
 #include <algorithm>
-#include <cctype>
 #include <utility>
 
 #include "text/LatinText.h"

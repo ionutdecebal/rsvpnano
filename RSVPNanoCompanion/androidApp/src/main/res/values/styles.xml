@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.RSVPNanoCompanion" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#2D5B45</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">#F6F7F1</item>
+        <item name="android:statusBarColor">#F6F7F1</item>
+        <item name="android:windowBackground">#F6F7F1</item>
+    </style>
+</resources>

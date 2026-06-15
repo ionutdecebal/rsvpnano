@@ -10,7 +10,25 @@ This README is written for the current release, `v0.1.166-noogi`.
 - A USB-C data cable.
 - A microSD card.
 - Chrome or Edge on a desktop computer for browser flashing and the web converter.
-- Optional: an iPhone companion app installed from Xcode while TestFlight approval is pending.
+- Optional: native iOS or Android companion apps built locally while public distribution is pending.
+
+## Supported Hardware
+
+The browser flasher supports these device targets:
+
+- Waveshare ESP32-S3 Touch LCD 3.49 rev1.
+- Waveshare ESP32-S3 Touch LCD 3.49 rev2.
+- Waveshare ESP32-S3 Touch AMOLED 1.8.
+- Waveshare ESP32-S3 Touch AMOLED 2.16.
+- Waveshare ESP32-S3 Touch AMOLED 2.41.
+
+Some hardware links below are affiliate links. Buying through them may support RSVP Nano at no
+extra cost to you:
+
+- [ESP32-S3 Touch LCD 3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal)
+- [ESP32-S3 Touch AMOLED 1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal)
+- [ESP32-S3 Touch AMOLED 2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal)
+- [ESP32-S3 Touch AMOLED 2.41](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal)
 
 ## Quick Start
 
@@ -28,7 +46,17 @@ Use the hosted flasher:
 
 Open it in Chrome or Edge on desktop, connect the device over USB, and follow the installer prompts. The flasher uses ESP Web Tools and Web Serial, so it must run from HTTPS or localhost.
 
-The hosted flasher installs the latest published GitHub Release. For `v0.0.5`, that means the release build includes the firmware, SD card, RSS, companion sync, web companion, and settings work described below.
+Choose the correct device from the flasher dropdown before installing.
+
+Most ESP32-S3 Touch LCD 3.49 devices should use the default rev1 firmware option. If a newer
+Waveshare batch boots but brightness or backlight control does not respond, try the rev2 firmware
+option instead; it uses the alternate GPIO42 backlight profile.
+
+The hosted flasher installs the latest published GitHub Release. For `v0.0.6`, that means the
+release build includes the firmware, SD card, RSS, companion sync, USB transfer, quick settings,
+browser flasher, menu, input, battery, and display work described below.
+
+Make sure your USB cable is a data cable.
 
 ## Prepare The SD Card
 
@@ -46,7 +74,7 @@ Create these folders on the card:
 /config
 ```
 
-Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.5`.
+Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.6`.
 
 If the device cannot see the SD card, the most common causes are:
 
@@ -56,7 +84,7 @@ If the device cannot see the SD card, the most common causes are:
 - The card was removed without ejecting it from the computer.
 - The card is slow, worn out, or unreliable.
 
-The device includes an `SD card check` tool in the main menu to help diagnose card size, mount status, write access, and folder layout.
+The device includes an `SD card check` tool under `Settings` to help diagnose card size, mount status, write access, and folder layout.
 
 ## Convert Books And Articles
 
@@ -96,23 +124,26 @@ Large books now load through the same indexed reading path as smaller books, wit
 
 From the device:
 
-1. Open the main menu with the `PWR` button.
-2. Choose `USB transfer`.
-3. Copy `.rsvp` files from your computer.
-4. Eject the device from the computer.
-5. Hold `PWR` to leave USB transfer mode.
+1. Swipe up from the bottom edge to open quick settings.
+2. Choose `Sync`.
+3. Choose `USB Sync`.
+4. Copy `.rsvp` files from your computer.
+5. Eject the device from the computer.
+6. Wait for the device to remount the SD card and refresh the library.
 
-Holding `PWR` is now the standard exit gesture for full-screen utility pages.
+Always eject before leaving USB transfer mode where possible. After the host ejects it, the device
+remounts the SD card and refreshes the library.
 
 ### Option 3: Web Companion
 
 The device can host its own browser companion page.
 
-1. Open the main menu.
-2. Choose `Companion sync`.
-3. The device shows the Wi-Fi network name and the browser URL.
-4. Connect your phone, tablet, or computer to the `RSVP-Nano-xxxxxx` Wi-Fi network.
-5. Open the URL shown on the device, usually `http://192.168.4.1`.
+1. Swipe up from the bottom edge to open quick settings.
+2. Choose `Sync`.
+3. Choose `Wi-Fi Sync`.
+4. The device shows the Wi-Fi network name and the browser URL.
+5. Connect your phone, tablet, or computer to the `RSVP-Nano-xxxxxx` Wi-Fi network.
+6. Open the URL shown on the device, usually `http://192.168.4.1`.
 
 The web companion has pages for:
 
@@ -122,17 +153,22 @@ The web companion has pages for:
 - `RSS`: manage RSS feed URLs.
 - `Help`: quick notes for connection, conversion, SD cards, and RSS.
 
-The web companion is the best option for Android, desktop, and anyone who does not have the iPhone app.
+The web companion remains the easiest option from desktop browsers and for anyone who does not have
+a native companion app installed.
 
-### Option 4: iPhone Companion App
+### Option 4: Native Companion Apps
 
-The iPhone app supports companion sync, article editing, share-sheet saving, RSS feed management, device settings, and library progress.
+The iOS and Android companion apps support companion sync, article drafts, share/import flows, RSS
+feed management, device settings, and library progress.
 
-TestFlight and App Store distribution are waiting on Apple Developer account approval. Until that is approved, the app can be installed temporarily from a Mac with Xcode.
+Public app distribution is not set up yet. The iOS app can be installed from a Mac with Xcode, and
+the Android app can be built and installed with Android Studio or the Android SDK.
 
 See:
 
-[`ios/RSVPNanoCompanion/README.md`](ios/RSVPNanoCompanion/README.md)
+[`RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md)
+
+[`RSVPNanoCompanion/androidApp/README.md`](RSVPNanoCompanion/androidApp/README.md)
 
 ## Home Wi-Fi, RSS, And OTA
 
@@ -141,13 +177,14 @@ The device can save home Wi-Fi credentials for features that need internet acces
 You can set Wi-Fi credentials from:
 
 - The web companion `Settings` page.
-- The iPhone companion app settings page.
+- The native companion app settings page.
 - The on-device Wi-Fi settings page.
 - Advanced users can still use `/config/ota.conf`.
 
-RSS feeds are managed from the web companion or the iPhone app, then checked from the device menu with `RSS feeds`. New articles are saved into `/books/articles`.
+RSS feeds are managed from the web companion or the native app, then checked from the device with
+`Articles -> Update RSS`. New articles are saved into `/books/articles`.
 
-RSS support in `v0.0.5` includes:
+RSS support in `v0.0.6` includes:
 
 - RSS and Atom feed parsing.
 - Redirect handling for common `301`, `302`, `303`, `307`, and `308` responses.
@@ -162,25 +199,25 @@ OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the devic
 
 ## Device Controls
 
+The current UI is built around edge gestures, a small top-level menu, and quick settings. On paused
+reader screens, subtle handles at the top and bottom edges hint that those menus are available.
+
 ### Hardware Buttons
 
-- `PWR` short press from the reader: open the main menu.
-- `PWR` short press on the main menu: return to the reader.
-- `PWR` short press in most submenus: go back to the main menu.
-- `PWR` hold in Companion Sync, USB Transfer, and Focus Timer: exit that page.
-- `PWR` hold from the normal reader or main menu: power-off confirmation dialog. Confirm with `PWR` again or wait 1.6 seconds to proceed; any other action cancels.
-- `BOOT` short press: cycle brightness (with live on-screen toast showing current level).
-- `BOOT` hold: cycle display theme.
-- Press `PWR` + `BOOT` together: enter standby. Press either button to wake after the short standby grace period.
-
-The goal is simple: use `PWR` as menu, back, exit, and power. Use `BOOT` for quick display changes.
+- Swipe down from the top edge: open the main menu.
+- Swipe up from the bottom edge: open quick settings.
+- On 3.49 rev1/rev2 and 2.41, `PWR` tap opens or closes the main menu.
+- On 3.49 rev1/rev2 and 2.41, `PWR` hold opens the power-off flow.
+- On 3.49 rev1/rev2 and 2.41, `BOOT` tap toggles play/pause in the reader and acts as Back in menus.
+- On 3.49 rev1/rev2 and 2.41, `BOOT` hold enters standby/screensaver.
+- On 2.16, `PWR` tap opens or closes the main menu and `PWR` hold opens the power-off flow.
+- On 2.16, `BOOT` tap cycles brightness and `BOOT` hold cycles the display theme.
+- On 2.16, `KEY` tap toggles play/pause and `KEY` hold enters standby/screensaver.
+- On 1.8, firmware ignores the unreliable PWR input. Use swipe down for the main menu, swipe up for quick settings, `BOOT` tap for play/pause or Back, and `BOOT` hold for standby/screensaver.
+- USB Transfer exits automatically when the computer ejects the device. On boards with firmware PWR input, holding `PWR` can also leave USB Transfer after copying is finished.
 
 ### Reader Controls
 
-- Hold the screen: start reading.
-- Release after a hold: pause.
-- Double tap while paused: start locked continuous play.
-- Tap while locked continuous play is running: pause.
 - Tap the far-left edge: rewind to the start of the current sentence, or the previous sentence if you are already at the start.
 - Swipe left or right while paused: scrub through nearby text.
 - Tap after scrubbing: return to RSVP view.
@@ -190,39 +227,60 @@ The goal is simple: use `PWR` as menu, back, exit, and power. Use `BOOT` for qui
 - Tap the bottom-right footer label: switch between progress, chapter time remaining, book time remaining, and battery display modes.
 - Tap the top-right battery label: switch between percentage, time remaining, and voltage.
 
-Pause behavior is configurable. In `Settings -> Word pacing`, choose whether taps pause instantly or at the end of the sentence.
+Pause behavior is configurable. In `Settings -> Word pacing`, choose whether reader shortcuts pause instantly or at the end of the sentence.
+
+### Quick Settings
+
+Open quick settings by swiping up from the bottom edge.
+
+```text
+Brightness
+Theme
+Focus Timer
+Sync
+```
+
+`Brightness` cycles through the brightness presets. `Theme` cycles Dark, Light, Night, and Yellow.
+`Focus Timer` opens the orientation-based timer. `Sync` opens a second menu:
+
+```text
+Wi-Fi Sync
+USB Sync
+```
+
+`Wi-Fi Sync` starts the device-hosted companion page for browser or native app sync. `USB Sync`
+starts USB mass-storage transfer so files can be copied without removing the SD card.
 
 ### Main Menu
 
-Open the main menu with `PWR`.
+Open the main menu with a top-edge swipe. On boards with firmware PWR input, `PWR` tap also opens
+or closes this menu.
 
 ```text
 Resume
 Chapters
 Books
 Articles
-Focus Timer
 Settings
-SD card check
-RSS feeds
-Companion sync
-USB transfer
 Power off
 ```
 
-Swipe up or down to move through the menu. Tap to select. Press `PWR` to go back.
+Swipe up or down to move through the menu. Tap to select. Submenus keep an on-screen `Back` item at
+the top. On boards where `BOOT` acts as Back, pressing it returns one level or closes the menu.
 
 ### Books And Articles
 
 `Books` shows files from `/books/books`.
 
-`Articles` shows files from `/books/articles`.
+`Articles` opens a small submenu for browsing saved articles or updating RSS feeds.
 
 Both pages show readable titles, progress, and saved position where available. Select an item to load it into the reader.
 
 ### Chapters
 
-The `Chapters` page lists chapter markers from the current book when available. Select a chapter to jump to it. Press `PWR` to return to the main menu.
+The `Chapters` page lists chapter markers from the current book when available. Select a chapter to
+jump to it. Use the on-screen `Back` item, `BOOT` Back where available, or `PWR` where available to
+return to the main menu.
 
 ### Settings
 
@@ -231,14 +289,17 @@ Settings are grouped by how people actually use the device.
 `Display` includes:
 
 - Reading mode (RSVP or Scroll).
-- Left/right handed layout.
 - Display theme.
+- Left/right handed layout.
+- Language.
+- Screen saver: Life, Maze, Voronoi, or Screen off.
+- Standby timer.
+- Reading mode (RSVP or Scroll).
 - Brightness with live toast feedback.
 - Chapter label visibility toggle (independent per reading mode).
 - Footer and battery label behavior.
 - Optional battery, chapter, and book percentage labels while actively reading.
-- Standby display mode: Life, Maze, Voronoi, or Screen off.
-- Language.
+- Menu repeat speed.
 
 `Battery` includes:
 
@@ -266,29 +327,42 @@ Battery estimate updates instantly on reading-mode change and reflects the actua
 
 `Word pacing` includes:
 
+- RSVP or scroll reading behavior.
+- Instant pause or sentence-end pause.
 - Long-word delay.
 - Complexity delay.
 - Punctuation delay.
-- RSVP or scroll reading behavior.
-- Reading speeds from 10 WPM upward, with 10 WPM steps below 100 WPM.
-- Instant pause or sentence-end pause.
 - Pacing reset.
 
-`Wi-Fi` includes network setup for RSS and OTA.
+`Wi-Fi` includes:
 
-`Firmware update` checks GitHub Releases and installs newer firmware when available. Displays current firmware version and build timestamp.
+- Saved network selection.
+- Choose or forget network.
+- Auto OTA.
+- OTA owner/source.
+
+`Battery` includes:
+
+- CPU speed for RSVP, scroll, paused, menu, and standby states.
+- Auto-dim delay.
+- Auto-dim brightness level.
+
+`Firmware update` checks GitHub Releases and installs newer firmware when available. `SD card
+check` also lives under Settings.
 
 `About` displays device information including firmware version, hardware platform, and uptime.
 
 ### Companion Sync
 
-Use this page to connect the iPhone app or the web companion.
+Use this page to connect the native companion app or the web companion.
 
-1. Open `Companion sync`.
-2. Connect to the Wi-Fi network shown on the device.
-3. Open the URL shown on the device.
-4. Use the web companion or iPhone app.
-5. Hold `PWR` to exit.
+1. Swipe up from the bottom edge.
+2. Choose `Sync`.
+3. Choose `Wi-Fi Sync`.
+4. Connect to the Wi-Fi network shown on the device.
+5. Open the URL shown on the device.
+6. Use the web companion or native companion app.
+7. Exit from the device when finished.
 
 When Companion Sync exits, the device reloads settings and refreshes the library.
 
@@ -296,16 +370,20 @@ When Companion Sync exits, the device reloads settings and refreshes the library
 
 Use this page to copy files over USB without removing the SD card.
 
-1. Open `USB transfer`.
-2. Copy files from your computer.
-3. Eject the device from the computer.
-4. Hold `PWR` to exit.
+1. Swipe up from the bottom edge.
+2. Choose `Sync`.
+3. Choose `USB Sync`.
+4. Copy files from your computer.
+5. Eject the device from the computer.
 
-Always eject before leaving USB transfer mode where possible.
+Always eject before leaving USB transfer mode where possible. The device remounts the SD card and
+refreshes the library after the host ejects it. On boards with firmware PWR input, holding `PWR` can
+also leave USB Transfer.
 
 ### RSS Feeds
 
-Use the web companion or iPhone app to manage feed URLs. Then run `RSS feeds` from the device menu.
+Use the web companion or native app to manage feed URLs. Then open `Articles -> Update RSS` on the
+device.
 
 The device shows live progress as it checks feeds. Saved articles appear in `Articles`.
 
@@ -317,35 +395,37 @@ RSS checks can continue in the background, while installable firmware updates st
 
 The Focus Timer uses the device orientation to guide work and break blocks.
 
-1. Open `Focus Timer`.
-2. Choose a timer category (configurable duration per category).
-3. Place or flip the device as prompted.
-4. Follow the on-screen timer.
-5. Hold `PWR` to exit the timer page.
+1. Swipe up from the bottom edge.
+2. Choose `Focus Timer`.
+3. Choose a timer category (configurable duration per category).
+4. Place or flip the device as prompted.
+5. Follow the on-screen timer.
+6. Use Back or `PWR` where available to exit the timer page.
 
 Touch-and-hold during an active timer cancels the current timer block. Timer settings are saved per genre/category.
 
 ### SD Card Check
 
-Run `SD card check` if books or articles do not appear. It checks whether the card mounts, whether it can write, and whether the expected library folders exist.
+Run `Settings -> SD card check` if books or articles do not appear. It checks whether the card
+mounts, whether it can write, and whether the expected library folders exist.
 
 If the old folder layout needs repair, the device now asks before changing the card.
 
 ## Character Support
 
-`v0.0.5` improves support for long books and unsupported characters. Common punctuation is normalized, ellipses and hyphenated sentence breaks are handled more carefully, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
+`v0.0.6` improves support for long books and unsupported characters. Common punctuation is normalized, ellipses and hyphenated sentence breaks are handled more carefully, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
 
 The current renderer is best for English and European Latin-script languages. Complex scripts still need additional font and shaping work.
 
-## iPhone App Status
+## Companion App Status
 
-The iPhone companion app is working, but public distribution is waiting on Apple Developer account approval.
+The native companion apps are working locally, but public distribution is not set up yet.
 
 Current app features include:
 
 - Library view for books and articles.
 - Article drafts, editing, preview, and sync.
-- Safari and Chrome share flow.
+- Share/import flows.
 - Fetch article title and text where available.
 - Device settings editor.
 - RSS feed management.
@@ -353,13 +433,9 @@ Current app features include:
 
 Temporary install instructions are in:
 
-[`ios/RSVPNanoCompanion/README.md`](ios/RSVPNanoCompanion/README.md)
+[`RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md`](RSVPNanoCompanion/ios/RSVPNanoCompanion/README.md)
 
-## Android App
-
-The web companion works today from Android browsers.
-
-A future native Android app is planned. Help from Android developers would be very welcome, especially around sharing URLs/articles into the app, local draft storage, and syncing with the device companion API.
+[`RSVPNanoCompanion/androidApp/README.md`](RSVPNanoCompanion/androidApp/README.md)
 
 ## Build From Source
 
@@ -367,6 +443,16 @@ Firmware builds with PlatformIO:
 
 ```bash
 pio run
+```
+
+All firmware targets enable USB transfer mode. The default build is the Touch LCD 3.49
+rev1 target; use explicit targets for other boards:
+
+```bash
+pio run -e waveshare_esp32s3_rev2
+pio run -e waveshare_esp32s3_touch_amoled_18
+pio run -e waveshare_esp32s3_touch_amoled_241
+pio run -e waveshare_esp32s3_touch_amoled_216
 ```
 
 Upload to a connected device:
@@ -381,10 +467,10 @@ Monitor serial output:
 pio device monitor
 ```
 
-The iPhone app lives in:
+The iOS app lives in:
 
 ```text
-ios/RSVPNanoCompanion
+RSVPNanoCompanion/ios/RSVPNanoCompanion
 ```
 
 Open the Xcode project from that folder when installing the app locally.
@@ -392,7 +478,7 @@ Open the Xcode project from that folder when installing the app locally.
 To export browser-flasher and OTA firmware assets for a release:
 
 ```bash
-python3 tools/export_web_firmware.py --version v0.0.5
+python3 tools/export_web_firmware.py --version v0.0.6
 ```
 
 That writes:
@@ -400,7 +486,21 @@ That writes:
 ```text
 web/firmware/rsvp-nano.bin
 web/firmware/rsvp-nano-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin
+web/firmware/rsvp-nano-rev2.bin
+web/firmware/rsvp-nano-rev2-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin
 web/firmware/manifest.json
+web/firmware/manifest-rev2.json
+web/firmware/manifest-esp32-s3-touch-amoled-1.8.json
+web/firmware/manifest-esp32-s3-touch-amoled-2.16.json
+web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
 ```
 
 ## Project Status
@@ -424,12 +524,12 @@ web/firmware/manifest.json
 **Focus Timer:**
 - Configurable timer duration per category/genre (settings persist across sessions).
 
-Earlier `v0.1.x-noogi` releases introduced the battery optimization framework, fixed settings menu scrolling, and added these granular controls.
+Earlier `v0.1.x-noogi` releases introduced the battery optimization framework, fixed settings menu scrolling, and added these granular controls. Upstream `v0.0.6` introduced the cross-device input model, restructured menu, bottom-edge quick settings, Wi-Fi/USB Sync picker, browser flasher device dropdown, AMOLED 1.8/2.16/2.41 web-flash assets, USB transfer across targets, battery and auto-dim settings, and the paused-reader edge handles.
 
 The next areas of work are:
 
-- TestFlight and unlisted App Store distribution after Apple Developer approval.
-- Better Android support, ideally with a native app.
+- Public app distribution.
+- More Android/iOS device testing and polish.
 - More capable article extraction for sites that do not expose full RSS content.
 - A fuller browser-hosted companion experience for desktop and Android users.
 - More font and script support.

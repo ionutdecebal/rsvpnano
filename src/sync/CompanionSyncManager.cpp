@@ -7,46 +7,23 @@
 #include <cstdio>
 #include <vector>
 
+#include "settings/PreferenceKeys.h"
+#include "storage/fs/StorageFiles.h"
+#include "storage/fs/StoragePaths.h"
+#include "text/AsciiText.h"
+
 namespace {
 
+// Preference keys + NVS namespace are defined once in settings/PreferenceKeys.h
+// and shared with the device UI; pull them in so call sites are unchanged.
+using namespace settings;
+
 constexpr const char *kMdnsName = "rsvp-nano";
-constexpr const char *kBooksPath = "/books";
-constexpr const char *kBookFilesPath = "/books/books";
-constexpr const char *kArticleFilesPath = "/books/articles";
-constexpr const char *kConfigPath = "/config";
 constexpr const char *kRssConfigPath = "/config/rss.conf";
-constexpr const char *kPrefsNamespace = "rsvp";
 constexpr size_t kMaxMetadataLineChars = 160;
 constexpr size_t kMaxSettingsPatchBytes = 2048;
 constexpr size_t kMaxRssFeedsPatchBytes = 4096;
 constexpr size_t kMaxRssFeeds = 24;
-constexpr const char *kPrefWpm = "wpm";
-constexpr const char *kPrefBrightness = "bright";
-constexpr const char *kPrefDarkMode = "dark";
-constexpr const char *kPrefNightMode = "night";
-constexpr const char *kPrefUiLanguage = "ui_lang";
-constexpr const char *kPrefReaderMode = "read_mode";
-constexpr const char *kPrefHandedness = "handed";
-constexpr const char *kPrefPhantomWords = "phantom_on";
-constexpr const char *kPrefFooterMetricMode = "prog_md";
-constexpr const char *kPrefBatteryLabelMode = "bat_md";
-constexpr const char *kPrefReaderBatteryVisible = "read_bat";
-constexpr const char *kPrefReaderChapterVisible = "read_ch";
-constexpr const char *kPrefReaderProgressVisible = "read_pct";
-constexpr const char *kPrefReaderFontSize = "font_size";
-constexpr const char *kPrefReaderTypeface = "typeface";
-constexpr const char *kPrefTypographyFocusHighlight = "type_hlt";
-constexpr const char *kPrefPacingLongMs = "pace_lms";
-constexpr const char *kPrefPacingComplexMs = "pace_cms";
-constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
-constexpr const char *kPrefPauseMode = "pause_md";
-constexpr const char *kPrefAccurateTime = "time_est_a";
-constexpr const char *kPrefTypographyTracking = "type_trk";
-constexpr const char *kPrefTypographyAnchor = "type_anc";
-constexpr const char *kPrefTypographyGuideWidth = "type_wid";
-constexpr const char *kPrefTypographyGuideGap = "type_gap";
-constexpr const char *kPrefWifiSsid = "wifi_ssid";
-constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr uint16_t kDefaultWpm = 300;
 constexpr uint16_t kMinWpm = 10;
 constexpr uint16_t kMaxWpm = 1000;
@@ -73,6 +50,12 @@ constexpr uint8_t kDefaultTypographyGuideWidth = 30;
 constexpr uint8_t kMinTypographyGuideGap = 2;
 constexpr uint8_t kMaxTypographyGuideGap = 8;
 constexpr uint8_t kDefaultTypographyGuideGap = 5;
+
+bool ensureLibraryDirectories() {
+  return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync") &&
+         StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sync") &&
+         StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sync");
+}
 
 const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
@@ -239,8 +222,8 @@ loadDraft();refresh();
 </html>)HTML";
 
 bool isSafeFilenameChar(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-         c == '-' || c == '_' || c == '.' || c == ' ';
+  return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == '.' ||
+         c == ' ';
 }
 
 String ipToString(IPAddress ip) {
@@ -261,7 +244,7 @@ bool directiveMatches(const String &loweredLine, const char *directive) {
   }
   const size_t directiveLength = strlen(directive);
   return loweredLine.length() == directiveLength ||
-         isspace(static_cast<unsigned char>(loweredLine[directiveLength]));
+         AsciiText::isWhitespace(loweredLine[directiveLength]);
 }
 
 String directiveValue(const String &line, const char *directive) {
@@ -284,7 +267,7 @@ String displayNameForPath(const String &path) {
 }
 
 String relativeLibraryName(const String &path) {
-  const String prefix = String(kBooksPath) + "/";
+  const String prefix = String(StoragePaths::kBooksPath) + "/";
   if (path.startsWith(prefix)) {
     return path.substring(prefix.length());
   }
@@ -350,7 +333,7 @@ bool findJsonKey(const String &body, const char *key, int &colonIndex) {
 
 int skipJsonWhitespace(const String &body, int index) {
   while (index < static_cast<int>(body.length()) &&
-         isspace(static_cast<unsigned char>(body[index]))) {
+         AsciiText::isWhitespace(body[index])) {
     ++index;
   }
   return index;
@@ -367,12 +350,12 @@ bool readJsonInt(const String &body, const char *key, int &value) {
     negative = true;
     ++index;
   }
-  if (index >= static_cast<int>(body.length()) || !isdigit(static_cast<unsigned char>(body[index]))) {
+  if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
     return false;
   }
   int result = 0;
   while (index < static_cast<int>(body.length()) &&
-         isdigit(static_cast<unsigned char>(body[index]))) {
+         AsciiText::isDigit(body[index])) {
     result = result * 10 + (body[index] - '0');
     ++index;
   }
@@ -723,7 +706,9 @@ void CompanionSyncManager::handleRoot() {
 }
 
 void CompanionSyncManager::handleBooksList() {
-  String body = "{\"books\":[";
+  String body;
+  body.reserve(1024);
+  body += "{\"books\":[";
   bool first = true;
 
   const auto appendDirectory = [&](const char *directoryPath) {
@@ -768,9 +753,9 @@ void CompanionSyncManager::handleBooksList() {
     dir.close();
   };
 
-  appendDirectory(kBooksPath);
-  appendDirectory(kBookFilesPath);
-  appendDirectory(kArticleFilesPath);
+  appendDirectory(StoragePaths::kBooksPath);
+  appendDirectory(StoragePaths::kBookFilesPath);
+  appendDirectory(StoragePaths::kArticleFilesPath);
 
   body += "]}";
   server_.send(200, "application/json", body);
@@ -876,10 +861,10 @@ void CompanionSyncManager::handleBookDelete() {
       server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid library path\"}");
       return;
     }
-    path = String(kBooksPath) + "/" + directory + "/" + filename;
+    path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
   } else {
     filename = sanitizeFilename(requested);
-    path = String(kBooksPath) + "/" + filename;
+    path = String(StoragePaths::kBooksPath) + "/" + filename;
   }
 
   String lowered = filename;
@@ -894,14 +879,14 @@ void CompanionSyncManager::handleBookDelete() {
     if (file) {
       file.close();
     }
-    path = String(kBookFilesPath) + "/" + filename;
+    path = String(StoragePaths::kBookFilesPath) + "/" + filename;
     file = SD_MMC.open(path);
   }
   if ((!file || file.isDirectory()) && separator < 0) {
     if (file) {
       file.close();
     }
-    path = String(kArticleFilesPath) + "/" + filename;
+    path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
     file = SD_MMC.open(path);
   }
   if (!file || file.isDirectory()) {
@@ -946,10 +931,14 @@ void CompanionSyncManager::handleBookUpload() {
 
     String category = server_.arg("category");
     category.toLowerCase();
-    const char *targetDirectory = category == "article" ? kArticleFilesPath : kBookFilesPath;
+    const char *targetDirectory = category == "article"
+                                      ? StoragePaths::kArticleFilesPath
+                                      : StoragePaths::kBookFilesPath;
 
-    SD_MMC.mkdir(kBooksPath);
-    SD_MMC.mkdir(targetDirectory);
+    if (!ensureLibraryDirectories()) {
+      uploadError_ = "Library folders unavailable";
+      return;
+    }
     uploadFinalPath_ = String(targetDirectory) + "/" + filename;
     uploadTmpPath_ = uploadFinalPath_ + ".tmp";
     SD_MMC.remove(uploadTmpPath_);
@@ -1320,7 +1309,9 @@ bool CompanionSyncManager::applyWifiJson(const String &body, String &error) {
 }
 
 String CompanionSyncManager::rssFeedsJson() {
-  String body = "{\"ok\":true,\"feeds\":[";
+  String body;
+  body.reserve(256);
+  body += "{\"ok\":true,\"feeds\":[";
   File file = SD_MMC.open(kRssConfigPath);
   bool first = true;
   if (file && !file.isDirectory()) {
@@ -1406,7 +1397,7 @@ bool CompanionSyncManager::writeRssFeedsJson(const String &body, String &error) 
     }
   }
 
-  SD_MMC.mkdir(kConfigPath);
+  SD_MMC.mkdir(StoragePaths::kConfigPath);
   const String tmpPath = String(kRssConfigPath) + ".tmp";
   SD_MMC.remove(tmpPath);
   File file = SD_MMC.open(tmpPath, FILE_WRITE);
@@ -1510,6 +1501,7 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(
   }
 
   String line;
+  line.reserve(kMaxMetadataLineChars);
   bool pastDirectives = false;
   while (file.available()) {
     const char c = static_cast<char>(file.read());

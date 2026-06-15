@@ -1,0 +1,617 @@
+# RSVP Nano localization source.
+# Edit this file, then run tools/generate_localization.py.
+# Keep ascii_only=true until the firmware font/rendering path supports accented glyphs reliably.
+schema_version = 1
+default_language = "English"
+ascii_only = true
+language_order = [
+	"English",
+	"Spanish",
+	"French",
+	"German",
+	"Romanian",
+	"Polish",
+]
+
+[languages.English]
+code = "en"
+name = "English"
+
+[languages.Spanish]
+code = "es"
+name = "Espanol"
+
+[languages.French]
+code = "fr"
+name = "Francais"
+
+[languages.German]
+code = "de"
+name = "Deutsch"
+
+[languages.Romanian]
+code = "ro"
+name = "Romana"
+
+[languages.Polish]
+code = "pl"
+name = "Polski"
+
+# Main menu
+[[strings]]
+key = "Resume"
+context = "Main menu action to continue reading from the saved position."
+English = "Resume"
+Spanish = "Reanudar"
+French = "Reprendre"
+German = "Weiter"
+Romanian = "Continua"
+Polish = "Wznow"
+
+[[strings]]
+key = "Chapters"
+context = "Main menu item that opens the chapter list for the current book."
+English = "Chapters"
+Spanish = "Capitulos"
+French = "Chapitres"
+German = "Kapitel"
+Romanian = "Capitole"
+Polish = "Rozdzialy"
+
+[[strings]]
+key = "Library"
+context = "Main menu item that opens the on-device book library."
+English = "Library"
+Spanish = "Biblioteca"
+French = "Bibliotheque"
+German = "Bibliothek"
+Romanian = "Biblioteca"
+Polish = "Biblioteka"
+
+[[strings]]
+key = "Settings"
+context = "Main menu item that opens app/device settings."
+English = "Settings"
+Spanish = "Ajustes"
+French = "Reglages"
+German = "Optionen"
+Romanian = "Setari"
+Polish = "Ustawienia"
+
+[[strings]]
+key = "UsbTransfer"
+context = "Main menu item for USB file transfer mode."
+English = "USB transfer"
+Spanish = "USB"
+French = "USB"
+German = "USB"
+Romanian = "USB"
+Polish = "USB"
+
+[[strings]]
+key = "PowerOff"
+context = "Main menu action that powers the device off."
+English = "Power off"
+Spanish = "Apagar"
+French = "Eteindre"
+German = "Ausschalten"
+Romanian = "Oprire"
+Polish = "Wylacz"
+
+
+# Shared navigation and settings categories
+[[strings]]
+key = "Back"
+context = "Navigation action returning to the previous screen."
+English = "Back"
+Spanish = "Atras"
+French = "Retour"
+German = "Zuruck"
+Romanian = "Inapoi"
+Polish = "Wroc"
+
+[[strings]]
+key = "Display"
+context = "Settings category for screen, theme, and backlight options."
+English = "Display"
+Spanish = "Pantalla"
+French = "Affichage"
+German = "Anzeige"
+Romanian = "Afisaj"
+Polish = "Ekran"
+
+[[strings]]
+key = "TypographyTune"
+context = "Settings category for typography calibration/tuning controls."
+English = "Typography tune"
+Spanish = "Tipografia"
+French = "Typographie"
+German = "Typografie"
+Romanian = "Tipografie"
+Polish = "Typografia"
+
+[[strings]]
+key = "WordPacing"
+context = "Settings category for RSVP timing and pacing adjustments."
+English = "Word pacing"
+Spanish = "Ritmo lectura"
+French = "Rythme mots"
+German = "Lesetempo"
+Romanian = "Ritm cuvinte"
+Polish = "Tempo slow"
+
+
+# Display and reading settings
+[[strings]]
+key = "Theme"
+context = "Setting label for visual color theme selection."
+English = "Theme"
+Spanish = "Tema"
+French = "Theme"
+German = "Thema"
+Romanian = "Tema"
+Polish = "Motyw"
+
+[[strings]]
+key = "Brightness"
+context = "Setting label for screen backlight brightness."
+English = "Brightness"
+Spanish = "Brillo"
+French = "Luminosite"
+German = "Helligkeit"
+Romanian = "Luminoz."
+Polish = "Jasnosc"
+
+[[strings]]
+key = "Language"
+context = "Setting label for UI language selection."
+English = "Language"
+Spanish = "Idioma"
+French = "Langue"
+German = "Sprache"
+Romanian = "Limba"
+Polish = "Jezyk"
+
+[[strings]]
+key = "ReadingMode"
+context = "Setting label for switching between RSVP and page scrolling modes."
+English = "Reading mode"
+Spanish = "Modo lectura"
+French = "Mode lecture"
+German = "Lesemodus"
+Romanian = "Mod citire"
+Polish = "Tryb czyt."
+
+
+# Word pacing settings
+[[strings]]
+key = "LongWords"
+context = "Word pacing setting that adjusts extra delay for long words."
+English = "Long words"
+Spanish = "Palabras largas"
+French = "Mots longs"
+German = "Lange Worter"
+Romanian = "Cuvinte lungi"
+Polish = "Dlugie slowa"
+
+[[strings]]
+key = "Complexity"
+context = "Word pacing setting that adjusts delay for complex words or tokens."
+English = "Complexity"
+Spanish = "Complejidad"
+French = "Complexite"
+German = "Komplexitat"
+Romanian = "Complexitate"
+Polish = "Zlozonosc"
+
+[[strings]]
+key = "Punctuation"
+context = "Word pacing setting that adjusts pause behavior around punctuation."
+English = "Punctuation"
+Spanish = "Puntuacion"
+French = "Ponctuation"
+German = "Zeichen"
+Romanian = "Punctuatie"
+Polish = "Interpunk."
+
+[[strings]]
+key = "ResetPacing"
+context = "Action that resets word pacing settings to defaults."
+English = "Reset pacing"
+Spanish = "Restablecer ritmo"
+French = "Reinit. rythme"
+German = "Tempo zuruck"
+Romanian = "Reset ritm"
+Polish = "Reset tempa"
+
+
+# Theme and toggle values
+[[strings]]
+key = "Night"
+context = "Theme option for the night reading theme."
+English = "Night"
+Spanish = "Noche"
+French = "Nuit"
+German = "Nacht"
+Romanian = "Noapte"
+Polish = "Noc"
+
+[[strings]]
+key = "Dark"
+context = "Theme option for the dark UI theme."
+English = "Dark"
+Spanish = "Oscuro"
+French = "Sombre"
+German = "Dunkel"
+Romanian = "Inchis"
+Polish = "Ciemny"
+
+[[strings]]
+key = "Light"
+context = "Theme option for the light UI theme."
+English = "Light"
+Spanish = "Claro"
+French = "Clair"
+German = "Hell"
+Romanian = "Deschis"
+Polish = "Jasny"
+
+[[strings]]
+key = "On"
+context = "Generic enabled/yes value used in settings toggles."
+English = "On"
+Spanish = "Si"
+French = "Oui"
+German = "Ein"
+Romanian = "Pornit"
+Polish = "Tak"
+
+[[strings]]
+key = "Off"
+context = "Generic disabled/no value used in settings toggles."
+English = "Off"
+Spanish = "No"
+French = "Non"
+German = "Aus"
+Romanian = "Oprit"
+Polish = "Nie"
+
+
+# Typography settings
+[[strings]]
+key = "FontSize"
+context = "Typography setting label for rendered text size."
+English = "Font size"
+Spanish = "Tamano"
+French = "Taille"
+German = "Schriftgrad"
+Romanian = "Marime"
+Polish = "Rozmiar"
+
+[[strings]]
+key = "Typeface"
+context = "Typography setting label for font/typeface selection."
+English = "Typeface"
+Spanish = "Fuente"
+French = "Police"
+German = "Schriftart"
+Romanian = "Font"
+Polish = "Kroj"
+
+[[strings]]
+key = "PhantomWords"
+context = "Typography setting label for showing faint neighboring RSVP words."
+English = "Phantom words"
+Spanish = "Palabras fantasma"
+French = "Mots fantomes"
+German = "Phantomworter"
+Romanian = "Cuvinte fantoma"
+Polish = "Slowa widma"
+
+[[strings]]
+key = "RedHighlight"
+context = "Typography setting label for red RSVP focus/highlight rendering."
+English = "Red highlight"
+Spanish = "Rojo"
+French = "Accent rouge"
+German = "Rotfokus"
+Romanian = "Accent rosu"
+Polish = "Czerwony"
+
+[[strings]]
+key = "Tracking"
+context = "Typography setting label for letter spacing/tracking."
+English = "Tracking"
+Spanish = "Espaciado"
+French = "Espacement"
+German = "Laufweite"
+Romanian = "Spatiere"
+Polish = "Odstepy"
+
+[[strings]]
+key = "Anchor"
+context = "Typography setting label for the RSVP focus anchor position."
+English = "Anchor"
+Spanish = "Ancla"
+French = "Ancre"
+German = "Anker"
+Romanian = "Ancora"
+Polish = "Kotwica"
+
+[[strings]]
+key = "GuideWidth"
+context = "Typography setting label for RSVP guide marker width."
+English = "Guide width"
+Spanish = "Ancho guia"
+French = "Largeur guide"
+German = "Guidebreite"
+Romanian = "Latime ghid"
+Polish = "Szer. guide"
+
+[[strings]]
+key = "GuideGap"
+context = "Typography setting label for the gap between RSVP guide markers."
+English = "Guide gap"
+Spanish = "Hueco guia"
+French = "Ecart guide"
+German = "Guidespalt"
+Romanian = "Spatiu ghid"
+Polish = "Przerwa guide"
+
+[[strings]]
+key = "Reset"
+context = "Generic action that restores the current group of settings to defaults."
+English = "Reset"
+Spanish = "Restablecer"
+French = "Reinit."
+German = "Zurucksetzen"
+Romanian = "Resetare"
+Polish = "Reset"
+
+[[strings]]
+key = "Typography"
+context = "Screen/category title for typography settings."
+English = "Typography"
+Spanish = "Tipografia"
+French = "Typographie"
+German = "Typografie"
+Romanian = "Tipografie"
+Polish = "Typografia"
+
+
+# Sample screen hints
+[[strings]]
+key = "TapToExit"
+context = "Small hint shown when tapping exits the current preview/sample screen."
+English = "tap to exit"
+Spanish = "toca salir"
+French = "toucher sortie"
+German = "tippen zum Ende"
+Romanian = "atinge iesire"
+Polish = "dotknij wyjscie"
+
+[[strings]]
+key = "TapToReset"
+context = "Small hint shown when tapping resets the current preview/sample setting."
+English = "tap to reset"
+Spanish = "toca reiniciar"
+French = "toucher reinit."
+German = "tippen zum Reset"
+Romanian = "atinge reset"
+Polish = "dotknij reset"
+
+[[strings]]
+key = "TapChangeSample"
+context = "Hint on typography sample screens: tap changes the value; left/right changes sample text."
+English = "Tap change  L/R sample"
+Spanish = "Toca cambiar L/R muestra"
+French = "Touchez change  G/D echant."
+German = "Tippen aendern  L/R Probe"
+Romanian = "Atinge schimba  S/D proba"
+Polish = "Dotknij zmien  L/R probka"
+
+[[strings]]
+key = "TapExitSample"
+context = "Hint on typography sample screens: tap exits; left/right changes sample text."
+English = "Tap exit  L/R sample"
+Spanish = "Toca salir L/R muestra"
+French = "Touchez sortie  G/D echant."
+German = "Tippen zuruck  L/R Probe"
+Romanian = "Atinge iesi  S/D proba"
+Polish = "Dotknij wyjdz  L/R probka"
+
+[[strings]]
+key = "TapToggleSample"
+context = "Hint on typography sample screens: tap toggles the option; left/right changes sample text."
+English = "Tap toggle  L/R sample"
+Spanish = "Toca alternar L/R muestra"
+French = "Touchez option  G/D echant."
+German = "Tippen schalten  L/R Probe"
+Romanian = "Atinge comuta  S/D proba"
+Polish = "Dotknij przel.  L/R probka"
+
+[[strings]]
+key = "TapCycleSample"
+context = "Hint on typography sample screens: tap cycles values; left/right changes sample text."
+English = "Tap cycle  L/R sample"
+Spanish = "Toca ciclo L/R muestra"
+French = "Touchez cycle  G/D echant."
+German = "Tippen wechseln  L/R Probe"
+Romanian = "Atinge ciclu  S/D proba"
+Polish = "Dotknij cykl  L/R probka"
+
+
+# Book and restart flow
+[[strings]]
+key = "CurrentBook"
+context = "Label for the currently selected or currently open book."
+English = "Current book"
+Spanish = "Libro actual"
+French = "Livre actuel"
+German = "Aktuelles Buch"
+Romanian = "Cartea curenta"
+Polish = "Biezaca ksiazka"
+
+[[strings]]
+key = "Start"
+context = "Short action label for starting reading."
+English = "Start"
+Spanish = "Inicio"
+French = "Debut"
+German = "Start"
+Romanian = "Inceput"
+Polish = "Start"
+
+[[strings]]
+key = "StartOfBook"
+context = "Library/book action label for opening from the beginning."
+English = "Start of book"
+Spanish = "Inicio del libro"
+French = "Debut du livre"
+German = "Buchanfang"
+Romanian = "Inceputul cartii"
+Polish = "Poczatek ksiazki"
+
+[[strings]]
+key = "RestartBook"
+context = "Confirmation action label for restarting the current book from the beginning."
+English = "Restart book"
+Spanish = "Reiniciar libro"
+French = "Relancer livre"
+German = "Buch neu"
+Romanian = "Reporneste cartea"
+Polish = "Restart ksiazki"
+
+[[strings]]
+key = "AreYouSure"
+context = "Confirmation prompt before destructive or position-changing actions."
+English = "Are you sure?"
+Spanish = "Seguro?"
+French = "Confirmer ?"
+German = "Sicher?"
+Romanian = "Sigur?"
+Polish = "Na pewno?"
+
+[[strings]]
+key = "NoKeepPlace"
+context = "Confirmation choice that cancels restart and keeps the saved reading position."
+English = "No, keep place"
+Spanish = "No, conservar"
+French = "Non, garder"
+German = "Nein, merken"
+Romanian = "Nu, pastreaza"
+Polish = "Nie, zostaw"
+
+[[strings]]
+key = "YesRestart"
+context = "Confirmation choice that restarts the book and discards the saved reading position."
+English = "Yes, restart"
+Spanish = "Si, reiniciar"
+French = "Oui, relancer"
+German = "Ja, neu"
+Romanian = "Da, reporneste"
+Polish = "Tak, restart"
+
+[[strings]]
+key = "NoSamples"
+context = "Message shown when no sample text is available for the preview screen."
+English = "No samples"
+Spanish = "Sin muestras"
+French = "Aucun exemple"
+German = "Keine Proben"
+Romanian = "Fara probe"
+Polish = "Brak probek"
+
+
+# Common option labels
+[[strings]]
+key = "Large"
+context = "Size option for typography or display settings."
+English = "Large"
+Spanish = "Grande"
+French = "Grand"
+German = "Gross"
+Romanian = "Mare"
+Polish = "Duzy"
+
+[[strings]]
+key = "Medium"
+context = "Size option for typography or display settings."
+English = "Medium"
+Spanish = "Mediano"
+French = "Moyen"
+German = "Mittel"
+Romanian = "Mediu"
+Polish = "Sredni"
+
+[[strings]]
+key = "Small"
+context = "Size option for typography or display settings."
+English = "Small"
+Spanish = "Pequeno"
+French = "Petit"
+German = "Klein"
+Romanian = "Mic"
+Polish = "Maly"
+
+[[strings]]
+key = "Standard"
+context = "Default/normal option used by typography, theme, or pacing settings."
+English = "Standard"
+Spanish = "Estandar"
+French = "Standard"
+German = "Standard"
+Romanian = "Standard"
+Polish = "Standard"
+
+
+# Reading mode and time estimate options
+[[strings]]
+key = "RsvpMode"
+context = "Reading mode option for rapid serial visual presentation."
+English = "RSVP"
+Spanish = "RSVP"
+French = "RSVP"
+German = "RSVP"
+Romanian = "RSVP"
+Polish = "RSVP"
+
+[[strings]]
+key = "ScrollMode"
+context = "Reading mode option for page-style scrolling."
+English = "Page scroll"
+Spanish = "Scroll pagina"
+French = "Defilement page"
+German = "Seiten-Scroll"
+Romanian = "Derulare pagina"
+Polish = "Scroll strony"
+
+[[strings]]
+key = "TimeEstimate"
+context = "Setting label for remaining reading time estimation behavior."
+English = "Time estimate"
+Spanish = "Tiempo restante"
+French = "Temps restant"
+German = "Restzeit"
+Romanian = "Timp ramas"
+Polish = "Pozostaly czas"
+
+[[strings]]
+key = "TimeEstimateAccurate"
+context = "Time estimate option favoring more accurate remaining-time calculations."
+English = "Accurate"
+Spanish = "Preciso"
+French = "Precis"
+German = "Genau"
+Romanian = "Exact"
+Polish = "Dokladny"
+
+[[strings]]
+key = "TimeEstimateFast"
+context = "Time estimate option favoring faster/lighter remaining-time calculations."
+English = "Fast"
+Spanish = "Rapido"
+French = "Rapide"
+German = "Schnell"
+Romanian = "Rapid"
+Polish = "Szybki"

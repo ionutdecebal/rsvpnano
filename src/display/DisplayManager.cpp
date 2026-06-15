@@ -1,12 +1,12 @@
 #include "display/DisplayManager.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cstring>
 
 #include <esp_heap_caps.h>
 #include <esp_log.h>
 
+#include "board/BoardDisplay.h"
 #include "board/BoardConfig.h"
 #include "display/EmbeddedAtkinsonFont.h"
 #include "display/EmbeddedAtkinsonFont70.h"
@@ -14,20 +14,17 @@
 #include "display/EmbeddedOpenDyslexicFont70.h"
 #include "display/EmbeddedSerifFont.h"
 #include "display/EmbeddedSerifFont70.h"
-#include "display/axs15231b.h"
 #include "text/LatinText.h"
 
 namespace {
 constexpr uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
-    return static_cast<uint16_t>(((r & 0xF8U) << 8) |
-                                 ((g & 0xFCU) << 3) |
-                                 (b >> 3));
+  return static_cast<uint16_t>(((r & 0xF8U) << 8) | ((g & 0xFCU) << 3) | (b >> 3));
 }
 
-constexpr int kDisplayWidth = BoardConfig::DISPLAY_WIDTH;
-constexpr int kDisplayHeight = BoardConfig::DISPLAY_HEIGHT;
-constexpr int kPanelNativeWidth = BoardConfig::PANEL_NATIVE_WIDTH;
-constexpr int kPanelNativeHeight = BoardConfig::PANEL_NATIVE_HEIGHT;
+constexpr int kDisplayWidth = Board::Config::DISPLAY_WIDTH;
+constexpr int kDisplayHeight = Board::Config::DISPLAY_HEIGHT;
+constexpr int kPanelNativeWidth = Board::Config::PANEL_NATIVE_WIDTH;
+constexpr int kPanelNativeHeight = Board::Config::PANEL_NATIVE_HEIGHT;
 
 constexpr int kMinTextScale = 1;
 constexpr int kMaxTextScale = 1;
@@ -37,8 +34,11 @@ constexpr uint16_t kPureWhite = 0xFFFF;
 constexpr uint16_t kDarkWordColor = 0xFFFF;
 constexpr uint16_t kLightWordColor = 0x0000;
 constexpr uint16_t kFocusLetterColor = 0xF800;
+constexpr uint16_t kYellowModeFocusColor = 0x001F;
 constexpr uint16_t kNightWordColor = 0xFCE0;
 constexpr uint16_t kNightFocusColor = 0xFA80;
+constexpr uint16_t kYellowModeNightFocusColor = 0x7D7F;
+constexpr uint16_t kYellowModeBackground = 0xFF44;
 constexpr uint16_t kDarkMenuDimColor = 0x8410;
 constexpr uint16_t kLightMenuDimColor = 0x6B4D;
 constexpr uint16_t kDarkFooterColor = 0x528A;
@@ -54,8 +54,19 @@ constexpr int kTinyGlyphWidth = 5;
 constexpr int kTinyGlyphHeight = 7;
 constexpr int kTinyGlyphSpacing = 1;
 constexpr int kTinyScale = 2;
-constexpr int kFooterMarginX = 12;
-constexpr int kFooterMarginBottom = 8;
+constexpr int kReaderChromeMarginX = Board::Config::READER_CHROME_MARGIN_X;
+constexpr int kReaderChromeMarginTop = Board::Config::READER_CHROME_MARGIN_TOP;
+constexpr int kReaderChromeMarginBottom = Board::Config::READER_CHROME_MARGIN_BOTTOM;
+constexpr int kFooterMarginX = kReaderChromeMarginX;
+constexpr int kFooterMarginBottom = kReaderChromeMarginBottom;
+constexpr int kReaderBatteryMarginX = Board::Config::READER_BATTERY_MARGIN_X;
+constexpr int kReaderBatteryMarginTop = Board::Config::READER_BATTERY_MARGIN_TOP;
+constexpr int kEdgeMenuHintMaxWidth = 34;
+constexpr int kEdgeMenuHintMinWidth = 22;
+constexpr int kEdgeMenuHintHeight = 3;
+constexpr int kEdgeMenuHintInset = 3;
+constexpr uint8_t kEdgeMenuHintAlpha = 72;
+constexpr uint8_t kNightEdgeMenuHintAlpha = 88;
 constexpr int kCompactMenuRowHeight = 22;
 constexpr int kCompactMenuX = 28;
 constexpr int kLibraryRowHeight = 38;
@@ -95,58 +106,58 @@ constexpr int kVirtualBufferWidth = kDisplayWidth;
 constexpr int kVirtualBufferHeight = kPanelNativeHeight;
 
 constexpr size_t kBytesPerPixel = sizeof(uint16_t);
-constexpr size_t kMaxChunkBytes = 16 * 1024;
+constexpr size_t kMaxChunkBytes = Board::Config::DISPLAY_TX_CHUNK_BYTES;
 constexpr int kTxBufferWidth = kDisplayWidth > kPanelNativeWidth ? kDisplayWidth : kPanelNativeWidth;
 constexpr int kMaxChunkPhysicalRows = kMaxChunkBytes / (kTxBufferWidth * kBytesPerPixel);
 static_assert(kMaxChunkPhysicalRows > 0, "Display chunk buffer must hold at least one row");
 
 constexpr size_t kTxBufferPixels = static_cast<size_t>(kTxBufferWidth) * kMaxChunkPhysicalRows;
 
-int logicalWidthForOrientation(BoardConfig::UiOrientation orientation) {
+int logicalWidthForOrientation(Board::Config::UiOrientation orientation) {
   switch (orientation) {
-    case BoardConfig::UiOrientation::Portrait:
-    case BoardConfig::UiOrientation::PortraitFlipped:
+    case Board::Config::UiOrientation::Portrait:
+    case Board::Config::UiOrientation::PortraitFlipped:
       return kPanelNativeWidth;
-    case BoardConfig::UiOrientation::Landscape:
-    case BoardConfig::UiOrientation::LandscapeFlipped:
+    case Board::Config::UiOrientation::Landscape:
+    case Board::Config::UiOrientation::LandscapeFlipped:
     default:
       return kDisplayWidth;
   }
 }
 
-int logicalHeightForOrientation(BoardConfig::UiOrientation orientation) {
+int logicalHeightForOrientation(Board::Config::UiOrientation orientation) {
   switch (orientation) {
-    case BoardConfig::UiOrientation::Portrait:
-    case BoardConfig::UiOrientation::PortraitFlipped:
+    case Board::Config::UiOrientation::Portrait:
+    case Board::Config::UiOrientation::PortraitFlipped:
       return kPanelNativeHeight;
-    case BoardConfig::UiOrientation::Landscape:
-    case BoardConfig::UiOrientation::LandscapeFlipped:
+    case Board::Config::UiOrientation::Landscape:
+    case Board::Config::UiOrientation::LandscapeFlipped:
     default:
       return kDisplayHeight;
   }
 }
 
-bool isPortraitOrientation(BoardConfig::UiOrientation orientation) {
-  return orientation == BoardConfig::UiOrientation::Portrait ||
-         orientation == BoardConfig::UiOrientation::PortraitFlipped;
+bool isPortraitOrientation(Board::Config::UiOrientation orientation) {
+  return orientation == Board::Config::UiOrientation::Portrait ||
+         orientation == Board::Config::UiOrientation::PortraitFlipped;
 }
 
-void mapPhysicalToLogical(BoardConfig::UiOrientation orientation, int physicalX, int physicalY,
+void mapPhysicalToLogical(Board::Config::UiOrientation orientation, int physicalX, int physicalY,
                           int &logicalX, int &logicalY) {
   switch (orientation) {
-    case BoardConfig::UiOrientation::Portrait:
+    case Board::Config::UiOrientation::Portrait:
       logicalX = physicalX;
       logicalY = physicalY;
       break;
-    case BoardConfig::UiOrientation::PortraitFlipped:
+    case Board::Config::UiOrientation::PortraitFlipped:
       logicalX = kPanelNativeWidth - 1 - physicalX;
       logicalY = kPanelNativeHeight - 1 - physicalY;
       break;
-    case BoardConfig::UiOrientation::Landscape:
+    case Board::Config::UiOrientation::Landscape:
       logicalX = kDisplayWidth - 1 - physicalY;
       logicalY = physicalX;
       break;
-    case BoardConfig::UiOrientation::LandscapeFlipped:
+    case Board::Config::UiOrientation::LandscapeFlipped:
     default:
       logicalX = physicalY;
       logicalY = kDisplayHeight - 1 - physicalX;
@@ -256,7 +267,8 @@ bool shouldDrawInvertedGlyph(char c) {
 String readerChromeKey(const DisplayManager::ReaderChrome &chrome) {
   return String(chrome.showBattery ? 1 : 0) + String(chrome.showChapter ? 1 : 0) +
          String(chrome.showProgress ? 1 : 0) +
-         String(chrome.showPreviousSentenceHint ? 1 : 0);
+         String(chrome.showPreviousSentenceHint ? 1 : 0) +
+         String(chrome.showEdgeMenuHints ? 1 : 0);
 }
 
 int baseGlyphHeightForTypeface(DisplayManager::ReaderTypeface typeface) {
@@ -871,10 +883,18 @@ void DisplayManager::setBatteryLabel(const String &label) {
   lastRenderKey_ = "";
 }
 
+void DisplayManager::setBrightnessOverlay(const String &text) {
+  if (brightnessOverlayText_ == text) {
+    return;
+  }
+
+  brightnessOverlayText_ = text;
+  tickerPlaybackFrameActive_ = false;
+  lastRenderKey_ = "";
+}
+
 void DisplayManager::setBrightnessPercent(uint8_t percent) {
-  if (percent == 0) {
-    percent = 1;
-  } else if (percent > 100) {
+  if (percent > 100) {
     percent = 100;
   }
 
@@ -882,11 +902,6 @@ void DisplayManager::setBrightnessPercent(uint8_t percent) {
   if (initialized_) {
     applyBrightness();
   }
-}
-
-void DisplayManager::setBrightnessOverlay(const String &text) {
-  brightnessOverlayText_ = text;
-  lastRenderKey_ = "";
 }
 
 void DisplayManager::setDarkMode(bool darkMode) {
@@ -909,7 +924,17 @@ void DisplayManager::setNightMode(bool nightMode) {
   lastRenderKey_ = "";
 }
 
-void DisplayManager::setUiOrientation(BoardConfig::UiOrientation orientation) {
+void DisplayManager::setYellowMode(bool enabled) {
+  if (yellowMode_ == enabled) {
+    return;
+  }
+
+  yellowMode_ = enabled;
+  tickerPlaybackFrameActive_ = false;
+  lastRenderKey_ = "";
+}
+
+void DisplayManager::setUiOrientation(Board::Config::UiOrientation orientation) {
   if (uiOrientation_ == orientation) {
     return;
   }
@@ -920,8 +945,8 @@ void DisplayManager::setUiOrientation(BoardConfig::UiOrientation orientation) {
 }
 
 void DisplayManager::setUiRotated180(bool rotated180) {
-  setUiOrientation(rotated180 ? BoardConfig::UiOrientation::LandscapeFlipped
-                              : BoardConfig::UiOrientation::Landscape);
+  setUiOrientation(rotated180 ? Board::Config::ROTATED_UI_ORIENTATION
+                              : Board::Config::DEFAULT_UI_ORIENTATION);
 }
 
 void DisplayManager::setTypographyConfig(const TypographyConfig &config) {
@@ -981,7 +1006,7 @@ bool DisplayManager::begin() {
   lastRenderKey_ = "";
   fillScreen(backgroundColor());
   applyBrightness();
-  ESP_LOGI(kDisplayTag, "AXS15231B LCD initialized");
+  ESP_LOGI(kDisplayTag, "Display initialized for %s", Board::Config::BOARD_LABEL);
   return true;
 }
 
@@ -991,7 +1016,7 @@ void DisplayManager::prepareForSleep() {
   }
 
   fillScreen(kTrueBlack);
-  axs15231bSleep();
+  Board::Display::sleep();
   initialized_ = false;
   tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
@@ -1003,7 +1028,7 @@ bool DisplayManager::wakeFromSleep() {
     return false;
   }
 
-  axs15231bWake();
+  Board::Display::wake();
   initialized_ = true;
   tickerPlaybackFrameActive_ = false;
   lastRenderKey_ = "";
@@ -1033,7 +1058,9 @@ bool DisplayManager::allocateBuffers() {
 }
 
 bool DisplayManager::initPanel() {
-  axs15231bInit();
+  if (!Board::Display::begin()) {
+    return false;
+  }
   ESP_LOGI(kDisplayTag, "Panel init sequence complete");
   return true;
 }
@@ -1043,11 +1070,11 @@ bool DisplayManager::drawBitmap(int xStart, int yStart, int xEnd, int yEnd, cons
     return false;
   }
 
-  axs15231bPushColors(static_cast<uint16_t>(xStart), static_cast<uint16_t>(yStart),
-                      static_cast<uint16_t>(xEnd - xStart),
-                      static_cast<uint16_t>(yEnd - yStart),
-                      static_cast<const uint16_t *>(colorData));
-  return true;
+  return Board::Display::pushColors(static_cast<uint16_t>(xStart),
+                                    static_cast<uint16_t>(yStart),
+                                    static_cast<uint16_t>(xEnd - xStart),
+                                    static_cast<uint16_t>(yEnd - yStart),
+                                    static_cast<const uint16_t *>(colorData));
 }
 
 void DisplayManager::fillScreen(uint16_t color) {
@@ -1079,6 +1106,9 @@ uint16_t DisplayManager::backgroundColor() const {
   if (nightMode_) {
     return kTrueBlack;
   }
+  if (yellowMode_) {
+    return kYellowModeBackground;
+  }
   return darkMode_ ? kTrueBlack : kPureWhite;
 }
 
@@ -1086,10 +1116,16 @@ uint16_t DisplayManager::wordColor() const {
   if (nightMode_) {
     return kNightWordColor;
   }
+  if (yellowMode_) {
+    return kLightWordColor;
+  }
   return darkMode_ ? kDarkWordColor : kLightWordColor;
 }
 
 uint16_t DisplayManager::focusColor() const {
+  if (yellowMode_) {
+    return nightMode_ ? kYellowModeNightFocusColor : kYellowModeFocusColor;
+  }
   if (nightMode_) {
     return kNightFocusColor;
   }
@@ -1100,12 +1136,18 @@ uint16_t DisplayManager::dimColor() const {
   if (nightMode_) {
     return blendOverBackground(wordColor(), kNightDimAlpha);
   }
+  if (yellowMode_) {
+    return kLightMenuDimColor;
+  }
   return darkMode_ ? kDarkMenuDimColor : kLightMenuDimColor;
 }
 
 uint16_t DisplayManager::footerColor() const {
   if (nightMode_) {
     return blendOverBackground(wordColor(), kNightFooterAlpha);
+  }
+  if (yellowMode_) {
+    return kLightFooterColor;
   }
   return darkMode_ ? kDarkFooterColor : kLightFooterColor;
 }
@@ -1551,10 +1593,11 @@ void DisplayManager::drawTinyGlyph(int x, int y, char c, uint16_t color, int sca
 void DisplayManager::drawTinyTextAt180(const String &text, int x, int y, uint16_t color,
                                        int scale) {
   const uint16_t panel = panelColor(color);
-  const int n = static_cast<int>(text.length());
-  for (int ci = 0; ci < n; ++ci) {
-    const int charBaseX = x + (n - 1 - ci) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
-    const uint8_t *rows = tinyRowsFor(text[ci]);
+  const int count = static_cast<int>(text.length());
+  for (int charIndex = 0; charIndex < count; ++charIndex) {
+    const int charBaseX =
+        x + (count - 1 - charIndex) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
+    const uint8_t *rows = tinyRowsFor(text[charIndex]);
     for (int row = 0; row < kTinyGlyphHeight; ++row) {
       const int dstRow = kTinyGlyphHeight - 1 - row;
       for (int col = 0; col < kTinyGlyphWidth; ++col) {
@@ -1564,10 +1607,14 @@ void DisplayManager::drawTinyTextAt180(const String &text, int x, int y, uint16_
         const int dstCol = kTinyGlyphWidth - 1 - col;
         for (int yy = 0; yy < scale; ++yy) {
           const int dstY = y + dstRow * scale + yy;
-          if (dstY < 0 || dstY >= kVirtualBufferHeight) continue;
+          if (dstY < 0 || dstY >= kVirtualBufferHeight) {
+            continue;
+          }
           for (int xx = 0; xx < scale; ++xx) {
             const int dstX = charBaseX + dstCol * scale + xx;
-            if (dstX < 0 || dstX >= kVirtualBufferWidth) continue;
+            if (dstX < 0 || dstX >= kVirtualBufferWidth) {
+              continue;
+            }
             virtualFrame_[dstY * kVirtualBufferWidth + dstX] = panel;
           }
         }
@@ -1618,8 +1665,9 @@ void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight) {
   }
 
   const int width = measureTinyTextWidth(batteryLabel_, kTinyScale);
-  const int x = std::max(kFooterMarginX, logicalWidth - kFooterMarginX - width);
-  const int y = logicalHeight > (kDisplayHeight * 2) ? kFooterMarginBottom + 8 : kFooterMarginBottom;
+  const int x = std::max(kReaderBatteryMarginX, logicalWidth - kReaderBatteryMarginX - width);
+  const int y = logicalHeight > (kDisplayHeight * 2) ? kReaderBatteryMarginTop + 8
+                                                      : kReaderBatteryMarginTop;
   drawTinyTextAt(batteryLabel_, x, y, footerColor(), kTinyScale);
 }
 
@@ -1657,8 +1705,61 @@ void DisplayManager::drawBrightnessToastBadge(const String &text) {
   drawTinyTextAt(text, x + iconW + iconSpacing, y, color, kTinyScale);
 }
 
+void DisplayManager::drawBrightnessToastBadge(int logicalWidth, int logicalHeight) {
+  if (brightnessOverlayText_.isEmpty()) {
+    return;
+  }
+
+  const int iconSize = 11;
+  const int iconGap = 8;
+  const int textWidth = measureTinyTextWidth(brightnessOverlayText_, kTinyScale);
+  const int badgeWidth = iconSize + iconGap + textWidth;
+  const int x = std::max(kReaderBatteryMarginX, logicalWidth - kReaderBatteryMarginX - badgeWidth);
+  const int y = std::min(std::max(kReaderBatteryMarginTop + 22, kReaderBatteryMarginTop),
+                         std::max(kReaderBatteryMarginTop, logicalHeight - iconSize - 2));
+  const uint16_t color = footerColor();
+  const int iconX = x;
+  const int iconY = y + 2;
+  const int centerX = iconX + iconSize / 2;
+  const int centerY = iconY + iconSize / 2;
+
+  fillVirtualRect(centerX - 2, centerY - 2, 5, 5, color);
+  fillVirtualRect(centerX, iconY, 1, 2, color);
+  fillVirtualRect(centerX, iconY + iconSize - 2, 1, 2, color);
+  fillVirtualRect(iconX, centerY, 2, 1, color);
+  fillVirtualRect(iconX + iconSize - 2, centerY, 2, 1, color);
+  fillVirtualRect(iconX + 2, iconY + 2, 1, 1, color);
+  fillVirtualRect(iconX + iconSize - 3, iconY + 2, 1, 1, color);
+  fillVirtualRect(iconX + 2, iconY + iconSize - 3, 1, 1, color);
+  fillVirtualRect(iconX + iconSize - 3, iconY + iconSize - 3, 1, 1, color);
+  drawTinyTextAt(brightnessOverlayText_, x + iconSize + iconGap, y, color, kTinyScale);
+}
+
 void DisplayManager::drawPreviousSentenceHint() {
-  drawTinyTextAt("<<", kFooterMarginX, kFooterMarginBottom, footerColor(), kTinyScale);
+  drawTinyTextAt("<<", kReaderChromeMarginX, kReaderChromeMarginTop, footerColor(), kTinyScale);
+}
+
+void DisplayManager::drawEdgeMenuHints(int logicalWidth, int logicalHeight,
+                                       const ReaderChrome &chrome) {
+  if (!chrome.showEdgeMenuHints) {
+    return;
+  }
+
+  const int handleWidth =
+      std::min(kEdgeMenuHintMaxWidth, std::max(kEdgeMenuHintMinWidth, logicalWidth / 7));
+  const int x = std::max(0, (logicalWidth - handleWidth) / 2);
+  const uint16_t color =
+      blendOverBackground(wordColor(), nightMode_ ? kNightEdgeMenuHintAlpha : kEdgeMenuHintAlpha);
+
+  auto drawHandle = [&](int y) {
+    fillVirtualRect(x + 1, y, handleWidth - 2, 1, color);
+    fillVirtualRect(x, y + 1, handleWidth, kEdgeMenuHintHeight - 2, color);
+    fillVirtualRect(x + 1, y + kEdgeMenuHintHeight - 1, handleWidth - 2, 1, color);
+  };
+
+  drawHandle(kEdgeMenuHintInset);
+  drawHandle(std::max(kEdgeMenuHintInset,
+                      logicalHeight - kEdgeMenuHintInset - kEdgeMenuHintHeight));
 }
 
 void DisplayManager::drawFooter(const String &chapterLabel, const String &statusLabel,
@@ -1667,21 +1768,22 @@ void DisplayManager::drawFooter(const String &chapterLabel, const String &status
     return;
   }
 
-  const int y = kDisplayHeight - kTinyGlyphHeight * kTinyScale - kFooterMarginBottom;
-  int maxChapterWidth = kDisplayWidth - (kFooterMarginX * 2);
+  const int y = kDisplayHeight - kTinyGlyphHeight * kTinyScale - kReaderChromeMarginBottom;
+  int maxChapterWidth = kDisplayWidth - (kReaderChromeMarginX * 2);
 
   if (chrome.showProgress) {
     const String status = statusLabel.isEmpty() ? "0%" : statusLabel;
     const int statusWidth = measureTinyTextWidth(status, kTinyScale);
-    const int rightX = std::max(kFooterMarginX, kDisplayWidth - kFooterMarginX - statusWidth);
-    maxChapterWidth = std::max(0, rightX - kFooterMarginX - 18);
+    const int rightX =
+        std::max(kReaderChromeMarginX, kDisplayWidth - kReaderChromeMarginX - statusWidth);
+    maxChapterWidth = std::max(0, rightX - kReaderChromeMarginX - 18);
     drawTinyTextAt(status, rightX, y, footerColor(), kTinyScale);
   }
 
   if (chrome.showChapter) {
     const String chapter = fitTinyText(chapterLabel.isEmpty() ? "START" : chapterLabel,
                                       maxChapterWidth, kTinyScale);
-    drawTinyTextAt(chapter, kFooterMarginX, y, footerColor(), kTinyScale);
+    drawTinyTextAt(chapter, kReaderChromeMarginX, y, footerColor(), kTinyScale);
   }
 }
 
@@ -1806,15 +1908,13 @@ void DisplayManager::drawMenuItem(const String &item, int y, bool selected) {
 }
 
 void DisplayManager::applyBrightness() {
-  axs15231bSetBrightnessPercent(brightnessPercent_);
-  axs15231bSetBacklight(true);
+  Board::Display::setBrightness(brightnessPercent_);
+  Board::Display::setBacklight(true);
 }
 
 void DisplayManager::flushScaledFrame(int scale, int virtualWidth, int virtualHeight) {
   tickerPlaybackFrameActive_ = false;
-  if (!brightnessOverlayText_.isEmpty()) {
-    drawBrightnessToastBadge(brightnessOverlayText_);
-  }
+  drawBrightnessToastBadge(virtualWidth, virtualHeight);
   for (int nativeYStart = 0; nativeYStart < kPanelNativeHeight;
        nativeYStart += kMaxChunkPhysicalRows) {
     const int nativeRows = std::min(kMaxChunkPhysicalRows, kPanelNativeHeight - nativeYStart);
@@ -1859,7 +1959,7 @@ void DisplayManager::flushFullWidthLogicalBand(int yStart, int yEnd) {
     return;
   }
 
-  const bool flipped = uiOrientation_ == BoardConfig::UiOrientation::LandscapeFlipped;
+  const bool flipped = uiOrientation_ == Board::Config::UiOrientation::LandscapeFlipped;
   const int physicalXStart = flipped ? (kDisplayHeight - yEnd) : yStart;
   const int physicalXEnd = flipped ? (kDisplayHeight - yStart) : yEnd;
   const int physicalWidth = physicalXEnd - physicalXStart;
@@ -1953,6 +2053,7 @@ void DisplayManager::renderRsvpWord(const String &word, const String &chapterLab
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge(virtualWidth, virtualHeight);
   }
@@ -1998,6 +2099,7 @@ void DisplayManager::renderRsvpWordWithWpm(const String &word, uint16_t wpm,
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2059,6 +2161,7 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
     if (chrome.showPreviousSentenceHint) {
       drawPreviousSentenceHint();
     }
+    drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (chrome.showBattery) {
       drawBatteryBadge();
     }
@@ -2107,6 +2210,7 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2130,12 +2234,28 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
   }
 
   const bool canUseBandOnly = !showFooter && overlayText.isEmpty() &&
-                              !chrome.showPreviousSentenceHint && tickerPlaybackFrameActive_;
-  String renderKey =
-      "ticker|" + String(fontSizeLevel) + "|i:" + String(currentWordIndex) + "|m:" +
-      String(motionPermille) + "|f:" + String(showFooter ? 1 : 0) + "|d:" +
-      String(darkMode_ ? 1 : 0) + "|n:" + String(nightMode_ ? 1 : 0) + "|wc:" +
-      String(words.size()) + "|rc:" + readerChromeKey(chrome);
+                              !chrome.showPreviousSentenceHint && !chrome.showEdgeMenuHints &&
+                              tickerPlaybackFrameActive_;
+  const String chromeKey = readerChromeKey(chrome);
+  String renderKey;
+  renderKey.reserve(96 + chromeKey.length() + chapterLabel.length() + overlayText.length() +
+                    batteryLabel_.length());
+  renderKey += "ticker|";
+  renderKey += String(fontSizeLevel);
+  renderKey += "|i:";
+  renderKey += String(currentWordIndex);
+  renderKey += "|m:";
+  renderKey += String(motionPermille);
+  renderKey += "|f:";
+  renderKey += String(showFooter ? 1 : 0);
+  renderKey += "|d:";
+  renderKey += String(darkMode_ ? 1 : 0);
+  renderKey += "|n:";
+  renderKey += String(nightMode_ ? 1 : 0);
+  renderKey += "|wc:";
+  renderKey += String(words.size());
+  renderKey += "|rc:";
+  renderKey += chromeKey;
   if (!canUseBandOnly) {
     renderKey += "|c:";
     renderKey += chapterLabel;
@@ -2229,6 +2349,7 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
     if (chrome.showPreviousSentenceHint) {
       drawPreviousSentenceHint();
     }
+    drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (!canUseBandOnly) {
       if (chrome.showBattery) {
         drawBatteryBadge();
@@ -2315,6 +2436,7 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (!canUseBandOnly) {
     if (chrome.showBattery) {
       drawBatteryBadge();
@@ -2486,6 +2608,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
     if (chrome.showPreviousSentenceHint) {
       drawPreviousSentenceHint();
     }
+    drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (chrome.showBattery) {
       drawBatteryBadge();
     }
@@ -2534,6 +2657,7 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2563,7 +2687,7 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
   const int overlayReserve = overlayText.isEmpty() ? 0 : (kTinyGlyphHeight * kTinyScale + 6);
   const bool showFooterRow = chrome.showChapter || chrome.showProgress;
   const int footerReserve =
-      showFooterRow ? (kTinyGlyphHeight * kTinyScale + kFooterMarginBottom + 6) : 6;
+      showFooterRow ? (kTinyGlyphHeight * kTinyScale + kReaderChromeMarginBottom + 6) : 6;
   const int textTop = kScrollTop;
   const int textBottom = virtualHeight - footerReserve - overlayReserve;
   const ReaderTypeface contextTypeface = currentReaderTypeface();
@@ -2730,6 +2854,7 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
   if (chrome.showPreviousSentenceHint) {
     drawPreviousSentenceHint();
   }
+  drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
     drawBatteryBadge();
   }
@@ -2761,7 +2886,9 @@ void DisplayManager::renderMenu(const std::vector<String> &items, size_t selecte
     selectedIndex = items.size() - 1;
   }
 
-  String renderKey = "menuv|";
+  String renderKey;
+  renderKey.reserve(48 + batteryLabel_.length() + (items.size() * 16));
+  renderKey += "menuv|";
   renderKey += String(selectedIndex);
   renderKey += "|b:";
   renderKey += batteryLabel_;
@@ -2827,7 +2954,9 @@ void DisplayManager::renderLibrary(const std::vector<LibraryItem> &items, size_t
     selectedIndex = items.size() - 1;
   }
 
-  String renderKey = "library|";
+  String renderKey;
+  renderKey.reserve(48 + batteryLabel_.length() + (items.size() * 32));
+  renderKey += "library|";
   renderKey += String(selectedIndex);
   renderKey += "|b:";
   renderKey += batteryLabel_;
@@ -2899,7 +3028,10 @@ void DisplayManager::renderLibrary(const std::vector<LibraryItem> &items, size_t
 void DisplayManager::renderTextEntry(const String &title, const String &prompt, const String &value,
                                      const String &helperText,
                                      const std::vector<Button> &buttons) {
-  String renderKey = "text-entry|";
+  String renderKey;
+  renderKey.reserve(80 + title.length() + prompt.length() + value.length() + helperText.length() +
+                    batteryLabel_.length() + (buttons.size() * 28));
+  renderKey += "text-entry|";
   renderKey += title;
   renderKey += "|";
   renderKey += prompt;
@@ -3192,7 +3324,10 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
   const bool portrait = isPortraitOrientation(uiOrientation_);
   const bool timerRunning = progressPercent >= 0;
 
-  String renderKey = "timer|";
+  String renderKey;
+  renderKey.reserve(80 + mode.length() + genre.length() + timer.length() + instruction.length() +
+                    footer.length() + batteryLabel_.length());
+  renderKey += "timer|";
   renderKey += mode;
   renderKey += "|";
   renderKey += genre;
@@ -3372,25 +3507,36 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
 
   auto drawTinyTextAt180Clipped = [&](const String &text, int x, int y, uint16_t color, int scale,
                                       int clipX, int clipY, int clipWidth, int clipHeight) {
-    if (clipWidth <= 0 || clipHeight <= 0) return;
+    if (clipWidth <= 0 || clipHeight <= 0) {
+      return;
+    }
+
     const int clipXEnd = clipX + clipWidth;
     const int clipYEnd = clipY + clipHeight;
     const uint16_t panel = panelColor(color);
-    const int n = static_cast<int>(text.length());
-    for (int ci = 0; ci < n; ++ci) {
-      const int charBaseX = x + (n - 1 - ci) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
-      const uint8_t *rows = tinyRowsFor(text[ci]);
+    const int count = static_cast<int>(text.length());
+    for (int charIndex = 0; charIndex < count; ++charIndex) {
+      const int charBaseX =
+          x + (count - 1 - charIndex) * (kTinyGlyphWidth + kTinyGlyphSpacing) * scale;
+      const uint8_t *rows = tinyRowsFor(text[charIndex]);
       for (int row = 0; row < kTinyGlyphHeight; ++row) {
         const int dstRow = kTinyGlyphHeight - 1 - row;
         for (int col = 0; col < kTinyGlyphWidth; ++col) {
-          if ((rows[row] & (1 << (kTinyGlyphWidth - 1 - col))) == 0) continue;
+          if ((rows[row] & (1 << (kTinyGlyphWidth - 1 - col))) == 0) {
+            continue;
+          }
           const int dstCol = kTinyGlyphWidth - 1 - col;
           for (int yy = 0; yy < scale; ++yy) {
             const int dstY = y + dstRow * scale + yy;
-            if (dstY < 0 || dstY >= kVirtualBufferHeight || dstY < clipY || dstY >= clipYEnd) continue;
+            if (dstY < 0 || dstY >= kVirtualBufferHeight || dstY < clipY || dstY >= clipYEnd) {
+              continue;
+            }
             for (int xx = 0; xx < scale; ++xx) {
               const int dstX = charBaseX + dstCol * scale + xx;
-              if (dstX < 0 || dstX >= kVirtualBufferWidth || dstX < clipX || dstX >= clipXEnd) continue;
+              if (dstX < 0 || dstX >= kVirtualBufferWidth || dstX < clipX ||
+                  dstX >= clipXEnd) {
+                continue;
+              }
               virtualFrame_[dstY * kVirtualBufferWidth + dstX] = panel;
             }
           }
@@ -3446,7 +3592,6 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
       while (footerScale > 1 && measureTinyTextWidth(footer, footerScale) > contentWidth) {
         --footerScale;
       }
-      // Mirror titleY padding: same distance from bottom as titleY is from top
       const int footerY = virtualHeight - titleY - (kTinyGlyphHeight * footerScale);
       const int footerX = centeredXForTiny(footer, footerScale);
       drawTinyTextAt180(footer, footerX, footerY, baseTextColor, footerScale);
@@ -3455,11 +3600,10 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
                                  fillX, fillY, fillWidth, fillHeight);
       }
       if (portraitFocusLayout) {
-        // Divider mirrored: same gap above text as BEGIN's divider is below BEGIN
         const int footerDividerWidth =
             std::min(contentWidth, 40 + (static_cast<int>(footer.length()) * 12));
         const int footerDividerX = contentX + ((contentWidth - footerDividerWidth) / 2);
-        const int footerDividerY = footerY - 20 - 2;
+        const int footerDividerY = footerY - 22;
         fillVirtualRect(footerDividerX, footerDividerY, footerDividerWidth, 2, accent);
       }
     }
@@ -3491,7 +3635,6 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
 
     drawTinyTextAt(mode, centeredXForTiny(mode, titleScale), titleY, baseTextColor, titleScale);
 
-    const std::vector<String> lines = wrapTinyLines(instruction, instructionBlockWidth, instructionScale);
     const int lineHeight = (kTinyGlyphHeight * instructionScale) + instructionScale + 4;
     int y = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 42 : 28);
     if (portraitFocusLayout) {
@@ -3500,7 +3643,8 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
 
     if (!timer.isEmpty()) {
       int timerStaticScale = portrait ? 4 : 5;
-      while (timerStaticScale > 1 && measureTinyTextWidth(timer, timerStaticScale) > contentWidth) {
+      while (timerStaticScale > 1 &&
+             measureTinyTextWidth(timer, timerStaticScale) > contentWidth) {
         --timerStaticScale;
       }
       drawTinyTextAt(timer, centeredXForTiny(timer, timerStaticScale), y, accent,
@@ -3508,21 +3652,25 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
       y += (kTinyGlyphHeight * timerStaticScale) + timerStaticScale + 20;
     }
 
-    // First paragraph (e.g. "Tap To Change") → baseTextColor (white)
-    // Second paragraph (e.g. "Place to Start") → instructionColor (accent)
-    const int newlinePos = instruction.indexOf('\n');
-    const String instructionPart1 = (newlinePos >= 0) ? instruction.substring(0, newlinePos) : instruction;
-    const std::vector<String> part1Lines = wrapTinyLines(instructionPart1, instructionBlockWidth, instructionScale);
-    const size_t part1Count = (newlinePos >= 0) ? part1Lines.size() : 0;
+    if (!instruction.isEmpty()) {
+      const std::vector<String> lines =
+          wrapTinyLines(instruction, instructionBlockWidth, instructionScale);
+      const int newlinePos = instruction.indexOf('\n');
+      const String firstInstruction =
+          newlinePos >= 0 ? instruction.substring(0, newlinePos) : instruction;
+      const std::vector<String> firstLines =
+          wrapTinyLines(firstInstruction, instructionBlockWidth, instructionScale);
+      const size_t firstLineCount = newlinePos >= 0 ? firstLines.size() : 0;
 
-    for (size_t i = 0; i < lines.size(); ++i) {
-      const String &line = lines[i];
-      const uint16_t lineColor = (i < part1Count) ? baseTextColor : instructionColor;
-      drawTinyTextAt(line,
-                     centeredXWithin(line, instructionScale, instructionBlockX,
-                                     instructionBlockWidth),
-                     y, lineColor, instructionScale);
-      y += lineHeight;
+      for (size_t i = 0; i < lines.size(); ++i) {
+        const String &line = lines[i];
+        const uint16_t lineColor = i < firstLineCount ? baseTextColor : instructionColor;
+        drawTinyTextAt(line,
+                       centeredXWithin(line, instructionScale, instructionBlockX,
+                                       instructionBlockWidth),
+                       y, lineColor, instructionScale);
+        y += lineHeight;
+      }
     }
   }
 

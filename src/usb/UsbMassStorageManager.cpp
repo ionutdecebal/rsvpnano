@@ -83,7 +83,7 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
 #else
   (void)writeEnabled;
   statusMessage_ = "USB transfer disabled";
-  Serial.println("[usb-msc] unsupported: build waveshare_esp32s3_usb_msc to enable it");
+  Serial.println("[usb-msc] unsupported: build a USB-enabled target to enable it");
   return false;
 #endif
 }
@@ -143,9 +143,9 @@ bool UsbMassStorageManager::beginSdCard() {
 
   sdmmc_slot_config_t slotConfig = SDMMC_SLOT_CONFIG_DEFAULT();
 #ifdef SOC_SDMMC_USE_GPIO_MATRIX
-  slotConfig.clk = static_cast<gpio_num_t>(BoardConfig::PIN_SD_CLK);
-  slotConfig.cmd = static_cast<gpio_num_t>(BoardConfig::PIN_SD_CMD);
-  slotConfig.d0 = static_cast<gpio_num_t>(BoardConfig::PIN_SD_D0);
+  slotConfig.clk = static_cast<gpio_num_t>(Board::Config::PIN_SD_CLK);
+  slotConfig.cmd = static_cast<gpio_num_t>(Board::Config::PIN_SD_CMD);
+  slotConfig.d0 = static_cast<gpio_num_t>(Board::Config::PIN_SD_D0);
   slotConfig.d1 = GPIO_NUM_NC;
   slotConfig.d2 = GPIO_NUM_NC;
   slotConfig.d3 = GPIO_NUM_NC;

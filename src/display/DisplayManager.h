@@ -33,12 +33,14 @@ class DisplayManager {
         : showBattery(true),
           showChapter(true),
           showProgress(true),
-          showPreviousSentenceHint(true) {}
+          showPreviousSentenceHint(true),
+          showEdgeMenuHints(false) {}
 
     bool showBattery;
     bool showChapter;
     bool showProgress;
     bool showPreviousSentenceHint;
+    bool showEdgeMenuHints;
   };
 
   struct ScrollConfig {
@@ -67,11 +69,12 @@ class DisplayManager {
 
   bool begin();
   void setBatteryLabel(const String &label);
-  void setBrightnessPercent(uint8_t percent);
   void setBrightnessOverlay(const String &text);
+  void setBrightnessPercent(uint8_t percent);
   void setDarkMode(bool darkMode);
   void setNightMode(bool nightMode);
-  void setUiOrientation(BoardConfig::UiOrientation orientation);
+  void setYellowMode(bool enabled);
+  void setUiOrientation(Board::Config::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
   void setTypographyConfig(const TypographyConfig &config);
   void setScrollConfig(const ScrollConfig &config);
@@ -182,7 +185,9 @@ class DisplayManager {
   void drawBatteryBadge();
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
   void drawBrightnessToastBadge(const String &text);
+  void drawBrightnessToastBadge(int logicalWidth, int logicalHeight);
   void drawPreviousSentenceHint();
+  void drawEdgeMenuHints(int logicalWidth, int logicalHeight, const ReaderChrome &chrome);
   void drawFooter(const String &chapterLabel, const String &statusLabel,
                   const ReaderChrome &chrome);
   void drawRsvpAnchorGuide(int anchorX, int textY, int textHeight);
@@ -208,9 +213,8 @@ class DisplayManager {
   uint8_t brightnessPercent_ = 100;
   bool darkMode_ = true;
   bool nightMode_ = false;
-  BoardConfig::UiOrientation uiOrientation_ =
-      BoardConfig::UI_ROTATED_180 ? BoardConfig::UiOrientation::LandscapeFlipped
-                                  : BoardConfig::UiOrientation::Landscape;
+  bool yellowMode_ = false;
+  Board::Config::UiOrientation uiOrientation_ = Board::Config::DEFAULT_UI_ORIENTATION;
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;

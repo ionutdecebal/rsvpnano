@@ -48,7 +48,7 @@ class FocusTimer {
   bool isActiveTimerRunning() const;
   State state() const;
   Genre genre() const;
-  BoardConfig::UiOrientation uiOrientation() const;
+  Board::Config::UiOrientation uiOrientation() const;
   uint32_t remainingMs(uint32_t nowMs) const;
   uint32_t selectedTouchDurationMs() const;
   uint8_t progressPercent(uint32_t nowMs) const;
@@ -76,6 +76,7 @@ class FocusTimer {
   };
 
   bool initImu();
+  bool probeImuAddress(uint8_t address);
   bool readRegister(uint8_t reg, uint8_t &value);
   bool writeRegister(uint8_t reg, uint8_t value);
   bool readRegisters(uint8_t startReg, uint8_t *buffer, size_t len);
@@ -95,10 +96,11 @@ class FocusTimer {
   uint8_t genreIdx() const;
   static bool isShortSide(OrientationState orientation);
   static OrientationState oppositeShortSide(OrientationState orientation);
-  static BoardConfig::UiOrientation portraitOrientationForShortSide(
+  static Board::Config::UiOrientation portraitOrientationForShortSide(
       OrientationState orientation);
 
   bool imuAvailable_ = false;
+  uint8_t imuAddress_ = Board::Config::IMU_I2C_ADDRESS;
   float accelScale_ = 4.0f / 32768.0f;
   uint8_t touchDurationByGenre_[kGenreCount] = {};
   OrientationState rawOrientation_ = OrientationState::Unknown;

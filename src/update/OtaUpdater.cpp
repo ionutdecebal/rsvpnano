@@ -8,6 +8,9 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
+#include "net/WifiConnection.h"
+#include "update/ReleaseParser.h"
+
 #ifndef RSVP_FIRMWARE_VERSION
 #define RSVP_FIRMWARE_VERSION "dev"
 #endif
@@ -18,27 +21,11 @@ constexpr const char *kConfigPaths[] = {
     "/config/ota.conf",
     "/ota.conf",
 };
-constexpr uint32_t kWifiConnectTimeoutMs = 15000;
-constexpr uint32_t kWifiConnectPollMs = 250;
 constexpr size_t kMaxReleaseJsonBytes = 32768;
 constexpr const char *kStatusTitle = "OTA";
 const char *kRedirectHeaderKeys[] = {
     "Location",
 };
-
-bool isAsciiWhitespace(char c) {
-  switch (c) {
-    case ' ':
-    case '\t':
-    case '\n':
-    case '\r':
-    case '\f':
-    case '\v':
-      return true;
-    default:
-      return false;
-  }
-}
 
 String trimCopy(String value) {
   value.trim();
@@ -49,125 +36,6 @@ bool parseBoolValue(const String &value) {
   String lowered = trimCopy(value);
   lowered.toLowerCase();
   return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
-}
-
-String jsonUnescape(const String &input) {
-  String output;
-  output.reserve(input.length());
-
-  bool escaping = false;
-  for (size_t i = 0; i < input.length(); ++i) {
-    const char c = input[i];
-    if (escaping) {
-      switch (c) {
-        case '"':
-        case '\\':
-        case '/':
-          output += c;
-          break;
-        case 'b':
-          output += '\b';
-          break;
-        case 'f':
-          output += '\f';
-          break;
-        case 'n':
-          output += '\n';
-          break;
-        case 'r':
-          output += '\r';
-          break;
-        case 't':
-          output += '\t';
-          break;
-        default:
-          output += c;
-          break;
-      }
-      escaping = false;
-      continue;
-    }
-
-    if (c == '\\') {
-      escaping = true;
-      continue;
-    }
-
-    output += c;
-  }
-
-  return output;
-}
-
-bool parseJsonStringAt(const String &json, int quoteIndex, String &value) {
-  if (quoteIndex < 0 || static_cast<size_t>(quoteIndex) >= json.length() ||
-      json[quoteIndex] != '"') {
-    return false;
-  }
-
-  String raw;
-  raw.reserve(64);
-  bool escaping = false;
-  for (size_t i = static_cast<size_t>(quoteIndex) + 1; i < json.length(); ++i) {
-    const char c = json[i];
-    if (!escaping && c == '"') {
-      value = jsonUnescape(raw);
-      return true;
-    }
-
-    raw += c;
-    if (escaping) {
-      escaping = false;
-    } else if (c == '\\') {
-      escaping = true;
-    }
-  }
-
-  return false;
-}
-
-bool extractJsonStringValue(const String &json, const char *key, size_t searchStart, String &value,
-                            int *keyPosition = nullptr) {
-  const String pattern = "\"" + String(key) + "\"";
-  const int keyIndex = json.indexOf(pattern, static_cast<unsigned int>(searchStart));
-  if (keyIndex < 0) {
-    return false;
-  }
-
-  const int colonIndex = json.indexOf(':', keyIndex + pattern.length());
-  if (colonIndex < 0) {
-    return false;
-  }
-
-  int quoteIndex = colonIndex + 1;
-  while (static_cast<size_t>(quoteIndex) < json.length() && isAsciiWhitespace(json[quoteIndex])) {
-    ++quoteIndex;
-  }
-  if (static_cast<size_t>(quoteIndex) >= json.length() || json[quoteIndex] != '"') {
-    return false;
-  }
-
-  if (keyPosition != nullptr) {
-    *keyPosition = keyIndex;
-  }
-  return parseJsonStringAt(json, quoteIndex, value);
-}
-
-bool extractAssetDownloadUrl(const String &json, const String &assetName, String &assetUrl) {
-  size_t searchStart = 0;
-  String candidateName;
-  int nameKeyIndex = -1;
-  while (extractJsonStringValue(json, "name", searchStart, candidateName, &nameKeyIndex)) {
-    if (candidateName == assetName &&
-        extractJsonStringValue(json, "browser_download_url",
-                               static_cast<size_t>(std::max(0, nameKeyIndex)), assetUrl)) {
-      return true;
-    }
-
-    searchStart = static_cast<size_t>(nameKeyIndex) + 1;
-  }
-
-  return false;
 }
 
 String readBodyLimited(HTTPClient &http, size_t maxBytes) {
@@ -228,6 +96,21 @@ String versionDetail(const String &currentVersion, const String &latestVersion) 
     return latestVersion;
   }
   return currentVersion + " -> " + latestVersion;
+}
+
+bool assetNameLooksCompatibleWithBoard(const String &assetName, String &errorDetail) {
+  const String trimmed = trimCopy(assetName);
+  if (trimmed.isEmpty()) {
+    errorDetail = "Asset name missing";
+    return false;
+  }
+
+  if (trimmed != Board::Config::OTA_ASSET_NAME) {
+    errorDetail = "Asset does not match " + String(Board::Config::BOARD_LABEL);
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -297,26 +180,12 @@ bool OtaUpdater::loadConfigFromPath(const char *path, Config &config) const {
 
 bool OtaUpdater::connectWiFi(const Config &config, StatusCallback callback,
                              void *context) const {
-  WiFi.persistent(false);
-  WiFi.setAutoReconnect(false);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(config.wifiSsid.c_str(), config.wifiPassword.c_str());
-
-  const uint32_t startMs = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startMs < kWifiConnectTimeoutMs) {
-    const uint32_t elapsedMs = millis() - startMs;
-    const int progress = 5 + static_cast<int>((elapsedMs * 15) / kWifiConnectTimeoutMs);
-    reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid, progress);
-    delay(kWifiConnectPollMs);
-  }
-
-  return WiFi.status() == WL_CONNECTED;
+  return net::connectStation(config.wifiSsid, config.wifiPassword, [&](int percent) {
+    reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", config.wifiSsid, percent);
+  });
 }
 
-void OtaUpdater::disconnectWiFi() const {
-  WiFi.disconnect(true, false);
-  WiFi.mode(WIFI_OFF);
-}
+void OtaUpdater::disconnectWiFi() const { net::disconnect(); }
 
 bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release,
                                     String &errorDetail, StatusCallback callback,
@@ -357,13 +226,15 @@ bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release
   const String body = readBodyLimited(http, kMaxReleaseJsonBytes);
   http.end();
 
-  if (!extractJsonStringValue(body, "tag_name", 0, release.tagName) || release.tagName.isEmpty()) {
+  releaseparser::ReleaseInfo parsed;
+  if (!releaseparser::parse(body, config.assetName, parsed)) {
     errorDetail = "Release tag missing";
     return false;
   }
+  release.tagName = parsed.tagName;
+  release.assetUrl = parsed.assetUrl;
 
-  if (!extractAssetDownloadUrl(body, config.assetName, release.assetUrl) ||
-      release.assetUrl.isEmpty()) {
+  if (release.assetUrl.isEmpty()) {
     errorDetail = config.assetName + " missing";
     return false;
   }
@@ -430,6 +301,14 @@ OtaUpdater::Result OtaUpdater::checkOnly(const Config &config, StatusCallback ca
   Result result;
   result.currentVersion = currentVersion();
 
+  String assetCompatibilityError;
+  if (!assetNameLooksCompatibleWithBoard(config.assetName, assetCompatibilityError)) {
+    result.code = ResultCode::AssetMismatch;
+    result.summary = "Wrong OTA asset";
+    result.detail = assetCompatibilityError;
+    return result;
+  }
+
   if (!isConfigured(config)) {
     result.code = ResultCode::NotConfigured;
     result.summary = "Wi-Fi not set";
@@ -481,6 +360,14 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallb
                                                void *context) const {
   Result result;
   result.currentVersion = currentVersion();
+
+  String assetCompatibilityError;
+  if (!assetNameLooksCompatibleWithBoard(config.assetName, assetCompatibilityError)) {
+    result.code = ResultCode::AssetMismatch;
+    result.summary = "Wrong OTA asset";
+    result.detail = assetCompatibilityError;
+    return result;
+  }
 
   if (!isConfigured(config)) {
     result.code = ResultCode::NotConfigured;

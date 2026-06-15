@@ -6,7 +6,9 @@
 wifi_ssid=YourWiFiName
 wifi_password=YourWiFiPassword
 
-# Optional. Defaults point at the main RSVP Nano repo.
+# Optional. Defaults point at the main RSVP Nano repo, and each board now chooses
+# its own OTA asset automatically. You should not usually need to override
+# `asset_name` unless you are testing a custom release channel.
 # github_owner=ionutdecebal
 # github_repo=rsvpnano
 # asset_name=rsvp-nano-ota.bin

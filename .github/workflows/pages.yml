@@ -8,48 +8,65 @@ on:
     types: [published]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
-  group: pages
+  group: pages-${{ github.repository }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Check and build web converter
+        run: bash ./gradlew checkWeb --no-daemon
 
       - name: Download latest release firmware
+        if: github.repository == 'ionutdecebal/rsvpnano'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python tools/fetch_release_firmware.py --repo "${{ github.repository }}"
 
+      - name: Configure GitHub Pages
+        if: github.repository == 'ionutdecebal/rsvpnano'
+        uses: actions/configure-pages@v5
+
       - name: Upload GitHub Pages artifact
+        if: github.repository == 'ionutdecebal/rsvpnano'
         uses: actions/upload-pages-artifact@v3
         with:
           path: web
 
   deploy:
-    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    if: github.repository == 'ionutdecebal/rsvpnano' && (github.ref == 'refs/heads/main' || github.event_name == 'release' || github.event_name == 'workflow_dispatch')
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
-    runs-on: ubuntu-latest
+
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

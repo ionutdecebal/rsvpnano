@@ -1,0 +1,11 @@
+@rsvp 1
+@title Basic Text Vector
+@source basic-text-input.txt
+
+@chapter Chapter 1
+Hello reader.
+
+@chapter Chapter 2
+
+@para
+@@directive-looking text stays readable.

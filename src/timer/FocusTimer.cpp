@@ -7,7 +7,6 @@
 
 namespace {
 
-constexpr uint8_t kImuAddress = 0x6B;
 constexpr uint8_t kImuWhoAmIReg = 0x00;
 constexpr uint8_t kImuCtrl1Reg = 0x02;
 constexpr uint8_t kImuCtrl2Reg = 0x03;
@@ -27,26 +26,23 @@ constexpr uint32_t kPostTimerFlipGraceMs = 900;
 constexpr uint32_t kFeedbackMs = 900;
 constexpr uint32_t kWorkDurationMs = 20UL * 60UL * 1000UL;
 constexpr uint32_t kBreakDurationMs = 5UL * 60UL * 1000UL;
-
 constexpr uint32_t kTouchDurations[] = {
-    2UL * 60UL * 1000UL,
-    5UL * 60UL * 1000UL,
-    10UL * 60UL * 1000UL,
-    15UL * 60UL * 1000UL,
-    20UL * 60UL * 1000UL,
-    25UL * 60UL * 1000UL,
-    30UL * 60UL * 1000UL,
-    35UL * 60UL * 1000UL,
-    40UL * 60UL * 1000UL,
-    45UL * 60UL * 1000UL,
-    50UL * 60UL * 1000UL,
-    60UL * 60UL * 1000UL,
+    2UL * 60UL * 1000UL,  5UL * 60UL * 1000UL,  10UL * 60UL * 1000UL,
+    15UL * 60UL * 1000UL, 20UL * 60UL * 1000UL, 25UL * 60UL * 1000UL,
+    30UL * 60UL * 1000UL, 35UL * 60UL * 1000UL, 40UL * 60UL * 1000UL,
+    45UL * 60UL * 1000UL, 50UL * 60UL * 1000UL, 60UL * 60UL * 1000UL,
 };
 constexpr size_t kTouchDurationCount = sizeof(kTouchDurations) / sizeof(kTouchDurations[0]);
 
 constexpr float kSideAxisThreshold = 0.78f;
 constexpr float kCrossAxisLimit = 0.42f;
 constexpr float kFlatAxisThreshold = 0.84f;
+
+TwoWire &imuWire() { return Board::Config::IMU_USES_WIRE1 ? Wire1 : Wire; }
+
+const char *imuWireName() { return Board::Config::IMU_USES_WIRE1 ? "Wire1" : "Wire"; }
+
+constexpr bool kReleaseBusBeforeImuRead = Board::Config::IMU_RELEASE_BUS_BEFORE_READ;
 
 }  // namespace
 
@@ -75,7 +71,7 @@ void FocusTimer::update(uint32_t nowMs) {
 
     case State::WaitForTouchStart:
       if (orientationInputArmed(nowMs) && isShortSide(stableOrientation_)) {
-        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationByGenre_[genreIdx()]], stableOrientation_);
+        startMode(TimerMode::Touch, nowMs, selectedTouchDurationMs(), stableOrientation_);
         transitionTo(State::TouchRunning, nowMs);
       }
       break;
@@ -87,7 +83,7 @@ void FocusTimer::update(uint32_t nowMs) {
         transitionTo(State::WaitAfterTouch, nowMs);
       } else if (isShortSide(stableOrientation_) &&
                  stableOrientation_ == oppositeShortSide(lastShortSide_)) {
-        startMode(TimerMode::Touch, nowMs, kTouchDurations[touchDurationByGenre_[genreIdx()]], stableOrientation_);
+        startMode(TimerMode::Touch, nowMs, selectedTouchDurationMs(), stableOrientation_);
         resetOrientationStability();
       }
       break;
@@ -195,12 +191,12 @@ FocusTimer::State FocusTimer::state() const { return state_; }
 
 FocusTimer::Genre FocusTimer::genre() const { return genre_; }
 
-BoardConfig::UiOrientation FocusTimer::uiOrientation() const {
+Board::Config::UiOrientation FocusTimer::uiOrientation() const {
   switch (state_) {
     case State::GenreSelect:
     case State::Unavailable:
     case State::Complete:
-      return BoardConfig::UiOrientation::Landscape;
+      return Board::Config::UiOrientation::Landscape;
 
     case State::WaitForTouchStart:
     case State::TouchRunning:
@@ -214,10 +210,10 @@ BoardConfig::UiOrientation FocusTimer::uiOrientation() const {
 
     case State::BreakRunning:
     case State::WaitAfterWork:
-      return BoardConfig::UiOrientation::Landscape;
+      return Board::Config::UiOrientation::Landscape;
 
     default:
-      return BoardConfig::UiOrientation::Portrait;
+      return Board::Config::UiOrientation::Portrait;
   }
 }
 
@@ -253,40 +249,40 @@ bool FocusTimer::consumeCompletionCue() {
 }
 
 void FocusTimer::cycleTouchDuration() {
-  uint8_t &idx = touchDurationByGenre_[genreIdx()];
-  idx = static_cast<uint8_t>((idx + 1) % kTouchDurationCount);
+  uint8_t &index = touchDurationByGenre_[genreIdx()];
+  index = static_cast<uint8_t>((index + 1) % kTouchDurationCount);
 }
 
 void FocusTimer::stepTouchDuration(int direction) {
-  uint8_t &idx = touchDurationByGenre_[genreIdx()];
-  if (direction > 0 && idx < kTouchDurationCount - 1) {
-    ++idx;
-  } else if (direction < 0 && idx > 0) {
-    --idx;
+  uint8_t &index = touchDurationByGenre_[genreIdx()];
+  if (direction > 0 && index < kTouchDurationCount - 1) {
+    ++index;
+  } else if (direction < 0 && index > 0) {
+    --index;
   }
 }
 
 void FocusTimer::setTouchDurationIndexForGenre(Genre genre, uint8_t index) {
-  const uint8_t g = static_cast<uint8_t>(genre);
-  if (g < kGenreCount && index < kTouchDurationCount) {
-    touchDurationByGenre_[g] = index;
+  const uint8_t genreIndex = static_cast<uint8_t>(genre);
+  if (genreIndex < kGenreCount && index < kTouchDurationCount) {
+    touchDurationByGenre_[genreIndex] = index;
   }
 }
 
-uint8_t FocusTimer::touchDurationIndexForGenre(Genre genre) const {
-  const uint8_t g = static_cast<uint8_t>(genre);
-  return g < kGenreCount ? touchDurationByGenre_[g] : 0;
-}
-
 uint8_t FocusTimer::touchDurationIndex() const { return touchDurationByGenre_[genreIdx()]; }
+
+uint8_t FocusTimer::touchDurationIndexForGenre(Genre genre) const {
+  const uint8_t genreIndex = static_cast<uint8_t>(genre);
+  return genreIndex < kGenreCount ? touchDurationByGenre_[genreIndex] : 0;
+}
 
 uint32_t FocusTimer::selectedTouchDurationMs() const {
   return kTouchDurations[touchDurationByGenre_[genreIdx()]];
 }
 
 uint8_t FocusTimer::genreIdx() const {
-  const uint8_t idx = static_cast<uint8_t>(genre_);
-  return idx < kGenreCount ? idx : 0;
+  const uint8_t index = static_cast<uint8_t>(genre_);
+  return index < kGenreCount ? index : 0;
 }
 
 const char *FocusTimer::genreLabel(Genre genre) {
@@ -308,79 +304,139 @@ const char *FocusTimer::genreLabel(Genre genre) {
 }
 
 bool FocusTimer::initImu() {
+  if (!Board::Config::HAS_IMU) {
+    imuAvailable_ = false;
+    Serial.println("[timer] IMU unavailable for this board profile");
+    return false;
+  }
+
   if (imuAvailable_) {
     return true;
   }
 
-  Wire1.beginTransmission(kImuAddress);
-  if (Wire1.endTransmission(true) != 0) {
-    imuAvailable_ = false;
-    return false;
-  }
+  const uint8_t candidateAddresses[] = {
+      Board::Config::IMU_I2C_ADDRESS,
+      0x6B,
+      0x6A,
+  };
+  bool sawRespondingAddress = false;
 
-  if (!writeRegister(kImuResetReg, kImuResetValue)) {
-    imuAvailable_ = false;
-    return false;
-  }
-
-  const uint32_t waitStartedMs = millis();
-  uint8_t resetResult = 0;
-  bool resetReady = false;
-  while (millis() - waitStartedMs < 500) {
-    if (readRegister(kImuResetResultReg, resetResult) &&
-        resetResult == kImuResetResultValue) {
-      resetReady = true;
-      break;
+  for (uint8_t i = 0; i < sizeof(candidateAddresses); ++i) {
+    const uint8_t candidateAddress = candidateAddresses[i];
+    bool alreadyTried = false;
+    for (uint8_t j = 0; j < i; ++j) {
+      if (candidateAddresses[j] == candidateAddress) {
+        alreadyTried = true;
+        break;
+      }
     }
-    delay(10);
+    if (alreadyTried) {
+      continue;
+    }
+
+    if (!probeImuAddress(candidateAddress)) {
+      continue;
+    }
+    sawRespondingAddress = true;
+    imuAddress_ = candidateAddress;
+
+    uint8_t whoAmI = 0;
+    if (!readRegister(kImuWhoAmIReg, whoAmI) || whoAmI != kImuWhoAmIValue) {
+      Serial.printf("[timer] QMI8658 WHOAMI mismatch addr=0x%02X got=0x%02X expected=0x%02X\n",
+                    candidateAddress, whoAmI, kImuWhoAmIValue);
+      continue;
+    }
+
+    if (!writeRegister(kImuResetReg, kImuResetValue)) {
+      Serial.printf("[timer] QMI8658 reset command failed addr=0x%02X\n", candidateAddress);
+      continue;
+    }
+
+    const uint32_t waitStartedMs = millis();
+    uint8_t resetResult = 0;
+    bool resetReady = false;
+    while (millis() - waitStartedMs < 500) {
+      if (readRegister(kImuResetResultReg, resetResult) &&
+          resetResult == kImuResetResultValue) {
+        resetReady = true;
+        break;
+      }
+      delay(10);
+    }
+
+    if (!resetReady) {
+      Serial.printf("[timer] QMI8658 reset timeout addr=0x%02X last=0x%02X\n",
+                    candidateAddress, resetResult);
+      continue;
+    }
+
+    whoAmI = 0;
+    if (!readRegister(kImuWhoAmIReg, whoAmI) || whoAmI != kImuWhoAmIValue) {
+      Serial.printf("[timer] QMI8658 WHOAMI mismatch after reset addr=0x%02X got=0x%02X "
+                    "expected=0x%02X\n",
+                    candidateAddress, whoAmI, kImuWhoAmIValue);
+      continue;
+    }
+
+    if (!updateRegister(kImuCtrl1Reg, 0x40, 0x40) ||
+        !writeRegister(kImuCtrl8Reg, 0x80) ||
+        !writeRegister(kImuCtrl2Reg, 0x16) ||
+        !updateRegister(kImuCtrl5Reg, 0x07, 0x07) ||
+        !updateRegister(kImuCtrl7Reg, 0x01, 0x01)) {
+      Serial.printf("[timer] QMI8658 configuration failed addr=0x%02X\n", candidateAddress);
+      continue;
+    }
+
+    accelScale_ = 4.0f / 32768.0f;
+    resetOrientationStability();
+    imuAvailable_ = true;
+    Serial.printf("[timer] QMI8658 initialized addr=0x%02X bus=%s\n", imuAddress_,
+                  imuWireName());
+    return true;
   }
 
-  if (!resetReady) {
-    imuAvailable_ = false;
-    return false;
+  imuAvailable_ = false;
+  if (sawRespondingAddress) {
+    Serial.printf("[timer] QMI8658 init failed bus=%s configured=0x%02X\n", imuWireName(),
+                  Board::Config::IMU_I2C_ADDRESS);
+  } else {
+    Serial.printf("[timer] QMI8658 not responding bus=%s configured=0x%02X fallback=0x6A\n",
+                  imuWireName(), Board::Config::IMU_I2C_ADDRESS);
   }
+  return false;
+}
 
-  uint8_t whoAmI = 0;
-  if (!readRegister(kImuWhoAmIReg, whoAmI) || whoAmI != kImuWhoAmIValue) {
-    imuAvailable_ = false;
-    return false;
-  }
-
-  if (!updateRegister(kImuCtrl1Reg, 0x40, 0x40) ||
-      !writeRegister(kImuCtrl8Reg, 0x80) ||
-      !writeRegister(kImuCtrl2Reg, 0x16) ||
-      !updateRegister(kImuCtrl5Reg, 0x07, 0x07) ||
-      !updateRegister(kImuCtrl7Reg, 0x01, 0x01)) {
-    imuAvailable_ = false;
-    return false;
-  }
-
-  accelScale_ = 4.0f / 32768.0f;
-  resetOrientationStability();
-  imuAvailable_ = true;
-  return true;
+bool FocusTimer::probeImuAddress(uint8_t address) {
+  TwoWire &wire = imuWire();
+  wire.beginTransmission(address);
+  return wire.endTransmission(true) == 0;
 }
 
 bool FocusTimer::readRegister(uint8_t reg, uint8_t &value) {
-  Wire1.beginTransmission(kImuAddress);
-  Wire1.write(reg);
-  if (Wire1.endTransmission(false) != 0) {
+  TwoWire &wire = imuWire();
+  wire.beginTransmission(imuAddress_);
+  wire.write(reg);
+  if (wire.endTransmission(kReleaseBusBeforeImuRead) != 0) {
+    return false;
+  }
+  if (kReleaseBusBeforeImuRead) {
+    delayMicroseconds(50);
+  }
+
+  if (wire.requestFrom(static_cast<int>(imuAddress_), 1, 1) != 1) {
     return false;
   }
 
-  if (Wire1.requestFrom(static_cast<int>(kImuAddress), 1, 1) != 1) {
-    return false;
-  }
-
-  value = Wire1.read();
+  value = wire.read();
   return true;
 }
 
 bool FocusTimer::writeRegister(uint8_t reg, uint8_t value) {
-  Wire1.beginTransmission(kImuAddress);
-  Wire1.write(reg);
-  Wire1.write(value);
-  return Wire1.endTransmission(true) == 0;
+  TwoWire &wire = imuWire();
+  wire.beginTransmission(imuAddress_);
+  wire.write(reg);
+  wire.write(value);
+  return wire.endTransmission(true) == 0;
 }
 
 bool FocusTimer::readRegisters(uint8_t startReg, uint8_t *buffer, size_t len) {
@@ -388,19 +444,23 @@ bool FocusTimer::readRegisters(uint8_t startReg, uint8_t *buffer, size_t len) {
     return false;
   }
 
-  Wire1.beginTransmission(kImuAddress);
-  Wire1.write(startReg);
-  if (Wire1.endTransmission(false) != 0) {
+  TwoWire &wire = imuWire();
+  wire.beginTransmission(imuAddress_);
+  wire.write(startReg);
+  if (wire.endTransmission(kReleaseBusBeforeImuRead) != 0) {
     return false;
   }
+  if (kReleaseBusBeforeImuRead) {
+    delayMicroseconds(50);
+  }
 
-  if (Wire1.requestFrom(static_cast<int>(kImuAddress), static_cast<int>(len), 1) !=
+  if (wire.requestFrom(static_cast<int>(imuAddress_), static_cast<int>(len), 1) !=
       static_cast<int>(len)) {
     return false;
   }
 
   for (size_t i = 0; i < len; ++i) {
-    buffer[i] = Wire1.read();
+    buffer[i] = wire.read();
   }
   return true;
 }
@@ -518,7 +578,7 @@ void FocusTimer::clearSession() {
   completedTouchBlocks_ = 0;
   completedWorkBlocks_ = 0;
   completedBreakBlocks_ = 0;
-  // touchDurationByGenre_ is intentionally preserved across sessions
+  // Duration choices are user preferences and intentionally survive sessions.
 }
 
 void FocusTimer::startMode(TimerMode mode, uint32_t nowMs, uint32_t durationMs,
@@ -592,8 +652,8 @@ FocusTimer::OrientationState FocusTimer::oppositeShortSide(
   }
 }
 
-BoardConfig::UiOrientation FocusTimer::portraitOrientationForShortSide(
+Board::Config::UiOrientation FocusTimer::portraitOrientationForShortSide(
     OrientationState orientation) {
-  return orientation == OrientationState::ShortSideB ? BoardConfig::UiOrientation::PortraitFlipped
-                                                     : BoardConfig::UiOrientation::Portrait;
+  return orientation == OrientationState::ShortSideB ? Board::Config::UiOrientation::PortraitFlipped
+                                                     : Board::Config::UiOrientation::Portrait;
 }

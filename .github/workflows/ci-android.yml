@@ -1,0 +1,63 @@
+name: CI - Android
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    paths:
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradlew'
+      - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
+      - 'RSVPNanoCompanion/shared/**'
+      - 'RSVPNanoCompanion/androidApp/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradlew'
+      - 'gradle/wrapper/**'
+      - 'RSVPNanoCompanion/conversionCore/**'
+      - 'RSVPNanoCompanion/shared/**'
+      - 'RSVPNanoCompanion/androidApp/**'
+      - '.github/workflows/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Run Android checks
+        run: bash ./gradlew checkAndroid --no-daemon
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+      - name: Upload shared artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: RSVPNanoCompanion/androidApp/build/outputs/apk/release/*.apk
+          if-no-files-found: error

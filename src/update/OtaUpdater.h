@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "board/BoardConfig.h"
+
 class OtaUpdater {
  public:
   using StatusCallback = void (*)(void *context, const char *title, const char *line1,
@@ -12,7 +14,7 @@ class OtaUpdater {
     String wifiPassword;
     String githubOwner = "giovannimazza";
     String githubRepo = "rsvpnano";
-    String assetName = "rsvp-nano-ota.bin";
+    String assetName = Board::Config::OTA_ASSET_NAME;
     bool autoCheck = false;
   };
 
@@ -24,6 +26,7 @@ class OtaUpdater {
     ConnectFailed,
     MetadataFailed,
     AssetMissing,
+    AssetMismatch,
     InstallFailed,
   };
 
