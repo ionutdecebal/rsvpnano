@@ -2,7 +2,7 @@
 
 RSVP Nano is an open-source ESP32-S3 reading device that shows text one word at a time using RSVP, Rapid Serial Visual Presentation. It is designed for small screens, SD card libraries, fast reading, and a simple browser-first workflow for converting and uploading books.
 
-This README is written for the current release, `v0.0.7`.
+This README is written for the current release, `v0.0.8`.
 
 ## What You Need
 
@@ -56,9 +56,10 @@ option instead; it uses the alternate GPIO42 backlight profile.
 For Waveshare Touch AMOLED 1.8 boards, choose the V1 option for SH8601 display / FT3168 touch
 hardware. Choose the V2 Test option only for newer CO5300 display / CST816 touch hardware.
 
-The hosted flasher installs the latest published GitHub Release. For `v0.0.7`, that means the
+The hosted flasher installs the latest published GitHub Release. For `v0.0.8`, that means the
 release build includes the firmware, SD card, RSS, companion sync, USB transfer, quick settings,
-browser flasher, menu, input, battery, display, multi-board, and compact timer work described below.
+browser flasher, menu, input, battery, display, multi-board, compact timer, and one-handed reader
+control work described below.
 
 Make sure your USB cable is a data cable.
 
@@ -78,7 +79,7 @@ Create these folders on the card:
 /config
 ```
 
-Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.7`.
+Books go in `/books/books`. Articles go in `/books/articles`. Older libraries with files directly inside `/books` are still read for compatibility, but the split folders are the recommended layout for `v0.0.8`.
 
 If the device cannot see the SD card, the most common causes are:
 
@@ -188,7 +189,7 @@ You can set Wi-Fi credentials from:
 RSS feeds are managed from the web companion or the native app, then checked from the device with
 `Articles -> Update RSS`. New articles are saved into `/books/articles`.
 
-RSS support in `v0.0.7` includes:
+RSS support in `v0.0.8` includes:
 
 - RSS and Atom feed parsing.
 - Redirect handling for common `301`, `302`, `303`, `307`, and `308` responses.
@@ -196,6 +197,8 @@ RSS support in `v0.0.7` includes:
 - Duplicate skipping.
 - Feed item author, creator, or website name used as the article source.
 - Larger feed downloads than earlier test builds.
+- Better handling for feeds that send usable complete items before timing out.
+- Longer full-text article bodies before on-device truncation.
 
 Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
 
@@ -403,7 +406,7 @@ If the old folder layout needs repair, the device now asks before changing the c
 
 ## Character Support
 
-`v0.0.7` includes the long-book and unsupported-character improvements from earlier releases. Common punctuation is normalized, ellipses and hyphenated sentence breaks are handled more carefully, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
+`v0.0.8` includes the long-book and unsupported-character improvements from earlier releases. Common punctuation is normalized, ellipses and hyphenated sentence breaks are handled more carefully, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
 
 The current renderer is best for English and European Latin-script languages. Complex scripts still need additional font and shaping work.
 
@@ -469,7 +472,7 @@ Open the Xcode project from that folder when installing the app locally.
 To export browser-flasher and OTA firmware assets for a release:
 
 ```bash
-python3 tools/export_web_firmware.py --version v0.0.7
+python3 tools/export_web_firmware.py --version v0.0.8
 ```
 
 That writes:
@@ -499,7 +502,20 @@ web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
 
 ## Project Status
 
-`v0.0.7` focuses on multi-board release polish and the fixes found during hardware testing:
+`v0.0.8` focuses on reader touch ergonomics and more resilient RSS downloads:
+
+- Restricts top and bottom edge menu swipe areas toward the middle of the display so WPM changes are
+  less likely to open menus by mistake.
+- Adds right-swipe Back navigation throughout menus, including text entry.
+- Adds a Reader controls setting that can put rewind in the top-right corner for one-handed use,
+  while moving the battery label to the top-left.
+- Exposes the Reader controls setting on device, in the device-hosted web companion, and in the
+  shared native companion app.
+- Raises RSS feed and article size limits for longer full-text feeds.
+- Accepts usable partial RSS or Atom downloads when complete items arrive before a slow feed times
+  out.
+
+`v0.0.7` focused on multi-board release polish and the fixes found during hardware testing:
 
 - Adds the Waveshare Touch AMOLED 1.8 V2 Test firmware target for newer CO5300 display / CST816
   touch hardware.
