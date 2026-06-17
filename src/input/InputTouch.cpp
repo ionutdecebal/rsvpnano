@@ -20,7 +20,9 @@ struct TouchState {
   uint8_t consecutiveReadFailures = 0;
   uint8_t emptySamples = 0;
   bool active = false;
-  Board::Config::UiOrientation uiOrientation = Board::Config::DEFAULT_UI_ORIENTATION;
+  Board::Config::UiOrientation uiOrientation =
+      Board::Config::PANEL_FLIP_180 ? Board::Config::ROTATED_UI_ORIENTATION
+                                    : Board::Config::DEFAULT_UI_ORIENTATION;
   uint16_t lastX = 0;
   uint16_t lastY = 0;
 };
