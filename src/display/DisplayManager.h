@@ -203,7 +203,11 @@ class DisplayManager {
   bool darkMode_ = true;
   bool nightMode_ = false;
   bool yellowMode_ = false;
-  Board::Config::UiOrientation uiOrientation_ = Board::Config::DEFAULT_UI_ORIENTATION;
+  // When PANEL_FLIP_180 is true the display must start in the flipped orientation so that
+  // it matches applyUiOrientation's display-vs-touch split from the first rendered frame.
+  Board::Config::UiOrientation uiOrientation_ =
+      Board::Config::PANEL_FLIP_180 ? Board::Config::ROTATED_UI_ORIENTATION
+                                    : Board::Config::DEFAULT_UI_ORIENTATION;
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;

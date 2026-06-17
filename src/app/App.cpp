@@ -7054,7 +7054,18 @@ bool App::isFocusTimerMenuScreen(MenuScreen screen) const {
 
 void App::applyUiOrientation(Board::Config::UiOrientation orientation) {
   Input::Touch::setUiOrientation(orientation);
-  display_.setUiOrientation(orientation);
+  // When PANEL_FLIP_180 is set, the display panel is physically mounted inverted. Apply
+  // the opposite display orientation so the rendered image appears correct to the user,
+  // while touch orientation stays untouched (already set above) for correct swipe mapping.
+  Board::Config::UiOrientation displayOrientation;
+  if constexpr (Board::Config::PANEL_FLIP_180) {
+    displayOrientation = (orientation == Board::Config::UiOrientation::Landscape)
+                             ? Board::Config::UiOrientation::LandscapeFlipped
+                             : Board::Config::UiOrientation::Landscape;
+  } else {
+    displayOrientation = orientation;
+  }
+  display_.setUiOrientation(displayOrientation);
 }
 
 void App::applyReaderUiOrientation() {
