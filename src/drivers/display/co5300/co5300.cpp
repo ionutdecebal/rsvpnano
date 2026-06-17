@@ -28,7 +28,10 @@ struct LcdCommand {
 
 // Keep the panel memory in its native orientation and let the shared mapping layer handle the
 // landscape transform, just like the stabilized 2.41 port.
-constexpr uint8_t kDefaultMadctl = Board::Config::UI_ROTATED_180 ? 0xC0 : 0x00;
+// PANEL_FLIP_180 controls the hardware MADCTL flip independently of the software UI orientation,
+// so that boards with physically inverted displays can flip the panel without affecting input
+// coordinate mapping.
+constexpr uint8_t kDefaultMadctl = Board::Config::PANEL_FLIP_180 ? 0xC0 : 0x00;
 constexpr LcdCommand kQspiInit[] = {
     {0x11, {0x00}, 0, 120},
     {0xFE, {0x20}, 1, 0},

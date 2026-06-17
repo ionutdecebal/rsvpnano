@@ -83,6 +83,7 @@ constexpr uint32_t PMU_BOOT_BUTTON_IGNORE_MS = 1200;
 // rounds transfers down to whole rows to avoid fixed seam artifacts.
 constexpr size_t DISPLAY_TX_CHUNK_BYTES = 32 * 1024;
 constexpr bool UI_ROTATED_180 = false;
+constexpr bool PANEL_FLIP_180 = false;
 constexpr UiOrientation DEFAULT_UI_ORIENTATION =
     UI_ROTATED_180 ? UiOrientation::LandscapeFlipped : UiOrientation::Landscape;
 constexpr UiOrientation ROTATED_UI_ORIENTATION =
