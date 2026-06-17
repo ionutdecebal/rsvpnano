@@ -80,7 +80,7 @@ constexpr uint8_t PMU_POWER_KEY_ON_TIME_VALUE = 0x00;   // 128 ms press to power
 constexpr uint8_t PMU_POWER_KEY_OFF_TIME_VALUE = 0x01;  // 6 second PMU fallback power off
 constexpr uint32_t PMU_BOOT_BUTTON_IGNORE_MS = 4000;
 constexpr size_t DISPLAY_TX_CHUNK_BYTES = 32 * 1024;
-constexpr bool UI_ROTATED_180 = true;
+constexpr bool UI_ROTATED_180 = false;
 constexpr UiOrientation DEFAULT_UI_ORIENTATION =
     UI_ROTATED_180 ? UiOrientation::LandscapeFlipped : UiOrientation::Landscape;
 constexpr UiOrientation ROTATED_UI_ORIENTATION =
