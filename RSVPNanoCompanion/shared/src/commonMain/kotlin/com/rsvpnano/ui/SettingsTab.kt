@@ -275,6 +275,16 @@ fun SettingsTab(
                             onSelected = { hand -> onUpdateSettings { it.withHandedness(hand) } },
                         )
                         ChoiceRow(
+                            label = "Reader controls",
+                            selected = settings.display.readerControls,
+                            options = listOf(
+                                NanoSettingsSchema.READER_CONTROLS_STANDARD to "Standard",
+                                NanoSettingsSchema.READER_CONTROLS_REWIND_TOP_RIGHT to
+                                    "Rewind top-right",
+                            ),
+                            onSelected = { layout -> onUpdateSettings { it.withReaderControls(layout) } },
+                        )
+                        ChoiceRow(
                             label = "Footer label",
                             selected = settings.display.footerMetric,
                             options = listOf(

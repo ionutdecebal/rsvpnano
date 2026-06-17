@@ -8,6 +8,8 @@
 // to unit test on the host with the Arduino String shim.
 namespace feedparser {
 
+constexpr size_t kMaxArticleChars = 512UL * 1024UL;
+
 struct FeedItem {
   String title;
   String link;

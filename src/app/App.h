@@ -204,6 +204,7 @@ class App {
   void cycleUiLanguage(uint32_t nowMs);
   void cycleReaderMode(uint32_t nowMs);
   void cycleHandednessMode(uint32_t nowMs);
+  void toggleReaderControlsLayout(uint32_t nowMs);
   void togglePhantomWords(uint32_t nowMs);
   void cycleReaderFontSize(uint32_t nowMs);
   void applyDisplayPreferences(uint32_t nowMs, bool rerender = true);
@@ -244,6 +245,7 @@ class App {
   void renderContextBrowsePreview(size_t currentIndex, uint16_t scrollProgressPermille);
   void applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs);
   void applyFocusTimerTouch(const TouchEvent &event, uint32_t nowMs);
+  bool navigateBackInMenu(uint32_t nowMs);
   bool moveMenuSelection(int direction, bool wrap);
   void selectMenuItem(uint32_t nowMs);
   bool isSettingsMenuScreen(MenuScreen screen) const;
@@ -310,6 +312,7 @@ class App {
   String readerModeLabel() const;
   String pauseModeLabel() const;
   String handednessLabel() const;
+  String readerControlsLayoutLabel() const;
   String readerFontSizeLabel() const;
   String readerTypefaceLabel() const;
   String typographyTuningLabel() const;
@@ -610,6 +613,7 @@ class App {
   bool readerBatteryVisibleWhilePlaying_ = true;
   bool readerChapterVisibleWhilePlaying_ = false;
   bool readerProgressVisibleWhilePlaying_ = false;
+  bool readerControlsSwapped_ = false;
   bool chapterLabelEnabled_ = true;
   FooterMetricMode footerMetricMode_ = FooterMetricMode::Percentage;
   BatteryLabelMode batteryLabelMode_ = BatteryLabelMode::Percent;

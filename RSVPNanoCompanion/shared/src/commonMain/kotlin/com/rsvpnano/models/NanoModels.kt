@@ -92,6 +92,7 @@ data class NanoSettings(
         val darkMode: Boolean,
         val nightMode: Boolean,
         val handedness: String,
+        val readerControls: String = NanoSettingsSchema.READER_CONTROLS_STANDARD,
         val footerMetric: String,
         val batteryLabel: String,
         val readingBattery: Boolean = true,
@@ -170,6 +171,9 @@ data class NanoSettings(
     fun withHandedness(value: String): NanoSettings =
         copy(display = display.copy(handedness = value))
 
+    fun withReaderControls(value: String): NanoSettings =
+        copy(display = display.copy(readerControls = value))
+
     fun withFooterMetric(value: String): NanoSettings =
         copy(display = display.copy(footerMetric = value))
 
@@ -246,6 +250,8 @@ object NanoSettingsSchema {
     const val APPEARANCE_NIGHT = "night"
     const val HANDEDNESS_LEFT = "left"
     const val HANDEDNESS_RIGHT = "right"
+    const val READER_CONTROLS_STANDARD = "standard"
+    const val READER_CONTROLS_REWIND_TOP_RIGHT = "rewind_top_right"
     const val FOOTER_PERCENTAGE = "percentage"
     const val FOOTER_CHAPTER_TIME = "chapter_time"
     const val FOOTER_BOOK_TIME = "book_time"

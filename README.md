@@ -210,6 +210,7 @@ reader screens, subtle handles at the top and bottom edges hint that those menus
 
 - Swipe down from the top edge: open the main menu.
 - Swipe up from the bottom edge: open quick settings.
+- Swipe right in menus: go back one level, or close the top-level menu.
 - On 3.49 rev1/rev2 and 2.41, `PWR` tap opens or closes the main menu.
 - On 3.49 rev1/rev2 and 2.41, `PWR` hold opens the power-off flow.
 - On 3.49 rev1/rev2 and 2.41, `BOOT` tap toggles play/pause in the reader and acts as Back in menus.
@@ -222,7 +223,7 @@ reader screens, subtle handles at the top and bottom edges hint that those menus
 
 ### Reader Controls
 
-- Tap the far-left edge: rewind to the start of the current sentence, or the previous sentence if you are already at the start.
+- Tap the rewind edge: left by default, or top-right when Reader controls is set to Rewind top-right. Rewinds to the start of the current sentence, or the previous sentence if you are already at the start.
 - Swipe left or right while paused: scrub through nearby text.
 - Tap after scrubbing: return to RSVP view.
 - Hold and move vertically in the scrub preview: browse through surrounding text.
@@ -269,8 +270,9 @@ Settings
 Power off
 ```
 
-Swipe up or down to move through the menu. Tap to select. Submenus keep an on-screen `Back` item at
-the top. On boards where `BOOT` acts as Back, pressing it returns one level or closes the menu.
+Swipe up or down to move through the menu. Tap to select. Swipe right to go back one level or close
+the top-level menu. Submenus keep an on-screen `Back` item at the top. On boards where `BOOT` acts
+as Back, pressing it returns one level or closes the menu.
 
 ### Books And Articles
 
@@ -295,6 +297,7 @@ Settings are grouped by how people actually use the device.
 - Display theme.
 - Brightness.
 - Left/right handed layout.
+- Reader controls layout, including an option to put rewind in the top-right corner.
 - Language.
 - Screen saver: Life, Maze, Voronoi, or Screen off.
 - Standby timer.

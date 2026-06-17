@@ -266,7 +266,8 @@ String readerChromeKey(const DisplayManager::ReaderChrome &chrome) {
   return String(chrome.showBattery ? 1 : 0) + String(chrome.showChapter ? 1 : 0) +
          String(chrome.showProgress ? 1 : 0) +
          String(chrome.showPreviousSentenceHint ? 1 : 0) +
-         String(chrome.showEdgeMenuHints ? 1 : 0);
+         String(chrome.showEdgeMenuHints ? 1 : 0) +
+         String(chrome.swapPreviousSentenceAndBattery ? 1 : 0);
 }
 
 int baseGlyphHeightForTypeface(DisplayManager::ReaderTypeface typeface) {
@@ -1650,12 +1651,24 @@ void DisplayManager::drawBatteryBadge() {
 }
 
 void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight) {
+  drawBatteryBadge(logicalWidth, logicalHeight, ReaderChrome());
+}
+
+void DisplayManager::drawBatteryBadge(const ReaderChrome &chrome) {
+  drawBatteryBadge(kDisplayWidth, kDisplayHeight, chrome);
+}
+
+void DisplayManager::drawBatteryBadge(int logicalWidth, int logicalHeight,
+                                      const ReaderChrome &chrome) {
   if (batteryLabel_.isEmpty()) {
     return;
   }
 
   const int width = measureTinyTextWidth(batteryLabel_, kTinyScale);
-  const int x = std::max(kReaderBatteryMarginX, logicalWidth - kReaderBatteryMarginX - width);
+  const int x =
+      chrome.swapPreviousSentenceAndBattery
+          ? kReaderBatteryMarginX
+          : std::max(kReaderBatteryMarginX, logicalWidth - kReaderBatteryMarginX - width);
   const int y = logicalHeight > (kDisplayHeight * 2) ? kReaderBatteryMarginTop + 8
                                                       : kReaderBatteryMarginTop;
   drawTinyTextAt(batteryLabel_, x, y, footerColor(), kTinyScale);
@@ -1691,8 +1704,14 @@ void DisplayManager::drawBrightnessToastBadge(int logicalWidth, int logicalHeigh
   drawTinyTextAt(brightnessOverlayText_, x + iconSize + iconGap, y, color, kTinyScale);
 }
 
-void DisplayManager::drawPreviousSentenceHint() {
-  drawTinyTextAt("<<", kReaderChromeMarginX, kReaderChromeMarginTop, footerColor(), kTinyScale);
+void DisplayManager::drawPreviousSentenceHint(int logicalWidth, const ReaderChrome &chrome) {
+  const String hint = "<<";
+  const int width = measureTinyTextWidth(hint, kTinyScale);
+  const int x =
+      chrome.swapPreviousSentenceAndBattery
+          ? std::max(kReaderChromeMarginX, logicalWidth - kReaderChromeMarginX - width)
+          : kReaderChromeMarginX;
+  drawTinyTextAt(hint, x, kReaderChromeMarginTop, footerColor(), kTinyScale);
 }
 
 void DisplayManager::drawEdgeMenuHints(int logicalWidth, int logicalHeight,
@@ -2007,11 +2026,11 @@ void DisplayManager::renderRsvpWord(const String &word, const String &chapterLab
                chrome);
   }
   if (chrome.showPreviousSentenceHint) {
-    drawPreviousSentenceHint();
+    drawPreviousSentenceHint(virtualWidth, chrome);
   }
   drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
-    drawBatteryBadge(virtualWidth, virtualHeight);
+    drawBatteryBadge(virtualWidth, virtualHeight, chrome);
   }
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }
@@ -2053,11 +2072,11 @@ void DisplayManager::renderRsvpWordWithWpm(const String &word, uint16_t wpm,
                chrome);
   }
   if (chrome.showPreviousSentenceHint) {
-    drawPreviousSentenceHint();
+    drawPreviousSentenceHint(virtualWidth, chrome);
   }
   drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
-    drawBatteryBadge();
+    drawBatteryBadge(virtualWidth, virtualHeight, chrome);
   }
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }
@@ -2112,11 +2131,11 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
                  chrome);
     }
     if (chrome.showPreviousSentenceHint) {
-      drawPreviousSentenceHint();
+      drawPreviousSentenceHint(virtualWidth, chrome);
     }
     drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (chrome.showBattery) {
-      drawBatteryBadge();
+      drawBatteryBadge(virtualWidth, virtualHeight, chrome);
     }
     flushScaledFrame(scale, virtualWidth, virtualHeight);
     return;
@@ -2158,11 +2177,11 @@ void DisplayManager::renderPhantomRsvpWord(const String &beforeText, const Strin
                chrome);
   }
   if (chrome.showPreviousSentenceHint) {
-    drawPreviousSentenceHint();
+    drawPreviousSentenceHint(virtualWidth, chrome);
   }
   drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
-    drawBatteryBadge();
+    drawBatteryBadge(virtualWidth, virtualHeight, chrome);
   }
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }
@@ -2297,12 +2316,12 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
       drawFooter(chapterLabel, String(progressPercent) + "%", chrome);
     }
     if (chrome.showPreviousSentenceHint) {
-      drawPreviousSentenceHint();
+      drawPreviousSentenceHint(virtualWidth, chrome);
     }
     drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (!canUseBandOnly) {
       if (chrome.showBattery) {
-        drawBatteryBadge();
+        drawBatteryBadge(virtualWidth, virtualHeight, chrome);
       }
       flushScaledFrame(scale, virtualWidth, virtualHeight);
       tickerPlaybackFrameActive_ = !showFooter && overlayText.isEmpty();
@@ -2384,12 +2403,12 @@ void DisplayManager::renderWordTickerView(const std::vector<ContextWord> &words,
     drawFooter(chapterLabel, String(progressPercent) + "%", chrome);
   }
   if (chrome.showPreviousSentenceHint) {
-    drawPreviousSentenceHint();
+    drawPreviousSentenceHint(virtualWidth, chrome);
   }
   drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (!canUseBandOnly) {
     if (chrome.showBattery) {
-      drawBatteryBadge();
+      drawBatteryBadge(virtualWidth, virtualHeight, chrome);
     }
     flushScaledFrame(scale, virtualWidth, virtualHeight);
     tickerPlaybackFrameActive_ = !showFooter && overlayText.isEmpty();
@@ -2556,11 +2575,11 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
                  chrome);
     }
     if (chrome.showPreviousSentenceHint) {
-      drawPreviousSentenceHint();
+      drawPreviousSentenceHint(virtualWidth, chrome);
     }
     drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
     if (chrome.showBattery) {
-      drawBatteryBadge();
+      drawBatteryBadge(virtualWidth, virtualHeight, chrome);
     }
     flushScaledFrame(scale, virtualWidth, virtualHeight);
     return;
@@ -2605,11 +2624,11 @@ void DisplayManager::renderPhantomRsvpWordWithWpm(const String &beforeText, cons
                chrome);
   }
   if (chrome.showPreviousSentenceHint) {
-    drawPreviousSentenceHint();
+    drawPreviousSentenceHint(virtualWidth, chrome);
   }
   drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
-    drawBatteryBadge();
+    drawBatteryBadge(virtualWidth, virtualHeight, chrome);
   }
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }
@@ -2791,11 +2810,11 @@ void DisplayManager::renderScrollView(const std::vector<ContextWord> &words, uin
                                                        : footerStatusLabel,
              chrome);
   if (chrome.showPreviousSentenceHint) {
-    drawPreviousSentenceHint();
+    drawPreviousSentenceHint(virtualWidth, chrome);
   }
   drawEdgeMenuHints(virtualWidth, virtualHeight, chrome);
   if (chrome.showBattery) {
-    drawBatteryBadge();
+    drawBatteryBadge(virtualWidth, virtualHeight, chrome);
   }
   flushScaledFrame(scale, virtualWidth, virtualHeight);
 }

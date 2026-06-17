@@ -46,6 +46,14 @@ inline int directionForDrag(int deltaX, int deltaY, uint16_t swipeThresholdPx,
   return deltaY < 0 ? -1 : 1;
 }
 
+inline bool isRightSwipe(int deltaX, int deltaY, uint16_t swipeThresholdPx,
+                         uint16_t axisBiasPx) {
+  const int absDeltaX = abs(deltaX);
+  const int absDeltaY = abs(deltaY);
+  return deltaX >= static_cast<int>(swipeThresholdPx) &&
+         absDeltaX > absDeltaY + static_cast<int>(axisBiasPx);
+}
+
 inline MoveResult movedIndex(size_t selectedIndex, size_t itemCount, int direction, bool wrap) {
   MoveResult result;
   result.index = selectedIndex;

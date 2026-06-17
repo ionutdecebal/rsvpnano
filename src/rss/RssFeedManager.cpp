@@ -21,11 +21,11 @@ constexpr const char *kConfigPaths[] = {
     "/rss.conf",
 };
 constexpr const char *kStatusTitle = "RSS";
-constexpr uint32_t kFeedTotalTimeoutMs = 30000;
-constexpr uint32_t kFeedIdleTimeoutMs = 5000;
+constexpr uint32_t kFeedRequestTimeoutMs = 30000;
+constexpr uint32_t kFeedTotalTimeoutMs = 90000;
+constexpr uint32_t kFeedIdleTimeoutMs = 15000;
 constexpr uint32_t kFeedProgressIntervalMs = 1000;
-constexpr size_t kMaxFeedBytes = 393216;
-constexpr size_t kMaxArticleChars = 24000;
+constexpr size_t kMaxFeedBytes = 4UL * 1024UL * 1024UL;
 constexpr uint8_t kMaxFeedsPerCheck = 8;
 constexpr uint8_t kMaxItemsPerFeed = 5;
 constexpr uint8_t kMaxArticlesPerCheck = 12;
@@ -373,6 +373,30 @@ bool isRedirectStatus(int statusCode) {
          statusCode == HTTP_CODE_PERMANENT_REDIRECT;
 }
 
+bool hasCompleteFeedCloseTag(const String &body, size_t searchStart = 0) {
+  return indexOfIgnoreCase(body, "</rss>", searchStart, body.length()) >= 0 ||
+         indexOfIgnoreCase(body, "</feed>", searchStart, body.length()) >= 0;
+}
+
+bool advancePastCompleteFeedItem(const String &body, size_t &searchStart) {
+  const int itemStart = indexOfIgnoreCase(body, "<item", searchStart, body.length());
+  const int entryStart = indexOfIgnoreCase(body, "<entry", searchStart, body.length());
+  if (itemStart < 0 && entryStart < 0) {
+    return false;
+  }
+
+  const bool atom = itemStart < 0 || (entryStart >= 0 && entryStart < itemStart);
+  const int blockStart = atom ? entryStart : itemStart;
+  const char *closeTag = atom ? "</entry>" : "</item>";
+  const int blockEnd = indexOfIgnoreCase(body, closeTag, blockStart, body.length());
+  if (blockEnd < 0) {
+    return false;
+  }
+
+  searchStart = static_cast<size_t>(blockEnd + strlen(closeTag));
+  return true;
+}
+
 String friendlyHttpError(int statusCode) {
   switch (statusCode) {
     case HTTPC_ERROR_CONNECTION_REFUSED:
@@ -604,7 +628,7 @@ bool RssFeedManager::fetchUrl(const String &url, String &body, String &error,
     HTTPClient http;
     http.setUserAgent(userAgent());
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-    http.setTimeout(15000);
+    http.setTimeout(kFeedRequestTimeoutMs);
     const char *headers[] = {"Location"};
     http.collectHeaders(headers, 1);
 
@@ -654,6 +678,10 @@ bool RssFeedManager::fetchUrl(const String &url, String &body, String &error,
 
     uint8_t buffer[512];
     size_t totalRead = 0;
+    size_t completeItemSearchStart = 0;
+    uint8_t completeItemsRead = 0;
+    bool stoppedAfterItems = false;
+    bool acceptedPartialFeed = false;
     const int reportedSize = http.getSize();
     const size_t reserveBytes =
         reportedSize > 0 ? std::min(static_cast<size_t>(reportedSize), kMaxFeedBytes) : 8192;
@@ -665,6 +693,13 @@ bool RssFeedManager::fetchUrl(const String &url, String &body, String &error,
     while (http.connected() || stream->available()) {
       const uint32_t nowMs = millis();
       if (nowMs - startedMs > kFeedTotalTimeoutMs) {
+        if (completeItemsRead > 0) {
+          acceptedPartialFeed = true;
+          Serial.printf("[rss] total timeout after usable items url=%s bytes=%u items=%u\n",
+                        currentUrl.c_str(), static_cast<unsigned int>(totalRead),
+                        static_cast<unsigned int>(completeItemsRead));
+          break;
+        }
         error = "Site took too long";
         Serial.printf("[rss] total timeout url=%s bytes=%u\n", currentUrl.c_str(),
                       static_cast<unsigned int>(totalRead));
@@ -672,6 +707,18 @@ bool RssFeedManager::fetchUrl(const String &url, String &body, String &error,
         return false;
       }
       if (nowMs - lastByteMs > kFeedIdleTimeoutMs) {
+        if (completeItemsRead > 0) {
+          acceptedPartialFeed = true;
+          Serial.printf("[rss] idle after usable items url=%s bytes=%u items=%u\n",
+                        currentUrl.c_str(), static_cast<unsigned int>(totalRead),
+                        static_cast<unsigned int>(completeItemsRead));
+          break;
+        }
+        if (totalRead > 0 && hasCompleteFeedCloseTag(body)) {
+          Serial.printf("[rss] idle after complete feed url=%s bytes=%u\n", currentUrl.c_str(),
+                        static_cast<unsigned int>(totalRead));
+          break;
+        }
         error = "Site stopped sending data";
         Serial.printf("[rss] idle timeout url=%s bytes=%u\n", currentUrl.c_str(),
                       static_cast<unsigned int>(totalRead));
@@ -703,9 +750,25 @@ bool RssFeedManager::fetchUrl(const String &url, String &body, String &error,
         break;
       }
       lastByteMs = millis();
+      const size_t previousRead = totalRead;
       totalRead += static_cast<size_t>(bytesRead);
       for (int i = 0; i < bytesRead; ++i) {
         body += static_cast<char>(buffer[i]);
+      }
+      while (completeItemsRead < kMaxItemsPerFeed &&
+             advancePastCompleteFeedItem(body, completeItemSearchStart)) {
+        ++completeItemsRead;
+      }
+      if (completeItemsRead >= kMaxItemsPerFeed) {
+        stoppedAfterItems = true;
+        Serial.printf("[rss] downloaded item limit url=%s bytes=%u items=%u\n",
+                      currentUrl.c_str(), static_cast<unsigned int>(totalRead),
+                      static_cast<unsigned int>(completeItemsRead));
+        break;
+      }
+      const size_t closeSearchStart = previousRead > 16 ? previousRead - 16 : 0;
+      if (hasCompleteFeedCloseTag(body, closeSearchStart)) {
+        break;
       }
     }
     http.end();
@@ -722,6 +785,13 @@ bool RssFeedManager::fetchUrl(const String &url, String &body, String &error,
              "Reached " + String(static_cast<unsigned int>(kMaxFeedBytes / 1024)) + " KB cap",
              20 + feedIndex * 7);
       delay(500);
+    } else if (stoppedAfterItems) {
+      report(callback, context, feedProgressLabel(feedIndex, feedCount),
+             "Downloaded " + String(static_cast<unsigned int>(completeItemsRead)) + " items",
+             20 + feedIndex * 7);
+    } else if (acceptedPartialFeed) {
+      report(callback, context, feedProgressLabel(feedIndex, feedCount),
+             "Downloaded partial feed", 20 + feedIndex * 7);
     } else {
       report(callback, context, feedProgressLabel(feedIndex, feedCount),
              "Downloaded " + String(static_cast<unsigned int>(totalRead / 1024)) + " KB",
@@ -809,8 +879,8 @@ bool RssFeedManager::saveItem(const feedparser::FeedItem &item, Preferences &pre
   file.println();
 
   String body = item.body;
-  if (body.length() > kMaxArticleChars) {
-    body = body.substring(0, kMaxArticleChars);
+  if (body.length() > feedparser::kMaxArticleChars) {
+    body = body.substring(0, feedparser::kMaxArticleChars);
     body += "\n\n[Article truncated on device.]";
   }
   file.println(body);

@@ -34,13 +34,15 @@ class DisplayManager {
           showChapter(true),
           showProgress(true),
           showPreviousSentenceHint(true),
-          showEdgeMenuHints(false) {}
+          showEdgeMenuHints(false),
+          swapPreviousSentenceAndBattery(false) {}
 
     bool showBattery;
     bool showChapter;
     bool showProgress;
     bool showPreviousSentenceHint;
     bool showEdgeMenuHints;
+    bool swapPreviousSentenceAndBattery;
   };
 
   struct LibraryItem {
@@ -174,8 +176,10 @@ class DisplayManager {
                                    int width, int xOffset);
   void drawBatteryBadge();
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
+  void drawBatteryBadge(const ReaderChrome &chrome);
+  void drawBatteryBadge(int logicalWidth, int logicalHeight, const ReaderChrome &chrome);
   void drawBrightnessToastBadge(int logicalWidth, int logicalHeight);
-  void drawPreviousSentenceHint();
+  void drawPreviousSentenceHint(int logicalWidth, const ReaderChrome &chrome);
   void drawEdgeMenuHints(int logicalWidth, int logicalHeight, const ReaderChrome &chrome);
   void drawFooter(const String &chapterLabel, const String &statusLabel,
                   const ReaderChrome &chrome);

@@ -23,6 +23,7 @@ constexpr const char *kPrefYellowMode = "yellow_md";
 constexpr const char *kPrefUiLanguage = "ui_lang";
 constexpr const char *kPrefReaderMode = "read_mode";
 constexpr const char *kPrefHandedness = "handed";
+constexpr const char *kPrefReaderControlsSwapped = "ctrl_swap";
 constexpr const char *kPrefPhantomWords = "phantom_on";
 constexpr const char *kPrefFooterMetricMode = "prog_md";
 constexpr const char *kPrefBatteryLabelMode = "bat_md";

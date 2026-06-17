@@ -62,6 +62,7 @@ class NanoSettingsUpdateHelpersTest {
         val updated = original
             .withBrightnessIndex(4)
             .withHandedness("left")
+            .withReaderControls("rewind_top_right")
             .withFooterMetric("chapter_time")
             .withBatteryLabel("time_remaining")
             .withAppearance(darkMode = true, nightMode = true)
@@ -72,6 +73,7 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(1, original.display.brightnessIndex)
         assertEquals(4, updated.display.brightnessIndex)
         assertEquals("left", updated.display.handedness)
+        assertEquals("rewind_top_right", updated.display.readerControls)
         assertEquals("chapter_time", updated.display.footerMetric)
         assertEquals("time_remaining", updated.display.batteryLabel)
         assertTrue(updated.display.darkMode)

@@ -51,9 +51,10 @@ constexpr uint16_t kReaderChromeBottomMarginPx = Board::Config::READER_CHROME_MA
 constexpr uint16_t kReaderBatteryMarginXPx = Board::Config::READER_BATTERY_MARGIN_X;
 constexpr uint16_t kReaderBatteryTopMarginPx = Board::Config::READER_BATTERY_MARGIN_TOP;
 constexpr uint16_t kMenuSwipeTopZonePx =
-    kReaderChromeTopMarginPx + (Board::Config::ENABLE_TOP_EDGE_MENU_SWIPE ? 64 : 0);
+    kReaderChromeTopMarginPx + (Board::Config::ENABLE_TOP_EDGE_MENU_SWIPE ? 32 : 0);
+constexpr uint16_t kMenuSwipeCenterHalfWidthPx = Board::Config::DISPLAY_WIDTH / 5;
 constexpr uint16_t kQuickSettingsSwipeBottomZonePx =
-    kReaderChromeBottomMarginPx + (Board::Config::ENABLE_BOTTOM_EDGE_QUICK_SETTINGS_SWIPE ? 64 : 0);
+    kReaderChromeBottomMarginPx + (Board::Config::ENABLE_BOTTOM_EDGE_QUICK_SETTINGS_SWIPE ? 32 : 0);
 constexpr uint16_t kMenuSwipeTriggerPx = 72;
 constexpr uint16_t kScrubStepPx = 22;
 constexpr uint16_t kBrowseNeutralZonePx = 14;
@@ -223,29 +224,31 @@ constexpr size_t kSettingsHomeRestructuredSdCardIndex = 8;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
-constexpr size_t kSettingsDisplayChapterLabelIndex = 4;
-constexpr size_t kSettingsDisplayFooterIndex = 5;
-constexpr size_t kSettingsDisplayBatteryIndex = 6;
-constexpr size_t kSettingsDisplayScreensaverIndex = 7;
-constexpr size_t kSettingsDisplayStandbyTimerIndex = 8;
-constexpr size_t kSettingsDisplayReaderBatteryIndex = 9;
-constexpr size_t kSettingsDisplayReaderChapterIndex = 10;
-constexpr size_t kSettingsDisplayReaderProgressIndex = 11;
-constexpr size_t kSettingsDisplayLanguageIndex = 12;
-constexpr size_t kSettingsDisplayMenuRepeatIndex = 13;
+constexpr size_t kSettingsDisplayReaderControlsIndex = 4;
+constexpr size_t kSettingsDisplayChapterLabelIndex = 5;
+constexpr size_t kSettingsDisplayFooterIndex = 6;
+constexpr size_t kSettingsDisplayBatteryIndex = 7;
+constexpr size_t kSettingsDisplayScreensaverIndex = 8;
+constexpr size_t kSettingsDisplayStandbyTimerIndex = 9;
+constexpr size_t kSettingsDisplayReaderBatteryIndex = 10;
+constexpr size_t kSettingsDisplayReaderChapterIndex = 11;
+constexpr size_t kSettingsDisplayReaderProgressIndex = 12;
+constexpr size_t kSettingsDisplayLanguageIndex = 13;
+constexpr size_t kSettingsDisplayMenuRepeatIndex = 14;
 constexpr size_t kSettingsDisplayRestructuredThemeIndex = 1;
 constexpr size_t kSettingsDisplayRestructuredBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayRestructuredHandednessIndex = 3;
-constexpr size_t kSettingsDisplayRestructuredLanguageIndex = 4;
-constexpr size_t kSettingsDisplayRestructuredScreensaverIndex = 5;
-constexpr size_t kSettingsDisplayRestructuredStandbyTimerIndex = 6;
-constexpr size_t kSettingsDisplayRestructuredChapterLabelIndex = 7;
-constexpr size_t kSettingsDisplayRestructuredFooterIndex = 8;
-constexpr size_t kSettingsDisplayRestructuredBatteryIndex = 9;
-constexpr size_t kSettingsDisplayRestructuredReaderBatteryIndex = 10;
-constexpr size_t kSettingsDisplayRestructuredReaderChapterIndex = 11;
-constexpr size_t kSettingsDisplayRestructuredReaderProgressIndex = 12;
-constexpr size_t kSettingsDisplayRestructuredMenuRepeatIndex = 13;
+constexpr size_t kSettingsDisplayRestructuredReaderControlsIndex = 4;
+constexpr size_t kSettingsDisplayRestructuredLanguageIndex = 5;
+constexpr size_t kSettingsDisplayRestructuredScreensaverIndex = 6;
+constexpr size_t kSettingsDisplayRestructuredStandbyTimerIndex = 7;
+constexpr size_t kSettingsDisplayRestructuredChapterLabelIndex = 8;
+constexpr size_t kSettingsDisplayRestructuredFooterIndex = 9;
+constexpr size_t kSettingsDisplayRestructuredBatteryIndex = 10;
+constexpr size_t kSettingsDisplayRestructuredReaderBatteryIndex = 11;
+constexpr size_t kSettingsDisplayRestructuredReaderChapterIndex = 12;
+constexpr size_t kSettingsDisplayRestructuredReaderProgressIndex = 13;
+constexpr size_t kSettingsDisplayRestructuredMenuRepeatIndex = 14;
 constexpr size_t kSettingsPacingReadingModeIndex = 1;
 constexpr size_t kSettingsPacingPauseModeIndex = 2;
 constexpr size_t kSettingsPacingWpmIndex = 3;
@@ -755,6 +758,8 @@ void App::begin() {
       preferences_.getBool(chapterLabelPrefKey(), chapterLabelDefaultForMode(readerMode_));
   handednessMode_ = handednessModeFromSetting(
       preferences_.getUChar(kPrefHandedness, static_cast<uint8_t>(handednessMode_)));
+  readerControlsSwapped_ =
+      preferences_.getBool(kPrefReaderControlsSwapped, readerControlsSwapped_);
   readerFontSizeIndex_ = preferences_.getUChar(kPrefReaderFontSize, readerFontSizeIndex_);
   if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
     readerFontSizeIndex_ = 0;
@@ -1260,47 +1265,7 @@ void App::maybeSaveReadingPosition(uint32_t nowMs) {
 
 void App::executeBootButtonSingleTap(uint32_t nowMs) {
   if (state_ == AppState::Menu && Board::Config::BOOT_BUTTON_BACKS_OUT_OF_MENU) {
-    if (menuScreen_ == MenuScreen::Main || menuScreen_ == MenuScreen::QuickSettings) {
-      setState(AppState::Paused, nowMs);
-    } else if (menuScreen_ == MenuScreen::PowerOffConfirm) {
-      cancelPowerOffConfirm(nowMs);
-    } else if (menuScreen_ == MenuScreen::QuickSync) {
-      menuScreen_ = MenuScreen::QuickSettings;
-      renderQuickSettings();
-    } else if (Board::Config::ENABLE_RESTRUCTURED_MENU && menuScreen_ == MenuScreen::Articles) {
-      menuScreen_ = MenuScreen::Main;
-      renderMainMenu();
-    } else if (Board::Config::ENABLE_RESTRUCTURED_MENU &&
-               menuScreen_ == MenuScreen::SettingsHome) {
-      menuScreen_ = MenuScreen::Main;
-      renderMainMenu();
-    } else if (Board::Config::ENABLE_RESTRUCTURED_MENU &&
-               menuScreen_ == MenuScreen::WifiNetworkSettings) {
-      openWifiSettings();
-    } else if (Board::Config::ENABLE_RESTRUCTURED_MENU &&
-               (menuScreen_ == MenuScreen::SettingsDisplay ||
-                menuScreen_ == MenuScreen::SettingsPacing ||
-                menuScreen_ == MenuScreen::SettingsBattery ||
-                menuScreen_ == MenuScreen::WifiSettings ||
-                menuScreen_ == MenuScreen::TypographyTuning)) {
-      if (menuScreen_ == MenuScreen::SettingsDisplay) {
-        settingsSelectedIndex_ = kSettingsHomeRestructuredDisplayIndex;
-      } else if (menuScreen_ == MenuScreen::SettingsPacing) {
-        flushPendingTimeEstimateRebuild();
-        settingsSelectedIndex_ = kSettingsHomeRestructuredPacingIndex;
-      } else if (menuScreen_ == MenuScreen::SettingsBattery) {
-        settingsSelectedIndex_ = kSettingsHomeRestructuredBatteryIndex;
-      } else if (menuScreen_ == MenuScreen::WifiSettings) {
-        settingsSelectedIndex_ = kSettingsHomeRestructuredWifiIndex;
-      } else {
-        settingsSelectedIndex_ = kSettingsHomeRestructuredTypographyIndex;
-      }
-      menuScreen_ = MenuScreen::SettingsHome;
-      rebuildSettingsMenuItems();
-      renderSettings();
-    } else {
-      toggleMenuFromPowerButton(nowMs);
-    }
+    navigateBackInMenu(nowMs);
     return;
   }
 
@@ -1700,6 +1665,8 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
       preferences_.getBool(chapterLabelPrefKey(), chapterLabelDefaultForMode(readerMode_));
   handednessMode_ = handednessModeFromSetting(
       preferences_.getUChar(kPrefHandedness, static_cast<uint8_t>(handednessMode_)));
+  readerControlsSwapped_ =
+      preferences_.getBool(kPrefReaderControlsSwapped, readerControlsSwapped_);
   readerFontSizeIndex_ = preferences_.getUChar(kPrefReaderFontSize, readerFontSizeIndex_);
   if (readerFontSizeIndex_ >= kReaderFontSizeCount) {
     readerFontSizeIndex_ = 0;
@@ -1927,6 +1894,22 @@ void App::cycleHandednessMode(uint32_t nowMs) {
   Serial.printf("[display] handedness=%s rotation180=%u\n", handednessLabel().c_str(),
                 uiRotated180() ? 1U : 0U);
   applyHandednessSettings(nowMs);
+}
+
+void App::toggleReaderControlsLayout(uint32_t nowMs) {
+  readerControlsSwapped_ = !readerControlsSwapped_;
+  preferences_.putBool(kPrefReaderControlsSwapped, readerControlsSwapped_);
+  Serial.printf("[display] reader controls=%s\n", readerControlsLayoutLabel().c_str());
+
+  if (state_ == AppState::Menu && isSettingsMenuScreen(menuScreen_)) {
+    rebuildSettingsMenuItems();
+    renderSettings();
+    return;
+  }
+
+  if (state_ == AppState::Paused || state_ == AppState::Playing) {
+    renderActiveReader(nowMs);
+  }
 }
 
 void App::togglePhantomWords(uint32_t nowMs) {
@@ -2198,11 +2181,22 @@ bool App::isFooterMetricTap(uint16_t x, uint16_t y) const {
 }
 
 bool App::isBatteryBadgeTap(uint16_t x, uint16_t y) const {
+  if (readerControlsSwapped_) {
+    return x <= kReaderBatteryMarginXPx + kBatteryBadgeTapWidthPx &&
+           y <= kReaderBatteryTopMarginPx + kBatteryBadgeTapHeightPx;
+  }
+
   return x >= Board::Config::DISPLAY_WIDTH - kReaderBatteryMarginXPx - kBatteryBadgeTapWidthPx &&
          y <= kReaderBatteryTopMarginPx + kBatteryBadgeTapHeightPx;
 }
 
 bool App::isPreviousSentenceTap(uint16_t x, uint16_t y) const {
+  if (readerControlsSwapped_) {
+    return x >= Board::Config::DISPLAY_WIDTH - kReaderChromeMarginXPx -
+                    kPreviousSentenceTapWidthPx &&
+           y <= kReaderChromeTopMarginPx + kPreviousSentenceTapHeightPx;
+  }
+
   return x <= kReaderChromeMarginXPx + kPreviousSentenceTapWidthPx &&
          y <= kReaderChromeTopMarginPx + kPreviousSentenceTapHeightPx;
 }
@@ -2217,6 +2211,7 @@ DisplayManager::ReaderChrome App::readerChrome() const {
   chrome.showProgress = !reading || readerProgressVisibleWhilePlaying_;
   chrome.showPreviousSentenceHint = !contextViewVisible_ || scrollModeEnabled();
   chrome.showEdgeMenuHints = !reading;
+  chrome.swapPreviousSentenceAndBattery = readerControlsSwapped_;
   return chrome;
 }
 
@@ -2557,11 +2552,16 @@ bool App::handleTopEdgeMenuSwipe(const TouchEvent &event, uint32_t nowMs, int de
 
   const int absDeltaX = abs(deltaX);
   const int absDeltaY = abs(deltaY);
-  const bool startsNearTop = pausedTouch_.startY <= kMenuSwipeTopZonePx;
+  const int centerX = Board::Config::DISPLAY_WIDTH / 2;
+  const int minMenuStartX = centerX - static_cast<int>(kMenuSwipeCenterHalfWidthPx);
+  const int maxMenuStartX = centerX + static_cast<int>(kMenuSwipeCenterHalfWidthPx);
+  const bool startsInTopCenter = pausedTouch_.startY <= kMenuSwipeTopZonePx &&
+                                 static_cast<int>(pausedTouch_.startX) >= minMenuStartX &&
+                                 static_cast<int>(pausedTouch_.startX) <= maxMenuStartX;
   const bool verticalDownSwipe =
       deltaY >= static_cast<int>(kMenuSwipeTriggerPx) &&
       absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx);
-  if (!startsNearTop || !verticalDownSwipe) {
+  if (!startsInTopCenter || !verticalDownSwipe) {
     return false;
   }
 
@@ -2581,13 +2581,18 @@ bool App::handleBottomEdgeQuickSettingsSwipe(const TouchEvent &event, uint32_t n
 
   const int absDeltaX = abs(deltaX);
   const int absDeltaY = abs(deltaY);
-  const bool startsNearBottom =
-      pausedTouch_.startY >=
+  const int centerX = Board::Config::DISPLAY_WIDTH / 2;
+  const int minMenuStartX = centerX - static_cast<int>(kMenuSwipeCenterHalfWidthPx);
+  const int maxMenuStartX = centerX + static_cast<int>(kMenuSwipeCenterHalfWidthPx);
+  const uint16_t bottomStartY =
       static_cast<uint16_t>(Board::Config::DISPLAY_HEIGHT - kQuickSettingsSwipeBottomZonePx);
+  const bool startsInBottomCenter = pausedTouch_.startY >= bottomStartY &&
+                                    static_cast<int>(pausedTouch_.startX) >= minMenuStartX &&
+                                    static_cast<int>(pausedTouch_.startX) <= maxMenuStartX;
   const bool verticalUpSwipe =
       deltaY <= -static_cast<int>(kMenuSwipeTriggerPx) &&
       absDeltaY > absDeltaX + static_cast<int>(kAxisBiasPx);
-  if (!startsNearBottom || !verticalUpSwipe) {
+  if (!startsInBottomCenter || !verticalUpSwipe) {
     return false;
   }
 
@@ -2753,6 +2758,10 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
   menuRepeatDirection_ = 0;
 
   if (menuScreen_ == MenuScreen::TextEntry) {
+    if (MenuRepeat::isRightSwipe(deltaX, deltaY, kSwipeThresholdPx, kAxisBiasPx)) {
+      navigateBackInMenu(nowMs);
+      return;
+    }
     if (absDeltaX <= static_cast<int>(kTapSlopPx) && absDeltaY <= static_cast<int>(kTapSlopPx)) {
       handleTextEntryTap(event.x, event.y, nowMs);
     }
@@ -2770,6 +2779,11 @@ void App::applyMenuTouchGesture(const TouchEvent &event, uint32_t nowMs) {
     menuRepeatGestureConsumed_ = false;
     menuRepeatMoved_ = false;
     menuRepeatNextMs_ = 0;
+    return;
+  }
+
+  if (MenuRepeat::isRightSwipe(deltaX, deltaY, kSwipeThresholdPx, kAxisBiasPx)) {
+    navigateBackInMenu(nowMs);
     return;
   }
 
@@ -2948,6 +2962,144 @@ void App::selectFocusTimerGenre(uint32_t nowMs) {
   focusTimerCancelHoldTriggered_ = false;
   menuScreen_ = MenuScreen::FocusTimerSession;
   renderFocusTimerSession();
+}
+
+bool App::navigateBackInMenu(uint32_t nowMs) {
+  if (state_ != AppState::Menu) {
+    return false;
+  }
+
+  pausedTouch_.active = false;
+  menuRepeatGestureConsumed_ = false;
+  menuRepeatMoved_ = false;
+  menuRepeatDirection_ = 0;
+  menuRepeatNextMs_ = 0;
+
+  switch (menuScreen_) {
+    case MenuScreen::Main:
+    case MenuScreen::QuickSettings:
+      setState(AppState::Paused, nowMs);
+      return true;
+
+    case MenuScreen::Articles:
+      menuScreen_ = MenuScreen::Main;
+      renderMainMenu();
+      return true;
+
+    case MenuScreen::SettingsHome:
+      menuScreen_ = MenuScreen::Main;
+      renderMainMenu();
+      return true;
+
+    case MenuScreen::SettingsDisplay:
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredDisplayIndex
+                                   : kSettingsHomeDisplayIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return true;
+
+    case MenuScreen::SettingsPacing:
+      flushPendingTimeEstimateRebuild();
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredPacingIndex
+                                   : kSettingsHomePacingIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return true;
+
+    case MenuScreen::SettingsBattery:
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredBatteryIndex
+                                   : kSettingsHomeBatteryIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return true;
+
+    case MenuScreen::WifiSettings:
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredWifiIndex
+                                   : kSettingsHomeWifiIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return true;
+
+    case MenuScreen::WifiNetworkSettings:
+      openWifiSettings();
+      return true;
+
+    case MenuScreen::WifiNetworks:
+      openWifiSettings();
+      return true;
+
+    case MenuScreen::TextEntry:
+      menuScreen_ = textEntrySession_.returnScreen;
+      textEntrySession_ = TextEntrySession();
+      textEntryButtons_.clear();
+      renderMenu();
+      return true;
+
+    case MenuScreen::TypographyTuning:
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredTypographyIndex
+                                   : kSettingsHomeTypographyIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return true;
+
+    case MenuScreen::BookPicker:
+      if (Board::Config::ENABLE_RESTRUCTURED_MENU && bookPickerArticlesOnly_) {
+        menuScreen_ = MenuScreen::Articles;
+        renderArticlesMenu();
+      } else {
+        menuScreen_ = MenuScreen::Main;
+        renderMainMenu();
+      }
+      return true;
+
+    case MenuScreen::ChapterPicker:
+      menuScreen_ = MenuScreen::Main;
+      renderMainMenu();
+      return true;
+
+    case MenuScreen::RestartConfirm:
+      menuScreen_ = restartConfirmReturnScreen_;
+      renderMenu();
+      return true;
+
+    case MenuScreen::SdCardRepairConfirm:
+      menuScreen_ = MenuScreen::Main;
+      renderMenu();
+      return true;
+
+    case MenuScreen::UpdateConfirm:
+      updateConfirmSelectedIndex_ = UpdateConfirmSkip;
+      selectUpdateConfirmItem(nowMs);
+      return true;
+
+    case MenuScreen::PowerOffConfirm:
+      cancelPowerOffConfirm(nowMs);
+      return true;
+
+    case MenuScreen::QuickSync:
+      menuScreen_ = MenuScreen::QuickSettings;
+      renderQuickSettings();
+      return true;
+
+    case MenuScreen::FocusTimerGenres:
+    case MenuScreen::FocusTimerSession:
+      resetFocusTimer();
+      menuScreen_ = MenuScreen::Main;
+      renderMainMenu();
+      return true;
+  }
+
+  return false;
 }
 
 bool App::moveMenuSelection(int direction, bool wrap) {
@@ -3432,6 +3584,9 @@ void App::selectSettingsItem(uint32_t nowMs) {
       case kSettingsDisplayHandednessIndex:
         cycleHandednessMode(nowMs);
         return;
+      case kSettingsDisplayReaderControlsIndex:
+        toggleReaderControlsLayout(nowMs);
+        return;
       case kSettingsDisplayChapterLabelIndex:
         chapterLabelEnabled_ = !chapterLabelEnabled_;
         preferences_.putBool(chapterLabelPrefKey(), chapterLabelEnabled_);
@@ -3657,6 +3812,9 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
         return;
       case kSettingsDisplayRestructuredHandednessIndex:
         cycleHandednessMode(nowMs);
+        return;
+      case kSettingsDisplayRestructuredReaderControlsIndex:
+        toggleReaderControlsLayout(nowMs);
         return;
       case kSettingsDisplayRestructuredLanguageIndex:
         cycleUiLanguage(nowMs);
@@ -4537,6 +4695,7 @@ void App::rebuildSettingsMenuItems() {
       settingsMenuItems_.push_back(uiText(UiText::Brightness) + ": " +
                                    String(currentBrightnessPercent()) + "%");
       settingsMenuItems_.push_back("L/R hand: " + handednessLabel());
+      settingsMenuItems_.push_back("Reader controls: " + readerControlsLayoutLabel());
       settingsMenuItems_.push_back(uiText(UiText::Language) + ": " + uiLanguageLabel());
       settingsMenuItems_.push_back("Screen saver: " + screensaverModeLabel());
       settingsMenuItems_.push_back("Standby timer: " + standbyTimerLabel());
@@ -4608,6 +4767,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back(uiText(UiText::Brightness) + ": " +
                                  String(currentBrightnessPercent()) + "%");
     settingsMenuItems_.push_back("Reader hand: " + handednessLabel());
+    settingsMenuItems_.push_back("Reader controls: " + readerControlsLayoutLabel());
     settingsMenuItems_.push_back("Chapter label: " + onOffLabel(chapterLabelEnabled_));
     settingsMenuItems_.push_back("Footer label: " + footerMetricModeLabel());
     settingsMenuItems_.push_back("Battery label: " + batteryLabelModeLabel());
@@ -4993,6 +5153,10 @@ String App::pauseModeLabel() const {
 
 String App::handednessLabel() const {
   return handednessMode_ == HandednessMode::Left ? "Left" : "Right";
+}
+
+String App::readerControlsLayoutLabel() const {
+  return readerControlsSwapped_ ? "Rewind top-right" : "Standard";
 }
 
 String App::readerFontSizeLabel() const {

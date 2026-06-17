@@ -40,6 +40,14 @@ void test_drag_direction_uses_vertical_threshold_and_bias(void) {
   TEST_ASSERT_EQUAL_INT(1, MenuRepeat::directionForDrag(20, 40, kSwipeThresholdPx, kAxisBiasPx));
 }
 
+void test_right_swipe_uses_horizontal_threshold_and_bias(void) {
+  TEST_ASSERT_FALSE(MenuRepeat::isRightSwipe(39, 0, kSwipeThresholdPx, kAxisBiasPx));
+  TEST_ASSERT_TRUE(MenuRepeat::isRightSwipe(40, 0, kSwipeThresholdPx, kAxisBiasPx));
+  TEST_ASSERT_FALSE(MenuRepeat::isRightSwipe(-40, 0, kSwipeThresholdPx, kAxisBiasPx));
+  TEST_ASSERT_FALSE(MenuRepeat::isRightSwipe(46, 35, kSwipeThresholdPx, kAxisBiasPx));
+  TEST_ASSERT_TRUE(MenuRepeat::isRightSwipe(40, 20, kSwipeThresholdPx, kAxisBiasPx));
+}
+
 void test_moved_index_wraps_for_quick_swipe_behavior(void) {
   MenuRepeat::MoveResult move = MenuRepeat::movedIndex(0, 3, -1, true);
   TEST_ASSERT_EQUAL_UINT32(2u, move.index);
@@ -81,6 +89,7 @@ int main(void) {
   RUN_TEST(test_repeat_delay_accepts_configured_options);
   RUN_TEST(test_repeat_delay_cycles_through_ui_options);
   RUN_TEST(test_drag_direction_uses_vertical_threshold_and_bias);
+  RUN_TEST(test_right_swipe_uses_horizontal_threshold_and_bias);
   RUN_TEST(test_moved_index_wraps_for_quick_swipe_behavior);
   RUN_TEST(test_moved_index_clamps_for_hold_repeat_behavior);
   RUN_TEST(test_moved_index_ignores_empty_or_zero_direction);
