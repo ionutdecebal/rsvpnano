@@ -79,6 +79,7 @@ constexpr uint32_t TOUCH_I2C_CLOCK_HZ = 400000;
 constexpr uint32_t TOUCH_I2C_TIMEOUT_MS = 10;
 constexpr size_t DISPLAY_TX_CHUNK_BYTES = 48 * 1024;
 constexpr bool UI_ROTATED_180 = false;
+constexpr bool PANEL_FLIP_180 = false;
 constexpr UiOrientation DEFAULT_UI_ORIENTATION =
     UI_ROTATED_180 ? UiOrientation::LandscapeFlipped : UiOrientation::Landscape;
 constexpr UiOrientation ROTATED_UI_ORIENTATION =
