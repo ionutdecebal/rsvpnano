@@ -31,6 +31,7 @@ web/firmware/*.bin
 RSVPNanoCompanion/web/generated/
 web/generated/
 .cache/
+.tmp/
 compile_commands.json
 benchmark/logs/
 benchmark/summary.md
