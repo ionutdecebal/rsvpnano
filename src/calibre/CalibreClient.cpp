@@ -376,8 +376,12 @@ std::vector<int> CalibreClient::search(const String &query) {
     return ids;
   }
 
+  // Request a generous page size: /ajax/search defaults to ~100 results, which
+  // would silently drop books in larger libraries. Calibre returns at most
+  // total_num regardless, so a big num just means "give me all matches".
   const String url = urlFor("/ajax/search?query=" + urlEncodeQuery(query) +
-                            "&library_id=" + urlEncodeQuery(config_.libraryId));
+                            "&library_id=" + urlEncodeQuery(config_.libraryId) +
+                            "&num=10000");
   String body;
   const net::HttpResult res = net::getToString(url, body, config_.auth, kMaxAjaxJsonBytes);
   if (!res.ok) {
