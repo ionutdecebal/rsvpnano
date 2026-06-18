@@ -146,40 +146,47 @@ void resetTouchState() {
 }
 
 constexpr uint8_t orientationQuarterTurns(Board::UiOrientation orientation) {
-  const uint8_t value = static_cast<uint8_t>(orientation);
-  uint8_t flippedTurns = value & 1U;
-  flippedTurns <<= 1U;
-  const uint8_t landscapeTurn = (value & 2U) == 0U ? uint8_t{1} : uint8_t{0};
-  return flippedTurns | landscapeTurn;
+  switch (orientation) {
+    case Board::UiOrientation::Landscape:
+      return 1;
+    case Board::UiOrientation::LandscapeFlipped:
+      return 3;
+    case Board::UiOrientation::PortraitFlipped:
+      return 2;
+    case Board::UiOrientation::Portrait:
+    default:
+      return 0;
+  }
 }
 
 TouchContact mapTouchContact(TouchContact contact) {
   const uint8_t quarterTurns = orientationQuarterTurns(gTouch.orientation);
   constexpr uint16_t kMin = 0;
-  const uint16_t maxX = std::max(gTouchSurface.width, uint16_t{1}) - 1;
-  const uint16_t maxY = std::max(gTouchSurface.height, uint16_t{1}) - 1;
-
-  uint16_t x = contact.x;
-  uint16_t y = contact.y;
+  const uint16_t rawMaxX = std::max(gTouchSurface.width, uint16_t{1}) - 1;
+  const uint16_t rawMaxY = std::max(gTouchSurface.height, uint16_t{1}) - 1;
+  const uint16_t rawX = std::clamp(contact.x, kMin, rawMaxX);
+  const uint16_t rawY = std::clamp(contact.y, kMin, rawMaxY);
+  uint16_t x = rawX;
+  uint16_t y = rawY;
 
   switch (quarterTurns) {
     case 1:
-      x = maxY - std::clamp(contact.y, kMin, maxY);
-      y = contact.x;
+      x = rawMaxY - rawY;
+      y = rawX;
       break;
     case 2:
-      x = maxX - std::clamp(contact.x, kMin, maxX);
-      y = maxY - std::clamp(contact.y, kMin, maxY);
+      x = rawMaxX - rawX;
+      y = rawMaxY - rawY;
       break;
     case 3:
-      x = contact.y;
-      y = maxX - std::clamp(contact.x, kMin, maxX);
+      x = rawY;
+      y = rawMaxX - rawX;
       break;
     default:
       break;
   }
 
-  return {true, std::clamp(x, kMin, maxX), std::clamp(y, kMin, maxY)};
+  return {true, x, y};
 }
 
 TouchMotion touchMotion(uint32_t nowMs) {
@@ -205,11 +212,23 @@ bool matchesReleaseGesture(Gesture gesture, TouchMotion motion) {
              gTouch.lastY - gTouch.startY >= gTouchTiming.swipeMinDistancePx;
 
     case Gesture::BottomEdgeSwiped:
-      return gTouchSurface.height > gTouchTiming.edgeSizePx &&
-             gTouch.startY >=
-                 gTouchSurface.height - gTouchTiming.edgeSizePx &&
+    {
+      const uint16_t logicalHeight = []() {
+        switch (gTouch.orientation) {
+          case Board::UiOrientation::Landscape:
+          case Board::UiOrientation::LandscapeFlipped:
+            return gTouchSurface.width;
+          case Board::UiOrientation::Portrait:
+          case Board::UiOrientation::PortraitFlipped:
+          default:
+            return gTouchSurface.height;
+        }
+      }();
+      return logicalHeight > gTouchTiming.edgeSizePx &&
+             gTouch.startY >= logicalHeight - gTouchTiming.edgeSizePx &&
              gTouch.lastY < gTouch.startY &&
              gTouch.startY - gTouch.lastY >= gTouchTiming.swipeMinDistancePx;
+    }
 
     default:
       return false;
