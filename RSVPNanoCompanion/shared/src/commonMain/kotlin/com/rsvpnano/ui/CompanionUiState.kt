@@ -7,6 +7,8 @@ import com.rsvpnano.app.isConnected
 import com.rsvpnano.app.isRequesting
 import com.rsvpnano.app.isWifiAttached
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoCalibreSettings
+import com.rsvpnano.models.NanoCalibreSchema
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
@@ -26,6 +28,15 @@ data class CompanionUiState(
     val draftBody: String = "",
     val editingDraftId: String? = null,
     val rssFeedDraft: String = "",
+    // Calibre library sync draft fields (edited in the Settings tab, pushed to device)
+    val calibreSettings: NanoCalibreSettings? = null,
+    val calibreBaseUrlDraft: String = "",
+    val calibreSearchQueryDraft: String = "",
+    val calibreUsernameDraft: String = "",
+    val calibrePasswordDraft: String = "",
+    val calibreLibraryIdDraft: String = "",
+    val calibreDeletionPolicyDraft: String = NanoCalibreSchema.DELETION_POLICY_KEEP,
+    val calibreEnabledDraft: Boolean = false,
     val connectionState: NanoConnectionState = NanoConnectionState.Disconnected,
     val rememberedNano: RememberedNano? = null,
     val canRememberCurrentNano: Boolean = false,

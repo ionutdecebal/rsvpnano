@@ -38,6 +38,7 @@ class CompanionSyncManager {
   static void handleSettingsStatic();
   static void handleWifiStatic();
   static void handleRssFeedsStatic();
+  static void handleCalibreSettingsStatic();
   static void handleBookDeleteStatic();
   static void handleBooksStatic();
   static void handleBookUploadStatic();
@@ -52,6 +53,7 @@ class CompanionSyncManager {
   void handleSettings();
   void handleWifi();
   void handleRssFeeds();
+  void handleCalibreSettings();
   void handleBookDelete();
   void handleBooks();
   void handleBookUpload();
@@ -62,6 +64,8 @@ class CompanionSyncManager {
   bool applyWifiJson(const String &body, String &error);
   String rssFeedsJson();
   bool writeRssFeedsJson(const String &body, String &error);
+  String calibreSettingsJson();
+  bool applyCalibreSettingsJson(const String &body, String &error);
   String deviceSuffix() const;
   String jsonEscape(const String &value) const;
   String sanitizeFilename(const String &name) const;

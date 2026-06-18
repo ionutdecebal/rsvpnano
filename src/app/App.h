@@ -17,9 +17,11 @@
 #include "input/InputTouch.h"
 #include "reader/ReadingLoop.h"
 #include "rss/RssFeedManager.h"
+#include "calibre/CalibreSettings.h"
 #include "standby/Screensaver.h"
 #include "storage/index/IndexedBookStore.h"
 #include "storage/StorageManager.h"
+#include "sync/CalibreSyncManager.h"
 #include "sync/CompanionSyncManager.h"
 #include "timer/FocusTimer.h"
 #include "ui/Localization.h"
@@ -94,6 +96,8 @@ class App {
     WifiSettings,
     WifiNetworkSettings,
     WifiNetworks,
+    // On-device Calibre configuration submenu.
+    CalibreSettings,
     TextEntry,
     TypographyTuning,
     BookPicker,
@@ -136,6 +140,11 @@ class App {
     None,
     WifiPassword,
     OtaOwner,
+    // On-device entry of Calibre config fields.
+    CalibreBaseUrl,
+    CalibreQuery,
+    CalibreUsername,
+    CalibrePassword,
   };
 
   enum class KeyboardMode : uint8_t {
@@ -272,6 +281,9 @@ class App {
   void openWifiSettings();
   void openWifiNetworkSettings();
   void selectWifiSettingsItem(uint32_t nowMs);
+  // On-device Calibre settings submenu.
+  void openCalibreSettings();
+  void selectCalibreSettingsItem(uint32_t nowMs);
   void openTypographyTuning();
   void selectTypographyTuningItem(uint32_t nowMs);
   void cycleTypographyPreviewSample(int direction);
@@ -286,6 +298,8 @@ class App {
   bool blockNetworkActionForOtaCheck(const String &title, uint32_t nowMs);
   void runFirmwareUpdate(const OtaUpdater::Config &config, bool automatic, uint32_t nowMs);
   void runRssFeedCheck(uint32_t nowMs);
+  // Manual "Sync from Calibre" menu action.
+  void runCalibreSync(uint32_t nowMs);
   OtaUpdater::Config preferredOtaConfig();
   void scanWifiNetworks();
   void renderWifiNetworks();

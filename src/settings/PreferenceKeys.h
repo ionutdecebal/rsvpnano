@@ -75,4 +75,14 @@ constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
 
+// Calibre library sync.
+// All keys share the "cal_" prefix and stay within the 15-char NVS limit.
+constexpr const char *kPrefCalEnabled  = "cal_en";      // bool
+constexpr const char *kPrefCalUrl      = "cal_url";     // String  e.g. http://192.168.0.120:8099
+constexpr const char *kPrefCalLibrary  = "cal_lib";     // String  empty => server default_library
+constexpr const char *kPrefCalQuery    = "cal_query";   // String  e.g. "tag:rsvp"
+constexpr const char *kPrefCalUser     = "cal_user";    // String  HTTP Basic username (optional)
+constexpr const char *kPrefCalPass     = "cal_pass";    // String  HTTP Basic password (optional)
+constexpr const char *kPrefCalDelPol   = "cal_delpol";  // uint8_t 0=Mirror 1=Keep
+
 }  // namespace settings

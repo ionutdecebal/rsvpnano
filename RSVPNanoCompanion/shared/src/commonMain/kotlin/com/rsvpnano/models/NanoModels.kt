@@ -345,6 +345,30 @@ object NanoSettingsSchema {
         value.coerceIn(GUIDE_GAP_MIN, GUIDE_GAP_MAX)
 }
 
+// Calibre library sync (companion-side model)
+/**
+ * Settings for Calibre Content Server synchronisation, persisted on the device via [NanoClient].
+ * Field names are kept in sync with the firmware contract (issues #4/#5).
+ *
+ * [deletionPolicy] must be one of [DELETION_POLICY_MIRROR] or [DELETION_POLICY_KEEP].
+ */
+@Serializable
+data class NanoCalibreSettings(
+    val ok: Boolean = true,
+    val enabled: Boolean = false,
+    val baseUrl: String = "",
+    val searchQuery: String = "",
+    val username: String = "",
+    val password: String = "",
+    val libraryId: String = "",
+    val deletionPolicy: String = NanoCalibreSchema.DELETION_POLICY_KEEP,
+)
+
+object NanoCalibreSchema {
+    const val DELETION_POLICY_MIRROR = "mirror"
+    const val DELETION_POLICY_KEEP = "keep"
+}
+
 @Serializable
 data class RememberedNano(
     val ssid: String,

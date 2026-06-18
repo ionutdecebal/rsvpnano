@@ -1,0 +1,15 @@
+{
+    "total_num": 1,
+    "sort_order": "asc",
+    "num_books_without_search": 1,
+    "offset": 0,
+    "num": 1,
+    "sort": "title",
+    "base_url": "/ajax/search/rsvplib",
+    "query": "Test",
+    "library_id": "rsvplib",
+    "book_ids": [
+        1
+    ],
+    "vl": ""
+}

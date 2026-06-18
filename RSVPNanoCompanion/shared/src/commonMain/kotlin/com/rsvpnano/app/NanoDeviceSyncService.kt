@@ -2,6 +2,7 @@ package com.rsvpnano.app
 
 import com.rsvpnano.api.NanoClient
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoCalibreSettings
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoUploadResponse
@@ -19,12 +20,14 @@ class NanoDeviceSyncService(
         val settings = runCatching { client.fetchSettings(baseUrl) }.getOrNull()
         val wifiSettings = runCatching { client.fetchWifiSettings(baseUrl) }.getOrNull()
         val rssFeeds = runCatching { client.fetchRssFeeds(baseUrl) }.getOrNull()
+        val calibreSettings = runCatching { client.fetchCalibreSettings(baseUrl) }.getOrNull()
         return NanoDeviceSnapshot(
             info = info,
             books = books,
             settings = settings,
             wifiSettings = wifiSettings,
             rssFeeds = rssFeeds,
+            calibreSettings = calibreSettings,
         )
     }
 
@@ -41,6 +44,12 @@ class NanoDeviceSyncService(
     suspend fun refreshRssFeeds(baseUrl: String) = client.fetchRssFeeds(baseUrl)
 
     suspend fun saveRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds = client.updateRssFeeds(baseUrl, feeds)
+
+    // Calibre library sync
+    suspend fun refreshCalibreSettings(baseUrl: String): NanoCalibreSettings = client.fetchCalibreSettings(baseUrl)
+
+    suspend fun saveCalibreSettings(baseUrl: String, settings: NanoCalibreSettings): NanoCalibreSettings =
+        client.updateCalibreSettings(baseUrl, settings)
 
     suspend fun saveSettings(baseUrl: String, settings: NanoSettings): NanoSettings = client.updateSettings(baseUrl, settings)
 

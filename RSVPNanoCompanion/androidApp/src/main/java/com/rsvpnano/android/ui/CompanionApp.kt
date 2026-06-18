@@ -169,5 +169,15 @@ fun CompanionApp(
         onAddRssFeed = viewModel::addRssFeed,
         onRefreshRssFeeds = viewModel::refreshRssFeeds,
         onDeleteFeed = viewModel::deleteRssFeed,
+        // Calibre library sync
+        onCalibreBaseUrlChange = viewModel::setCalibreBaseUrlDraft,
+        onCalibreSearchQueryChange = viewModel::setCalibreSearchQueryDraft,
+        onCalibreUsernameChange = viewModel::setCalibreUsernameDraft,
+        onCalibrePasswordChange = viewModel::setCalibrePasswordDraft,
+        onCalibreLibraryIdChange = viewModel::setCalibreLibraryIdDraft,
+        onCalibreDeletionPolicyChange = viewModel::setCalibreDeletionPolicyDraft,
+        onCalibreEnabledChange = viewModel::setCalibreEnabledDraft,
+        onSaveCalibre = viewModel::saveCalibreSettings,
+        onRefreshCalibre = viewModel::refreshCalibreSettings,
     )
 }

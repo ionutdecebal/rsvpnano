@@ -100,6 +100,16 @@ fun RsvpNanoSharedApp(
     onAddRssFeed: () -> Unit,
     onRefreshRssFeeds: () -> Unit,
     onDeleteFeed: (String) -> Unit,
+    // Calibre library sync callbacks (defaulted so existing call sites compile)
+    onCalibreBaseUrlChange: (String) -> Unit = {},
+    onCalibreSearchQueryChange: (String) -> Unit = {},
+    onCalibreUsernameChange: (String) -> Unit = {},
+    onCalibrePasswordChange: (String) -> Unit = {},
+    onCalibreLibraryIdChange: (String) -> Unit = {},
+    onCalibreDeletionPolicyChange: (String) -> Unit = {},
+    onCalibreEnabledChange: (Boolean) -> Unit = {},
+    onSaveCalibre: () -> Unit = {},
+    onRefreshCalibre: () -> Unit = {},
 ) {
     val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
@@ -220,6 +230,16 @@ fun RsvpNanoSharedApp(
                         onForgetRememberedNano = onForgetRememberedNano,
                         hasPermissions = hasPermissions,
                         onGrantPermissions = onGrantPermissions,
+                        // Calibre library sync
+                        onCalibreBaseUrlChange = onCalibreBaseUrlChange,
+                        onCalibreSearchQueryChange = onCalibreSearchQueryChange,
+                        onCalibreUsernameChange = onCalibreUsernameChange,
+                        onCalibrePasswordChange = onCalibrePasswordChange,
+                        onCalibreLibraryIdChange = onCalibreLibraryIdChange,
+                        onCalibreDeletionPolicyChange = onCalibreDeletionPolicyChange,
+                        onCalibreEnabledChange = onCalibreEnabledChange,
+                        onSaveCalibre = onSaveCalibre,
+                        onRefreshCalibre = onRefreshCalibre,
                     )
                 }
             }
