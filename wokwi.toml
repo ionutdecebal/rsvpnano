@@ -1,0 +1,4 @@
+[wokwi]
+version = 1
+firmware = '.pio/build/t_lora_pager/firmware.bin'
+elf = '.pio/build/t_lora_pager/firmware.elf'

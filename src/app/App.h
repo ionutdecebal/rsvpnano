@@ -276,6 +276,10 @@ private:
     void rebuildTextEntryButtons();
     void renderTextEntry();
     bool handleTextEntryTap(uint16_t x, uint16_t y, uint32_t nowMs);
+    // Physical-keyboard text entry (T-Pager): polls Board::Keyboard each tick and
+    // maps keys to insert/delete/commit. No-op on boards without a keyboard
+    // (Board::Keyboard::present() == false).
+    void handleTextEntryKeyboard(uint32_t nowMs);
     void activateTextEntryButton(size_t buttonIndex, uint32_t nowMs);
     void commitTextEntry(uint32_t nowMs);
     String configuredWifiSsid();

@@ -31,11 +31,35 @@ constexpr float kSideAxisThreshold = 0.78f;
 constexpr float kCrossAxisLimit = 0.42f;
 constexpr float kFlatAxisThreshold = 0.84f;
 
+#ifdef RSVP_BOARD_TPAGER
+// The T-LoRa-Pager has no touch panel and only two stable rest orientations, so
+// the place-on-side / flip hourglass mechanic cannot work. The timer is driven
+// by the rotary encoder (duration) and center button (start/cancel) instead, and
+// does not use the IMU for control. App::applyFocusTimerTouch maps the input.
+constexpr bool kButtonDrivenTimer = true;
+#else
+constexpr bool kButtonDrivenTimer = false;
+#endif
+
 }  // namespace
 
-bool FocusTimer::begin() { return initImu(); }
+bool FocusTimer::begin() {
+  if (kButtonDrivenTimer) {
+    return true;  // No IMU needed; the timer is rotary/button-driven.
+  }
+  return initImu();
+}
 
 void FocusTimer::open() {
+  if (kButtonDrivenTimer) {
+    // Always ready: no IMU gate, so no "IMU unavailable" dead end.
+    clearSession();
+    resetOrientationStability();
+    state_ = State::GenreSelect;
+    stateStartedMs_ = millis();
+    return;
+  }
+
   if (!imuAvailable_) {
     initImu();
   }
@@ -47,7 +71,7 @@ void FocusTimer::open() {
 }
 
 void FocusTimer::update(uint32_t nowMs) {
-  if (imuAvailable_) {
+  if (!kButtonDrivenTimer && imuAvailable_) {
     updateOrientation(nowMs);
   }
 
@@ -57,7 +81,10 @@ void FocusTimer::update(uint32_t nowMs) {
       break;
 
     case State::WaitForTouchStart:
-      if (orientationInputArmed(nowMs) && isShortSide(stableOrientation_)) {
+      // Button-driven boards start via startTouchTimer(); only orientation boards
+      // auto-start from being placed on a short side.
+      if (!kButtonDrivenTimer && orientationInputArmed(nowMs) &&
+          isShortSide(stableOrientation_)) {
         startMode(TimerMode::Touch, nowMs, kTouchDurationMs, stableOrientation_);
         transitionTo(State::TouchRunning, nowMs);
       }
@@ -67,7 +94,13 @@ void FocusTimer::update(uint32_t nowMs) {
       if (timerExpired(nowMs)) {
         completeActiveTimer();
         resetOrientationStability();
-        transitionTo(State::WaitAfterTouch, nowMs);
+        if (kButtonDrivenTimer) {
+          // No pomodoro flip cycle on this hardware: finish the session.
+          feedbackStartedMs_ = nowMs;
+          transitionTo(State::Complete, nowMs);
+        } else {
+          transitionTo(State::WaitAfterTouch, nowMs);
+        }
       }
       break;
 
@@ -157,6 +190,17 @@ void FocusTimer::cancelActiveTimer(uint32_t nowMs) {
   resetOrientationStability();
   feedbackStartedMs_ = nowMs;
   transitionTo(State::Cancelled, nowMs);
+}
+
+void FocusTimer::startTouchTimer(uint32_t nowMs) {
+  // Explicit start for button-driven boards (no place-on-side gesture). The
+  // start orientation is irrelevant here, so use a neutral value that is not a
+  // short side (it would otherwise seed the flip-restart logic).
+  if (state_ != State::WaitForTouchStart) {
+    return;
+  }
+  startMode(TimerMode::Touch, nowMs, selectedTouchDurationMs(), OrientationState::FlatBack);
+  transitionTo(State::TouchRunning, nowMs);
 }
 
 void FocusTimer::abandon() {
@@ -260,6 +304,19 @@ bool FocusTimer::initImu() {
     return true;
   }
 
+#ifdef RSVP_BOARD_TPAGER
+  // BHI260AP sensor hub via the LilyGoLib BSP: no raw-register probe/reset dance.
+  // begin() boots the hub's gravity virtual sensor; readGravity() feeds the same
+  // classify() path the QMI8658 boards use.
+  imuAvailable_ = Board::Imu::begin();
+  if (imuAvailable_) {
+    resetOrientationStability();
+    Serial.println("[timer] BHI260AP gravity source ready");
+  } else {
+    Serial.println("[timer] BHI260AP gravity source unavailable");
+  }
+  return imuAvailable_;
+#else
   const uint8_t candidateAddresses[] = {
       Board::Imu::address(),
       0x6B,
@@ -352,8 +409,10 @@ bool FocusTimer::initImu() {
                   Board::Imu::wireName(), Board::Imu::address());
   }
   return false;
+#endif  // RSVP_BOARD_TPAGER
 }
 
+#ifndef RSVP_BOARD_TPAGER
 bool FocusTimer::updateRegister(uint8_t reg, uint8_t mask, uint8_t value) {
   uint8_t current = 0;
   if (!Board::Imu::readRegister(imuAddress_, reg, current)) {
@@ -363,8 +422,14 @@ bool FocusTimer::updateRegister(uint8_t reg, uint8_t mask, uint8_t value) {
   current = static_cast<uint8_t>((current & static_cast<uint8_t>(~mask)) | (value & mask));
   return Board::Imu::writeRegister(imuAddress_, reg, current);
 }
+#endif  // !RSVP_BOARD_TPAGER
 
 bool FocusTimer::readAccelerometer(float &x, float &y, float &z) {
+#ifdef RSVP_BOARD_TPAGER
+  // BHI260AP gravity vector (already a unit direction), used directly by
+  // classify(). No raw registers or accelScale_ on this board.
+  return Board::Imu::readGravity(x, y, z);
+#else
   uint8_t buffer[6] = {0};
   if (!Board::Imu::readRegisters(imuAddress_, kImuAccelStartReg, buffer, sizeof(buffer))) {
     return false;
@@ -378,6 +443,7 @@ bool FocusTimer::readAccelerometer(float &x, float &y, float &z) {
   y = rawY * accelScale_;
   z = rawZ * accelScale_;
   return true;
+#endif  // RSVP_BOARD_TPAGER
 }
 
 void FocusTimer::updateOrientation(uint32_t nowMs) {

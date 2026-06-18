@@ -143,14 +143,23 @@ remounts the SD card and refreshes the library.
 
 ### Option 3: Web Companion
 
-The device can host its own browser companion page.
+The device serves a browser companion page over Wi-Fi.
 
 1. Swipe up from the bottom edge to open quick settings.
 2. Choose `Sync`.
 3. Choose `Wi-Fi Sync`.
-4. The device shows the Wi-Fi network name and the browser URL.
-5. Connect your phone, tablet, or computer to the `RSVP-Nano-xxxxxx` Wi-Fi network.
-6. Open the URL shown on the device, usually `http://192.168.4.1`.
+4. The device shows the Wi-Fi network name and the browser address.
+
+**If home Wi-Fi credentials are saved** (Settings → Wi-Fi, or the companion's
+Settings page), the device joins that network and serves the page on your LAN.
+Leave your phone/computer on the same Wi-Fi and open the IP address shown on the
+device (e.g. `http://192.168.1.42`) — no network switching needed.
+(`http://rsvp-nano.local` also works on clients that resolve mDNS.)
+
+**Otherwise** the device falls back to hosting its own access point: connect
+your phone, tablet, or computer to the `RSVP-Nano-xxxxxx` Wi-Fi network, then
+open the URL shown on the device, usually `http://192.168.4.1`. (This is also
+the automatic fallback if joining the saved network fails — e.g. out of range.)
 
 The web companion has pages for:
 

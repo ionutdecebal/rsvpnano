@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "net/WifiConnection.h"
 #include "settings/PreferenceKeys.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -175,7 +176,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <section id="help" class="page">
 <div class="card"><h2>How to use this web companion</h2>
 <ul>
-<li>Open Companion sync on the reader, join the <code>RSVP-Nano</code> Wi-Fi network, then open this page.</li>
+<li>Open Companion sync on the reader. If it joined your home Wi-Fi, stay on that network and open the IP address shown on the reader (mDNS <code>rsvp-nano.local</code> also works on some clients). Otherwise join the reader's <code>RSVP-Nano</code> Wi-Fi network, then open this page.</li>
 <li>Use Books for prepared book files and Articles for article drafts, article uploads, and synced articles.</li>
 <li>For best book conversion, use the hosted web converter/flasher first. This page is the wireless upload and settings companion, not the full conversion engine.</li>
 <li><code>.txt</code> and <code>.epub</code> uploads are accepted, but EPUB conversion is handled on the device when opened.</li>
@@ -506,7 +507,6 @@ String rsvpMetadataValueFromLine(const String &line, const char *directive, bool
 CompanionSyncManager *CompanionSyncManager::instance_ = nullptr;
 
 bool CompanionSyncManager::begin(const Config &config) {
-  (void)config;
   if (active_) {
     return true;
   }
@@ -517,7 +517,18 @@ bool CompanionSyncManager::begin(const Config &config) {
   statusLine2_ = "Preparing Wi-Fi";
   preferences_.begin(kPrefsNamespace, false);
 
-  const bool networkReady = startAccessPoint();
+  // Prefer joining the configured Wi-Fi (station mode): the companion is then
+  // reachable from any device already on that LAN at http://rsvp-nano.local
+  // (mDNS) or the IP shown on screen, with no network switching. Fall back to
+  // hosting our own open SoftAP when no Wi-Fi is configured or the join fails,
+  // so sync still works with zero infrastructure / away from a known network.
+  bool networkReady = false;
+  if (!config.wifiSsid.isEmpty()) {
+    networkReady = startStation(config.wifiSsid, config.wifiPassword);
+  }
+  if (!networkReady) {
+    networkReady = startAccessPoint();
+  }
   if (!networkReady) {
     statusLine1_ = "Wi-Fi failed";
     statusLine2_ = "";
@@ -534,9 +545,13 @@ bool CompanionSyncManager::begin(const Config &config) {
 
   active_ = true;
   statusLine1_ = networkSsid_;
+  // Show the IP URL in both modes -- it always works, whereas mDNS (.local)
+  // resolution is unreliable on some networks/clients. mDNS stays registered as
+  // a convenience for clients that do resolve it.
   statusLine2_ = baseUrl();
-  Serial.printf("[sync] ready ssid=%s url=%s pairing=%s\n", networkSsid_.c_str(), baseUrl().c_str(),
-                pairingCode_.c_str());
+  Serial.printf("[sync] ready mode=%s ssid=%s url=%s host=%s.local pairing=%s\n",
+                networkMode_ == NetworkMode::Station ? "station" : "access_point",
+                networkSsid_.c_str(), baseUrl().c_str(), kMdnsName, pairingCode_.c_str());
   return true;
 }
 
@@ -639,6 +654,21 @@ void CompanionSyncManager::handleNotFoundStatic() {
   if (instance_ != nullptr) {
     instance_->handleNotFound();
   }
+}
+
+bool CompanionSyncManager::startStation(const String &ssid, const String &password) {
+  statusLine1_ = "Joining Wi-Fi";
+  statusLine2_ = ssid;
+  if (!net::connectStation(ssid, password)) {
+    Serial.printf("[sync] station join failed ssid=%s\n", ssid.c_str());
+    return false;
+  }
+
+  networkMode_ = NetworkMode::Station;
+  networkSsid_ = ssid;
+  Serial.printf("[sync] station ssid=%s ip=%s\n", ssid.c_str(),
+                ipToString(WiFi.localIP()).c_str());
+  return true;
 }
 
 bool CompanionSyncManager::startAccessPoint() {

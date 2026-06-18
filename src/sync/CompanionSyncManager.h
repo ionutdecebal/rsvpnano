@@ -43,6 +43,7 @@ class CompanionSyncManager {
   static void handleBookUploadStatic();
   static void handleNotFoundStatic();
 
+  bool startStation(const String &ssid, const String &password);
   bool startAccessPoint();
   bool startServer();
   void stopServer();

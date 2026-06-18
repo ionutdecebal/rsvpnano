@@ -7,6 +7,8 @@
 
 #include "board/BoardConfig.h"
 #include "board/BoardInput.h"
+#include "board/BoardKeyboard.h"
+#include "settings/PreferenceKeys.h"
 
 #ifndef RSVP_USB_TRANSFER_ENABLED
 #define RSVP_USB_TRANSFER_ENABLED 0
@@ -841,6 +843,7 @@ void App::update(uint32_t nowMs) {
     maybeOpenUpdateConfirm(nowMs);
     updateFocusTimer(nowMs);
     updateReader(nowMs);
+    handleTextEntryKeyboard(nowMs);
     updateWpmFeedback(nowMs);
     maybeSaveReadingPosition(nowMs);
     updateTimeEstimateBuild(nowMs);
@@ -1197,14 +1200,20 @@ bool App::handleReaderInput(const Input::Event& event, uint32_t nowMs) {
         return true;
     }
 
+    // BOOT = back: on boards where the physical BOOT button is the power button
+    // (e.g. T-Pager), a short power-button press also leaves Companion sync /
+    // USB transfer, mirroring the long-hold exit. Otherwise these screens could
+    // only be left by long-holding.
     if (state_ == AppState::CompanionSync && Input::hasControl(event.controls, Input::InputPower)
-        && event.gesture == Input::Gesture::LongPressed) {
+        && (event.gesture == Input::Gesture::ShortPressed
+            || event.gesture == Input::Gesture::LongPressed)) {
         exitCompanionSync(nowMs);
         return true;
     }
 
     if (state_ == AppState::UsbTransfer && Input::hasControl(event.controls, Input::InputPower)
-        && event.gesture == Input::Gesture::LongPressed) {
+        && (event.gesture == Input::Gesture::ShortPressed
+            || event.gesture == Input::Gesture::LongPressed)) {
         exitUsbTransfer(nowMs);
         return true;
     }
@@ -2344,6 +2353,54 @@ void App::applyMenuTouchGesture(const TouchEvent& event, uint32_t nowMs) {
 }
 
 void App::applyFocusTimerTouch(const TouchEvent& event, uint32_t nowMs) {
+#ifdef RSVP_BOARD_TPAGER
+    // Rotary + center button only (no touch panel, no orientation control):
+    //   synthetic vertical swipe (rotary turn) -> step the duration on BEGIN
+    //   center-button tap -> start (BEGIN) or cancel (running)
+    // The rotary/center input is synthesized into TouchStart/TouchEnd/Tapped
+    // events by platforms/lilygo_tlora_pager/BoardInput.cpp.
+    if (event.gesture == Input::Gesture::TouchStart) {
+        pausedTouch_.active = true;
+        pausedTouch_.startX = event.x;
+        pausedTouch_.startY = event.y;
+        pausedTouch_.startMs = nowMs;
+        return;
+    }
+    if ((event.gesture != Input::Gesture::TouchEnd && event.gesture != Input::Gesture::Tapped) ||
+        !pausedTouch_.active) {
+        return;
+    }
+    pausedTouch_.active = false;
+
+    const int tpagerDeltaX = static_cast<int>(event.x) - static_cast<int>(pausedTouch_.startX);
+    const int tpagerDeltaY = static_cast<int>(event.y) - static_cast<int>(pausedTouch_.startY);
+    const bool rotaryStep = abs(tpagerDeltaY) >= static_cast<int>(kSwipeThresholdPx) &&
+                            abs(tpagerDeltaY) > abs(tpagerDeltaX);
+
+    if (rotaryStep) {
+        if (focusTimer_.state() == FocusTimer::State::WaitForTouchStart) {
+            // Rotate CW (synthetic swipe down, deltaY > 0) lengthens the block.
+            focusTimer_.stepTouchDuration(tpagerDeltaY > 0 ? 1 : -1);
+            const uint8_t genreIndex = static_cast<uint8_t>(focusTimer_.genre());
+            if (genreIndex < FocusTimer::kGenreCount) {
+                preferences_.putUChar(kPrefTimerDurationByGenre[genreIndex],
+                                      focusTimer_.touchDurationIndex());
+            }
+            renderFocusTimerSession();
+        }
+        return;
+    }
+
+    // Center-button tap.
+    if (focusTimer_.state() == FocusTimer::State::WaitForTouchStart) {
+        focusTimer_.startTouchTimer(nowMs);
+        renderFocusTimerSession();
+    } else if (focusTimer_.isActiveTimerRunning()) {
+        focusTimer_.cancelActiveTimer(nowMs);
+        renderFocusTimerSession();
+    }
+    return;
+#else
     if (event.gesture == Input::Gesture::TouchStart) {
         pausedTouch_.active = true;
         pausedTouch_.startX = event.x;
@@ -2393,6 +2450,7 @@ void App::applyFocusTimerTouch(const TouchEvent& event, uint32_t nowMs) {
     }
 
     (void) tapLike;
+#endif  // RSVP_BOARD_TPAGER
 }
 
 void App::openFocusTimer() {
@@ -3532,7 +3590,12 @@ void App::openTextEntry(TextEntryPurpose purpose, const String& title, const Str
     textEntrySession_.contextValue = contextValue;
     textEntrySession_.maxLength = maxLength;
     textEntrySession_.masked = masked;
-    textEntrySession_.revealValue = false;
+    // On physical-keyboard boards there is no on-screen show/hide control
+    // (rebuildTextEntryButtons() suppresses the virtual keys), so reveal masked
+    // values as they are typed -- otherwise the user can never see what they
+    // enter. The on-screen keyboard keeps the default-hidden behaviour and its
+    // show/hide toggle button.
+    textEntrySession_.revealValue = Board::Keyboard::present();
     menuScreen_ = MenuScreen::TextEntry;
     rebuildTextEntryButtons();
     renderTextEntry();
@@ -3541,6 +3604,12 @@ void App::openTextEntry(TextEntryPurpose purpose, const String& title, const Str
 void App::rebuildTextEntryButtons() {
     textEntryButtons_.clear();
     if (!textEntrySession_.active) {
+        return;
+    }
+
+    if (Board::Keyboard::present()) {
+        // Physical keyboard: no on-screen keys. Text entry is driven by
+        // handleTextEntryKeyboard(); the field renders with an empty button list.
         return;
     }
 
@@ -3667,6 +3736,42 @@ bool App::handleTextEntryTap(uint16_t x, uint16_t y, uint32_t nowMs) {
     }
 
     return false;
+}
+
+void App::handleTextEntryKeyboard(uint32_t nowMs) {
+    if (!Board::Keyboard::present() || menuScreen_ != MenuScreen::TextEntry ||
+        !textEntrySession_.active) {
+        return;
+    }
+
+    char c = '\0';
+    if (!Board::Keyboard::readChar(c)) {
+        return;
+    }
+
+    lastActivityMs_ = nowMs;
+    restoreFromAutoDim(nowMs);
+
+    if (c == '\n') {  // Enter: confirm/save.
+        commitTextEntry(nowMs);
+        return;
+    }
+
+    if (c == '\b') {  // Backspace.
+        if (!textEntrySession_.value.isEmpty()) {
+            textEntrySession_.value.remove(textEntrySession_.value.length() - 1);
+            renderTextEntry();
+        }
+        return;
+    }
+
+    // Printable character (letters, digits, symbols and space). Shift and the
+    // Space-Fn symbol layer are already resolved by the keyboard backend.
+    if (c >= ' ' && static_cast<uint8_t>(c) < 0x7F &&
+        textEntrySession_.value.length() < textEntrySession_.maxLength) {
+        textEntrySession_.value += c;
+        renderTextEntry();
+    }
 }
 
 void App::activateTextEntryButton(size_t buttonIndex, uint32_t nowMs) {
@@ -5787,7 +5892,15 @@ void App::renderFocusTimerGenres() {
 }
 
 void App::renderFocusTimerSession() {
+#ifdef RSVP_BOARD_TPAGER
+    // The pager's ST7796 is landscape-native and held normally; the BHI260AP
+    // drives only the timer's state transitions, not screen rotation. Keep the
+    // reader orientation instead of the touch boards' flip-to-portrait behavior,
+    // which would otherwise render this screen rotated 90 degrees.
+    applyReaderUiOrientation();
+#else
     applyUiOrientation(focusTimer_.uiOrientation());
+#endif
     const String remainingLabel = formatFocusTimerRemaining(millis());
 
     switch (focusTimer_.state()) {
@@ -5798,8 +5911,20 @@ void App::renderFocusTimerSession() {
         renderFocusTimerGenres();
         return;
     case FocusTimer::State::WaitForTouchStart:
+#ifdef RSVP_BOARD_TPAGER
+    {
+        // Rotary selects the block length; center button starts. Show the
+        // selected duration so the rotary feedback is visible.
+        const uint32_t durationMs = focusTimer_.selectedTouchDurationMs();
+        const String durationLabel = String(durationMs / 60000UL) + " min";
+        display_.renderFocusTimerScreen("BEGIN", "", durationLabel,
+                                        "Rotate to change\nPress to start");
+        return;
+    }
+#else
         display_.renderFocusTimerScreen("BEGIN", "", "", "Place on short side");
         return;
+#endif
     case FocusTimer::State::TouchRunning:
         display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "", "", focusTimer_.progressPercent(millis()));
         return;
@@ -5820,7 +5945,11 @@ void App::renderFocusTimerSession() {
         display_.renderFocusTimerScreen("WORK", "", "", "Flip to begin");
         return;
     case FocusTimer::State::Cancelled:
+#ifdef RSVP_BOARD_TPAGER
+        display_.renderFocusTimerScreen("BEGIN", "", "", "Press to begin again");
+#else
         display_.renderFocusTimerScreen("BEGIN", "", "", "Place to begin again");
+#endif
         return;
     case FocusTimer::State::Complete:
         display_.renderFocusTimerScreen("DONE", "", "", "Session complete");
