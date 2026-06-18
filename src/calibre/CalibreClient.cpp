@@ -244,6 +244,13 @@ bool parseBookRsvpRef(const String &json, RsvpRef &out) {
   }
   out.url = rsvpUrl;
 
+  // Top-level book title, used for the on-SD filename. The quoted-key search for
+  // "title" does not match "title_sort"; the top-level title appears first.
+  String title;
+  if (extractStringValue(json, "title", 0, title) && !title.isEmpty()) {
+    out.title = title;
+  }
+
   // Best-effort metadata. Calibre keys formats LOWERCASE everywhere, so the
   // per-format block is format_metadata.rsvp.{size,mtime}. format_metadata holds
   // one sub-object per format (e.g. "epub" and "rsvp"), each with its own size /

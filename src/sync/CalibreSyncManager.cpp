@@ -406,12 +406,9 @@ CalibreSyncManager::Result CalibreSyncManager::reconcile(
     entry.id = id;
     entry.key = changeKey(ref);
     entry.url = client.downloadUrl(ref);
-    // CalibreClient::resolveRsvp() does not surface a human title (the
-    // /ajax/book payload carries one, but RsvpRef intentionally exposes only
-    // the download ref + change-key). We therefore name files by id, which is
-    // stable and clock-free. If a future CalibreClient revision adds a title to
-    // RsvpRef, set entry.title here and destinationPath() will prefer it.
-    entry.title = String();
+    // Name files by the book title from /ajax/book (RsvpRef.title). When the
+    // title is empty, destinationPath() falls back to the stable book id.
+    entry.title = ref.title;
     if (entry.url.isEmpty()) {
       continue;
     }

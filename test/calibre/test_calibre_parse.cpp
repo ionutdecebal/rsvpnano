@@ -152,11 +152,14 @@ void test_book_rsvp_ref() {
     CHECK(ref.size == 123456);
     // rsvp's own mtime (not epub's), with fractional seconds preserved.
     CHECK_STR_EQ("2024-05-06T07:08:09.528479+00:00", ref.lastModified.c_str());
+    // top-level title (not title_sort) drives the on-SD filename.
+    CHECK_STR_EQ("Some Book", ref.title.c_str());
   } else {
     // Live fixture book-1.json: confirmed values from the prototype.
     CHECK_STR_EQ("/get/rsvp/1/rsvplib", ref.url.c_str());
     CHECK(ref.size == 475);
     CHECK_STR_EQ("2026-06-17T15:37:34.528479+00:00", ref.lastModified.c_str());
+    CHECK_STR_EQ("Test Book", ref.title.c_str());
   }
 }
 

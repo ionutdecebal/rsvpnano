@@ -46,6 +46,8 @@ struct RsvpRef {
   String lastModified;  // ISO timestamp; prefers format_metadata.rsvp.mtime
                         // (may carry fractional seconds), else top-level
                         // last_modified; stored raw as the manifest change-key
+  String title;         // top-level book title; used for the on-SD filename
+                        // (falls back to the book id when empty)
 };
 
 // Extracts default_library from /ajax/library-info. Returns true when a
