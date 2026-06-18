@@ -158,7 +158,7 @@ segment**, not a query parameter. The `/ajax/*` endpoints take it as
 
 ---
 
-## Fixture files (for firmware unit tests — issue #3)
+## Fixture files (for firmware unit tests)
 
 | File | Endpoint |
 |------|----------|

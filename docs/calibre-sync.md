@@ -1,7 +1,7 @@
 # Calibre Library Sync
 
 Device-direct pull of `.rsvp` books from a local [Calibre](https://calibre-ebook.com/)
-content server over WiFi. Implements issue #9.
+content server over WiFi.
 
 ---
 
@@ -31,7 +31,7 @@ Key source files:
 |------|------|
 | `src/calibre/CalibreClient.h/.cpp` | HTTP client + pure JSON parsers (`calibreparser` namespace) |
 | `src/calibre/CalibreSettings.h/.cpp` | NVS-backed configuration (`CalibreSettings` struct) |
-| `src/calibre/CalibreSettingsJson.h` | Pure serialize/parse helpers for the companion HTTP API (issue #12) |
+| `src/calibre/CalibreSettingsJson.h` | Pure serialize/parse helpers for the companion HTTP API |
 | `src/sync/CalibreSyncPlan.h` | Pure, host-testable reconcile core (`calibresync::computeSyncPlan`) |
 | `src/sync/CalibreSyncManager.h/.cpp` | On-device orchestrator: WiFi up → search → diff → download → delete → manifest rewrite → reindex |
 | `src/settings/PreferenceKeys.h` | NVS key constants (`kPrefCal*`) |
@@ -112,7 +112,7 @@ Navigate **Settings → Calibre** on the device to set:
 
 Then tap **Sync from Calibre** to run an immediate sync.
 
-### Via the companion app (issue #12)
+### Via the companion app
 
 The companion app configures Calibre sync remotely over the device's AP/STA HTTP server
 using two routes:
@@ -301,7 +301,7 @@ internally, following the same pattern as `CompanionSyncManager`.
 - If security on an untrusted LAN is required, run `calibre-server` behind a TLS
   terminator (e.g. nginx with a self-signed cert) and set `baseUrl` to `https://...`.
   The firmware's `net::get` selects `WiFiClientSecure` for `https://` URLs. **Note:** it
-  currently calls `setInsecure()` (`HttpFetch.cpp`, `TODO(issue #4)`), so TLS *encrypts*
+  currently calls `setInsecure()` (`HttpFetch.cpp`, marked `TODO`), so TLS *encrypts*
   the connection but does **not** verify the server certificate — i.e. no protection
   against an active MITM yet. Certificate pinning/verification is tracked as follow-up.
 
