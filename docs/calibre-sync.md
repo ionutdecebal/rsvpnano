@@ -57,7 +57,7 @@ See `docs/esp32-s3-multi-target-layout.md` for the multi-board build layout.
 ### 1. Install the Calibre RSVP Output plugin
 
 The device downloads `.rsvp` files. Calibre does not produce `.rsvp` natively; the
-[calibre-rsvp-plugin](https://github.com/ionutdecebal/calibre-rsvp-plugin) adds RSVP
+[calibre-rsvp-plugin](https://github.com/jonathanglima/calibre-rsvp-plugin) adds RSVP
 as an output format and registers the `application/x-rsvp` MIME type so the content
 server serves it correctly.
 
