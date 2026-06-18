@@ -108,6 +108,7 @@ enum MenuItem : size_t {
   MenuSdCardCheck,
   MenuRssFeeds,
   MenuCompanionSync,
+  MenuCalibreSync,  // manual sync trigger
 #if RSVP_USB_TRANSFER_ENABLED
   MenuUsbTransfer,
 #endif
@@ -221,6 +222,8 @@ constexpr size_t kSettingsHomeRestructuredBatteryIndex = 5;
 constexpr size_t kSettingsHomeRestructuredUpdateIndex = 6;
 constexpr size_t kSettingsHomeRestructuredFirmwareVersionIndex = 7;
 constexpr size_t kSettingsHomeRestructuredSdCardIndex = 8;
+// "Calibre" entry in the restructured Settings home.
+constexpr size_t kSettingsHomeRestructuredCalibreIndex = 9;
 constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayHandednessIndex = 3;
@@ -270,6 +273,17 @@ constexpr size_t kWifiSettingsRestructuredAutoUpdateIndex = 2;
 constexpr size_t kWifiSettingsRestructuredOtaOwnerIndex = 3;
 constexpr size_t kWifiNetworkSettingsChooseIndex = 1;
 constexpr size_t kWifiNetworkSettingsForgetIndex = 2;
+// Items on the on-device Calibre settings screen.
+constexpr size_t kCalibreSettingsEnabledIndex = 1;
+constexpr size_t kCalibreSettingsUrlIndex = 2;
+constexpr size_t kCalibreSettingsQueryIndex = 3;
+constexpr size_t kCalibreSettingsUsernameIndex = 4;
+constexpr size_t kCalibreSettingsPasswordIndex = 5;
+constexpr size_t kCalibreSettingsSyncNowIndex = 6;
+constexpr size_t kCalibreBaseUrlMaxLength = 95;
+constexpr size_t kCalibreQueryMaxLength = 95;
+constexpr size_t kCalibreUsernameMaxLength = 63;
+constexpr size_t kCalibrePasswordMaxLength = 63;
 constexpr size_t kSettingsBatteryCpuPlayIndex = 1;
 constexpr size_t kSettingsBatteryCpuScrollIndex = 2;
 constexpr size_t kSettingsBatteryCpuPausedIndex = 3;
@@ -1066,7 +1080,9 @@ const char *App::touchPhaseName(TouchPhase phase) const {
 bool App::isSettingsMenuScreen(MenuScreen screen) const {
   return screen == MenuScreen::SettingsHome || screen == MenuScreen::SettingsDisplay ||
          screen == MenuScreen::SettingsPacing || screen == MenuScreen::SettingsBattery ||
-         screen == MenuScreen::WifiSettings || screen == MenuScreen::WifiNetworkSettings;
+         screen == MenuScreen::WifiSettings || screen == MenuScreen::WifiNetworkSettings ||
+         // On-device Calibre settings submenu.
+         screen == MenuScreen::CalibreSettings;
 }
 
 void App::setState(AppState nextState, uint32_t nowMs) {
@@ -3036,6 +3052,16 @@ bool App::navigateBackInMenu(uint32_t nowMs) {
       openWifiSettings();
       return true;
 
+    case MenuScreen::CalibreSettings:
+      // Return to the Settings home.
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredCalibreIndex
+                                   : kSettingsHomeWifiIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return true;
+
     case MenuScreen::TextEntry:
       menuScreen_ = textEntrySession_.returnScreen;
       textEntrySession_ = TextEntrySession();
@@ -3403,6 +3429,10 @@ void App::selectMenuItem(uint32_t nowMs) {
     case MenuCompanionSync:
       enterCompanionSync(nowMs);
       return;
+    case MenuCalibreSync:
+      // Manual Calibre sync, mirroring MenuRssFeeds -> runRssFeedCheck().
+      runCalibreSync(nowMs);
+      return;
     case MenuSdCardCheck:
       runSdCardCheck(nowMs);
       return;
@@ -3518,6 +3548,13 @@ void App::selectSettingsItem(uint32_t nowMs) {
 
   if (Board::Config::ENABLE_RESTRUCTURED_MENU) {
     selectRestructuredSettingsItem(nowMs);
+    return;
+  }
+
+  // The Calibre submenu shares one handler for both the legacy and restructured
+  // menu layouts.
+  if (menuScreen_ == MenuScreen::CalibreSettings) {
+    selectCalibreSettingsItem(nowMs);
     return;
   }
 
@@ -3791,6 +3828,10 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
       case kSettingsHomeRestructuredSdCardIndex:
         runSdCardCheck(nowMs);
         return;
+      case kSettingsHomeRestructuredCalibreIndex:
+        // Open the on-device Calibre submenu.
+        openCalibreSettings();
+        return;
       default:
         return;
     }
@@ -4027,6 +4068,11 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
         return;
     }
   }
+
+  if (menuScreen_ == MenuScreen::CalibreSettings) {
+    selectCalibreSettingsItem(nowMs);
+    return;
+  }
 }
 
 void App::openBatterySettings() {
@@ -4169,6 +4215,75 @@ void App::openWifiNetworkSettings() {
   menuScreen_ = MenuScreen::WifiNetworkSettings;
   rebuildSettingsMenuItems();
   renderSettings();
+}
+
+void App::openCalibreSettings() {
+  // On-device Calibre configuration submenu.
+  settingsSelectedIndex_ = kCalibreSettingsEnabledIndex;
+  menuScreen_ = MenuScreen::CalibreSettings;
+  rebuildSettingsMenuItems();
+  renderSettings();
+}
+
+void App::selectCalibreSettingsItem(uint32_t nowMs) {
+  // Edit/persist config or trigger a sync. Text fields reuse the shared
+  // on-screen keyboard via openTextEntry(); values are persisted through
+  // saveCalibreSettings. No credentials logged.
+  switch (settingsSelectedIndex_) {
+    case kSettingsBackIndex:
+      settingsSelectedIndex_ = Board::Config::ENABLE_RESTRUCTURED_MENU
+                                   ? kSettingsHomeRestructuredCalibreIndex
+                                   : kSettingsHomeWifiIndex;
+      menuScreen_ = MenuScreen::SettingsHome;
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    case kCalibreSettingsEnabledIndex: {
+      CalibreSettings calibre;
+      loadCalibreSettings(calibre);
+      calibre.enabled = !calibre.enabled;
+      saveCalibreSettings(calibre);
+      Serial.printf("[settings] calibre enabled=%d\n", calibre.enabled ? 1 : 0);
+      rebuildSettingsMenuItems();
+      renderSettings();
+      return;
+    }
+    case kCalibreSettingsUrlIndex: {
+      CalibreSettings calibre;
+      loadCalibreSettings(calibre);
+      openTextEntry(TextEntryPurpose::CalibreBaseUrl, "Calibre", "Server URL",
+                    "e.g. http://192.168.0.10:8080", calibre.baseUrl, "", false,
+                    kCalibreBaseUrlMaxLength, MenuScreen::CalibreSettings);
+      return;
+    }
+    case kCalibreSettingsQueryIndex: {
+      CalibreSettings calibre;
+      loadCalibreSettings(calibre);
+      openTextEntry(TextEntryPurpose::CalibreQuery, "Calibre", "Query / tag",
+                    "e.g. tag:rsvp", calibre.searchQuery, "", false,
+                    kCalibreQueryMaxLength, MenuScreen::CalibreSettings);
+      return;
+    }
+    case kCalibreSettingsUsernameIndex: {
+      CalibreSettings calibre;
+      loadCalibreSettings(calibre);
+      openTextEntry(TextEntryPurpose::CalibreUsername, "Calibre", "Username",
+                    "Optional", calibre.username, "", false,
+                    kCalibreUsernameMaxLength, MenuScreen::CalibreSettings);
+      return;
+    }
+    case kCalibreSettingsPasswordIndex:
+      // Existing password is never preloaded into the editable field.
+      openTextEntry(TextEntryPurpose::CalibrePassword, "Calibre", "Password",
+                    "Optional", "", "", true, kCalibrePasswordMaxLength,
+                    MenuScreen::CalibreSettings);
+      return;
+    case kCalibreSettingsSyncNowIndex:
+      runCalibreSync(nowMs);
+      return;
+    default:
+      return;
+  }
 }
 
 void App::selectWifiSettingsItem(uint32_t nowMs) {
@@ -4569,6 +4684,43 @@ void App::commitTextEntry(uint32_t nowMs) {
       openWifiSettings();
       return;
     }
+    case TextEntryPurpose::CalibreBaseUrl:
+    case TextEntryPurpose::CalibreQuery:
+    case TextEntryPurpose::CalibreUsername:
+    case TextEntryPurpose::CalibrePassword: {
+      // Persist a single edited field through saveCalibreSettings.
+      // Credential values are never logged.
+      CalibreSettings calibre;
+      loadCalibreSettings(calibre);
+      const String entered = textEntrySession_.value;
+      String savedLabel;
+      switch (textEntrySession_.purpose) {
+        case TextEntryPurpose::CalibreBaseUrl:
+          calibre.baseUrl = normalizeCalibreBaseUrl(entered);
+          savedLabel = "Server URL saved";
+          break;
+        case TextEntryPurpose::CalibreQuery:
+          calibre.searchQuery = entered;
+          savedLabel = "Query saved";
+          break;
+        case TextEntryPurpose::CalibreUsername:
+          calibre.username = entered;
+          savedLabel = "Username saved";
+          break;
+        case TextEntryPurpose::CalibrePassword:
+        default:
+          calibre.password = entered;
+          savedLabel = entered.isEmpty() ? "Password cleared" : "Password saved";
+          break;
+      }
+      saveCalibreSettings(calibre);
+      textEntrySession_ = TextEntrySession();
+      textEntryButtons_.clear();
+      display_.renderStatus("Calibre", savedLabel, "");
+      delay(900);
+      openCalibreSettings();
+      return;
+    }
     case TextEntryPurpose::None:
     default:
       menuScreen_ = textEntrySession_.returnScreen;
@@ -4689,6 +4841,9 @@ void App::rebuildSettingsMenuItems() {
       settingsMenuItems_.push_back(firmwareUpdateMenuLabel());
       settingsMenuItems_.push_back("Installed: " + firmwareVersionLabel());
       settingsMenuItems_.push_back("SD card check");
+      // Reach the Calibre submenu in the restructured Settings home
+      // (shipping board has ENABLE_RESTRUCTURED_MENU).
+      settingsMenuItems_.push_back("Calibre");
     } else if (menuScreen_ == MenuScreen::SettingsDisplay) {
       settingsMenuItems_.push_back(uiText(UiText::Back));
       settingsMenuItems_.push_back("Theme: " + themeModeLabel());
@@ -4744,6 +4899,22 @@ void App::rebuildSettingsMenuItems() {
       settingsMenuItems_.push_back("Choose network: " +
                                    storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
       settingsMenuItems_.push_back("Forget network");
+    } else if (menuScreen_ == MenuScreen::CalibreSettings) {
+      // On-device Calibre configuration.
+      // Credential values are never shown in the menu (only "Set"/"Not set").
+      CalibreSettings calibre;
+      loadCalibreSettings(calibre);
+      settingsMenuItems_.push_back(uiText(UiText::Back));
+      settingsMenuItems_.push_back("Enabled: " + onOffLabel(calibre.enabled));
+      settingsMenuItems_.push_back("Server URL: " +
+                                   storedOrFallbackLabel(calibre.baseUrl, "Not set"));
+      settingsMenuItems_.push_back("Query/tag: " +
+                                   storedOrFallbackLabel(calibre.searchQuery, "Not set"));
+      settingsMenuItems_.push_back("Username: " +
+                                   storedOrFallbackLabel(calibre.username, "Not set"));
+      settingsMenuItems_.push_back(String("Password: ") +
+                                   (calibre.password.isEmpty() ? "Not set" : "Set"));
+      settingsMenuItems_.push_back("Sync now");
     }
 
     if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -5100,6 +5271,71 @@ void App::runRssFeedCheck(uint32_t nowMs) {
     renderArticlesMenu();
     return;
   }
+  renderMainMenu();
+}
+
+// Manual "Sync from Calibre" menu action. Modelled directly on
+// runRssFeedCheck() above -- a synchronous, blocking networked action: show
+// status, run the engine while streaming progress to the display, then render a
+// final summary and return to the menu. WiFi creds are obtained the same way
+// enterCompanionSync()/runFirmwareUpdate() get them, via preferredOtaConfig()
+// (the shared station SSID/password). CalibreSyncManager owns the radio:
+// runSync() brings WiFi up and tears it down. CalibreSettings are only read
+// here, never redefined. Manual trigger only -- no auto-sync.
+void App::runCalibreSync(uint32_t nowMs) {
+  if (blockNetworkActionForOtaCheck("Calibre", nowMs)) {
+    return;
+  }
+
+  CalibreSettings settings;
+  loadCalibreSettings(settings);
+
+  if (!settings.enabled || settings.baseUrl.isEmpty()) {
+    display_.renderStatus("Calibre", "Not configured", "Use companion app");
+    delay(1800);
+    renderMainMenu();
+    return;
+  }
+
+  saveReadingPosition(true);
+  pausedTouch_.active = false;
+  pausedTouchIntent_ = TouchIntent::None;
+  wpmFeedbackVisible_ = false;
+  display_.renderStatus("Calibre", "Starting Wi-Fi", "");
+
+  const OtaUpdater::Config wifiConfig = preferredOtaConfig();
+
+  CalibreSyncManager syncManager(&storage_);
+  syncManager.setProgressCallback(
+      [this](const String &phase, int current, int total, const String &detail) {
+        const int percent =
+            (total > 0) ? static_cast<int>((static_cast<long>(current) * 100) / total) : -1;
+        display_.renderProgress("Calibre", phase, detail, percent);
+      });
+
+  const CalibreSyncManager::Result result =
+      syncManager.runSync(settings, wifiConfig.wifiSsid, wifiConfig.wifiPassword);
+
+  Serial.printf(
+      "[app][calibre-sync] ok=%d downloaded=%d deleted=%d unchanged=%d failed=%d error=%s\n",
+      result.ok ? 1 : 0, result.downloaded, result.deleted, result.unchanged, result.failed,
+      result.error.c_str());
+
+  String summary;
+  String detail;
+  if (result.ok) {
+    summary = "Sync complete";
+    detail = String(result.downloaded) + " new, " + String(result.deleted) + " removed";
+    if (result.failed > 0) {
+      detail += ", " + String(result.failed) + " failed";
+    }
+  } else {
+    summary = "Sync failed";
+    detail = result.error.isEmpty() ? "Unknown error" : result.error;
+  }
+
+  display_.renderStatus("Calibre", summary, detail);
+  delay(1800);
   renderMainMenu();
 }
 
@@ -6422,6 +6658,7 @@ void App::renderMainMenu() {
   items.push_back("SD card check");
   items.push_back("RSS feeds");
   items.push_back("Companion sync");
+  items.push_back("Sync from Calibre");
 #if RSVP_USB_TRANSFER_ENABLED
   items.push_back(uiText(UiText::UsbTransfer));
 #endif

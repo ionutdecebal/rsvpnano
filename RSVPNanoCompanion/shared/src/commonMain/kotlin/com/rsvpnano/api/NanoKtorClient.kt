@@ -1,6 +1,7 @@
 package com.rsvpnano.api
 
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoCalibreSettings
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
@@ -85,6 +86,22 @@ class NanoKtorClient(
         }
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoRssFeeds.serializer())
+    }
+
+    // Calibre library sync
+    // Cross-cutting note: firmware must expose GET/PUT api/calibre-settings accepting
+    // NanoCalibreSettings JSON (fields: enabled, baseUrl, searchQuery, username, password,
+    // libraryId, deletionPolicy). The PUT endpoint should return the updated settings as JSON.
+    override suspend fun fetchCalibreSettings(baseUrl: String): NanoCalibreSettings =
+        json.decodeFromString(NanoCalibreSettings.serializer(), requestText(baseUrl, "api/calibre-settings"))
+
+    override suspend fun updateCalibreSettings(baseUrl: String, settings: NanoCalibreSettings): NanoCalibreSettings {
+        val response = httpClient.put(buildUrl(baseUrl, "api/calibre-settings")) {
+            contentType(ContentType.Application.Json)
+            setBody(settings)
+        }
+        val body = response.body<String>()
+        return decodeDeviceResponse(response.status, body, NanoCalibreSettings.serializer())
     }
 
     override suspend fun uploadBook(

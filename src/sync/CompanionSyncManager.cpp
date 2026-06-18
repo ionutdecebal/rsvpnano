@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <vector>
 
+#include "calibre/CalibreSettings.h"
+#include "calibre/CalibreSettingsJson.h"
 #include "settings/PreferenceKeys.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -617,6 +619,12 @@ void CompanionSyncManager::handleRssFeedsStatic() {
   }
 }
 
+void CompanionSyncManager::handleCalibreSettingsStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleCalibreSettings();
+  }
+}
+
 void CompanionSyncManager::handleBookDeleteStatic() {
   if (instance_ != nullptr) {
     instance_->handleBookDelete();
@@ -671,6 +679,8 @@ bool CompanionSyncManager::startServer() {
   server_.on("/api/wifi", HTTP_DELETE, handleWifiStatic);
   server_.on("/api/rss-feeds", HTTP_GET, handleRssFeedsStatic);
   server_.on("/api/rss-feeds", HTTP_PUT, handleRssFeedsStatic);
+  server_.on("/api/calibre-settings", HTTP_GET, handleCalibreSettingsStatic);
+  server_.on("/api/calibre-settings", HTTP_PUT, handleCalibreSettingsStatic);
   server_.onNotFound(handleNotFoundStatic);
   server_.begin();
   serverStarted_ = true;
@@ -827,6 +837,83 @@ void CompanionSyncManager::handleRssFeeds() {
   statusLine1_ = "RSS feeds saved";
   statusLine2_ = kRssConfigPath;
   server_.send(200, "application/json", rssFeedsJson());
+}
+
+// GET /api/calibre-settings and PUT /api/calibre-settings.
+// Mirrors handleRssFeeds() in structure (GET → serialize, PUT → parse+save).
+void CompanionSyncManager::handleCalibreSettings() {
+  if (server_.method() == HTTP_GET) {
+    server_.send(200, "application/json", calibreSettingsJson());
+    return;
+  }
+
+  constexpr size_t kMaxCalibreSettingsPatchBytes = 1024;
+  const String body = server_.arg("plain");
+  if (body.length() > kMaxCalibreSettingsPatchBytes) {
+    server_.send(413, "application/json",
+                 "{\"ok\":false,\"error\":\"Calibre settings payload too large\"}");
+    return;
+  }
+
+  String error;
+  if (!applyCalibreSettingsJson(body, error)) {
+    server_.send(400, "application/json",
+                 String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+    return;
+  }
+
+  statusLine1_ = "Calibre settings saved";
+  statusLine2_ = "";
+  server_.send(200, "application/json", calibreSettingsJson());
+}
+
+String CompanionSyncManager::calibreSettingsJson() {
+  CalibreSettings settings;
+  // loadCalibreSettings opens/closes its own Preferences handle; this is the
+  // same pattern as wifiJson() which reads directly from preferences_.
+  // We mirror the design choice made by wifiJson: on load failure we return
+  // safe defaults (all empty/false/Mirror) so the companion still gets a
+  // well-formed response.
+  loadCalibreSettings(settings);
+
+  // Forward jsonEscape to the pure helper via a lambda so CalibreSettingsJson.h
+  // stays free of member-function dependencies.
+  return calibresettingsjson::serializeCalibreSettings(
+      settings, [this](const String &v) { return jsonEscape(v); });
+}
+
+bool CompanionSyncManager::applyCalibreSettingsJson(const String &body,
+                                                     String &error) {
+  // Load the currently stored settings first so we can preserve the password
+  // when the incoming body omits it or sends "" (the masked sentinel).
+  CalibreSettings current;
+  loadCalibreSettings(current);
+
+  CalibreSettings updated = current;
+  bool passwordProvided = false;
+
+  // Bind the anonymous-namespace helpers to the template parameters expected
+  // by parseCalibreSettingsJson.
+  const bool ok = calibresettingsjson::parseCalibreSettingsJson(
+      body, updated, passwordProvided, error,
+      [](const String &b, const char *k, bool &v) {
+        return readJsonBool(b, k, v);
+      },
+      [](const String &b, const char *k, String &v) {
+        return readJsonString(b, k, v);
+      });
+
+  if (!ok) {
+    return false;
+  }
+
+  // Security: if no non-empty password was provided in the PUT body, preserve
+  // the stored credential so a settings round-trip does not blank the password.
+  if (!passwordProvided) {
+    updated.password = current.password;
+  }
+
+  return saveCalibreSettings(updated);
 }
 
 void CompanionSyncManager::handleBooks() {

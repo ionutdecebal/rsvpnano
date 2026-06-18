@@ -1,0 +1,62 @@
+{
+    "last_modified": "2026-06-17T15:37:34+00:00",
+    "uuid": "2fa6311a-1c68-4531-b850-6827874244f1",
+    "publisher": null,
+    "cover": "/get/cover/1/rsvplib",
+    "series": null,
+    "application_id": 1,
+    "authors": [
+        "Jane Doe"
+    ],
+    "thumbnail": "/get/thumb/1/rsvplib",
+    "user_metadata": {},
+    "timestamp": "2026-06-17T15:37:34+00:00",
+    "identifiers": {},
+    "title_sort": "Test Book",
+    "tags": [],
+    "series_index": null,
+    "author_sort": "Doe, Jane",
+    "title": "Test Book",
+    "rating": 0.0,
+    "languages": [
+        "eng"
+    ],
+    "comments": null,
+    "user_categories": {},
+    "pubdate": "None",
+    "link_maps": {},
+    "author_sort_map": {
+        "Jane Doe": "Doe, Jane"
+    },
+    "format_metadata": {
+        "epub": {
+            "path": "/tmp/rsvplib/Jane Doe/Test Book (1)/Test Book - Jane Doe.epub",
+            "size": 20945,
+            "mtime": "2026-06-17T15:37:34.252009+00:00"
+        },
+        "rsvp": {
+            "path": "/tmp/rsvplib/Jane Doe/Test Book (1)/Test Book - Jane Doe.rsvp",
+            "size": 475,
+            "mtime": "2026-06-17T15:37:34.528479+00:00"
+        }
+    },
+    "formats": [
+        "epub",
+        "rsvp"
+    ],
+    "main_format": {
+        "epub": "/get/epub/1/rsvplib"
+    },
+    "other_formats": {
+        "rsvp": "/get/rsvp/1/rsvplib"
+    },
+    "category_urls": {
+        "publisher": {},
+        "series": {},
+        "authors": {
+            "Jane Doe": "/ajax/books_in/617574686f7273/31/rsvplib"
+        },
+        "languages": {},
+        "tags": {}
+    }
+}

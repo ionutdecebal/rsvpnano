@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.Wifi
+import com.rsvpnano.models.NanoCalibreSchema
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -75,6 +76,7 @@ import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
 import com.rsvpnano.models.PendingUpload
 
+// Calibre library sync UI callbacks
 @Composable
 fun SettingsTab(
     uiState: CompanionUiState,
@@ -89,6 +91,15 @@ fun SettingsTab(
     onForgetRememberedNano: () -> Unit,
     hasPermissions: Boolean,
     onGrantPermissions: () -> Unit,
+    onCalibreBaseUrlChange: (String) -> Unit = {},
+    onCalibreSearchQueryChange: (String) -> Unit = {},
+    onCalibreUsernameChange: (String) -> Unit = {},
+    onCalibrePasswordChange: (String) -> Unit = {},
+    onCalibreLibraryIdChange: (String) -> Unit = {},
+    onCalibreDeletionPolicyChange: (String) -> Unit = {},
+    onCalibreEnabledChange: (Boolean) -> Unit = {},
+    onSaveCalibre: () -> Unit = {},
+    onRefreshCalibre: () -> Unit = {},
 ) {
     PullRefreshBox(
         isRefreshing = uiState.isRefreshing,
@@ -477,6 +488,87 @@ fun SettingsTab(
                             ) {
                                 Text(text = "Forget")
                             }
+                        }
+                    }
+                }
+
+                // Calibre library sync settings section
+                item {
+                    SectionCard(
+                        title = "Calibre Library",
+                        subtitle = "Sync books from a Calibre Content Server when the reader has Wi-Fi.",
+                    ) {
+                        val calibreStatus = uiState.calibreSettings?.let { c ->
+                            if (c.enabled) "Sync enabled — ${c.baseUrl.ifBlank { "no server URL" }}"
+                            else "Sync disabled"
+                        } ?: "Calibre settings not loaded from reader."
+                        SettingsStatusRow(
+                            icon = Icons.AutoMirrored.Outlined.MenuBook,
+                            title = "Calibre sync",
+                            body = calibreStatus,
+                            action = {
+                                TextButton(onClick = onRefreshCalibre) {
+                                    Text(text = "Refresh")
+                                }
+                            },
+                        )
+                        HorizontalDivider()
+                        SwitchRow(
+                            label = "Enable Calibre sync",
+                            description = "Reader will pull books from the configured server.",
+                            checked = uiState.calibreEnabledDraft,
+                            onCheckedChange = onCalibreEnabledChange,
+                        )
+                        OutlinedTextField(
+                            value = uiState.calibreBaseUrlDraft,
+                            onValueChange = onCalibreBaseUrlChange,
+                            label = { Text("Server base URL") },
+                            supportingText = { Text("e.g. http://192.168.1.10:8080") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = uiState.calibreSearchQueryDraft,
+                            onValueChange = onCalibreSearchQueryChange,
+                            label = { Text("Search / tag query") },
+                            supportingText = { Text("Calibre saved-search name or tag filter.") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = uiState.calibreUsernameDraft,
+                            onValueChange = onCalibreUsernameChange,
+                            label = { Text("Username") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = uiState.calibrePasswordDraft,
+                            onValueChange = onCalibrePasswordChange,
+                            label = { Text("Password") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = uiState.calibreLibraryIdDraft,
+                            onValueChange = onCalibreLibraryIdChange,
+                            label = { Text("Library ID (optional)") },
+                            supportingText = { Text("Leave blank to use the default library.") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        ChoiceRow(
+                            label = "Deletion policy",
+                            selected = uiState.calibreDeletionPolicyDraft,
+                            options = listOf(
+                                NanoCalibreSchema.DELETION_POLICY_KEEP to "Keep — never delete books",
+                                NanoCalibreSchema.DELETION_POLICY_MIRROR to "Mirror — remove books not in query",
+                            ),
+                            onSelected = onCalibreDeletionPolicyChange,
+                        )
+                        Button(onClick = onSaveCalibre) {
+                            Icon(imageVector = Icons.Outlined.CloudUpload, contentDescription = null)
+                            Text(text = "Save Calibre settings")
                         }
                     }
                 }

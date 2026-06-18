@@ -4,6 +4,7 @@ import com.rsvpnano.api.NanoClient
 import com.rsvpnano.converters.RsvpBookFile
 import com.rsvpnano.converters.SharedArticle
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoCalibreSettings
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.PendingUpload
@@ -38,6 +39,7 @@ class NanoCompanionController(
             device = device,
             rssFeeds = deviceFeeds,
             syncedRssFeeds = deviceFeeds,
+            calibreSettings = device.calibreSettings,
             drafts = draftService.loadDrafts(),
         )
     }
@@ -60,12 +62,14 @@ class NanoCompanionController(
         val deviceFeeds = RssFeedNormalizer.normalize(
             runCatching { deviceSyncService.refreshRssFeeds(baseUrl).feeds }.getOrDefault(emptyList())
         )
+        val calibreSettings = runCatching { deviceSyncService.refreshCalibreSettings(baseUrl) }.getOrNull()
         return CompanionDeviceRefreshSnapshot(
             books = books,
             settings = settings,
             wifiSettings = wifiSettings,
             rssFeeds = deviceFeeds,
             syncedRssFeeds = deviceFeeds,
+            calibreSettings = calibreSettings,
             drafts = draftService.loadDrafts(),
         )
     }
@@ -173,6 +177,19 @@ class NanoCompanionController(
         )
     }
 
+    // Calibre library sync
+    suspend fun saveCalibreSettings(baseUrl: String, settings: NanoCalibreSettings): CompanionCalibreSnapshot {
+        verifyReachable(baseUrl)
+        val saved = deviceSyncService.saveCalibreSettings(baseUrl, settings)
+        return CompanionCalibreSnapshot(calibreSettings = saved, didSyncDevice = true)
+    }
+
+    suspend fun refreshCalibreSettings(baseUrl: String): CompanionCalibreSnapshot {
+        verifyReachable(baseUrl)
+        val fetched = deviceSyncService.refreshCalibreSettings(baseUrl)
+        return CompanionCalibreSnapshot(calibreSettings = fetched, didSyncDevice = false)
+    }
+
     suspend fun uploadBook(
         baseUrl: String,
         file: RsvpBookFile,
@@ -278,6 +295,7 @@ data class CompanionConnectSnapshot(
     val device: NanoDeviceSnapshot,
     val rssFeeds: List<String>,
     val syncedRssFeeds: List<String>,
+    val calibreSettings: NanoCalibreSettings?,
     val drafts: List<PendingUpload>,
 )
 
@@ -287,6 +305,7 @@ data class CompanionDeviceRefreshSnapshot(
     val wifiSettings: NanoWifiSettings?,
     val rssFeeds: List<String>,
     val syncedRssFeeds: List<String>,
+    val calibreSettings: NanoCalibreSettings?,
     val drafts: List<PendingUpload>,
 )
 
@@ -328,4 +347,10 @@ data class CompanionSettingsSnapshot(
 
 data class CompanionWifiSnapshot(
     val wifiSettings: NanoWifiSettings,
+)
+
+// Calibre library sync
+data class CompanionCalibreSnapshot(
+    val calibreSettings: NanoCalibreSettings,
+    val didSyncDevice: Boolean,
 )

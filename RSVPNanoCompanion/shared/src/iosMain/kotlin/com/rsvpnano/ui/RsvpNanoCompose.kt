@@ -57,5 +57,15 @@ private fun RsvpNanoComposeApp(presenter: CompanionPresenter) {
         onAddRssFeed = presenter::addRssFeed,
         onRefreshRssFeeds = presenter::refreshRssFeeds,
         onDeleteFeed = presenter::deleteRssFeed,
+        // Calibre library sync
+        onCalibreBaseUrlChange = presenter::setCalibreBaseUrlDraft,
+        onCalibreSearchQueryChange = presenter::setCalibreSearchQueryDraft,
+        onCalibreUsernameChange = presenter::setCalibreUsernameDraft,
+        onCalibrePasswordChange = presenter::setCalibrePasswordDraft,
+        onCalibreLibraryIdChange = presenter::setCalibreLibraryIdDraft,
+        onCalibreDeletionPolicyChange = presenter::setCalibreDeletionPolicyDraft,
+        onCalibreEnabledChange = presenter::setCalibreEnabledDraft,
+        onSaveCalibre = presenter::saveCalibreSettings,
+        onRefreshCalibre = presenter::refreshCalibreSettings,
     )
 }

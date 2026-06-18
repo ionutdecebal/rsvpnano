@@ -33,3 +33,7 @@ web/generated/
 .cache/
 compile_commands.json
 logs/
+
+# calibre host test artifacts
+test/calibre/vendor/
+test/calibre/build/

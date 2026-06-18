@@ -1,6 +1,7 @@
 package com.rsvpnano.api
 
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoCalibreSettings
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
@@ -21,6 +22,9 @@ interface NanoClient {
     suspend fun forgetWifi(baseUrl: String): NanoWifiSettings
     suspend fun fetchRssFeeds(baseUrl: String): NanoRssFeeds
     suspend fun updateRssFeeds(baseUrl: String, feeds: List<String>): NanoRssFeeds
+    // Calibre library sync; firmware endpoint: GET/PUT api/calibre-settings
+    suspend fun fetchCalibreSettings(baseUrl: String): NanoCalibreSettings
+    suspend fun updateCalibreSettings(baseUrl: String, settings: NanoCalibreSettings): NanoCalibreSettings
     suspend fun uploadBook(
         baseUrl: String,
         name: String,

@@ -13,6 +13,8 @@ import com.rsvpnano.app.SharedAppUtils
 import com.rsvpnano.converters.ImportPreparation
 import com.rsvpnano.converters.RsvpConverter
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoCalibreSettings
+import com.rsvpnano.models.NanoCalibreSchema
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.RememberedNano
@@ -119,6 +121,15 @@ class CompanionPresenter(
     fun setDraftBody(value: String) = updateState { it.copy(draftBody = value) }
 
     fun setRssFeedDraft(value: String) = updateState { it.copy(rssFeedDraft = value) }
+
+    // Calibre library sync draft setters (mirror setRssFeedDraft pattern)
+    fun setCalibreBaseUrlDraft(value: String) = updateState { it.copy(calibreBaseUrlDraft = value) }
+    fun setCalibreSearchQueryDraft(value: String) = updateState { it.copy(calibreSearchQueryDraft = value) }
+    fun setCalibreUsernameDraft(value: String) = updateState { it.copy(calibreUsernameDraft = value) }
+    fun setCalibrePasswordDraft(value: String) = updateState { it.copy(calibrePasswordDraft = value) }
+    fun setCalibreLibraryIdDraft(value: String) = updateState { it.copy(calibreLibraryIdDraft = value) }
+    fun setCalibreDeletionPolicyDraft(value: String) = updateState { it.copy(calibreDeletionPolicyDraft = value) }
+    fun setCalibreEnabledDraft(value: Boolean) = updateState { it.copy(calibreEnabledDraft = value) }
 
     fun refresh() {
         scope.launch {
@@ -427,6 +438,91 @@ class CompanionPresenter(
                 }
             }.onFailure { error ->
                 markDisconnected(error.message ?: "Reader disconnected before removing RSS feeds.")
+            }
+        }
+    }
+
+    // Calibre library sync: push settings to device (mirrors saveRssFeeds/addRssFeed pattern)
+    fun saveCalibreSettings() {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before saving Calibre settings."))
+                return@launch
+            }
+            val baseUrl = state.calibreBaseUrlDraft.trim()
+            if (state.calibreEnabledDraft && baseUrl.isEmpty()) {
+                setNotice(CompanionNotice.Error("Calibre server URL is required when sync is enabled."))
+                return@launch
+            }
+            setNotice(CompanionNotice.Attention("Saving Calibre settings on Nano..."))
+            if (!ensureReaderReachable("saving Calibre settings")) return@launch
+            val settings = NanoCalibreSettings(
+                enabled = state.calibreEnabledDraft,
+                baseUrl = baseUrl,
+                searchQuery = state.calibreSearchQueryDraft.trim(),
+                username = state.calibreUsernameDraft.trim(),
+                password = state.calibrePasswordDraft,
+                libraryId = state.calibreLibraryIdDraft.trim(),
+                deletionPolicy = state.calibreDeletionPolicyDraft
+                    .takeIf { it == NanoCalibreSchema.DELETION_POLICY_MIRROR }
+                    ?: NanoCalibreSchema.DELETION_POLICY_KEEP,
+            )
+            runCatching {
+                withNanoApi {
+                    companionController.saveCalibreSettings(state.address, settings)
+                }
+            }.onSuccess { snapshot ->
+                val saved = snapshot.calibreSettings
+                updateState {
+                    it.copy(
+                        calibreSettings = saved,
+                        calibreBaseUrlDraft = saved.baseUrl,
+                        calibreSearchQueryDraft = saved.searchQuery,
+                        calibreUsernameDraft = saved.username,
+                        calibrePasswordDraft = saved.password,
+                        calibreLibraryIdDraft = saved.libraryId,
+                        calibreDeletionPolicyDraft = saved.deletionPolicy,
+                        calibreEnabledDraft = saved.enabled,
+                        notice = CompanionNotice.Success("Calibre settings saved on Nano."),
+                    )
+                }
+            }.onFailure { error ->
+                markDisconnected(error.message ?: "Reader disconnected before saving Calibre settings.")
+            }
+        }
+    }
+
+    fun refreshCalibreSettings() {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before refreshing Calibre settings."))
+                return@launch
+            }
+            setNotice(CompanionNotice.Attention("Refreshing Calibre settings from Nano..."))
+            if (!ensureReaderReachable("refreshing Calibre settings")) return@launch
+            runCatching {
+                withNanoApi {
+                    companionController.refreshCalibreSettings(baseUrl = state.address)
+                }
+            }.onSuccess { snapshot ->
+                val fetched = snapshot.calibreSettings
+                updateState {
+                    it.copy(
+                        calibreSettings = fetched,
+                        calibreBaseUrlDraft = fetched.baseUrl,
+                        calibreSearchQueryDraft = fetched.searchQuery,
+                        calibreUsernameDraft = fetched.username,
+                        calibrePasswordDraft = fetched.password,
+                        calibreLibraryIdDraft = fetched.libraryId,
+                        calibreDeletionPolicyDraft = fetched.deletionPolicy,
+                        calibreEnabledDraft = fetched.enabled,
+                        notice = CompanionNotice.Success("Calibre settings loaded from Nano."),
+                    )
+                }
+            }.onFailure { error ->
+                markDisconnected(error.message ?: "Reader disconnected before refreshing Calibre settings.")
             }
         }
     }
@@ -917,6 +1013,8 @@ class CompanionPresenter(
             } else {
                 it.connectionState
             }
+            // Populate Calibre draft fields from device on connect
+            val calibre = snapshot.calibreSettings
             it.copy(
                 books = device.books,
                 settings = device.settings,
@@ -926,6 +1024,14 @@ class CompanionPresenter(
                 address = address,
                 rssFeeds = snapshot.rssFeeds,
                 drafts = snapshot.drafts,
+                calibreSettings = calibre,
+                calibreBaseUrlDraft = calibre?.baseUrl.orEmpty(),
+                calibreSearchQueryDraft = calibre?.searchQuery.orEmpty(),
+                calibreUsernameDraft = calibre?.username.orEmpty(),
+                calibrePasswordDraft = calibre?.password.orEmpty(),
+                calibreLibraryIdDraft = calibre?.libraryId.orEmpty(),
+                calibreDeletionPolicyDraft = calibre?.deletionPolicy ?: NanoCalibreSchema.DELETION_POLICY_KEEP,
+                calibreEnabledDraft = calibre?.enabled ?: false,
                 connectionState = nextConnectionState,
                 canRememberCurrentNano = canPromptToRemember(currentIdentity, it.rememberedNano),
                 showAddressEntry = false,
