@@ -18,7 +18,7 @@ Sh8601::Context gDisplayContext = {
         WaveshareAmoled18::DisplayWiring::kPanelWidth,
         WaveshareAmoled18::DisplayWiring::kPanelHeight,
         WaveshareAmoled18::DisplayWiring::kTxChunkBytes,
-        WaveshareAmoled18::DisplayWiring::kUiRotated180,
+        WaveshareAmoled18::DisplayWiring::kPanelMemoryRotated180,
     },
 };
 

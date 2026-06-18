@@ -67,6 +67,8 @@ void sendCommand(Co5300::Context &context, uint8_t command, const uint8_t *data,
 }
 
 void setColumnWindow(Co5300::Context &context, uint16_t x1, uint16_t x2) {
+  x1 = static_cast<uint16_t>(x1 + context.config.columnOffset);
+  x2 = static_cast<uint16_t>(x2 + context.config.columnOffset);
   const uint8_t data[] = {
       static_cast<uint8_t>(x1 >> 8),
       static_cast<uint8_t>(x1),
@@ -77,6 +79,8 @@ void setColumnWindow(Co5300::Context &context, uint16_t x1, uint16_t x2) {
 }
 
 void setRowWindow(Co5300::Context &context, uint16_t y1, uint16_t y2) {
+  y1 = static_cast<uint16_t>(y1 + context.config.rowOffset);
+  y2 = static_cast<uint16_t>(y2 + context.config.rowOffset);
   const uint8_t data[] = {
       static_cast<uint8_t>(y1 >> 8),
       static_cast<uint8_t>(y1),

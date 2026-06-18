@@ -5,6 +5,12 @@
 
 #include "board/BoardTypes.h"
 
+#ifndef RSVP_AMOLED_18_VERSION_HEADER
+#error "AMOLED 1.8 platform env must define RSVP_AMOLED_18_VERSION_HEADER."
+#endif
+
+#include RSVP_AMOLED_18_VERSION_HEADER
+
 namespace WaveshareAmoled18::AudioWiring {
 constexpr uint8_t kEs8311Address = 0x18;
 constexpr int kMclkPin = 16;
@@ -43,11 +49,10 @@ constexpr int kBacklightPin = -1;
 constexpr uint16_t kPanelWidth = 368;
 constexpr uint16_t kPanelHeight = 448;
 constexpr size_t kTxChunkBytes = 32 * 1024;
-constexpr bool kUiRotated180 = true;
+constexpr bool kPanelMemoryRotated180 = Version::kPanelMemoryRotated180;
 constexpr Board::UiOrientation kDefaultUiOrientation =
-    kUiRotated180 ? Board::UiOrientation::LandscapeFlipped : Board::UiOrientation::Landscape;
-constexpr Board::UiOrientation kRotatedUiOrientation =
-    kUiRotated180 ? Board::UiOrientation::Landscape : Board::UiOrientation::LandscapeFlipped;
+    Version::kDefaultUiOrientation;
+constexpr Board::UiOrientation kRotatedUiOrientation = Version::kRotatedUiOrientation;
 }
 
 namespace WaveshareAmoled18::ImuWiring {
@@ -81,7 +86,7 @@ constexpr uint32_t kSystemI2cTimeoutMs = 20;
 constexpr int kTouchSdaPin = 15;
 constexpr int kTouchSclPin = 14;
 constexpr int kTouchResetPin = -1;
-constexpr int kTouchIrqPin = -1;
+constexpr int kTouchIrqPin = Version::kTouchIrqPin;
 constexpr uint32_t kTouchI2cClockHz = kSystemI2cClockHz;
 constexpr uint32_t kTouchI2cTimeoutMs = kSystemI2cTimeoutMs;
 constexpr int kDeepSleepWakePin = Buttons::kBootPin;
@@ -107,7 +112,7 @@ constexpr uint8_t kInputMask = (1U << kPowerButtonPin) | (1U << kPmuIrqPin);
 }
 
 namespace WaveshareAmoled18::TouchWiring {
-constexpr uint8_t kAddress = 0x38;
+constexpr uint8_t kAddress = Version::kTouchAddress;
 constexpr bool kReleaseBusBeforeRead = true;
 constexpr uint8_t kReleaseConfirmSamples = 2;
 constexpr uint8_t kMaxConsecutiveReadFailures = 5;

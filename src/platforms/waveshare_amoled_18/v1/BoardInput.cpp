@@ -12,6 +12,14 @@ namespace {
 
 TwoWire &touchWire() { return Wire; }
 
+bool tcaPinHeld(uint8_t pin) {
+  bool levelHigh = false;
+  return BoardDrivers::Tca9554::readInputPin(
+             Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress, pin, levelHigh,
+             WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead) &&
+         levelHigh;
+}
+
 void resetTouchHardware() {
   if constexpr (WaveshareAmoled18::System::kTouchResetPin >= 0) {
     pinMode(WaveshareAmoled18::System::kTouchResetPin, OUTPUT);
@@ -30,12 +38,7 @@ bool primaryPressedRaw() {
 }
 
 bool powerPressedRaw() {
-  bool held = false;
-  return BoardDrivers::Tca9554::readInputPin(
-             Wire1, WaveshareAmoled18::Tca9554Wiring::kAddress,
-             WaveshareAmoled18::Tca9554Wiring::kPowerButtonPin, held,
-             WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead) &&
-         held;
+  return tcaPinHeld(WaveshareAmoled18::Tca9554Wiring::kPowerButtonPin);
 }
 
 void configureButtonPins() {
