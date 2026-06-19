@@ -99,7 +99,9 @@ void cancel() {}
 
 bool beginTouch() {
   resetTouchHardware();
-  return Cst92xxTouch::probe(touchWire(), WaveshareAmoled216::TouchWiring::kAddress);
+  TwoWire &wire = touchWire();
+  return Cst92xxTouch::probe(wire, WaveshareAmoled216::TouchWiring::kAddress) &&
+         Cst92xxTouch::configureMonitorMode(wire, WaveshareAmoled216::TouchWiring::kAddress);
 }
 
 bool touchReady() {

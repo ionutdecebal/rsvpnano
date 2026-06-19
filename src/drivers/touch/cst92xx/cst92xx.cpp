@@ -6,6 +6,8 @@ namespace {
 
 constexpr uint16_t kReadCommand = 0xD000;
 constexpr uint8_t kAck = 0xAB;
+constexpr uint8_t kMonitorModeRegister = 0xFA;
+constexpr uint8_t kMonitorModeValue = 0x40;
 
 bool validAddress(uint8_t address) { return address <= 0x7F; }
 
@@ -24,6 +26,17 @@ bool probe(TwoWire &wire, uint8_t address) {
 
   wire.beginTransmission(address);
   return wire.endTransmission() == 0;
+}
+
+bool configureMonitorMode(TwoWire &wire, uint8_t address) {
+  if (!validAddress(address)) {
+    return false;
+  }
+
+  wire.beginTransmission(address);
+  wire.write(kMonitorModeRegister);
+  wire.write(kMonitorModeValue);
+  return wire.endTransmission(true) == 0;
 }
 
 bool readPacket(TwoWire &wire, uint8_t address, uint8_t *buffer, size_t len) {
