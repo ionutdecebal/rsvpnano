@@ -69,7 +69,7 @@ constexpr gpio_num_t kDeepSleepWakeGpio = GPIO_NUM_9;
 
 namespace WaveshareC6TouchLcd147::TouchWiring {
 constexpr uint8_t kAddress = 0x63;
-constexpr bool kReleaseBusBeforeRead = false;
+constexpr bool kReleaseBusBeforeRead = true;
 constexpr uint8_t kReleaseConfirmSamples = 2;
 constexpr uint8_t kMaxConsecutiveReadFailures = 5;
 constexpr uint32_t kPollIntervalMs = 20;

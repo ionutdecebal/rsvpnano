@@ -44,6 +44,7 @@ constexpr uint8_t kCmdE5A[] = {0x00, 0x02, 0x00};
 constexpr uint8_t kCmdE5B[] = {0x01, 0x02, 0x00};
 constexpr uint8_t kCmdDe0[] = {0x00};
 constexpr uint8_t kCmd35[] = {0x00};
+constexpr uint8_t kCmd36[] = {0x00};
 constexpr uint8_t kCmd3A[] = {0x05};
 constexpr uint8_t kCmd2A[] = {0x00, 0x22, 0x00, 0xCD};
 constexpr uint8_t kCmd2B[] = {0x00, 0x00, 0x01, 0x3F};
@@ -64,7 +65,8 @@ constexpr LcdCommand kInitCommands[] = {
     {0x35, kCmd35, sizeof(kCmd35), 0}, {0x3A, kCmd3A, sizeof(kCmd3A), 0},
     {0x2A, kCmd2A, sizeof(kCmd2A), 0}, {0x2B, kCmd2B, sizeof(kCmd2B), 0},
     {0xDE, kCmdDe2, sizeof(kCmdDe2), 0}, {0xE5, kCmdE5A, sizeof(kCmdE5A), 0},
-    {0xDE, kCmdDe0, sizeof(kCmdDe0), 0}, {0x29, nullptr, 0, 0},
+    {0xDE, kCmdDe0, sizeof(kCmdDe0), 0}, {0x36, kCmd36, sizeof(kCmd36), 0},
+    {0x21, nullptr, 0, 0}, {0x29, nullptr, 0, 0},
 };
 
 size_t chunkPixels(const Jd9853::Context &context) {

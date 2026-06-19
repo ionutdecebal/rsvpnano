@@ -31,7 +31,7 @@
   "name": "Waveshare ESP32-C6 Touch LCD 1.47",
   "upload": {
     "flash_size": "8MB",
-    "maximum_ram_size": 327680,
+    "maximum_ram_size": 524288,
     "maximum_size": 8388608,
     "require_upload_port": true,
     "speed": 460800
