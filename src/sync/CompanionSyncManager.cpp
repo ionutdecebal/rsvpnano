@@ -7,46 +7,23 @@
 #include <cstdio>
 #include <vector>
 
+#include "settings/PreferenceKeys.h"
+#include "storage/fs/StorageFiles.h"
+#include "storage/fs/StoragePaths.h"
+#include "text/AsciiText.h"
+
 namespace {
 
+// Preference keys + NVS namespace are defined once in settings/PreferenceKeys.h
+// and shared with the device UI; pull them in so call sites are unchanged.
+using namespace settings;
+
 constexpr const char *kMdnsName = "rsvp-nano";
-constexpr const char *kBooksPath = "/books";
-constexpr const char *kBookFilesPath = "/books/books";
-constexpr const char *kArticleFilesPath = "/books/articles";
-constexpr const char *kConfigPath = "/config";
 constexpr const char *kRssConfigPath = "/config/rss.conf";
-constexpr const char *kPrefsNamespace = "rsvp";
 constexpr size_t kMaxMetadataLineChars = 160;
 constexpr size_t kMaxSettingsPatchBytes = 2048;
 constexpr size_t kMaxRssFeedsPatchBytes = 4096;
 constexpr size_t kMaxRssFeeds = 24;
-constexpr const char *kPrefWpm = "wpm";
-constexpr const char *kPrefBrightness = "bright";
-constexpr const char *kPrefDarkMode = "dark";
-constexpr const char *kPrefNightMode = "night";
-constexpr const char *kPrefUiLanguage = "ui_lang";
-constexpr const char *kPrefReaderMode = "read_mode";
-constexpr const char *kPrefHandedness = "handed";
-constexpr const char *kPrefPhantomWords = "phantom_on";
-constexpr const char *kPrefFooterMetricMode = "prog_md";
-constexpr const char *kPrefBatteryLabelMode = "bat_md";
-constexpr const char *kPrefReaderBatteryVisible = "read_bat";
-constexpr const char *kPrefReaderChapterVisible = "read_ch";
-constexpr const char *kPrefReaderProgressVisible = "read_pct";
-constexpr const char *kPrefReaderFontSize = "font_size";
-constexpr const char *kPrefReaderTypeface = "typeface";
-constexpr const char *kPrefTypographyFocusHighlight = "type_hlt";
-constexpr const char *kPrefPacingLongMs = "pace_lms";
-constexpr const char *kPrefPacingComplexMs = "pace_cms";
-constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
-constexpr const char *kPrefPauseMode = "pause_md";
-constexpr const char *kPrefAccurateTime = "time_est_a";
-constexpr const char *kPrefTypographyTracking = "type_trk";
-constexpr const char *kPrefTypographyAnchor = "type_anc";
-constexpr const char *kPrefTypographyGuideWidth = "type_wid";
-constexpr const char *kPrefTypographyGuideGap = "type_gap";
-constexpr const char *kPrefWifiSsid = "wifi_ssid";
-constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr uint16_t kDefaultWpm = 300;
 constexpr uint16_t kMinWpm = 10;
 constexpr uint16_t kMaxWpm = 1000;
@@ -73,6 +50,12 @@ constexpr uint8_t kDefaultTypographyGuideWidth = 30;
 constexpr uint8_t kMinTypographyGuideGap = 2;
 constexpr uint8_t kMaxTypographyGuideGap = 8;
 constexpr uint8_t kDefaultTypographyGuideGap = 5;
+
+bool ensureLibraryDirectories() {
+  return StorageFiles::ensureDirectory(StoragePaths::kBooksPath, "sync") &&
+         StorageFiles::ensureDirectory(StoragePaths::kBookFilesPath, "sync") &&
+         StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath, "sync");
+}
 
 const char kWebCompanionHtml[] PROGMEM = R"HTML(<!doctype html>
 <html lang="en">
@@ -154,6 +137,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <label>Display mode</label><select id="displayMode"><option value="dark">Dark</option><option value="light">Light</option><option value="night">Night</option></select>
 <label>Brightness <span id="brightnessValue"></span></label><input id="brightnessIndex" type="range" min="0" max="4">
 <label>Reader hand</label><select id="handedness"><option value="right">Right</option><option value="left">Left</option></select>
+<label>Reader controls</label><select id="readerControls"><option value="standard">Standard</option><option value="rewind_top_right">Rewind top-right</option></select>
 <label>Footer label</label><select id="footerMetric"><option value="percentage">Percentage</option><option value="chapter_time">Chapter time</option><option value="book_time">Book time</option></select>
 <label>Battery label</label><select id="batteryLabel"><option value="percent">Percentage</option><option value="time_remaining">Time remaining</option><option value="voltage">Voltage</option></select>
 <label><input id="readingBattery" type="checkbox" style="width:auto"> Show battery while reading</label>
@@ -222,8 +206,8 @@ function val(id){const e=$(id);return e.type==='checkbox'?e.checked:e.value}
 function setVal(id,v){const e=$(id);if(e.type==='checkbox')e.checked=!!v;else e.value=v}
 function snapWpm(v){v=Math.max(10,Math.min(1000,Math.round(+v||300)));return v<=100?Math.max(10,Math.min(100,Math.round(v/10)*10)):Math.min(1000,100+Math.round((v-100)/25)*25)}
 function updateLabels(){['wpm','longWordMs','complexWordMs','punctuationMs','brightnessIndex','fontSizeIndex','tracking','anchorPercent','guideWidth','guideGap'].forEach(id=>{const l=$(id+'Value')||$(id.replace('Index','')+'Value');if(l)l.textContent=$(id).value+(id==='wpm'?' WPM':id.includes('Ms')?' ms':'')})}
-async function loadSettings(){try{settings=await api('/api/settings');setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('displayMode',settings.display.nightMode?'night':settings.display.darkMode?'dark':'light');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
-async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const mode=val('displayMode');const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{darkMode:mode==='dark',nightMode:mode==='night',brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
+async function loadSettings(){try{settings=await api('/api/settings');setVal('readerMode',settings.reading.readerMode);setVal('pauseMode',settings.reading.pauseMode);setVal('wpm',snapWpm(settings.reading.wpm));setVal('longWordMs',settings.reading.pacing.longWordMs);setVal('complexWordMs',settings.reading.pacing.complexWordMs);setVal('punctuationMs',settings.reading.pacing.punctuationMs);setVal('displayMode',settings.display.nightMode?'night':settings.display.darkMode?'dark':'light');setVal('brightnessIndex',settings.display.brightnessIndex);setVal('handedness',settings.display.handedness);setVal('readerControls',settings.display.readerControls||'standard');setVal('footerMetric',settings.display.footerMetric);setVal('batteryLabel',settings.display.batteryLabel);setVal('readingBattery',settings.display.readingBattery);setVal('readingChapter',settings.display.readingChapter);setVal('readingProgress',settings.display.readingProgress);setVal('typeface',settings.typography.typeface);setVal('fontSizeIndex',settings.display.fontSizeIndex);setVal('tracking',settings.typography.tracking);setVal('anchorPercent',settings.typography.anchorPercent);setVal('guideWidth',settings.typography.guideWidth);setVal('guideGap',settings.typography.guideGap);setVal('focusHighlight',settings.typography.focusHighlight);setVal('phantomWords',settings.display.phantomWords);updateLabels()}catch(e){status('Settings load failed: '+e.message)}}
+async function saveSettings(){setVal('wpm',snapWpm(val('wpm')));const mode=val('displayMode');const payload={reading:{wpm:+val('wpm'),readerMode:val('readerMode'),pauseMode:val('pauseMode'),pacing:{longWordMs:+val('longWordMs'),complexWordMs:+val('complexWordMs'),punctuationMs:+val('punctuationMs')}},display:{darkMode:mode==='dark',nightMode:mode==='night',brightnessIndex:+val('brightnessIndex'),handedness:val('handedness'),readerControls:val('readerControls'),footerMetric:val('footerMetric'),batteryLabel:val('batteryLabel'),readingBattery:val('readingBattery'),readingChapter:val('readingChapter'),readingProgress:val('readingProgress'),phantomWords:val('phantomWords'),fontSizeIndex:+val('fontSizeIndex')},typography:{typeface:val('typeface'),focusHighlight:val('focusHighlight'),tracking:+val('tracking'),anchorPercent:+val('anchorPercent'),guideWidth:+val('guideWidth'),guideGap:+val('guideGap')}};try{settings=await api('/api/settings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status('Settings saved. Exit sync mode to apply all reader changes.')}catch(e){status('Settings save failed: '+e.message)}}
 async function loadWifi(){try{const w=await api('/api/wifi');$('wifiSsid').value=w.ssid||'';$('wifiPassword').value='';$('wifiCurrent').textContent=w.configured?'Saved network: '+w.ssid:'No home Wi-Fi saved.'}catch(e){status('Wi-Fi load failed: '+e.message)}}
 async function saveWifi(){const ssid=$('wifiSsid').value.trim();if(!ssid){status('Enter a Wi-Fi SSID first.');return}try{const w=await api('/api/wifi',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid,password:$('wifiPassword').value})});$('wifiPassword').value='';$('wifiCurrent').textContent='Saved network: '+w.ssid;status('Wi-Fi saved for RSS and OTA.')}catch(e){status('Wi-Fi save failed: '+e.message)}}
 async function forgetWifi(){if(!confirm('Forget saved Wi-Fi?'))return;try{await api('/api/wifi',{method:'DELETE'});$('wifiSsid').value='';$('wifiPassword').value='';$('wifiCurrent').textContent='No home Wi-Fi saved.';status('Wi-Fi credentials cleared.')}catch(e){status('Forget Wi-Fi failed: '+e.message)}}
@@ -239,8 +223,8 @@ loadDraft();refresh();
 </html>)HTML";
 
 bool isSafeFilenameChar(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-         c == '-' || c == '_' || c == '.' || c == ' ';
+  return AsciiText::isAlphaNumeric(c) || c == '-' || c == '_' || c == '.' ||
+         c == ' ';
 }
 
 String ipToString(IPAddress ip) {
@@ -261,7 +245,7 @@ bool directiveMatches(const String &loweredLine, const char *directive) {
   }
   const size_t directiveLength = strlen(directive);
   return loweredLine.length() == directiveLength ||
-         isspace(static_cast<unsigned char>(loweredLine[directiveLength]));
+         AsciiText::isWhitespace(loweredLine[directiveLength]);
 }
 
 String directiveValue(const String &line, const char *directive) {
@@ -284,7 +268,7 @@ String displayNameForPath(const String &path) {
 }
 
 String relativeLibraryName(const String &path) {
-  const String prefix = String(kBooksPath) + "/";
+  const String prefix = String(StoragePaths::kBooksPath) + "/";
   if (path.startsWith(prefix)) {
     return path.substring(prefix.length());
   }
@@ -350,7 +334,7 @@ bool findJsonKey(const String &body, const char *key, int &colonIndex) {
 
 int skipJsonWhitespace(const String &body, int index) {
   while (index < static_cast<int>(body.length()) &&
-         isspace(static_cast<unsigned char>(body[index]))) {
+         AsciiText::isWhitespace(body[index])) {
     ++index;
   }
   return index;
@@ -367,12 +351,12 @@ bool readJsonInt(const String &body, const char *key, int &value) {
     negative = true;
     ++index;
   }
-  if (index >= static_cast<int>(body.length()) || !isdigit(static_cast<unsigned char>(body[index]))) {
+  if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
     return false;
   }
   int result = 0;
   while (index < static_cast<int>(body.length()) &&
-         isdigit(static_cast<unsigned char>(body[index]))) {
+         AsciiText::isDigit(body[index])) {
     result = result * 10 + (body[index] - '0');
     ++index;
   }
@@ -723,7 +707,9 @@ void CompanionSyncManager::handleRoot() {
 }
 
 void CompanionSyncManager::handleBooksList() {
-  String body = "{\"books\":[";
+  String body;
+  body.reserve(1024);
+  body += "{\"books\":[";
   bool first = true;
 
   const auto appendDirectory = [&](const char *directoryPath) {
@@ -768,9 +754,9 @@ void CompanionSyncManager::handleBooksList() {
     dir.close();
   };
 
-  appendDirectory(kBooksPath);
-  appendDirectory(kBookFilesPath);
-  appendDirectory(kArticleFilesPath);
+  appendDirectory(StoragePaths::kBooksPath);
+  appendDirectory(StoragePaths::kBookFilesPath);
+  appendDirectory(StoragePaths::kArticleFilesPath);
 
   body += "]}";
   server_.send(200, "application/json", body);
@@ -876,10 +862,10 @@ void CompanionSyncManager::handleBookDelete() {
       server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid library path\"}");
       return;
     }
-    path = String(kBooksPath) + "/" + directory + "/" + filename;
+    path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
   } else {
     filename = sanitizeFilename(requested);
-    path = String(kBooksPath) + "/" + filename;
+    path = String(StoragePaths::kBooksPath) + "/" + filename;
   }
 
   String lowered = filename;
@@ -894,14 +880,14 @@ void CompanionSyncManager::handleBookDelete() {
     if (file) {
       file.close();
     }
-    path = String(kBookFilesPath) + "/" + filename;
+    path = String(StoragePaths::kBookFilesPath) + "/" + filename;
     file = SD_MMC.open(path);
   }
   if ((!file || file.isDirectory()) && separator < 0) {
     if (file) {
       file.close();
     }
-    path = String(kArticleFilesPath) + "/" + filename;
+    path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
     file = SD_MMC.open(path);
   }
   if (!file || file.isDirectory()) {
@@ -946,10 +932,14 @@ void CompanionSyncManager::handleBookUpload() {
 
     String category = server_.arg("category");
     category.toLowerCase();
-    const char *targetDirectory = category == "article" ? kArticleFilesPath : kBookFilesPath;
+    const char *targetDirectory = category == "article"
+                                      ? StoragePaths::kArticleFilesPath
+                                      : StoragePaths::kBookFilesPath;
 
-    SD_MMC.mkdir(kBooksPath);
-    SD_MMC.mkdir(targetDirectory);
+    if (!ensureLibraryDirectories()) {
+      uploadError_ = "Library folders unavailable";
+      return;
+    }
     uploadFinalPath_ = String(targetDirectory) + "/" + filename;
     uploadTmpPath_ = uploadFinalPath_ + ".tmp";
     SD_MMC.remove(uploadTmpPath_);
@@ -995,6 +985,7 @@ void CompanionSyncManager::handleNotFound() {
 String CompanionSyncManager::settingsJson() {
   static const char *const readerModeLabels[] = {"rsvp", "scroll"};
   static const char *const handednessLabels[] = {"right", "left"};
+  static const char *const readerControlLabels[] = {"standard", "rewind_top_right"};
   static const char *const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
   static const char *const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
   static const char *const typefaceLabels[] = {"standard", "open_dyslexic", "atkinson"};
@@ -1019,6 +1010,8 @@ String CompanionSyncManager::settingsJson() {
       clampInt(preferences_.getUChar(kPrefBrightness, kDefaultBrightness), 0, kMaxBrightness));
   const uint8_t handedness =
       static_cast<uint8_t>(clampInt(preferences_.getUChar(kPrefHandedness, 0), 0, kMaxHandedness));
+  const uint8_t readerControls =
+      preferences_.getBool(kPrefReaderControlsSwapped, false) ? 1 : 0;
   const uint8_t footerMetric = static_cast<uint8_t>(
       clampInt(preferences_.getUChar(kPrefFooterMetricMode, 0), 0, kMaxFooterMetric));
   const uint8_t batteryLabel = static_cast<uint8_t>(
@@ -1044,7 +1037,7 @@ String CompanionSyncManager::settingsJson() {
                kMinTypographyGuideGap, kMaxTypographyGuideGap));
 
   String body;
-  body.reserve(1250);
+  body.reserve(1320);
   body += "{\"ok\":true,\"version\":1";
   body += ",\"reading\":{";
   body += "\"wpm\":" + String(wpm);
@@ -1066,6 +1059,9 @@ String CompanionSyncManager::settingsJson() {
           String(preferences_.getBool(kPrefNightMode, false) ? "true" : "false");
   body += ",\"handedness\":\"";
   body += enumLabel(handedness, handednessLabels, 2);
+  body += "\"";
+  body += ",\"readerControls\":\"";
+  body += enumLabel(readerControls, readerControlLabels, 2);
   body += "\"";
   body += ",\"footerMetric\":\"";
   body += enumLabel(footerMetric, footerMetricLabels, 3);
@@ -1119,6 +1115,7 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
 
   static const char *const readerModeLabels[] = {"rsvp", "scroll"};
   static const char *const handednessLabels[] = {"right", "left"};
+  static const char *const readerControlLabels[] = {"standard", "rewind_top_right"};
   static const char *const footerMetricLabels[] = {"percentage", "chapter_time", "book_time"};
   static const char *const batteryLabelLabels[] = {"percent", "time_remaining", "voltage"};
   static const char *const typefaceLabels[] = {"standard", "open_dyslexic", "atkinson"};
@@ -1193,6 +1190,14 @@ bool CompanionSyncManager::applySettingsJson(const String &body, String &error) 
       return false;
     }
     preferences_.putUChar(kPrefHandedness, static_cast<uint8_t>(value));
+  }
+  if (readJsonString(body, "readerControls", stringValue)) {
+    const int value = enumValue(stringValue, readerControlLabels, 2);
+    if (value < 0) {
+      error = "readerControls must be standard or rewind_top_right";
+      return false;
+    }
+    preferences_.putBool(kPrefReaderControlsSwapped, value == 1);
   }
   if (readJsonString(body, "footerMetric", stringValue)) {
     const int value = enumValue(stringValue, footerMetricLabels, 3);
@@ -1320,7 +1325,9 @@ bool CompanionSyncManager::applyWifiJson(const String &body, String &error) {
 }
 
 String CompanionSyncManager::rssFeedsJson() {
-  String body = "{\"ok\":true,\"feeds\":[";
+  String body;
+  body.reserve(256);
+  body += "{\"ok\":true,\"feeds\":[";
   File file = SD_MMC.open(kRssConfigPath);
   bool first = true;
   if (file && !file.isDirectory()) {
@@ -1406,7 +1413,7 @@ bool CompanionSyncManager::writeRssFeedsJson(const String &body, String &error) 
     }
   }
 
-  SD_MMC.mkdir(kConfigPath);
+  SD_MMC.mkdir(StoragePaths::kConfigPath);
   const String tmpPath = String(kRssConfigPath) + ".tmp";
   SD_MMC.remove(tmpPath);
   File file = SD_MMC.open(tmpPath, FILE_WRITE);
@@ -1510,6 +1517,7 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(
   }
 
   String line;
+  line.reserve(kMaxMetadataLineChars);
   bool pastDirectives = false;
   while (file.available()) {
     const char c = static_cast<char>(file.read());

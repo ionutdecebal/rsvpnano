@@ -1,25 +1,44 @@
 #include <Arduino.h>
 #include <esp_log.h>
 
-#include "app/App.h"
-#include "board/BoardConfig.h"
+#include "board/Board.h"
 
+#ifndef RSVP_BENCHMARK_MODE
+#define RSVP_BENCHMARK_MODE 0
+#endif
+
+#if RSVP_BENCHMARK_MODE
+#include "benchmark/BenchmarkRunner.h"
+#else
+#include "app/App.h"
 App app;
+#endif
 
 void setup() {
   Serial.begin(115200);
   esp_log_level_set("*", ESP_LOG_INFO);
   delay(50);
-  BoardConfig::begin();
+  Board::System::begin();
   const uint32_t serialWaitStart = millis();
   while (!Serial && millis() - serialWaitStart < 2000) {
     delay(10);
   }
+  Board::System::logStartupDiagnostics();
+#if RSVP_BENCHMARK_MODE
+  Serial.println("[main] benchmark setup");
+  Benchmark::run();
+#else
   Serial.println("[main] app setup");
   app.begin();
+#endif
 }
 
 void loop() {
+#if RSVP_BENCHMARK_MODE
+  delay(1000);
+#else
   const uint32_t now = millis();
   app.update(now);
+  delay(1);
+#endif
 }

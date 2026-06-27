@@ -1,0 +1,6 @@
+@rsvp 1
+@title Basic XHTML Vector
+@source basic-xhtml-input.xhtml
+
+@chapter XHTML Chapter
+Hello from xhtml.

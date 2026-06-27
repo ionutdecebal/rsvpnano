@@ -1,0 +1,25 @@
+{
+  "name": "RSVP Nano Touch AMOLED 1.8 V2 Test",
+  "version": "dev",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "features": [
+    "Books and articles library",
+    "Device-hosted web companion",
+    "RSS feed downloads",
+    "USB SD-card transfer mode",
+    "Touch AMOLED 1.8 V2 test profile"
+  ],
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": false,
+      "parts": [
+        {
+          "path": "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

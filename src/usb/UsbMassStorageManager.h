@@ -11,8 +11,6 @@
 #include <USBMSC.h>
 #endif
 
-#include <driver/sdmmc_types.h>
-
 class UsbMassStorageManager {
  public:
   UsbMassStorageManager();
@@ -43,8 +41,8 @@ class UsbMassStorageManager {
   USBMSC msc_;
 #endif
 
-  sdmmc_card_t card_ = {};
   uint8_t *sectorBuffer_ = nullptr;
+  uint8_t physicalDrive_ = 0xFF;
   uint32_t blockCount_ = 0;
   uint16_t blockSize_ = 512;
   bool active_ = false;

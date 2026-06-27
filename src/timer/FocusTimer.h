@@ -30,19 +30,27 @@ class FocusTimer {
     Complete,
   };
 
+  static constexpr uint8_t kGenreCount = 5;
+
   bool begin();
   void open();
   void update(uint32_t nowMs);
   void chooseGenre(Genre genre, uint32_t nowMs);
   void cancelActiveTimer(uint32_t nowMs);
+  void cycleTouchDuration();
+  void stepTouchDuration(int direction);
+  void setTouchDurationIndexForGenre(Genre genre, uint8_t index);
+  uint8_t touchDurationIndex() const;
+  uint8_t touchDurationIndexForGenre(Genre genre) const;
   void abandon();
 
   bool available() const;
   bool isActiveTimerRunning() const;
   State state() const;
   Genre genre() const;
-  BoardConfig::UiOrientation uiOrientation() const;
+  Board::Config::UiOrientation uiOrientation() const;
   uint32_t remainingMs(uint32_t nowMs) const;
+  uint32_t selectedTouchDurationMs() const;
   uint8_t progressPercent(uint32_t nowMs) const;
   uint8_t completedTouchBlocks() const;
   uint8_t completedWorkBlocks() const;
@@ -68,9 +76,6 @@ class FocusTimer {
   };
 
   bool initImu();
-  bool readRegister(uint8_t reg, uint8_t &value);
-  bool writeRegister(uint8_t reg, uint8_t value);
-  bool readRegisters(uint8_t startReg, uint8_t *buffer, size_t len);
   bool updateRegister(uint8_t reg, uint8_t mask, uint8_t value);
   bool readAccelerometer(float &x, float &y, float &z);
   void updateOrientation(uint32_t nowMs);
@@ -84,13 +89,16 @@ class FocusTimer {
   void stopActiveTimer();
   void completeActiveTimer();
   bool timerExpired(uint32_t nowMs) const;
+  uint8_t genreIdx() const;
   static bool isShortSide(OrientationState orientation);
   static OrientationState oppositeShortSide(OrientationState orientation);
-  static BoardConfig::UiOrientation portraitOrientationForShortSide(
+  static Board::Config::UiOrientation portraitOrientationForShortSide(
       OrientationState orientation);
 
   bool imuAvailable_ = false;
+  uint8_t imuAddress_ = Board::Config::IMU_I2C_ADDRESS;
   float accelScale_ = 4.0f / 32768.0f;
+  uint8_t touchDurationByGenre_[kGenreCount] = {};
   OrientationState rawOrientation_ = OrientationState::Unknown;
   OrientationState stableOrientation_ = OrientationState::Unknown;
   OrientationState candidateOrientation_ = OrientationState::Unknown;

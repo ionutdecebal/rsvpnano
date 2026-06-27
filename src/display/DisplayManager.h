@@ -33,12 +33,16 @@ class DisplayManager {
         : showBattery(true),
           showChapter(true),
           showProgress(true),
-          showPreviousSentenceHint(true) {}
+          showPreviousSentenceHint(true),
+          showEdgeMenuHints(false),
+          swapPreviousSentenceAndBattery(false) {}
 
     bool showBattery;
     bool showChapter;
     bool showProgress;
     bool showPreviousSentenceHint;
+    bool showEdgeMenuHints;
+    bool swapPreviousSentenceAndBattery;
   };
 
   struct LibraryItem {
@@ -60,11 +64,12 @@ class DisplayManager {
 
   bool begin();
   void setBatteryLabel(const String &label);
+  void setBrightnessOverlay(const String &text);
   void setBrightnessPercent(uint8_t percent);
   void setDarkMode(bool darkMode);
   void setNightMode(bool nightMode);
   void setYellowMode(bool enabled);
-  void setUiOrientation(BoardConfig::UiOrientation orientation);
+  void setUiOrientation(Board::Config::UiOrientation orientation);
   void setUiRotated180(bool rotated180);
   void setTypographyConfig(const TypographyConfig &config);
   TypographyConfig typographyConfig() const;
@@ -162,6 +167,7 @@ class DisplayManager {
                              uint8_t scalePercent);
   void drawTinyGlyph(int x, int y, char c, uint16_t color, int scale);
   void drawTinyTextAt(const String &text, int x, int y, uint16_t color, int scale);
+  void drawTinyTextAt180(const String &text, int x, int y, uint16_t color, int scale);
   void drawTinyTextCentered(const String &text, int y, uint16_t color, int scale);
   void drawTinyTextCentered(const String &text, int y, uint16_t color, int scale, int width,
                             int xOffset);
@@ -170,7 +176,11 @@ class DisplayManager {
                                    int width, int xOffset);
   void drawBatteryBadge();
   void drawBatteryBadge(int logicalWidth, int logicalHeight);
-  void drawPreviousSentenceHint();
+  void drawBatteryBadge(const ReaderChrome &chrome);
+  void drawBatteryBadge(int logicalWidth, int logicalHeight, const ReaderChrome &chrome);
+  void drawBrightnessToastBadge(int logicalWidth, int logicalHeight);
+  void drawPreviousSentenceHint(int logicalWidth, const ReaderChrome &chrome);
+  void drawEdgeMenuHints(int logicalWidth, int logicalHeight, const ReaderChrome &chrome);
   void drawFooter(const String &chapterLabel, const String &statusLabel,
                   const ReaderChrome &chrome);
   void drawRsvpAnchorGuide(int anchorX, int textY, int textHeight);
@@ -197,10 +207,9 @@ class DisplayManager {
   bool darkMode_ = true;
   bool nightMode_ = false;
   bool yellowMode_ = false;
-  BoardConfig::UiOrientation uiOrientation_ =
-      BoardConfig::UI_ROTATED_180 ? BoardConfig::UiOrientation::LandscapeFlipped
-                                  : BoardConfig::UiOrientation::Landscape;
+  Board::Config::UiOrientation uiOrientation_ = Board::Config::DEFAULT_UI_ORIENTATION;
   bool tickerPlaybackFrameActive_ = false;
   String lastRenderKey_;
   String batteryLabel_;
+  String brightnessOverlayText_;
 };
