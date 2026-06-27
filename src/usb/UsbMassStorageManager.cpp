@@ -85,7 +85,7 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
 #else
   (void)writeEnabled;
   statusMessage_ = "USB transfer disabled";
-  Serial.println("[usb-msc] unsupported: build waveshare_esp32s3_usb_msc to enable it");
+  Serial.println("[usb-msc] unsupported: build a USB-transfer-enabled board target to enable it");
   return false;
 #endif
 }
