@@ -239,9 +239,11 @@ namespace {
     constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
     constexpr size_t kWifiSettingsForgetIndex = 4;
     constexpr size_t kWifiSettingsOtaOwnerIndex = 5;
+    constexpr size_t kWifiSettingsOtaTagIndex = 6;
     constexpr size_t kWifiSettingsRestructuredNetworkIndex = 1;
     constexpr size_t kWifiSettingsRestructuredAutoUpdateIndex = 2;
     constexpr size_t kWifiSettingsRestructuredOtaOwnerIndex = 3;
+    constexpr size_t kWifiSettingsRestructuredOtaTagIndex = 4;
     constexpr size_t kWifiNetworkSettingsChooseIndex = 1;
     constexpr size_t kWifiNetworkSettingsForgetIndex = 2;
 
@@ -286,6 +288,7 @@ namespace {
     constexpr const char* kPrefWifiPass = "wifi_pass";
     constexpr const char* kPrefOtaAuto = "ota_auto";
     constexpr const char* kPrefOtaOwner = "ota_owner";
+    constexpr const char* kPrefOtaTag = "ota_tag";
     constexpr size_t kReaderFontSizeCount = 3;
     constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
     constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -3325,6 +3328,10 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
             openTextEntry(TextEntryPurpose::OtaOwner, "OTA Source", "GitHub owner", "",
                           preferences_.getString(kPrefOtaOwner, ""), "", false, 39, MenuScreen::WifiSettings);
             return;
+        case kWifiSettingsRestructuredOtaTagIndex:
+            openTextEntry(TextEntryPurpose::OtaTag, "OTA Tag", "Release tag", "Leave empty for latest",
+                          otaTagValue(), "", false, 64, MenuScreen::WifiSettings);
+            return;
         default:
             return;
         }
@@ -3402,6 +3409,10 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
     case kWifiSettingsOtaOwnerIndex:
         openTextEntry(TextEntryPurpose::OtaOwner, "OTA Source", "GitHub owner", "",
                       preferences_.getString(kPrefOtaOwner, ""), "", false, 39, MenuScreen::WifiSettings);
+        return;
+    case kWifiSettingsOtaTagIndex:
+        openTextEntry(TextEntryPurpose::OtaTag, "OTA Tag", "Release tag", "Leave empty for latest",
+                      otaTagValue(), "", false, 64, MenuScreen::WifiSettings);
         return;
     default:
         return;
@@ -3760,6 +3771,22 @@ void App::commitTextEntry(uint32_t nowMs) {
         openWifiSettings();
         return;
     }
+    case TextEntryPurpose::OtaTag: {
+        String tag = textEntrySession_.value;
+        tag.trim();
+        if (tag.isEmpty()) {
+            preferences_.remove(kPrefOtaTag);
+            display_.renderStatus("OTA", "Following latest", "");
+        } else {
+            preferences_.putString(kPrefOtaTag, tag);
+            display_.renderStatus("OTA", "Tag saved", tag);
+        }
+        delay(900);
+        textEntrySession_ = TextEntrySession();
+        textEntryButtons_.clear();
+        openWifiSettings();
+        return;
+    }
     case TextEntryPurpose::None:
     default:
         menuScreen_ = textEntrySession_.returnScreen;
@@ -3905,6 +3932,7 @@ void App::rebuildSettingsMenuItems() {
             settingsMenuItems_.push_back("Network: " + storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
             settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
             settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+            settingsMenuItems_.push_back("OTA Tag: " + otaTagLabel());
         } else if (menuScreen_ == MenuScreen::WifiNetworkSettings) {
             settingsMenuItems_.push_back(uiText(UiText::Back));
             settingsMenuItems_.push_back("Choose network: " + storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
@@ -3954,6 +3982,7 @@ void App::rebuildSettingsMenuItems() {
         settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
         settingsMenuItems_.push_back("Forget network");
         settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+        settingsMenuItems_.push_back("OTA Tag: " + otaTagLabel());
     }
 
     if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -3995,6 +4024,24 @@ String App::otaOwnerLabel() {
     return cfg.githubOwner;
 }
 
+String App::otaTagValue() {
+    String tag;
+    if (preferences_.isKey(kPrefOtaTag)) {
+        tag = preferences_.getString(kPrefOtaTag, "");
+    } else {
+        OtaUpdater::Config cfg;
+        otaUpdater_.loadConfig(cfg);
+        tag = cfg.githubTag;
+    }
+    tag.trim();
+    return tag;
+}
+
+String App::otaTagLabel() {
+    const String tag = otaTagValue();
+    return tag.isEmpty() ? "Latest" : tag;
+}
+
 OtaUpdater::Config App::preferredOtaConfig() {
     OtaUpdater::Config otaConfig;
     otaUpdater_.loadConfig(otaConfig);
@@ -4010,6 +4057,9 @@ OtaUpdater::Config App::preferredOtaConfig() {
     }
     if (preferences_.isKey(kPrefOtaOwner)) {
         otaConfig.githubOwner = preferences_.getString(kPrefOtaOwner, "");
+    }
+    if (preferences_.isKey(kPrefOtaTag)) {
+        otaConfig.githubTag = preferences_.getString(kPrefOtaTag, "");
     }
 
     return otaConfig;

@@ -11,6 +11,7 @@ wifi_password=YourWiFiPassword
 # `asset_name` unless you are testing a custom release channel.
 # github_owner=ionutdecebal
 # github_repo=rsvpnano
+# github_tag=v0.0.8
 # asset_name=rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin
 
 # Optional. When true, the device checks the latest GitHub Release during boot.

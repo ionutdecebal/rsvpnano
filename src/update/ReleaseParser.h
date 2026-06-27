@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-// Pure parsing of a GitHub "releases/latest" JSON payload. No networking, no
+// Pure parsing of a GitHub release JSON payload. No networking, no
 // SD access -- safe to unit test on the host with the Arduino String shim.
 namespace releaseparser {
 

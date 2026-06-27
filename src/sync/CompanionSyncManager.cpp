@@ -180,7 +180,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <li>For best book conversion, use the hosted web converter/flasher first. This page is the wireless upload and settings companion, not the full conversion engine.</li>
 <li><code>.txt</code> and <code>.epub</code> uploads are accepted, but EPUB conversion is handled on the device when opened.</li>
 <li>Use Wi-Fi to save your home network for RSS and OTA. You can still use the on-device Wi-Fi keyboard if you prefer the standalone path.</li>
-<li>Use <code>/books/books</code> for books and <code>/books/articles</code> for articles. Legacy files in <code>/books</code> still show up.</li>
+<li>Use <code>/books/books</code> for books and <code>/books/articles</code> for articles. Files in <code>/books</code> still show up.</li>
 </ul>
 </div>
 </section>
@@ -283,7 +283,7 @@ String libraryCategoryForPath(const String &path) {
   if (relative.startsWith("books/")) {
     return "book";
   }
-  return "legacy";
+  return "root";
 }
 
 uint16_t clampU16(uint16_t value, uint16_t minValue, uint16_t maxValue) {

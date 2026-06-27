@@ -205,6 +205,8 @@ RSS support in `v0.0.8` includes:
 Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
 
 OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
+By default the updater follows the latest release; advanced `/config/ota.conf` setups can set
+`github_tag` to pin checks to one release tag.
 
 ## Device Controls
 
@@ -337,6 +339,7 @@ Settings are grouped by how people actually use the device.
 - Choose or forget network.
 - Auto OTA.
 - OTA owner/source.
+- OTA release tag.
 
 `Battery` includes:
 

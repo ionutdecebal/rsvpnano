@@ -130,6 +130,7 @@ private:
         None,
         WifiPassword,
         OtaOwner,
+        OtaTag,
     };
 
     enum class KeyboardMode : uint8_t {
@@ -281,6 +282,8 @@ private:
     String configuredWifiSsid();
     bool otaAutoCheckEnabled();
     String otaOwnerLabel();
+    String otaTagValue();
+    String otaTagLabel();
     String pacingDelayLabel(uint16_t delayMs) const;
     String firmwareUpdateMenuLabel() const;
     String firmwareVersionLabel() const;

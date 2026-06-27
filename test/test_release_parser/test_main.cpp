@@ -4,7 +4,7 @@
 
 namespace {
 
-const char *kAsset = "rsvp-nano-ota.bin";
+const char *kAsset = "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin";
 
 releaseparser::ReleaseInfo parseJson(const String &json) {
   releaseparser::ReleaseInfo out;
@@ -14,11 +14,15 @@ releaseparser::ReleaseInfo parseJson(const String &json) {
 
 }  // namespace
 
+void setUp() {}
+
+void tearDown() {}
+
 void test_extracts_tag_and_matching_asset_url() {
   const String json =
       "{\"tag_name\":\"v0.0.6\",\"assets\":["
       "{\"name\":\"other.bin\",\"browser_download_url\":\"https://example.com/other.bin\"},"
-      "{\"name\":\"rsvp-nano-ota.bin\",\"browser_download_url\":\"https://example.com/ota.bin\"}"
+      "{\"name\":\"rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin\",\"browser_download_url\":\"https://example.com/ota.bin\"}"
       "]}";
   releaseparser::ReleaseInfo out;
   TEST_ASSERT_TRUE(releaseparser::parse(json, kAsset, out));
@@ -51,7 +55,7 @@ void test_handles_whitespace_after_colon() {
 void test_unescapes_forward_slashes_in_url() {
   const String json =
       "{\"tag_name\":\"v2\",\"assets\":["
-      "{\"name\":\"rsvp-nano-ota.bin\","
+      "{\"name\":\"rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin\","
       "\"browser_download_url\":\"https:\\/\\/example.com\\/path\\/ota.bin\"}]}";
   const releaseparser::ReleaseInfo out = parseJson(json);
   TEST_ASSERT_EQUAL_STRING("https://example.com/path/ota.bin", out.assetUrl.c_str());
@@ -62,7 +66,7 @@ void test_picks_url_after_matching_name_not_a_neighbor() {
   const String json =
       "{\"tag_name\":\"v3\",\"assets\":["
       "{\"name\":\"a.bin\",\"browser_download_url\":\"https://example.com/a.bin\"},"
-      "{\"name\":\"rsvp-nano-ota.bin\",\"browser_download_url\":\"https://example.com/correct.bin\"}"
+      "{\"name\":\"rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin\",\"browser_download_url\":\"https://example.com/correct.bin\"}"
       "]}";
   const releaseparser::ReleaseInfo out = parseJson(json);
   TEST_ASSERT_EQUAL_STRING("https://example.com/correct.bin", out.assetUrl.c_str());

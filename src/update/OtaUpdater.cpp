@@ -38,6 +38,31 @@ bool parseBoolValue(const String &value) {
   return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
 }
 
+bool isUrlUnreserved(char value) {
+  return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
+         (value >= '0' && value <= '9') || value == '-' || value == '.' || value == '_' ||
+         value == '~';
+}
+
+String urlEncodePathSegment(const String &value) {
+  constexpr char kHex[] = "0123456789ABCDEF";
+  String encoded;
+  encoded.reserve(value.length());
+  for (size_t i = 0; i < value.length(); ++i) {
+    const char c = value[i];
+    if (isUrlUnreserved(c)) {
+      encoded += c;
+      continue;
+    }
+
+    const uint8_t byte = static_cast<uint8_t>(c);
+    encoded += '%';
+    encoded += kHex[byte >> 4];
+    encoded += kHex[byte & 0x0F];
+  }
+  return encoded;
+}
+
 String readBodyLimited(HTTPClient &http, size_t maxBytes) {
   WiFiClient *stream = http.getStreamPtr();
   if (stream == nullptr) {
@@ -167,6 +192,8 @@ bool OtaUpdater::loadConfigFromPath(const char *path, Config &config) const {
       config.githubOwner = value;
     } else if (key == "github_repo") {
       config.githubRepo = value;
+    } else if (key == "github_tag") {
+      config.githubTag = value;
     } else if (key == "asset_name") {
       config.assetName = value;
     } else if (key == "auto_check") {
@@ -187,14 +214,17 @@ bool OtaUpdater::connectWiFi(const Config &config, StatusCallback callback,
 
 void OtaUpdater::disconnectWiFi() const { net::disconnect(); }
 
-bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release,
-                                    String &errorDetail, StatusCallback callback,
-                                    void *context) const {
+bool OtaUpdater::fetchRelease(const Config &config, LatestRelease &release,
+                              String &errorDetail, StatusCallback callback, void *context) const {
   const String version = currentVersion();
+  const String githubTag = trimCopy(config.githubTag);
+  const String releasePath =
+      githubTag.isEmpty() ? "latest" : "tags/" + urlEncodePathSegment(githubTag);
   const String url = "https://api.github.com/repos/" + config.githubOwner + "/" +
-                     config.githubRepo + "/releases/latest";
+                     config.githubRepo + "/releases/" + releasePath;
+  const String sourceLabel = githubTag.isEmpty() ? config.githubRepo : config.githubRepo + "@" + githubTag;
 
-  reportStatus(callback, context, kStatusTitle, "Checking GitHub", config.githubRepo, 22);
+  reportStatus(callback, context, kStatusTitle, "Checking GitHub", sourceLabel, 22);
 
   WiFiClientSecure client;
   // GitHub release metadata and assets can redirect across multiple hosts, so keep the transport
@@ -215,7 +245,7 @@ bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release
   const int statusCode = http.GET();
   if (statusCode != HTTP_CODE_OK) {
     if (statusCode == HTTP_CODE_NOT_FOUND) {
-      errorDetail = "No published release";
+      errorDetail = githubTag.isEmpty() ? "No published release" : "Release tag not found";
     } else {
       errorDetail = "GitHub HTTP " + String(statusCode);
     }
@@ -326,7 +356,7 @@ OtaUpdater::Result OtaUpdater::checkOnly(const Config &config, StatusCallback ca
 
   LatestRelease release;
   String metadataError;
-  if (!fetchLatestRelease(config, release, metadataError, callback, context)) {
+  if (!fetchRelease(config, release, metadataError, callback, context)) {
     disconnectWiFi();
     result.code = ResultCode::MetadataFailed;
     result.summary = "GitHub failed";
@@ -386,7 +416,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallb
 
   LatestRelease release;
   String metadataError;
-  if (!fetchLatestRelease(config, release, metadataError, callback, context)) {
+  if (!fetchRelease(config, release, metadataError, callback, context)) {
     disconnectWiFi();
     result.code = ResultCode::MetadataFailed;
     result.summary = "GitHub failed";
