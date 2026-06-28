@@ -14,6 +14,7 @@ namespace StoragePaths {
     constexpr const char* kEpubExtension = ".epub";
     constexpr const char* kIndexExtension = ".ridx";
     constexpr const char* kDataExtension = ".rdat";
+    constexpr const char* kProgressExtension = ".rpos";
     constexpr const char* kTempExtension = ".tmp";
     constexpr const char* kFailedExtension = ".failed";
     constexpr const char* kConvertingExtension = ".converting";
@@ -29,6 +30,7 @@ namespace StoragePaths {
     String rsvpCachePathForEpub(const String& epubPath);
     String indexedIndexPathFor(const String& path);
     String indexedDataPathFor(const String& path);
+    String progressSidecarPathFor(const String& path);
     String indexedTempPathFor(const String& path);
     bool isHiddenOrSidecarPath(const String& path);
 
