@@ -353,17 +353,20 @@ class App {
   bool prepareBootBookLoad();
   void loadPendingBootBook(uint32_t nowMs);
   void saveReadingPosition(bool force = false);
+  void mirrorReadingPositionToSidecar();
   struct BookOpenOptions {
     BookOpenOptions()
         : allowLegacyPositionFallback(false),
           allowIndexBuild(true),
           allowEpubConversion(true),
-          rebuildTimeEstimate(true) {}
+          rebuildTimeEstimate(true),
+          preferSidecarPosition(false) {}
 
     bool allowLegacyPositionFallback;
     bool allowIndexBuild;
     bool allowEpubConversion;
     bool rebuildTimeEstimate;
+    bool preferSidecarPosition;
   };
   bool loadBookAtIndex(size_t index, uint32_t nowMs,
                        const BookOpenOptions &options = BookOpenOptions());
@@ -373,6 +376,9 @@ class App {
   uint32_t nextRecentSequence();
   uint32_t bookRecentSequence(const String &bookPath);
   void markBookRecent(const String &bookPath);
+  uint32_t savedWordIndexFromSidecar(const String &bookPath, uint32_t expectedWordCount,
+                                     bool logResult);
+  uint32_t savedWordIndexFromSidecar(const String &bookPath, uint32_t expectedWordCount);
   uint32_t savedWordIndexForBook(const String &bookPath, bool allowLegacyFallback = false);
   bool bookProgressPercent(size_t bookIndex, uint8_t &percent);
   int findBookIndexByPath(const String &path) const;
