@@ -101,7 +101,6 @@ class App {
     RestartConfirm,
     SdCardRepairConfirm,
     UpdateConfirm,
-    PowerOffConfirm,
     QuickSettings,
     QuickSync,
     FocusTimerGenres,
@@ -330,9 +329,6 @@ class App {
   void runSdCardCheck(uint32_t nowMs);
   void openUpdateConfirm();
   void selectUpdateConfirmItem(uint32_t nowMs);
-  void openPowerOffConfirm(uint32_t nowMs);
-  void cancelPowerOffConfirm(uint32_t nowMs);
-  void selectPowerOffConfirmItem(uint32_t nowMs);
   void enterCompanionSync(uint32_t nowMs);
   void updateCompanionSync(uint32_t nowMs);
   void exitCompanionSync(uint32_t nowMs);
@@ -386,7 +382,6 @@ class App {
   void renderRestartConfirm();
   void renderSdCardRepairConfirm();
   void renderUpdateConfirm();
-  void renderPowerOffConfirm();
   void renderQuickSettings();
   void renderQuickSync();
   void renderFocusTimerGenres();
@@ -464,7 +459,6 @@ class App {
 
   AppState state_ = AppState::Booting;
   AppState standbyReturnState_ = AppState::Paused;
-  AppState powerOffConfirmReturnState_ = AppState::Paused;
   DisplayManager display_;
   FocusTimer focusTimer_;
   ReadingLoop reader_;
@@ -514,7 +508,6 @@ class App {
   size_t restartConfirmSelectedIndex_ = 0;
   size_t sdCardRepairConfirmSelectedIndex_ = 0;
   size_t updateConfirmSelectedIndex_ = 0;
-  size_t powerOffConfirmSelectedIndex_ = 0;
   size_t quickSettingsSelectedIndex_ = 0;
   size_t quickSyncSelectedIndex_ = 0;
   size_t focusTimerGenreSelectedIndex_ = 0;
@@ -529,7 +522,6 @@ class App {
   size_t typographyPreviewSampleIndex_ = 0;
   MenuScreen menuScreen_ = MenuScreen::Main;
   MenuScreen restartConfirmReturnScreen_ = MenuScreen::Main;
-  MenuScreen powerOffConfirmReturnScreen_ = MenuScreen::Main;
   QueueHandle_t otaCheckQueue_ = nullptr;
   std::vector<String> settingsMenuItems_;
   std::vector<String> focusTimerGenreMenuItems_;
