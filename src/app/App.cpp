@@ -1,5 +1,6 @@
 #include "app/App.h"
 
+#include <SD_MMC.h>
 #include <WiFi.h>
 #include <algorithm>
 #include <climits>
@@ -12,6 +13,7 @@
 #include "app/MenuRepeat.h"
 #include "board/BoardConfig.h"
 #include "settings/PreferenceKeys.h"
+#include "storage/fs/StoragePaths.h"
 
 #ifndef RSVP_USB_TRANSFER_ENABLED
 #define RSVP_USB_TRANSFER_ENABLED 0
@@ -5328,7 +5330,10 @@ void App::selectBookPickerItem(uint32_t nowMs) {
 
   const size_t bookIndex = bookPickerBookIndices_[rowIndex];
   saveReadingPosition(true);
-  if (!loadBookAtIndex(bookIndex, nowMs)) {
+  mirrorReadingPositionToSidecar();
+  BookOpenOptions loadOptions;
+  loadOptions.preferSidecarPosition = true;
+  if (!loadBookAtIndex(bookIndex, nowMs, loadOptions)) {
     Serial.println("[book-picker] Failed to load selected book");
     display_.renderStatus("Book open failed", storage_.bookDisplayName(bookIndex),
                           "Check serial log");
@@ -5871,6 +5876,7 @@ void App::enterPowerOff(uint32_t nowMs) {
   powerOffStarted_ = true;
   Serial.println("[app] powering off; hold PWR to start again");
   saveReadingPosition(true);
+  mirrorReadingPositionToSidecar();
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
   contextViewVisible_ = false;
@@ -5977,6 +5983,7 @@ void App::enterPowerOff(uint32_t nowMs) {
 void App::enterSleep(uint32_t nowMs) {
   Serial.println("[app] entering light sleep; press BOOT to wake");
   saveReadingPosition(true);
+  mirrorReadingPositionToSidecar();
   setState(AppState::Sleeping, nowMs);
   Serial.flush();
   delay(200);
@@ -6172,6 +6179,55 @@ void App::saveReadingPosition(bool force) {
                 currentBookPath_.c_str());
 }
 
+void App::mirrorReadingPositionToSidecar() {
+  if (!usingStorageBook_ || currentBookPath_.isEmpty() || !storageReady_) {
+    return;
+  }
+
+  const uint32_t wordIndex = static_cast<uint32_t>(reader_.currentIndex());
+  const uint32_t wordCount = static_cast<uint32_t>(reader_.wordCount());
+  const uint32_t existingWordIndex =
+      savedWordIndexFromSidecar(currentBookPath_, wordCount, false);
+  if (existingWordIndex != kNoSavedWordIndex && existingWordIndex >= wordIndex) {
+    Serial.printf("[app] skipped sidecar mirror existing=%u pending=%u book=%s\n",
+                  static_cast<unsigned int>(existingWordIndex),
+                  static_cast<unsigned int>(wordIndex), currentBookPath_.c_str());
+    return;
+  }
+
+  const String sidecarPath = StoragePaths::progressSidecarPathFor(currentBookPath_);
+  const String tempPath = sidecarPath + StoragePaths::kTempExtension;
+
+  SD_MMC.remove(tempPath);
+  File sidecarFile = SD_MMC.open(tempPath, FILE_WRITE);
+  if (!sidecarFile || sidecarFile.isDirectory()) {
+    Serial.printf("[app] failed to open progress sidecar for write: %s\n", tempPath.c_str());
+    SD_MMC.remove(tempPath);
+    return;
+  }
+
+  const size_t written = sidecarFile.printf("%lu %lu\n", static_cast<unsigned long>(wordIndex),
+                                            static_cast<unsigned long>(wordCount));
+  sidecarFile.close();
+  if (written == 0) {
+    Serial.printf("[app] failed to write progress sidecar: %s\n", tempPath.c_str());
+    SD_MMC.remove(tempPath);
+    return;
+  }
+
+  SD_MMC.remove(sidecarPath);
+  if (!SD_MMC.rename(tempPath, sidecarPath)) {
+    Serial.printf("[app] failed to rename progress sidecar temp=%s target=%s\n",
+                  tempPath.c_str(), sidecarPath.c_str());
+    SD_MMC.remove(tempPath);
+    return;
+  }
+
+  Serial.printf("[app] mirrored position word=%u count=%u sidecar=%s\n",
+                static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(wordCount),
+                sidecarPath.c_str());
+}
+
 bool App::loadBookAtIndex(size_t index, uint32_t nowMs,
                           const BookOpenOptions &options) {
   BookMetadata book;
@@ -6234,12 +6290,22 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs,
 
   {
     // Restore saved position after the active book identity has been committed.
-    const uint32_t savedWordIndex = savedWordIndexForBook(
-        currentBookPath_, options.allowLegacyPositionFallback);
+    uint32_t savedWordIndex = kNoSavedWordIndex;
+    if (options.preferSidecarPosition) {
+      savedWordIndex = savedWordIndexFromSidecar(
+          currentBookPath_, static_cast<uint32_t>(reader_.wordCount()));
+    }
+    if (savedWordIndex == kNoSavedWordIndex) {
+      savedWordIndex = savedWordIndexForBook(
+          currentBookPath_, options.allowLegacyPositionFallback);
+    }
     if (savedWordIndex != kNoSavedWordIndex) {
       renderStorageStatus("Opening book", currentBookTitle_.c_str(), "Restoring position", 78);
       reader_.seekTo(savedWordIndex);
       lastSavedWordIndex_ = reader_.currentIndex();
+      preferences_.putUInt(bookPositionKey(currentBookPath_).c_str(),
+                           static_cast<uint32_t>(reader_.currentIndex()));
+      preferences_.putUInt(kPrefLegacyWordIndex, static_cast<uint32_t>(reader_.currentIndex()));
       Serial.printf("[app] restored book position word=%u key=%s\n",
                     static_cast<unsigned int>(reader_.currentIndex()),
                     bookPositionKey(currentBookPath_).c_str());
@@ -6304,6 +6370,55 @@ void App::markBookRecent(const String &bookPath) {
   }
 
   preferences_.putUInt(bookRecentKey(bookPath).c_str(), nextRecentSequence());
+}
+
+uint32_t App::savedWordIndexFromSidecar(const String &bookPath, uint32_t expectedWordCount,
+                                        bool logResult) {
+  if (bookPath.isEmpty() || expectedWordCount == 0 || !storageReady_) {
+    return kNoSavedWordIndex;
+  }
+
+  const String sidecarPath = StoragePaths::progressSidecarPathFor(bookPath);
+  File sidecarFile = SD_MMC.open(sidecarPath, FILE_READ);
+  if (!sidecarFile || sidecarFile.isDirectory()) {
+    return kNoSavedWordIndex;
+  }
+
+  const String payload = sidecarFile.readString();
+  sidecarFile.close();
+
+  unsigned long savedWordIndex = 0;
+  unsigned long savedWordCount = 0;
+  const int parsed = std::sscanf(payload.c_str(), "%lu %lu", &savedWordIndex, &savedWordCount);
+  if (parsed <= 0) {
+    if (logResult) {
+      Serial.printf("[app] ignored unreadable progress sidecar: %s\n", sidecarPath.c_str());
+    }
+    return kNoSavedWordIndex;
+  }
+
+  if (parsed >= 2 && savedWordCount != 0 && savedWordCount != expectedWordCount) {
+    if (logResult) {
+      Serial.printf("[app] ignored stale progress sidecar count=%lu expected=%lu path=%s\n",
+                    savedWordCount, static_cast<unsigned long>(expectedWordCount),
+                    sidecarPath.c_str());
+    }
+    return kNoSavedWordIndex;
+  }
+
+  const uint32_t clampedWordIndex =
+      expectedWordCount == 0
+          ? static_cast<uint32_t>(savedWordIndex)
+          : static_cast<uint32_t>(std::min<unsigned long>(savedWordIndex, expectedWordCount - 1));
+  if (logResult) {
+    Serial.printf("[app] loaded sidecar position word=%u path=%s\n",
+                  static_cast<unsigned int>(clampedWordIndex), sidecarPath.c_str());
+  }
+  return clampedWordIndex;
+}
+
+uint32_t App::savedWordIndexFromSidecar(const String &bookPath, uint32_t expectedWordCount) {
+  return savedWordIndexFromSidecar(bookPath, expectedWordCount, true);
 }
 
 uint32_t App::savedWordIndexForBook(const String &bookPath, bool allowLegacyFallback) {
