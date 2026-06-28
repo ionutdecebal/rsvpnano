@@ -7,10 +7,12 @@ namespace EpubContent {
 
     String plainTextFromXmlFragment(const String& fragment);
     bool writeBodyLine(File& output, const String& line, size_t& wordCount, size_t maxWords);
+    bool writeChapterDirective(File& output, const String& title, String& lastChapterTitle);
 
     class RsvpContentWriter {
     public:
-        RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle);
+        RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle,
+                          bool allowHeadingChapters = true);
 
         bool write(const uint8_t* data, size_t length);
         bool finish();
@@ -44,6 +46,7 @@ namespace EpubContent {
         String commentTail_;
         Mode mode_ = Mode::Text;
         bool inHeading_ = false;
+        const bool allowHeadingChapters_;
         bool reachedWordLimit_ = false;
         int skipDepth_ = 0;
     };

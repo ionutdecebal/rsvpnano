@@ -496,11 +496,17 @@ namespace EpubContent {
         return keepGoing;
     }
 
-    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle) :
+    bool writeChapterDirective(File& output, const String& title, String& lastChapterTitle) {
+        return writeChapterMarker(output, title, lastChapterTitle);
+    }
+
+    RsvpContentWriter::RsvpContentWriter(File& output, size_t& wordCount, size_t maxWords, String& lastChapterTitle,
+                                         bool allowHeadingChapters) :
             output_(output),
             wordCount_(wordCount),
             maxWords_(maxWords),
-            lastChapterTitle_(lastChapterTitle) {
+            lastChapterTitle_(lastChapterTitle),
+            allowHeadingChapters_(allowHeadingChapters) {
         line_.reserve(160);
         heading_.reserve(80);
         tag_.reserve(96);
@@ -615,7 +621,7 @@ namespace EpubContent {
 
         // Headings become RSVP chapter markers instead of body words.
         {
-            if (isHeadingTag(tagInfo.name)) {
+            if (allowHeadingChapters_ && isHeadingTag(tagInfo.name)) {
                 if (tagInfo.closing) {
                     inHeading_ = false;
                     const String cleanedHeading = plainTextFromXmlFragment(heading_);
