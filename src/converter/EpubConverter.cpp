@@ -3,6 +3,7 @@
 #include "board/BoardStorage.h"
 #include <algorithm>
 
+#include "converter/EpubContentWriter.h"
 #include "converter/EpubPackage.h"
 #include "converter/EpubZip.h"
 #include "storage/fs/StoragePaths.h"
@@ -11,22 +12,33 @@ namespace {
 
     constexpr size_t kMaxOpfBytes = 256UL * 1024UL;
     constexpr size_t kMaxContainerBytes = 32UL * 1024UL;
+    constexpr size_t kMaxTocBytes = 256UL * 1024UL;
     constexpr const char* kConverterVersion = "stream-v6";
 
     using EpubPackage::basenameWithoutExtension;
     using EpubPackage::directoryForPath;
     using EpubPackage::findManifestItem;
+    using EpubPackage::findNavDocumentPath;
+    using EpubPackage::findNcxDocumentPath;
     using EpubPackage::isContentDocument;
     using EpubPackage::ManifestItem;
     using EpubPackage::parseDcMetadata;
     using EpubPackage::parseManifestItems;
+    using EpubPackage::parseNavTocEntries;
+    using EpubPackage::parseNcxTocEntries;
     using EpubPackage::parseRootfilePath;
     using EpubPackage::parseSpineIds;
+    using EpubPackage::TocEntry;
 
     struct PackageDocuments {
         String opfXml;
         String opfPath;
         String opfBaseDir;
+    };
+
+    struct ReadingItem {
+        String path;
+        String chapterTitle;
     };
 
     struct ConversionPaths {
@@ -61,6 +73,71 @@ namespace {
 
     int contentProgressPercent(size_t completedItems, size_t itemCount) {
         return 25 + static_cast<int>((completedItems * 70UL) / itemCount);
+    }
+
+    bool hasSectionKeyword(const String& loweredValue, const char* keyword) {
+        return loweredValue == keyword || loweredValue.startsWith(String(keyword) + " ")
+            || loweredValue.endsWith(String(" ") + keyword) || loweredValue.indexOf(String(" ") + keyword + " ") >= 0;
+    }
+
+    bool shouldFilterNonReadingSection(const String& path, const String& tocTitle) {
+        const String loweredPath = EpubPackage::toLowerCopy(path);
+        const String loweredTitle = EpubPackage::toLowerCopy(tocTitle);
+
+        if (loweredPath.indexOf("next-reads") >= 0 || loweredPath.indexOf("_nav_") >= 0) {
+            return true;
+        }
+
+        if (loweredPath.indexOf("_cvi_") >= 0 || loweredPath.indexOf("_cop_") >= 0 || loweredPath.indexOf("_map_") >= 0
+            || loweredPath.indexOf("_toc_") >= 0 || loweredPath.indexOf("_tp_") >= 0) {
+            return true;
+        }
+
+        return hasSectionKeyword(loweredTitle, "cover") || loweredTitle == "title page"
+            || hasSectionKeyword(loweredTitle, "copyright") || loweredTitle == "contents"
+            || loweredTitle == "table of contents" || loweredTitle == "maps" || loweredTitle == "map"
+            || loweredTitle == "what's next on your reading list?"
+            || loweredTitle == "what’s next on your reading list?" || loweredTitle == "what is next on your reading list?"
+            || loweredTitle.indexOf("next on your reading list") >= 0;
+    }
+
+    const TocEntry* findTocEntryForPath(const std::vector<TocEntry>& entries, const String& path) {
+        const auto entry = std::find_if(entries.begin(), entries.end(), [&](const TocEntry& candidate) {
+            return candidate.path == path;
+        });
+        return entry == entries.end() ? nullptr : &(*entry);
+    }
+
+    std::vector<TocEntry> readPrimaryTocEntries(EpubZip::Archive& zip, const std::vector<ManifestItem>& manifest,
+                                                const String& opfXml, const EpubConverter::Options& options) {
+        typedef std::vector<TocEntry> (*TocParser)(const String&, const String&);
+
+        const auto readTocEntries = [&](const String& tocPath, const char* label, TocParser parser) {
+            if (tocPath.isEmpty()) {
+                return std::vector<TocEntry>{};
+            }
+
+            reportProgress(options, "Opening EPUB", label, 18);
+            String tocXml;
+            Serial.printf("[epub] Reading %s: %s\n", label, tocPath.c_str());
+            if (!zip.extractToString(tocPath, tocXml, kMaxTocBytes)) {
+                Serial.printf("[epub] Could not read %s: %s\n", label, tocPath.c_str());
+                return std::vector<TocEntry>{};
+            }
+            std::vector<TocEntry> entries = parser(tocXml, directoryForPath(tocPath));
+            Serial.printf("[epub] Parsed %u TOC entries from %s\n", static_cast<unsigned int>(entries.size()),
+                          tocPath.c_str());
+            return entries;
+        };
+
+        const String navPath = findNavDocumentPath(manifest);
+        std::vector<TocEntry> entries = readTocEntries(navPath, "Reading navigation", parseNavTocEntries);
+        if (!entries.empty()) {
+            return entries;
+        }
+
+        const String ncxPath = findNcxDocumentPath(opfXml, manifest);
+        return readTocEntries(ncxPath, "Reading NCX", parseNcxTocEntries);
     }
 
     bool readPackageDocuments(EpubZip::Archive& zip, const EpubConverter::Options& options,
@@ -122,20 +199,50 @@ namespace {
         return order;
     }
 
-    std::vector<String> buildReadingOrder(const String& opfXml, const String& opfBaseDir,
-                                          const EpubConverter::Options& options) {
+    std::vector<ReadingItem> buildReadingOrder(const std::vector<ManifestItem>& manifest,
+                                               const std::vector<String>& spineIds,
+                                               const std::vector<TocEntry>& tocEntries,
+                                               const EpubConverter::Options& options) {
+        std::vector<String> paths = [&]() {
+            std::vector<String> order = contentDocumentsInSpineOrder(manifest, spineIds);
+            return order.empty() ? allContentDocuments(manifest) : order;
+        }();
+
+        std::vector<ReadingItem> order;
+        order.reserve(paths.size());
+
+        std::for_each(paths.begin(), paths.end(), [&](const String& path) {
+            serviceBackground();
+
+            const TocEntry* tocEntry = findTocEntryForPath(tocEntries, path);
+            const String title = tocEntry == nullptr ? String("") : tocEntry->title;
+            if (shouldFilterNonReadingSection(path, title)) {
+                Serial.printf("[epub] Filtering non-reading section: %s title=%s\n", path.c_str(), title.c_str());
+                return;
+            }
+
+            ReadingItem item;
+            item.path = path;
+            item.chapterTitle = title;
+            order.push_back(item);
+        });
+
+        reportProgress(options, "Opening EPUB", "Building reading order", 20);
+        return order;
+    }
+
+    std::vector<ReadingItem> buildReadingOrder(const String& opfXml, const String& opfBaseDir,
+                                               EpubZip::Archive& zip, const EpubConverter::Options& options,
+                                               bool& usingPrimaryTocChapters) {
         const std::vector<ManifestItem> manifest = parseManifestItems(opfXml, opfBaseDir);
         const std::vector<String> spineIds = parseSpineIds(opfXml);
+        const std::vector<TocEntry> tocEntries = readPrimaryTocEntries(zip, manifest, opfXml, options);
 
         Serial.printf("[epub] Package parsed: manifest=%u spine=%u base=%s\n",
                       static_cast<unsigned int>(manifest.size()), static_cast<unsigned int>(spineIds.size()),
                       opfBaseDir.c_str());
-
-        reportProgress(options, "Opening EPUB", "Building reading order", 20);
-        return [&]() {
-            std::vector<String> order = contentDocumentsInSpineOrder(manifest, spineIds);
-            return order.empty() ? allContentDocuments(manifest) : order;
-        }();
+        usingPrimaryTocChapters = !tocEntries.empty();
+        return buildReadingOrder(manifest, spineIds, tocEntries, options);
     }
 
     void writeRsvpHeader(File& output, const String& epubPath, const String& opfXml) {
@@ -159,15 +266,17 @@ namespace {
         output.println();
     }
 
-    void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<String>& readingOrder) {
+    void reportReadingOrderReady(const EpubConverter::Options& options, const std::vector<ReadingItem>& readingOrder,
+                                 bool usingPrimaryTocChapters) {
         Serial.printf("[epub] Reading order contains %u content files\n",
                       static_cast<unsigned int>(readingOrder.size()));
-        const String foundDetail = String(readingOrder.size()) + " content files";
+        const String foundDetail = String(readingOrder.size()) + " content files"
+                                 + (usingPrimaryTocChapters ? " with TOC chapters" : " with heading fallback");
         reportProgress(options, "Opening EPUB", foundDetail.c_str(), 25);
     }
 
-    void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<String>& readingOrder,
-                            const EpubConverter::Options& options, size_t& wordCount) {
+    void streamReadingOrder(EpubZip::Archive& zip, File& output, const std::vector<ReadingItem>& readingOrder,
+                            bool usingPrimaryTocChapters, const EpubConverter::Options& options, size_t& wordCount) {
         String lastChapterTitle;
 
         const auto withinWordLimit = [&]() {
@@ -184,15 +293,19 @@ namespace {
 
             reportItemProgress("Extracting content", i);
 
+            if (usingPrimaryTocChapters && !readingOrder[i].chapterTitle.isEmpty()) {
+                EpubContent::writeChapterDirective(output, readingOrder[i].chapterTitle, lastChapterTitle);
+            }
+
             const EpubZip::ContentExtractStatus extractStatus =
-                zip.extractContentToRsvp(readingOrder[i], output, wordCount, options.maxWords, lastChapterTitle,
-                                         options, i, readingOrder.size());
+                zip.extractContentToRsvp(readingOrder[i].path, output, wordCount, options.maxWords, lastChapterTitle,
+                                         !usingPrimaryTocChapters, options, i, readingOrder.size());
 
             reportItemProgress("Parsed content", i + 1);
 
             if (extractStatus == EpubZip::ContentExtractStatus::Unsupported
                 || extractStatus == EpubZip::ContentExtractStatus::Failed) {
-                Serial.printf("[epub] Skipping unreadable content file: %s\n", readingOrder[i].c_str());
+                Serial.printf("[epub] Skipping unreadable content file: %s\n", readingOrder[i].path.c_str());
                 continue;
             }
 
@@ -233,12 +346,14 @@ namespace {
             return failWithClosedZip();
         }
 
-        const std::vector<String> readingOrder = buildReadingOrder(documents.opfXml, documents.opfBaseDir, options);
+        bool usingPrimaryTocChapters = false;
+        const std::vector<ReadingItem> readingOrder =
+            buildReadingOrder(documents.opfXml, documents.opfBaseDir, zip, options, usingPrimaryTocChapters);
         if (readingOrder.empty()) {
             Serial.println("[epub] No readable XHTML spine items found");
             return failWithClosedZip();
         }
-        reportReadingOrderReady(options, readingOrder);
+        reportReadingOrderReady(options, readingOrder, usingPrimaryTocChapters);
 
         Board::Storage::filesystem().remove(tempPath);
         File output = Board::Storage::filesystem().open(tempPath, FILE_WRITE);
@@ -250,7 +365,7 @@ namespace {
         writeRsvpHeader(output, epubPath, documents.opfXml);
 
         size_t wordCount = 0;
-        streamReadingOrder(zip, output, readingOrder, options, wordCount);
+        streamReadingOrder(zip, output, readingOrder, usingPrimaryTocChapters, options, wordCount);
 
         const String finishingDetail = wordCountDetail(wordCount);
         reportProgress(options, "Finishing EPUB", finishingDetail.c_str(), 96);

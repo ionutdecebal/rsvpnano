@@ -32,7 +32,8 @@ namespace EpubZip {
 
         bool extractToString(const String& name, String& output, size_t maxBytes);
         ContentExtractStatus extractContentToRsvp(const String& name, File& output, size_t& wordCount, size_t maxWords,
-                                                  String& lastChapterTitle, const EpubConverter::Options& options,
+                                                  String& lastChapterTitle, bool allowHeadingChapters,
+                                                  const EpubConverter::Options& options,
                                                   size_t itemIndex, size_t itemCount);
 
     private:
@@ -41,6 +42,7 @@ namespace EpubZip {
         bool extractToString(const ZipEntry& entry, String& output, size_t maxBytes);
         ContentExtractStatus extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
                                                   size_t maxWords, String& lastChapterTitle,
+                                                  bool allowHeadingChapters,
                                                   const EpubConverter::Options& options, size_t itemIndex,
                                                   size_t itemCount);
 

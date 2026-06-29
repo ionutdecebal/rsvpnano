@@ -338,6 +338,7 @@ namespace EpubZip {
 
     ContentExtractStatus Archive::extractContentToRsvp(const String& name, File& output, size_t& wordCount,
                                                        size_t maxWords, String& lastChapterTitle,
+                                                       bool allowHeadingChapters,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         const ZipEntry* entry = find(name);
@@ -345,7 +346,8 @@ namespace EpubZip {
             Serial.printf("[epub-zip] Content entry not found: %s\n", name.c_str());
             return ContentExtractStatus::Failed;
         }
-        return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, options, itemIndex,
+        return extractContentToRsvp(*entry, output, wordCount, maxWords, lastChapterTitle, allowHeadingChapters,
+                                    options, itemIndex,
                                     itemCount);
     }
 
@@ -590,6 +592,7 @@ namespace EpubZip {
 
     ContentExtractStatus Archive::extractContentToRsvp(const ZipEntry& entry, File& output, size_t& wordCount,
                                                        size_t maxWords, String& lastChapterTitle,
+                                                       bool allowHeadingChapters,
                                                        const EpubConverter::Options& options, size_t itemIndex,
                                                        size_t itemCount) {
         Serial.printf("[epub-zip] Extract content: %s method=%u flags=0x%04x c=%lu u=%lu\n", entry.name.c_str(),
@@ -610,7 +613,8 @@ namespace EpubZip {
             return ContentExtractStatus::Failed;
         }
 
-        EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle);
+        EpubContent::RsvpContentWriter writer(output, wordCount, maxWords, lastChapterTitle,
+                                             allowHeadingChapters);
         uint32_t totalOutputBytes = 0;
         uint32_t lastProgressBytes = 0;
         ContentExtractStatus result = ContentExtractStatus::Complete;

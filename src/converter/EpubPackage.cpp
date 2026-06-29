@@ -151,6 +151,61 @@ namespace EpubPackage {
             return "";
         }
 
+        bool attributeValueContainsToken(const String& tag, const char* name, const char* token) {
+            String value = attributeValue(tag, name);
+            value.toLowerCase();
+
+            String tokenValue(token);
+            tokenValue.toLowerCase();
+
+            int start = 0;
+            while (start >= 0 && static_cast<size_t>(start) < value.length()) {
+                start = skipAsciiWhitespace(value, start);
+                if (static_cast<size_t>(start) >= value.length()) {
+                    break;
+                }
+
+                int end = start;
+                while (static_cast<size_t>(end) < value.length() && !AsciiText::isWhitespace(value[end])) {
+                    ++end;
+                }
+
+                if (value.substring(start, end) == tokenValue) {
+                    return true;
+                }
+                start = end + 1;
+            }
+
+            return false;
+        }
+
+        void pushUniqueTocEntry(std::vector<TocEntry>& entries, const String& path, const String& title) {
+            if (path.isEmpty()) {
+                return;
+            }
+
+            String cleanedTitle = EpubContent::plainTextFromXmlFragment(title);
+            cleanedTitle.trim();
+            if (cleanedTitle.isEmpty()) {
+                return;
+            }
+
+            const auto existing = std::find_if(entries.begin(), entries.end(), [&](const TocEntry& entry) {
+                return entry.path == path;
+            });
+            if (existing != entries.end()) {
+                if (existing->title.isEmpty()) {
+                    existing->title = cleanedTitle;
+                }
+                return;
+            }
+
+            TocEntry entry;
+            entry.path = path;
+            entry.title = cleanedTitle;
+            entries.push_back(entry);
+        }
+
     } // namespace
 
     String toLowerCopy(String value) {
@@ -297,6 +352,7 @@ namespace EpubPackage {
             item.id = attributeValue(tag, "id");
             item.path = resolveZipPath(opfBaseDir, attributeValue(tag, "href"));
             item.mediaType = attributeValue(tag, "media-type");
+            item.properties = attributeValue(tag, "properties");
 
             if (!item.id.isEmpty() && !item.path.isEmpty()) {
                 items.push_back(item);
@@ -333,6 +389,133 @@ namespace EpubPackage {
         }
 
         return ids;
+    }
+
+    String findNavDocumentPath(const std::vector<ManifestItem>& items) {
+        const auto item = std::find_if(items.begin(), items.end(), [&](const ManifestItem& candidate) {
+            String properties = candidate.properties;
+            properties.toLowerCase();
+            return properties == "nav" || properties.startsWith("nav ") || properties.endsWith(" nav")
+                || properties.indexOf(" nav ") >= 0;
+        });
+        return item == items.end() ? String("") : item->path;
+    }
+
+    String findNcxDocumentPath(const String& opfXml, const std::vector<ManifestItem>& items) {
+        int position = opfXml.indexOf("<spine");
+        if (position >= 0) {
+            const int end = opfXml.indexOf('>', position);
+            if (end >= 0) {
+                const String tag = opfXml.substring(position, end + 1);
+                const String tocId = attributeValue(tag, "toc");
+                if (!tocId.isEmpty()) {
+                    const ManifestItem* item = findManifestItem(items, tocId);
+                    if (item != nullptr) {
+                        return item->path;
+                    }
+                }
+            }
+        }
+
+        const auto item = std::find_if(items.begin(), items.end(), [&](const ManifestItem& candidate) {
+            return toLowerCopy(candidate.mediaType) == "application/x-dtbncx+xml";
+        });
+        return item == items.end() ? String("") : item->path;
+    }
+
+    std::vector<TocEntry> parseNavTocEntries(const String& navXml, const String& navBaseDir) {
+        std::vector<TocEntry> entries;
+        int position = 0;
+
+        while (position >= 0) {
+            position = navXml.indexOf("<nav", position);
+            if (position < 0) {
+                break;
+            }
+
+            const int openEnd = navXml.indexOf('>', position);
+            if (openEnd < 0) {
+                break;
+            }
+
+            const String openTag = navXml.substring(position, openEnd + 1);
+            const bool isTocNav = attributeValueContainsToken(openTag, "epub:type", "toc")
+                               || attributeValueContainsToken(openTag, "type", "toc");
+            const int closeStart = navXml.indexOf("</nav>", openEnd + 1);
+            if (closeStart < 0) {
+                break;
+            }
+
+            if (isTocNav) {
+                const String body = navXml.substring(openEnd + 1, closeStart);
+                int anchorPosition = 0;
+                while (anchorPosition >= 0) {
+                    anchorPosition = body.indexOf("<a", anchorPosition);
+                    if (anchorPosition < 0) {
+                        break;
+                    }
+
+                    const int anchorOpenEnd = body.indexOf('>', anchorPosition);
+                    if (anchorOpenEnd < 0) {
+                        break;
+                    }
+                    const int anchorCloseStart = body.indexOf("</a>", anchorOpenEnd + 1);
+                    if (anchorCloseStart < 0) {
+                        break;
+                    }
+
+                    const String anchorTag = body.substring(anchorPosition, anchorOpenEnd + 1);
+                    const String href = attributeValue(anchorTag, "href");
+                    if (!href.isEmpty()) {
+                        pushUniqueTocEntry(entries, resolveZipPath(navBaseDir, href),
+                                           body.substring(anchorOpenEnd + 1, anchorCloseStart));
+                    }
+
+                    anchorPosition = anchorCloseStart + 4;
+                }
+                break;
+            }
+
+            position = closeStart + 6;
+        }
+
+        return entries;
+    }
+
+    std::vector<TocEntry> parseNcxTocEntries(const String& ncxXml, const String& ncxBaseDir) {
+        std::vector<TocEntry> entries;
+        int position = 0;
+
+        while (position >= 0) {
+            position = ncxXml.indexOf("<navPoint", position);
+            if (position < 0) {
+                break;
+            }
+
+            const int closeStart = ncxXml.indexOf("</navPoint>", position);
+            if (closeStart < 0) {
+                break;
+            }
+
+            const String body = ncxXml.substring(position, closeStart);
+            const int textOpen = body.indexOf("<text");
+            const int textTagEnd = textOpen < 0 ? -1 : body.indexOf('>', textOpen);
+            const int textClose = textTagEnd < 0 ? -1 : body.indexOf("</text>", textTagEnd + 1);
+            const int contentOpen = body.indexOf("<content");
+            const int contentEnd = contentOpen < 0 ? -1 : body.indexOf('>', contentOpen);
+            if (textTagEnd >= 0 && textClose >= 0 && contentEnd >= 0) {
+                const String contentTag = body.substring(contentOpen, contentEnd + 1);
+                const String src = attributeValue(contentTag, "src");
+                if (!src.isEmpty()) {
+                    pushUniqueTocEntry(entries, resolveZipPath(ncxBaseDir, src),
+                                       body.substring(textTagEnd + 1, textClose));
+                }
+            }
+
+            position = closeStart + 11;
+        }
+
+        return entries;
     }
 
     const ManifestItem* findManifestItem(const std::vector<ManifestItem>& items, const String& id) {
