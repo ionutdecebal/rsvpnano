@@ -3,8 +3,9 @@
 #include <Wire.h>
 #include <algorithm>
 
+#include "drivers/gpio/tca9554/Tca9554.h"
 #include "drivers/power/BatteryCurve.h"
-#include "drivers/gpio/Tca9554.h"
+#include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
 namespace {
 
@@ -14,25 +15,22 @@ struct PowerContext {
 
 PowerContext gPower;
 
-bool configureOutputPin(uint8_t pin, bool high) {
-  return BoardDrivers::Tca9554::configureOutputPin(
-      Wire1, static_cast<uint8_t>(Board::Config::TCA9554_ADDRESS), pin, high,
-      Board::Config::TCA9554_RELEASE_BUS_BEFORE_READ);
-}
-
 }  // namespace
 
 namespace Board::Power {
 
 void begin() {
-  if (Config::PIN_BATTERY_ADC >= 0) {
-    pinMode(Config::PIN_BATTERY_ADC, INPUT);
+  if constexpr (WaveshareLcd349::Power::kBatteryAdcPin >= 0) {
+    pinMode(WaveshareLcd349::Power::kBatteryAdcPin, INPUT);
     analogReadResolution(12);
-    analogSetPinAttenuation(Config::PIN_BATTERY_ADC, ADC_11db);
+    analogSetPinAttenuation(WaveshareLcd349::Power::kBatteryAdcPin, ADC_11db);
   }
 
   if (!gPower.batteryPowerHoldEnabled &&
-      configureOutputPin(Config::TCA9554_PIN_SYS_EN, true)) {
+      BoardDrivers::Tca9554::configureOutputPin(
+          Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+          WaveshareLcd349::Tca9554Wiring::kSysEnablePin, true,
+          WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
     gPower.batteryPowerHoldEnabled = true;
     Serial.println("[board] Battery power hold enabled");
   }
@@ -40,15 +38,16 @@ void begin() {
 
 void prepareDeepSleepPowerHold() {}
 
-void resetWakePeripherals() {}
-
 bool enableAudioPowerIfAvailable() {
-  return configureOutputPin(Config::TCA9554_PIN_AUDIO_ENABLE, true);
+  return BoardDrivers::Tca9554::configureOutputPin(
+      Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+      WaveshareLcd349::Tca9554Wiring::kAudioEnablePin, true,
+      WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead);
 }
 
 bool readBatteryStatus(BatteryStatus &status) {
   status = BatteryStatus{};
-  if (Config::PIN_BATTERY_ADC < 0) {
+  if constexpr (WaveshareLcd349::Power::kBatteryAdcPin < 0) {
     return false;
   }
 
@@ -61,7 +60,7 @@ bool readBatteryStatus(BatteryStatus &status) {
   uint32_t millivolts[kMaxSamples];
   uint8_t samples = 0;
   for (uint8_t i = 0; i < kMaxSamples + 2; ++i) {
-    const uint32_t sample = analogReadMilliVolts(Config::PIN_BATTERY_ADC);
+    const uint32_t sample = analogReadMilliVolts(WaveshareLcd349::Power::kBatteryAdcPin);
     if (i >= 2 && sample > 0 && samples < kMaxSamples) {
       millivolts[samples++] = sample;
     }
@@ -71,7 +70,7 @@ bool readBatteryStatus(BatteryStatus &status) {
   if (samples == 0) {
     uint32_t rawTotal = 0;
     for (uint8_t i = 0; i < kRawSamples; ++i) {
-      rawTotal += analogRead(Config::PIN_BATTERY_ADC);
+      rawTotal += analogRead(WaveshareLcd349::Power::kBatteryAdcPin);
       delayMicroseconds(500);
     }
     const float pinMillivolts =
@@ -106,7 +105,10 @@ DiagnosticSnapshot diagnosticSnapshot() { return PowerDiagnosticSnapshot{}; }
 bool externalPowerPresent() { return false; }
 
 bool releaseBatteryPowerHold() {
-  if (!configureOutputPin(Config::TCA9554_PIN_SYS_EN, false)) {
+  if (!BoardDrivers::Tca9554::configureOutputPin(
+          Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+          WaveshareLcd349::Tca9554Wiring::kSysEnablePin, false,
+          WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
     Serial.println("[board] Battery power hold release failed");
     return false;
   }
@@ -116,12 +118,16 @@ bool releaseBatteryPowerHold() {
   return true;
 }
 
+bool supportsSoftwarePowerOff() { return true; }
+
 bool powerOffUsesControllerWake() { return false; }
 
-bool shouldRequestShutdownOnPowerOff() { return Config::REQUEST_PMU_SHUTDOWN_ON_POWEROFF; }
+bool shouldRequestShutdownOnPowerOff() {
+  return WaveshareLcd349::Power::kRequestPmuShutdownOnPowerOff;
+}
 
 bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-  return Config::RELEASE_BATTERY_HOLD_BEFORE_DEEP_SLEEP;
+  return WaveshareLcd349::Power::kReleaseBatteryHoldBeforeDeepSleep;
 }
 
 }  // namespace Board::Power

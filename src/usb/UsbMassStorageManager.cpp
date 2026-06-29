@@ -3,22 +3,37 @@
 #include <algorithm>
 #include <cstring>
 
+#if RSVP_USB_MSC_ENABLED
+#include <esp_err.h>
 #include <esp_heap_caps.h>
-#include <ff.h>
-#include <diskio.h>
-#include <diskio_impl.h>
+#include <esp_log.h>
+#include <sdmmc_cmd.h>
 #include <tusb.h>
-
-#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
-#include <USB.h>
+#include <driver/sdmmc_host.h>
 #endif
+
+#include "board/BoardStorage.h"
 
 namespace {
 
+#if RSVP_USB_MSC_ENABLED
 constexpr uint16_t kUsbBlockSize = 512;
+constexpr int kSdFrequenciesKhz[] = {
+    SDMMC_FREQ_DEFAULT,
+    10000,
+    SDMMC_FREQ_PROBING,
+};
+
+static const char *kUsbMscTag = "usb_msc";
+
+void deinitHostIfNeeded() {
+  const esp_err_t err = sdmmc_host_deinit();
+  if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+    ESP_LOGW(kUsbMscTag, "SDMMC host deinit returned 0x%x", err);
+  }
+}
 
 void pulseUsbReconnect() {
-#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
   if (!tud_inited()) {
     return;
   }
@@ -26,8 +41,8 @@ void pulseUsbReconnect() {
   tud_disconnect();
   delay(120);
   tud_connect();
-#endif
 }
+#endif
 
 }  // namespace
 
@@ -39,7 +54,7 @@ UsbMassStorageManager::UsbMassStorageManager() {
 }
 
 bool UsbMassStorageManager::begin(bool writeEnabled) {
-#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
+#if RSVP_USB_MSC_ENABLED
   if (active_) {
     return true;
   }
@@ -49,19 +64,13 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
   statusMessage_ = "Preparing SD";
 
   if (!beginSdCard()) {
+    statusMessage_ = "SD init failed";
     endSdCard();
     return false;
   }
 
   if (!configureMsc() || !msc_.begin(blockCount_, blockSize_)) {
     statusMessage_ = "USB MSC failed";
-    endSdCard();
-    return false;
-  }
-
-  if (!USB.begin()) {
-    statusMessage_ = "USB start failed";
-    msc_.end();
     endSdCard();
     return false;
   }
@@ -76,13 +85,13 @@ bool UsbMassStorageManager::begin(bool writeEnabled) {
 #else
   (void)writeEnabled;
   statusMessage_ = "USB transfer disabled";
-  Serial.println("[usb-msc] unsupported: build a USB-enabled target to enable it");
+  Serial.println("[usb-msc] unsupported: build waveshare_esp32s3_usb_msc to enable it");
   return false;
 #endif
 }
 
 void UsbMassStorageManager::end() {
-#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
+#if RSVP_USB_MSC_ENABLED
   msc_.mediaPresent(false);
   msc_.end();
 #endif
@@ -106,7 +115,7 @@ uint64_t UsbMassStorageManager::cardSizeBytes() const {
 const char *UsbMassStorageManager::statusMessage() const { return statusMessage_; }
 
 bool UsbMassStorageManager::configureMsc() {
-#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
+#if RSVP_USB_MSC_ENABLED
   msc_.vendorID("RSVPNANO");
   msc_.productID("SD Transfer");
   msc_.productRevision("0.1");
@@ -121,10 +130,10 @@ bool UsbMassStorageManager::configureMsc() {
 }
 
 bool UsbMassStorageManager::beginSdCard() {
+#if RSVP_USB_MSC_ENABLED
   blockCount_ = 0;
   blockSize_ = kUsbBlockSize;
   cardReady_ = false;
-  physicalDrive_ = 0xFF;
 
   if (sectorBuffer_ == nullptr) {
     sectorBuffer_ = static_cast<uint8_t *>(
@@ -132,62 +141,79 @@ bool UsbMassStorageManager::beginSdCard() {
   }
   if (sectorBuffer_ == nullptr) {
     Serial.println("[usb-msc] failed to allocate DMA sector buffer");
-    statusMessage_ = "Buffer allocation failed";
     return false;
   }
 
-  BYTE firstUnusedDrive = FF_VOLUMES;
-  if (ff_diskio_get_drive(&firstUnusedDrive) != ESP_OK) {
-    firstUnusedDrive = FF_VOLUMES;
-  }
+  sdmmc_slot_config_t slotConfig = SDMMC_SLOT_CONFIG_DEFAULT();
+#ifdef SOC_SDMMC_USE_GPIO_MATRIX
+  Board::Storage::configureSdMmcSlot(slotConfig);
+#endif
+  slotConfig.width = 1;
 
-  for (BYTE drive = 0; drive < firstUnusedDrive; ++drive) {
-    DWORD sectorCount = 0;
-    WORD sectorSize = 0;
-    const DRESULT countResult = disk_ioctl(drive, GET_SECTOR_COUNT, &sectorCount);
-    const DRESULT sizeResult = disk_ioctl(drive, GET_SECTOR_SIZE, &sectorSize);
-    if (countResult != RES_OK || sizeResult != RES_OK || sectorCount == 0) {
-      Serial.printf("[usb-msc] FatFS drive %u unavailable count=%u size=%u sectors=%lu\n",
-                    drive, static_cast<unsigned int>(countResult),
-                    static_cast<unsigned int>(sizeResult),
-                    static_cast<unsigned long>(sectorCount));
+  for (int frequencyKhz : kSdFrequenciesKhz) {
+    std::memset(&card_, 0, sizeof(card_));
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.flags = SDMMC_HOST_FLAG_1BIT;
+    host.slot = SDMMC_HOST_SLOT_1;
+    host.max_freq_khz = frequencyKhz;
+
+    deinitHostIfNeeded();
+    esp_err_t err = host.init();
+    if (err != ESP_OK) {
+      Serial.printf("[usb-msc] host init failed at %d kHz: 0x%x\n", frequencyKhz, err);
       continue;
     }
 
-    if (sectorSize != kUsbBlockSize) {
-      Serial.printf("[usb-msc] unsupported SD geometry on drive %u: sectors=%lu sectorSize=%u\n",
-                    drive, static_cast<unsigned long>(sectorCount),
-                    static_cast<unsigned int>(sectorSize));
-      statusMessage_ = "Unsupported SD geometry";
+    err = sdmmc_host_init_slot(host.slot, &slotConfig);
+    if (err != ESP_OK) {
+      Serial.printf("[usb-msc] slot init failed at %d kHz: 0x%x\n", frequencyKhz, err);
+      deinitHostIfNeeded();
       continue;
     }
 
-    physicalDrive_ = drive;
-    blockCount_ = static_cast<uint32_t>(sectorCount);
-    blockSize_ = static_cast<uint16_t>(sectorSize);
+    err = sdmmc_card_init(&host, &card_);
+    if (err != ESP_OK) {
+      Serial.printf("[usb-msc] card init failed at %d kHz: 0x%x\n", frequencyKhz, err);
+      deinitHostIfNeeded();
+      continue;
+    }
+
+    if (card_.csd.sector_size != kUsbBlockSize || card_.csd.capacity == 0) {
+      Serial.printf("[usb-msc] unsupported SD geometry: sectors=%d sectorSize=%d\n",
+                    card_.csd.capacity, card_.csd.sector_size);
+      deinitHostIfNeeded();
+      continue;
+    }
+
+    blockCount_ = static_cast<uint32_t>(card_.csd.capacity);
+    blockSize_ = static_cast<uint16_t>(card_.csd.sector_size);
     cardReady_ = true;
-    Serial.printf("[usb-msc] FatFS drive %u ready for USB (%lu MB)\n", physicalDrive_,
+    Serial.printf("[usb-msc] SD ready for USB at %d kHz (%lu MB)\n", frequencyKhz,
                   static_cast<unsigned long>(cardSizeBytes() / (1024ULL * 1024ULL)));
     return true;
   }
 
-  statusMessage_ = "No mounted SD drive";
-  Serial.println("[usb-msc] no mounted FatFS SD drive found for USB transfer");
   return false;
+#else
+  return false;
+#endif
 }
 
 void UsbMassStorageManager::endSdCard() {
-  if (cardReady_ && physicalDrive_ != 0xFF) {
-    disk_ioctl(physicalDrive_, CTRL_SYNC, nullptr);
+#if RSVP_USB_MSC_ENABLED
+  if (cardReady_) {
+    deinitHostIfNeeded();
   }
+#endif
   cardReady_ = false;
-  physicalDrive_ = 0xFF;
   blockCount_ = 0;
 
+#if RSVP_USB_MSC_ENABLED
   if (sectorBuffer_ != nullptr) {
     heap_caps_free(sectorBuffer_);
     sectorBuffer_ = nullptr;
   }
+#endif
 }
 
 int32_t UsbMassStorageManager::onRead(uint32_t lba, uint32_t offset, void *buffer,
@@ -215,6 +241,7 @@ bool UsbMassStorageManager::onStartStop(uint8_t powerCondition, bool start, bool
 
 int32_t UsbMassStorageManager::readSectors(uint32_t lba, uint32_t offset, void *buffer,
                                            uint32_t bufsize) {
+#if RSVP_USB_MSC_ENABLED
   if (!active_ || !cardReady_ || buffer == nullptr || sectorBuffer_ == nullptr ||
       offset >= blockSize_) {
     return -1;
@@ -228,11 +255,10 @@ int32_t UsbMassStorageManager::readSectors(uint32_t lba, uint32_t offset, void *
   while (copied < bufsize && currentLba < blockCount_) {
     const uint32_t bytesThisSector =
         std::min<uint32_t>(blockSize_ - currentOffset, bufsize - copied);
-    const DRESULT result = disk_read(physicalDrive_, sectorBuffer_, currentLba, 1);
-    if (result != RES_OK) {
-      Serial.printf("[usb-msc] read failed drive=%u lba=%lu result=%u\n", physicalDrive_,
-                    static_cast<unsigned long>(currentLba),
-                    static_cast<unsigned int>(result));
+    const esp_err_t err = sdmmc_read_sectors(&card_, sectorBuffer_, currentLba, 1);
+    if (err != ESP_OK) {
+      Serial.printf("[usb-msc] read failed lba=%lu err=0x%x\n",
+                    static_cast<unsigned long>(currentLba), err);
       return copied > 0 ? static_cast<int32_t>(copied) : -1;
     }
 
@@ -243,10 +269,18 @@ int32_t UsbMassStorageManager::readSectors(uint32_t lba, uint32_t offset, void *
   }
 
   return static_cast<int32_t>(copied);
+#else
+  (void)lba;
+  (void)offset;
+  (void)buffer;
+  (void)bufsize;
+  return -1;
+#endif
 }
 
 int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8_t *buffer,
                                             uint32_t bufsize) {
+#if RSVP_USB_MSC_ENABLED
   if (!writeEnabled_) {
     return -1;
   }
@@ -263,22 +297,20 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
     const uint32_t bytesThisSector =
         std::min<uint32_t>(blockSize_ - currentOffset, bufsize - written);
     if (currentOffset != 0 || bytesThisSector != blockSize_) {
-      const DRESULT readResult = disk_read(physicalDrive_, sectorBuffer_, currentLba, 1);
-      if (readResult != RES_OK) {
-        Serial.printf("[usb-msc] write pre-read failed drive=%u lba=%lu result=%u\n",
-                      physicalDrive_, static_cast<unsigned long>(currentLba),
-                      static_cast<unsigned int>(readResult));
+      const esp_err_t readErr = sdmmc_read_sectors(&card_, sectorBuffer_, currentLba, 1);
+      if (readErr != ESP_OK) {
+        Serial.printf("[usb-msc] write pre-read failed lba=%lu err=0x%x\n",
+                      static_cast<unsigned long>(currentLba), readErr);
         return written > 0 ? static_cast<int32_t>(written) : -1;
       }
     }
 
     std::memcpy(sectorBuffer_ + currentOffset, buffer + written, bytesThisSector);
 
-    const DRESULT writeResult = disk_write(physicalDrive_, sectorBuffer_, currentLba, 1);
-    if (writeResult != RES_OK) {
-      Serial.printf("[usb-msc] write failed drive=%u lba=%lu result=%u\n", physicalDrive_,
-                    static_cast<unsigned long>(currentLba),
-                    static_cast<unsigned int>(writeResult));
+    const esp_err_t writeErr = sdmmc_write_sectors(&card_, sectorBuffer_, currentLba, 1);
+    if (writeErr != ESP_OK) {
+      Serial.printf("[usb-msc] write failed lba=%lu err=0x%x\n",
+                    static_cast<unsigned long>(currentLba), writeErr);
       return written > 0 ? static_cast<int32_t>(written) : -1;
     }
 
@@ -288,6 +320,13 @@ int32_t UsbMassStorageManager::writeSectors(uint32_t lba, uint32_t offset, uint8
   }
 
   return static_cast<int32_t>(written);
+#else
+  (void)lba;
+  (void)offset;
+  (void)buffer;
+  (void)bufsize;
+  return -1;
+#endif
 }
 
 bool UsbMassStorageManager::handleStartStop(uint8_t powerCondition, bool start, bool loadEject) {
@@ -297,10 +336,7 @@ bool UsbMassStorageManager::handleStartStop(uint8_t powerCondition, bool start, 
   if (loadEject && !start) {
     ejected_ = true;
     statusMessage_ = "Ejected";
-    if (cardReady_ && physicalDrive_ != 0xFF) {
-      disk_ioctl(physicalDrive_, CTRL_SYNC, nullptr);
-    }
-#if RSVP_USB_TRANSFER_ENABLED && CONFIG_TINYUSB_MSC_ENABLED && !ARDUINO_USB_MODE
+#if RSVP_USB_MSC_ENABLED
     msc_.mediaPresent(false);
 #endif
   }

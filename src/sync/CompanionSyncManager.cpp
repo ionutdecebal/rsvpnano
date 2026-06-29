@@ -1,7 +1,7 @@
 #include "sync/CompanionSyncManager.h"
 
 #include <ESPmDNS.h>
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <WiFi.h>
 #include <algorithm>
 #include <cstdio>
@@ -713,7 +713,7 @@ void CompanionSyncManager::handleBooksList() {
   bool first = true;
 
   const auto appendDirectory = [&](const char *directoryPath) {
-    File dir = SD_MMC.open(directoryPath);
+    File dir = Board::Storage::filesystem().open(directoryPath);
     if (!dir || !dir.isDirectory()) {
       if (dir) {
         dir.close();
@@ -875,20 +875,20 @@ void CompanionSyncManager::handleBookDelete() {
     return;
   }
 
-  File file = SD_MMC.open(path);
+  File file = Board::Storage::filesystem().open(path);
   if ((!file || file.isDirectory()) && separator < 0) {
     if (file) {
       file.close();
     }
     path = String(StoragePaths::kBookFilesPath) + "/" + filename;
-    file = SD_MMC.open(path);
+    file = Board::Storage::filesystem().open(path);
   }
   if ((!file || file.isDirectory()) && separator < 0) {
     if (file) {
       file.close();
     }
     path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
-    file = SD_MMC.open(path);
+    file = Board::Storage::filesystem().open(path);
   }
   if (!file || file.isDirectory()) {
     if (file) {
@@ -899,7 +899,7 @@ void CompanionSyncManager::handleBookDelete() {
   }
   file.close();
 
-  if (!SD_MMC.remove(path)) {
+  if (!Board::Storage::filesystem().remove(path)) {
     server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Delete failed\"}");
     return;
   }
@@ -942,8 +942,8 @@ void CompanionSyncManager::handleBookUpload() {
     }
     uploadFinalPath_ = String(targetDirectory) + "/" + filename;
     uploadTmpPath_ = uploadFinalPath_ + ".tmp";
-    SD_MMC.remove(uploadTmpPath_);
-    uploadFile_ = SD_MMC.open(uploadTmpPath_, FILE_WRITE);
+    Board::Storage::filesystem().remove(uploadTmpPath_);
+    uploadFile_ = Board::Storage::filesystem().open(uploadTmpPath_, FILE_WRITE);
     if (!uploadFile_) {
       uploadError_ = "Could not create file";
       return;
@@ -1328,7 +1328,7 @@ String CompanionSyncManager::rssFeedsJson() {
   String body;
   body.reserve(256);
   body += "{\"ok\":true,\"feeds\":[";
-  File file = SD_MMC.open(kRssConfigPath);
+  File file = Board::Storage::filesystem().open(kRssConfigPath);
   bool first = true;
   if (file && !file.isDirectory()) {
     while (file.available()) {
@@ -1413,10 +1413,10 @@ bool CompanionSyncManager::writeRssFeedsJson(const String &body, String &error) 
     }
   }
 
-  SD_MMC.mkdir(StoragePaths::kConfigPath);
+  Board::Storage::filesystem().mkdir(StoragePaths::kConfigPath);
   const String tmpPath = String(kRssConfigPath) + ".tmp";
-  SD_MMC.remove(tmpPath);
-  File file = SD_MMC.open(tmpPath, FILE_WRITE);
+  Board::Storage::filesystem().remove(tmpPath);
+  File file = Board::Storage::filesystem().open(tmpPath, FILE_WRITE);
   if (!file) {
     error = "Could not write RSS config";
     return false;
@@ -1428,9 +1428,9 @@ bool CompanionSyncManager::writeRssFeedsJson(const String &body, String &error) 
   }
   file.close();
 
-  SD_MMC.remove(kRssConfigPath);
-  if (!SD_MMC.rename(tmpPath, kRssConfigPath)) {
-    SD_MMC.remove(tmpPath);
+  Board::Storage::filesystem().remove(kRssConfigPath);
+  if (!Board::Storage::filesystem().rename(tmpPath, kRssConfigPath)) {
+    Board::Storage::filesystem().remove(tmpPath);
     error = "Could not save RSS config";
     return false;
   }
@@ -1508,7 +1508,7 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(
     return metadata;
   }
 
-  File file = SD_MMC.open(path);
+  File file = Board::Storage::filesystem().open(path);
   if (!file || file.isDirectory()) {
     if (file) {
       file.close();
@@ -1614,17 +1614,17 @@ void CompanionSyncManager::finishUpload(bool success) {
   }
 
   if (success && uploadError_.isEmpty()) {
-    SD_MMC.remove(uploadFinalPath_);
-    if (!SD_MMC.rename(uploadTmpPath_, uploadFinalPath_)) {
+    Board::Storage::filesystem().remove(uploadFinalPath_);
+    if (!Board::Storage::filesystem().rename(uploadTmpPath_, uploadFinalPath_)) {
       uploadError_ = "Rename failed";
-      SD_MMC.remove(uploadTmpPath_);
+      Board::Storage::filesystem().remove(uploadTmpPath_);
     } else {
       statusLine1_ = "Book received";
       statusLine2_ = uploadFinalPath_;
       Serial.printf("[sync] upload ready %s\n", uploadFinalPath_.c_str());
     }
   } else {
-    SD_MMC.remove(uploadTmpPath_);
+    Board::Storage::filesystem().remove(uploadTmpPath_);
   }
 
   uploadTmpPath_ = "";

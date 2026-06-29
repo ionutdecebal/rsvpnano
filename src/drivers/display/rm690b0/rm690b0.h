@@ -3,9 +3,12 @@
 #include <Arduino.h>
 #include <driver/spi_master.h>
 
+#include "drivers/display/DisplayBusConfig.h"
+
 namespace Rm690b0 {
 
 struct Context {
+  BoardDrivers::Display::BusConfig config;
   spi_device_handle_t spi = nullptr;
   bool busReady = false;
   bool displayOn = true;

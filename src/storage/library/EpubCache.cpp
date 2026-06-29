@@ -1,6 +1,6 @@
 #include "storage/library/EpubCache.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <algorithm>
 #include <esp_heap_caps.h>
 
@@ -97,7 +97,7 @@ namespace EpubCache {
 
         const size_t epubBytes = [&]() {
             // Read source size for conversion logging.
-            File epubFile = SD_MMC.open(epubPath);
+            File epubFile = Board::Storage::filesystem().open(epubPath);
             const size_t bytes = epubFile ? static_cast<size_t>(epubFile.size()) : 0;
             if (epubFile) {
                 epubFile.close();

@@ -1,6 +1,6 @@
 #include "storage/fs/StorageFiles.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <cerrno>
 #include <cstring>
 
@@ -32,7 +32,7 @@ namespace StorageFiles {
     }
 
     bool directoryExists(const char* path) {
-        File dir = SD_MMC.open(path);
+        File dir = Board::Storage::filesystem().open(path);
         const bool exists = dir && dir.isDirectory();
         if (dir) {
             dir.close();
@@ -41,7 +41,7 @@ namespace StorageFiles {
     }
 
     bool fileExists(const String& path) {
-        File file = SD_MMC.open(path);
+        File file = Board::Storage::filesystem().open(path);
         const bool exists = file && !file.isDirectory();
         if (file) {
             file.close();
@@ -50,7 +50,7 @@ namespace StorageFiles {
     }
 
     bool fileExistsWithBytes(const String& path) {
-        File file = SD_MMC.open(path);
+        File file = Board::Storage::filesystem().open(path);
         const bool exists = file && !file.isDirectory() && file.size() > 0;
         if (file) {
             file.close();
@@ -70,7 +70,7 @@ namespace StorageFiles {
 
         Serial.printf("[%s] creating directory: %s\n", tag, path);
         errno = 0;
-        const bool mkdirOk = SD_MMC.mkdir(path);
+        const bool mkdirOk = Board::Storage::filesystem().mkdir(path);
         const int mkdirErrno = errno;
         const bool existsAfter = directoryExists(path);
         Serial.printf("[%s] mkdir path=%s ok=%u existsAfter=%u\n", tag, path, mkdirOk ? 1 : 0, existsAfter ? 1 : 0);

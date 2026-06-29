@@ -20,11 +20,10 @@ constexpr uint8_t kBatteryVoltageHighReg = 0x34;
 constexpr uint8_t kBatteryVoltageLowReg = 0x35;
 constexpr uint8_t kBatteryDetectCtrlReg = 0x68;
 constexpr uint8_t kBatteryPercentReg = 0xA4;
-constexpr uint8_t kPowerKeyIrqMask = 0x0F;
 constexpr uint8_t kPowerKeyPositiveIrqMask = 0x01;
 constexpr uint8_t kPowerKeyNegativeIrqMask = 0x02;
-constexpr uint8_t kPowerKeyLongIrqMask = 0x04;
-constexpr uint8_t kPowerKeyShortIrqMask = 0x08;
+constexpr uint8_t kPowerKeyIrqMask =
+    static_cast<uint8_t>(kPowerKeyPositiveIrqMask | kPowerKeyNegativeIrqMask);
 constexpr uint8_t kLongPressShutdownMask = 0x02;
 constexpr uint8_t kLongPressRestartMask = 0x01;
 constexpr uint8_t kPowerKeyTimingMask = 0x0F;
@@ -33,9 +32,8 @@ constexpr uint32_t kPowerKeyPollIntervalMs = 20;
 struct Context {
   bool ready = false;
   bool powerButtonHeld = false;
-  bool shortPressPending = false;
-  bool longPressPending = false;
   uint32_t lastPowerKeyPollMs = 0;
+  Config config;
   Board::Power::DiagnosticSnapshot diagnosticSnapshot;
 };
 
@@ -44,10 +42,10 @@ Context gContext;
 bool readRegister(uint8_t reg, uint8_t &value) {
   Wire.beginTransmission(kAddress);
   Wire.write(reg);
-  if (Wire.endTransmission(Board::Config::AXP2101_RELEASE_BUS_BEFORE_READ) != 0) {
+  if (Wire.endTransmission(gContext.config.releaseBusBeforeRead) != 0) {
     return false;
   }
-  if (Board::Config::AXP2101_RELEASE_BUS_BEFORE_READ) {
+  if (gContext.config.releaseBusBeforeRead) {
     delayMicroseconds(50);
   }
   if (Wire.requestFrom(kAddress, static_cast<uint8_t>(1)) != 1) {
@@ -115,7 +113,9 @@ bool batteryConnected() {
 
 }  // namespace
 
-bool begin() {
+bool begin(const Config &config) {
+  gContext.config = config;
+
   uint8_t value = 0;
   if (!readRegister(kStatus1Reg, value)) {
     if (gContext.ready) {
@@ -134,15 +134,15 @@ bool begin() {
     Serial.println("[board] AXP2101 battery detect enable failed");
   }
 
-  const uint8_t irqValue = Board::Config::AXP2101_ENABLE_POWER_KEY_IRQS ? kPowerKeyIrqMask : 0x00;
+  const uint8_t irqValue = gContext.config.enablePowerKeyIrqs ? kPowerKeyIrqMask : 0x00;
   if (!updateRegisterBits(kIrqEnable2Reg, kPowerKeyIrqMask, irqValue)) {
     Serial.println("[board] AXP2101 power-key IRQ setup failed");
   }
 
-  if (Board::Config::PMU_REQUIRES_POWER_KEY_CONFIG) {
+  if (gContext.config.requiresPowerKeyConfig) {
     const uint8_t powerKeyTiming =
-        static_cast<uint8_t>((Board::Config::PMU_POWER_KEY_ON_TIME_VALUE & 0x03) |
-                             ((Board::Config::PMU_POWER_KEY_OFF_TIME_VALUE & 0x03) << 2));
+        static_cast<uint8_t>((gContext.config.powerKeyOnTimeValue & 0x03) |
+                             ((gContext.config.powerKeyOffTimeValue & 0x03) << 2));
     if (!updateRegisterBits(kIrqOffOnLevelCtrlReg, kPowerKeyTimingMask, powerKeyTiming)) {
       Serial.println("[board] AXP2101 power-key timing config failed");
     }
@@ -154,15 +154,13 @@ bool begin() {
   }
 
   gContext.powerButtonHeld = false;
-  gContext.shortPressPending = false;
-  gContext.longPressPending = false;
   gContext.lastPowerKeyPollMs = 0;
   writeRegister(kIrqStatus2Reg, 0xFF);
   return true;
 }
 
 bool readBatteryStatus(Board::Power::BatteryStatus &status) {
-  if (!gContext.ready && !begin()) {
+  if (!gContext.ready && !begin(gContext.config)) {
     return false;
   }
 
@@ -190,7 +188,7 @@ bool readBatteryStatus(Board::Power::BatteryStatus &status) {
 Board::Power::DiagnosticSnapshot diagnosticSnapshot() { return gContext.diagnosticSnapshot; }
 
 bool externalPowerPresent() {
-  if (!gContext.ready && !begin()) {
+  if (!gContext.ready && !begin(gContext.config)) {
     return false;
   }
 
@@ -204,7 +202,7 @@ bool externalPowerPresent() {
 }
 
 bool releasePower() {
-  if (!gContext.ready && !begin()) {
+  if (!gContext.ready && !begin(gContext.config)) {
     return false;
   }
 
@@ -218,7 +216,7 @@ bool releasePower() {
 }
 
 void pollPowerKeyIfDue(bool force) {
-  if (!Board::Config::AXP2101_ENABLE_POWER_KEY_IRQS) {
+  if (!gContext.config.enablePowerKeyIrqs) {
     return;
   }
 
@@ -228,7 +226,7 @@ void pollPowerKeyIfDue(bool force) {
   }
   gContext.lastPowerKeyPollMs = nowMs;
 
-  if (!gContext.ready && !begin()) {
+  if (!gContext.ready && !begin(gContext.config)) {
     return;
   }
 
@@ -243,12 +241,6 @@ void pollPowerKeyIfDue(bool force) {
   if ((status2 & kPowerKeyPositiveIrqMask) != 0) {
     gContext.powerButtonHeld = false;
   }
-  if ((status2 & kPowerKeyLongIrqMask) != 0) {
-    gContext.longPressPending = true;
-  }
-  if ((status2 & kPowerKeyShortIrqMask) != 0) {
-    gContext.shortPressPending = true;
-  }
   if (status2 != 0) {
     writeRegister(kIrqStatus2Reg, status2);
   }
@@ -257,20 +249,6 @@ void pollPowerKeyIfDue(bool force) {
 bool isPowerButtonHeld() {
   pollPowerKeyIfDue();
   return gContext.powerButtonHeld;
-}
-
-bool consumeShortPress() {
-  pollPowerKeyIfDue();
-  const bool pending = gContext.shortPressPending;
-  gContext.shortPressPending = false;
-  return pending;
-}
-
-bool consumeLongPress() {
-  pollPowerKeyIfDue();
-  const bool pending = gContext.longPressPending;
-  gContext.longPressPending = false;
-  return pending;
 }
 
 }  // namespace BoardDrivers::Axp2101

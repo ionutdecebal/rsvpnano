@@ -1,7 +1,6 @@
 #include "storage/fs/SdDiagnostics.h"
 
 #include <Preferences.h>
-#include <SD_MMC.h>
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -38,19 +37,36 @@ namespace SdDiagnostics {
 
         struct FrequencyCache {
             int frequencyKhz = 0;
-            uint8_t cardType = CARD_NONE;
+            Board::Storage::CardType cardType = Board::Storage::CardType::None;
             uint32_t sizeMb = 0;
             bool valid = false;
         };
 
-        const char* cardTypeLabel(uint8_t cardType, uint64_t sizeMb) {
+        Board::Storage::CardType cardTypeFromByte(uint8_t value) {
+            switch (static_cast<Board::Storage::CardType>(value)) {
+            case Board::Storage::CardType::Mmc:
+            case Board::Storage::CardType::Sd:
+            case Board::Storage::CardType::Sdhc:
+                return static_cast<Board::Storage::CardType>(value);
+            case Board::Storage::CardType::None:
+            default:
+                return Board::Storage::CardType::None;
+            }
+        }
+
+        uint8_t cardTypeByte(Board::Storage::CardType cardType) {
+            return static_cast<uint8_t>(cardType);
+        }
+
+        const char* cardTypeLabel(Board::Storage::CardType cardType, uint64_t sizeMb) {
             switch (cardType) {
-            case CARD_MMC:
+            case Board::Storage::CardType::Mmc:
                 return "MMC";
-            case CARD_SD:
+            case Board::Storage::CardType::Sd:
                 return "SDSC";
-            case CARD_SDHC:
+            case Board::Storage::CardType::Sdhc:
                 return sizeMb > kSdxcMinSizeMb ? "SDXC" : "SDHC";
+            case Board::Storage::CardType::None:
             default:
                 return "Unknown";
             }
@@ -69,32 +85,34 @@ namespace SdDiagnostics {
         }
 
         uint32_t currentCardSizeMb() {
-            return static_cast<uint32_t>(SD_MMC.cardSize() / kBytesPerMegabyte);
+            return static_cast<uint32_t>(Board::Storage::cardSize() / kBytesPerMegabyte);
         }
 
         FrequencyCache readFrequencyCache() {
             Preferences preferences;
             if (!preferences.begin(kPreferencesNamespace, true)) {
                 Serial.println("[sd-check] frequency cache unavailable");
-                return {};
+                return FrequencyCache{};
             }
             FrequencyCache cache;
             cache.frequencyKhz = preferences.getInt(kPreferenceFrequencyKhz, 0);
-            cache.cardType = preferences.getUChar(kPreferenceCardType, CARD_NONE);
+            cache.cardType =
+                cardTypeFromByte(preferences.getUChar(kPreferenceCardType, cardTypeByte(Board::Storage::CardType::None)));
             cache.sizeMb = preferences.getUInt(kPreferenceCardSizeMb, 0);
             preferences.end();
-            if (!isSupportedFrequency(cache.frequencyKhz) || cache.cardType == CARD_NONE || cache.sizeMb == 0) {
+            if (!isSupportedFrequency(cache.frequencyKhz) ||
+                cache.cardType == Board::Storage::CardType::None || cache.sizeMb == 0) {
                 if (cache.frequencyKhz != 0) {
                     Serial.printf("[sd-check] ignoring incomplete cached frequency %d kHz\n", cache.frequencyKhz);
                 }
-                return {};
+                return FrequencyCache{};
             }
             cache.valid = true;
             return cache;
         }
 
         bool cacheMatchesMountedCard(const FrequencyCache& cache) {
-            return cache.valid && cache.cardType == SD_MMC.cardType() && cache.sizeMb == currentCardSizeMb();
+            return cache.valid && cache.cardType == Board::Storage::cardType() && cache.sizeMb == currentCardSizeMb();
         }
 
         void writeFrequencyCache(int frequencyKhz) {
@@ -102,7 +120,7 @@ namespace SdDiagnostics {
                 return;
             }
 
-            const uint8_t cardType = SD_MMC.cardType();
+            const Board::Storage::CardType cardType = Board::Storage::cardType();
             const uint32_t sizeMb = currentCardSizeMb();
             const FrequencyCache cache = readFrequencyCache();
             if (cache.valid && cache.frequencyKhz == frequencyKhz && cache.cardType == cardType
@@ -116,7 +134,7 @@ namespace SdDiagnostics {
                 return;
             }
             preferences.putInt(kPreferenceFrequencyKhz, frequencyKhz);
-            preferences.putUChar(kPreferenceCardType, cardType);
+            preferences.putUChar(kPreferenceCardType, cardTypeByte(cardType));
             preferences.putUInt(kPreferenceCardSizeMb, sizeMb);
             preferences.end();
         }
@@ -143,7 +161,7 @@ namespace SdDiagnostics {
 
         bool removeProbeFile(const String& path, const char* tag) {
             errno = 0;
-            const bool removed = SD_MMC.remove(path);
+            const bool removed = Board::Storage::filesystem().remove(path);
             const int removeErrno = errno;
             if (!removed && StorageFiles::fileExists(path)) {
                 StorageFiles::logError(tag, "remove probe", path, removeErrno);
@@ -155,7 +173,7 @@ namespace SdDiagnostics {
         bool writeReadProbeFile(const String& path, size_t bytes, const char* tag) {
             Serial.printf("[%s] write/read probe path=%s bytes=%u\n", tag, path.c_str(),
                           static_cast<unsigned int>(bytes));
-            SD_MMC.remove(path);
+            Board::Storage::filesystem().remove(path);
 
             static uint8_t writeBuffer[kProbeChunkBytes];
             static uint8_t readBuffer[kProbeChunkBytes];
@@ -163,7 +181,7 @@ namespace SdDiagnostics {
             {
                 // Write the deterministic probe payload.
                 errno = 0;
-                File file = SD_MMC.open(path, FILE_WRITE);
+                File file = Board::Storage::filesystem().open(path, FILE_WRITE);
                 const int openErrno = errno;
                 if (!file) {
                     StorageFiles::logError(tag, "open FILE_WRITE", path, openErrno);
@@ -192,7 +210,7 @@ namespace SdDiagnostics {
 
             {
                 // Reopen and verify the exact bytes to catch flaky card timings.
-                File file = SD_MMC.open(path, FILE_READ);
+                File file = Board::Storage::filesystem().open(path, FILE_READ);
                 if (!file || file.isDirectory()) {
                     if (file) {
                         file.close();
@@ -245,14 +263,14 @@ namespace SdDiagnostics {
 
         bool tryMountFrequency(bool& mounted, int frequencyKhz) {
             Serial.printf("[sd-check] trying mount at %d kHz\n", frequencyKhz);
-            SD_MMC.end();
-            mounted = SD_MMC.begin(StoragePaths::kMountPoint, true, false, frequencyKhz, 5);
+            Board::Storage::end();
+            mounted = Board::Storage::mount(StoragePaths::kMountPoint, frequencyKhz);
             if (!mounted) {
                 return false;
             }
             if (!writeReadProbeFile(kFrequencyProbePath, kFrequencyProbeBytes, "sd-probe")) {
                 Serial.printf("[sd-check] frequency %d kHz failed sustained probe\n", frequencyKhz);
-                SD_MMC.end();
+                Board::Storage::end();
                 mounted = false;
                 return false;
             }
@@ -267,7 +285,7 @@ namespace SdDiagnostics {
         }
 
         void unmountCard(bool& mounted) {
-            SD_MMC.end();
+            Board::Storage::end();
             mounted = false;
             sMountedFrequencyKhz = 0;
         }
@@ -282,8 +300,16 @@ namespace SdDiagnostics {
             return true;
         }
 
+        if (!Board::Storage::supportsFrequencySelection()) {
+            mounted = Board::Storage::mount(StoragePaths::kMountPoint, SDMMC_FREQ_DEFAULT);
+            if (mounted) {
+                recordMountedFrequency(SDMMC_FREQ_DEFAULT, mountedFrequencyKhz);
+            }
+            return mounted;
+        }
+
         if (!Board::Storage::setSdMmcPins()) {
-            Serial.println("[sd-check] SD_MMC pin setup failed");
+            Serial.println("[sd-check] SD pin setup failed");
             return false;
         }
 
@@ -379,8 +405,8 @@ namespace SdDiagnostics {
             return result;
         }
 
-        result.sizeMb = SD_MMC.cardSize() / kBytesPerMegabyte;
-        result.cardType = cardTypeLabel(SD_MMC.cardType(), result.sizeMb);
+        result.sizeMb = Board::Storage::cardSize() / kBytesPerMegabyte;
+        result.cardType = cardTypeLabel(Board::Storage::cardType(), result.sizeMb);
         result.frequencyKhz = sMountedFrequencyKhz;
         Serial.printf("[sd-check] mounted type=%s size=%llu MB freq=%d kHz\n", result.cardType.c_str(), result.sizeMb,
                       result.frequencyKhz);

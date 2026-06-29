@@ -2,81 +2,122 @@
 
 ## Goal
 
-Keep the existing `ESP32-S3-Touch-LCD-3.49` firmware stable while making room for additional
-ESP32-S3 boards, starting with `ESP32-S3-Touch-AMOLED-2.41`.
+Keep the app code board-independent while supporting multiple ESP32-S3 Waveshare boards from one
+source tree. PlatformIO selects one physical board at build time; shared code should not need
+`#ifdef` branches for display chips, PMUs, expanders, touch controllers, or board button wiring.
 
-## Key idea
+## Current Structure
 
-The repo stays single-source, but the hardware target becomes explicit at build time.
+`src/board` is the stable app-facing API. It declares what the app may ask the board to do:
 
-- Shared code stays shared:
-  - `src/app/`
-  - `src/reader/`
-  - most of `src/storage/`
-  - most of `src/display/DisplayManager.cpp`
-- Board-specific details move behind target-specific files and constants:
-  - pins
-  - screen geometry
-  - display driver
-  - touch controller
-  - power-management backend
+- `BoardDisplay.h`: display init, sleep, wake, brightness, and backlight capability.
+- `BoardInput.h`: raw logical controls, raw touch contacts, and timing facts used by `src/input`.
+- `BoardPower.h`: battery status, wake, sleep, shutdown, and power-button support.
+- `BoardStorage.h`: SD card bus setup and frequency probing.
+- `BoardImu.h`: orientation sensor operations used by Focus Timer.
+- `BoardAudio.h`: app beep/audio operations.
 
-## New structure
+`src/platforms/<board>` contains the implementation for one board family. These files choose the
+real buses, pins, rails, reset order, and selected chip drivers for that board. Board-owned
+`Waveshare*.h` headers hold private `constexpr` wiring and timing facts, split into small namespaces
+such as display, touch, power, input, storage, and IMU.
 
-- `src/board/BoardConfig.h`
-  - public board API used by the app
-  - selects the active board profile via build flags
-- `src/board/profiles/`
-  - `WaveshareEsp32S3TouchLcd349Profile.h`
-  - `WaveshareEsp32S3TouchAmoled241Profile.h`
-- `src/display/BoardDisplay.h`
-  - generic display boundary used by `DisplayManager`
-- `src/display/BoardDisplay.cpp`
-  - maps the active target to the concrete display driver implementation
+`src/drivers` contains reusable chip code. Drivers validate their own chip-level facts, such as I2C
+addresses, packet sizes, register masks, and transfer limits. They should not know about public
+`Board::Config` facts or app states.
 
-## Why screen size changes stay isolated
+`src/input/Input.h` and `src/input/Input.cpp` own input-domain behavior: debouncing, press duration,
+triple press detection, touch movement tracking, edge gestures, and the final logical events consumed
+by `App`.
 
-The renderer and touch mapping already read dimensions through `BoardConfig`, for example:
+## Board Config
 
-- `BoardConfig::DISPLAY_WIDTH`
-- `BoardConfig::DISPLAY_HEIGHT`
-- `BoardConfig::PANEL_NATIVE_WIDTH`
-- `BoardConfig::PANEL_NATIVE_HEIGHT`
+`Board::Config` is intentionally small. It is for public board facts that app/UI code legitimately
+needs, such as board identity, asset names, display dimensions, default orientation, UI margins, and
+safe public limits.
 
-That means the `2.41` target can define:
+Driver-specific wiring does not belong in `Board::Config`. For example, a TCA9554 address, AXP2101
+IRQ pin, backlight GPIO, touch controller packet size, or audio bus choice belongs in that board's
+private platform header and the matching `Board*.cpp` implementation.
 
-- `600 x 450`
+## Input Flow
 
-while the existing `3.49` target keeps:
+The app does not check physical buttons directly. The flow is:
 
-- `640 x 172` logical
-- `172 x 640` native panel
+```text
+physical GPIO, PMU, expander, or touch controller
+  -> platform Board::Input raw reads
+  -> Input::poll debounce and gesture tracking
+  -> Input::Event with logical controls
+  -> App state-specific handling
+```
 
-As long as we do not replace the shared constants directly in the old profile, changing the new
-target does not alter the old one.
+The logical controls are `InputPrimary`, `InputPower`, `InputKey`, and `InputTouch`. A board maps its
+physical controls to those names in its platform implementation. The app then decides what a short
+press, long press, triple press, tap, swipe, or touch event means in the current app state.
 
-## Current status
+## PlatformIO Selection
 
-The scaffold is in place, but the `2.41` target is intentionally not implemented yet.
+The base PlatformIO configuration excludes all platform and driver folders. Each environment includes
+one platform folder and only the driver folders used by that board. This keeps unused implementations
+out of the build instead of relying on runtime checks.
 
-The new env in `platformio.ini` exists to mark the target boundary:
+Current firmware environments:
 
+- `waveshare_esp32s3`
+- `waveshare_esp32s3_rev2`
+- `waveshare_esp32s3_usb_msc`
+- `waveshare_esp32s3_usb_msc_rev2`
+- `waveshare_esp32s3_touch_amoled_18_v1`
+- `waveshare_esp32s3_touch_amoled_18` compatibility alias for v1
+- `waveshare_esp32s3_touch_amoled_18_v2`
+- `waveshare_esp32s3_touch_amoled_206`
+- `waveshare_esp32s3_touch_amoled_216`
 - `waveshare_esp32s3_touch_amoled_241`
 
-If someone tries to build it now, the code should stop with explicit compile-time errors in the
-unimplemented backends:
+The benchmark environments extend these firmware environments and add `RSVP_BENCHMARK_MODE`.
 
-- `src/board/BoardConfig.cpp`
-- `src/display/BoardDisplay.cpp`
-- `src/input/TouchHandler.cpp`
+## LCD 3.49 Revisions
 
-That is deliberate. It protects the current board from half-ported code and makes the missing work
-obvious.
+The LCD 3.49 rev1 and rev2 boards share one platform folder:
 
-## What gets implemented next for 2.41
+```text
+src/platforms/waveshare_lcd_349/
+```
 
-1. Replace the display backend with an `RM690B0` implementation.
-2. Replace the touch backend with an `FT6336` implementation.
-3. Confirm the `2.41` SD wiring mode and pins.
-4. Implement the `2.41` power/battery behavior.
-5. Tune the shared UI layout for the taller, more square display.
+Common facts live in `WaveshareLcd349.h`. The small hardware differences live in:
+
+```text
+src/platforms/waveshare_lcd_349/rev1/WaveshareLcd349Revision.h
+src/platforms/waveshare_lcd_349/rev2/WaveshareLcd349Revision.h
+```
+
+PlatformIO selects the revision header with `RSVP_LCD_349_REVISION_HEADER`.
+
+## AMOLED 1.8 Versions
+
+The AMOLED 1.8 v1 and v2 boards share audio, power, storage, system, and IMU code. Display and touch
+binding live in version folders because v1 uses SH8601 plus FT6336-compatible touch, while v2 uses
+CO5300 plus CST92xx-compatible touch:
+
+```text
+src/platforms/waveshare_amoled_18/v1/
+src/platforms/waveshare_amoled_18/v2/
+```
+
+Each version provides `WaveshareAmoled18Version.h`. That header owns the board label, OTA asset,
+touch address, display panel-memory rotation, and default UI orientation. PlatformIO selects it with
+`RSVP_AMOLED_18_VERSION_HEADER`, so orientation fixes stay in the board version instead of adding
+shared App/Input/Display conditionals.
+
+## Adding A Board
+
+1. Add a new `src/platforms/<board>` folder.
+2. Add a private board header with the physical wiring and timing facts.
+3. Implement the required `Board*.cpp` files by binding those facts to the shared board API.
+4. Reuse drivers from `src/drivers` where possible.
+5. Add a PlatformIO environment that includes only that platform folder and its selected drivers.
+6. Keep app behavior in `App`, `DisplayManager`, `Input`, and domain modules, not in the platform folder.
+
+The desired boundary is simple: adding a board should mostly mean adding a platform folder and build
+environment, not teaching app/storage/display logic about another hardware variant.

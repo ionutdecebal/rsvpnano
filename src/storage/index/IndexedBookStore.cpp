@@ -1,6 +1,6 @@
 #include "storage/index/IndexedBookStore.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <algorithm>
 #include <limits>
 
@@ -54,7 +54,7 @@ namespace {
 } // namespace
 
 bool IndexedBookStore::open(const String& indexPath, const String& dataPath, const Header& header) {
-    File nextIndexFile = SD_MMC.open(indexPath, FILE_READ);
+    File nextIndexFile = Board::Storage::filesystem().open(indexPath, FILE_READ);
     if (!nextIndexFile || nextIndexFile.isDirectory()) {
         if (nextIndexFile) {
             nextIndexFile.close();
@@ -62,7 +62,7 @@ bool IndexedBookStore::open(const String& indexPath, const String& dataPath, con
         return false;
     }
 
-    File nextDataFile = SD_MMC.open(dataPath, FILE_READ);
+    File nextDataFile = Board::Storage::filesystem().open(dataPath, FILE_READ);
     if (!nextDataFile || nextDataFile.isDirectory()) {
         nextIndexFile.close();
         if (nextDataFile) {

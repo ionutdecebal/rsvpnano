@@ -4,8 +4,8 @@
 
 namespace Board::Audio {
 
-bool begin();
-bool beep();
-bool available();
+    bool begin();
+    bool beep();
+    bool available();
 
-}  // namespace Board::Audio
+} // namespace Board::Audio

@@ -1,18 +1,13 @@
 #include <Arduino.h>
 #include <esp_log.h>
 
-#include "board/Board.h"
-
-#ifndef RSVP_BENCHMARK_MODE
-#define RSVP_BENCHMARK_MODE 0
-#endif
-
+#include "app/App.h"
 #if RSVP_BENCHMARK_MODE
 #include "benchmark/BenchmarkRunner.h"
-#else
-#include "app/App.h"
-App app;
 #endif
+#include "board/Board.h"
+
+App app;
 
 void setup() {
   Serial.begin(115200);
@@ -39,6 +34,5 @@ void loop() {
 #else
   const uint32_t now = millis();
   app.update(now);
-  delay(1);
 #endif
 }

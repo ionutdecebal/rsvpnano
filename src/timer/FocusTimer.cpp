@@ -2,7 +2,6 @@
 
 #include <math.h>
 
-#include "board/BoardConfig.h"
 #include "board/BoardImu.h"
 
 namespace {
@@ -24,15 +23,9 @@ constexpr uint32_t kOrientationStableMs = 700;
 constexpr uint32_t kTouchStartArmDelayMs = 350;
 constexpr uint32_t kPostTimerFlipGraceMs = 900;
 constexpr uint32_t kFeedbackMs = 900;
+constexpr uint32_t kTouchDurationMs = 2UL * 60UL * 1000UL;
 constexpr uint32_t kWorkDurationMs = 20UL * 60UL * 1000UL;
 constexpr uint32_t kBreakDurationMs = 5UL * 60UL * 1000UL;
-constexpr uint32_t kTouchDurations[] = {
-    2UL * 60UL * 1000UL,  5UL * 60UL * 1000UL,  10UL * 60UL * 1000UL,
-    15UL * 60UL * 1000UL, 20UL * 60UL * 1000UL, 25UL * 60UL * 1000UL,
-    30UL * 60UL * 1000UL, 35UL * 60UL * 1000UL, 40UL * 60UL * 1000UL,
-    45UL * 60UL * 1000UL, 50UL * 60UL * 1000UL, 60UL * 60UL * 1000UL,
-};
-constexpr size_t kTouchDurationCount = sizeof(kTouchDurations) / sizeof(kTouchDurations[0]);
 
 constexpr float kSideAxisThreshold = 0.78f;
 constexpr float kCrossAxisLimit = 0.42f;
@@ -65,7 +58,7 @@ void FocusTimer::update(uint32_t nowMs) {
 
     case State::WaitForTouchStart:
       if (orientationInputArmed(nowMs) && isShortSide(stableOrientation_)) {
-        startMode(TimerMode::Touch, nowMs, selectedTouchDurationMs(), stableOrientation_);
+        startMode(TimerMode::Touch, nowMs, kTouchDurationMs, stableOrientation_);
         transitionTo(State::TouchRunning, nowMs);
       }
       break;
@@ -75,10 +68,6 @@ void FocusTimer::update(uint32_t nowMs) {
         completeActiveTimer();
         resetOrientationStability();
         transitionTo(State::WaitAfterTouch, nowMs);
-      } else if (isShortSide(stableOrientation_) &&
-                 stableOrientation_ == oppositeShortSide(lastShortSide_)) {
-        startMode(TimerMode::Touch, nowMs, selectedTouchDurationMs(), stableOrientation_);
-        resetOrientationStability();
       }
       break;
 
@@ -87,8 +76,8 @@ void FocusTimer::update(uint32_t nowMs) {
         break;
       }
       if (stableOrientation_ == oppositeShortSide(lastShortSide_)) {
-        resetOrientationStability();
-        transitionTo(State::WaitForTouchStart, nowMs);
+        startMode(TimerMode::Work, nowMs, kWorkDurationMs, stableOrientation_);
+        transitionTo(State::WorkRunning, nowMs);
       } else if (stableOrientation_ == OrientationState::LongSide) {
         startMode(TimerMode::Break, nowMs, kBreakDurationMs, OrientationState::LongSide);
         transitionTo(State::BreakRunning, nowMs);
@@ -126,8 +115,8 @@ void FocusTimer::update(uint32_t nowMs) {
 
     case State::WaitAfterBreak:
       if (orientationInputArmed(nowMs) && isShortSide(stableOrientation_)) {
-        resetOrientationStability();
-        transitionTo(State::WaitForTouchStart, nowMs);
+        startMode(TimerMode::Work, nowMs, kWorkDurationMs, stableOrientation_);
+        transitionTo(State::WorkRunning, nowMs);
       }
       break;
 
@@ -185,12 +174,12 @@ FocusTimer::State FocusTimer::state() const { return state_; }
 
 FocusTimer::Genre FocusTimer::genre() const { return genre_; }
 
-Board::Config::UiOrientation FocusTimer::uiOrientation() const {
+Board::UiOrientation FocusTimer::uiOrientation() const {
   switch (state_) {
     case State::GenreSelect:
     case State::Unavailable:
     case State::Complete:
-      return Board::Config::UiOrientation::Landscape;
+      return Board::UiOrientation::Landscape;
 
     case State::WaitForTouchStart:
     case State::TouchRunning:
@@ -204,10 +193,10 @@ Board::Config::UiOrientation FocusTimer::uiOrientation() const {
 
     case State::BreakRunning:
     case State::WaitAfterWork:
-      return Board::Config::UiOrientation::Landscape;
+      return Board::UiOrientation::Landscape;
 
     default:
-      return Board::Config::UiOrientation::Portrait;
+      return Board::UiOrientation::Portrait;
   }
 }
 
@@ -240,43 +229,6 @@ bool FocusTimer::consumeCompletionCue() {
   const bool pending = completionCuePending_;
   completionCuePending_ = false;
   return pending;
-}
-
-void FocusTimer::cycleTouchDuration() {
-  uint8_t &index = touchDurationByGenre_[genreIdx()];
-  index = static_cast<uint8_t>((index + 1) % kTouchDurationCount);
-}
-
-void FocusTimer::stepTouchDuration(int direction) {
-  uint8_t &index = touchDurationByGenre_[genreIdx()];
-  if (direction > 0 && index < kTouchDurationCount - 1) {
-    ++index;
-  } else if (direction < 0 && index > 0) {
-    --index;
-  }
-}
-
-void FocusTimer::setTouchDurationIndexForGenre(Genre genre, uint8_t index) {
-  const uint8_t genreIndex = static_cast<uint8_t>(genre);
-  if (genreIndex < kGenreCount && index < kTouchDurationCount) {
-    touchDurationByGenre_[genreIndex] = index;
-  }
-}
-
-uint8_t FocusTimer::touchDurationIndex() const { return touchDurationByGenre_[genreIdx()]; }
-
-uint8_t FocusTimer::touchDurationIndexForGenre(Genre genre) const {
-  const uint8_t genreIndex = static_cast<uint8_t>(genre);
-  return genreIndex < kGenreCount ? touchDurationByGenre_[genreIndex] : 0;
-}
-
-uint32_t FocusTimer::selectedTouchDurationMs() const {
-  return kTouchDurations[touchDurationByGenre_[genreIdx()]];
-}
-
-uint8_t FocusTimer::genreIdx() const {
-  const uint8_t index = static_cast<uint8_t>(genre_);
-  return index < kGenreCount ? index : 0;
 }
 
 const char *FocusTimer::genreLabel(Genre genre) {
@@ -515,7 +467,6 @@ void FocusTimer::clearSession() {
   completedTouchBlocks_ = 0;
   completedWorkBlocks_ = 0;
   completedBreakBlocks_ = 0;
-  // Duration choices are user preferences and intentionally survive sessions.
 }
 
 void FocusTimer::startMode(TimerMode mode, uint32_t nowMs, uint32_t durationMs,
@@ -589,8 +540,7 @@ FocusTimer::OrientationState FocusTimer::oppositeShortSide(
   }
 }
 
-Board::Config::UiOrientation FocusTimer::portraitOrientationForShortSide(
-    OrientationState orientation) {
-  return orientation == OrientationState::ShortSideB ? Board::Config::UiOrientation::PortraitFlipped
-                                                     : Board::Config::UiOrientation::Portrait;
+Board::UiOrientation FocusTimer::portraitOrientationForShortSide(OrientationState orientation) {
+  return orientation == OrientationState::ShortSideB ? Board::UiOrientation::PortraitFlipped
+                                                     : Board::UiOrientation::Portrait;
 }

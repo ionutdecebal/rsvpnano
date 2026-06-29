@@ -2,22 +2,15 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <Wire.h>
 #include <driver/spi_master.h>
 #include <esp_log.h>
-
-#include "board/BoardConfig.h"
 
 namespace {
 
 constexpr int kSpiFrequency = 20000000;
-constexpr int kSendBufferPixels = 0x4000;
 constexpr int kColumnOffset = 16;
 constexpr uint8_t kRamWriteCommand = 0x2C;
 constexpr uint8_t kRamWriteContinueCommand = 0x3C;
-constexpr uint8_t kTca9554OutputReg = 0x01;
-constexpr uint8_t kTca9554ConfigReg = 0x03;
-constexpr uint8_t kDisplayEnableExioPin = 1;
 static const char *kRm690b0Tag = "rm690b0";
 
 struct LcdCommand {
@@ -30,7 +23,6 @@ struct LcdCommand {
 // Keep the panel in its native memory orientation and let the shared display
 // mapping layer perform the quarter-turn into landscape. That avoids the edge
 // wrap/clipping artifacts we saw when both layers rotated at once.
-constexpr uint8_t kDefaultMadctl = Board::Config::UI_ROTATED_180 ? 0x10 : 0x00;
 constexpr LcdCommand kQspiInit[] = {
     {0xFE, {0x20}, 1, 0},
     {0x24, {0x80}, 1, 0},
@@ -38,57 +30,21 @@ constexpr LcdCommand kQspiInit[] = {
     {0xFE, {0x00}, 1, 0},
     {0xC2, {0x00}, 1, 10},
     {0x35, {0x00}, 1, 0},
-    {0x36, {kDefaultMadctl}, 1, 0},
+    {0x36, {0x00}, 1, 0},
     {0x3A, {0x55}, 1, 0},
     {0x80, {0x00}, 1, 0},
     {0x11, {0x00}, 0, 120},
-    {0x29, {0x00}, 0, 10},
 };
 
-bool tca9554Read(uint8_t reg, uint8_t &value) {
-  Wire1.beginTransmission(Board::Config::TCA9554_ADDRESS);
-  Wire1.write(reg);
-  if (Wire1.endTransmission(false) != 0) {
-    return false;
-  }
-
-  if (Wire1.requestFrom(static_cast<uint8_t>(Board::Config::TCA9554_ADDRESS),
-                        static_cast<uint8_t>(1)) != 1) {
-    return false;
-  }
-
-  value = Wire1.read();
-  return true;
+uint8_t defaultMadctl(const Rm690b0::Context &context) {
+  return context.config.panelMemoryRotated180 ? 0x10 : 0x00;
 }
 
-bool tca9554Write(uint8_t reg, uint8_t value) {
-  Wire1.beginTransmission(Board::Config::TCA9554_ADDRESS);
-  Wire1.write(reg);
-  Wire1.write(value);
-  return Wire1.endTransmission(true) == 0;
-}
-
-void enableDisplayRailIfAvailable() {
-  if (Board::Config::TCA9554_ADDRESS < 0) {
-    return;
-  }
-
-  uint8_t output = 0;
-  uint8_t config = 0xFF;
-  if (!tca9554Read(kTca9554OutputReg, output) || !tca9554Read(kTca9554ConfigReg, config)) {
-    ESP_LOGW(kRm690b0Tag, "Display power expander not detected");
-    return;
-  }
-
-  const uint8_t mask = static_cast<uint8_t>(1U << kDisplayEnableExioPin);
-  output |= mask;
-  config &= static_cast<uint8_t>(~mask);
-  if (!tca9554Write(kTca9554OutputReg, output) || !tca9554Write(kTca9554ConfigReg, config)) {
-    ESP_LOGW(kRm690b0Tag, "Failed to enable display rail");
-    return;
-  }
-
-  delay(25);
+size_t sendBufferPixels(const Rm690b0::Context &context) {
+  constexpr size_t kFallbackPixels = 0x4000;
+  return context.config.txChunkBytes == 0
+             ? kFallbackPixels
+             : context.config.txChunkBytes / sizeof(uint16_t);
 }
 
 void sendCommand(Rm690b0::Context &context, uint8_t command, const uint8_t *data,
@@ -143,24 +99,25 @@ void applyBrightness(Rm690b0::Context &context) {
 namespace Rm690b0 {
 
 void init(Context &context) {
-  enableDisplayRailIfAvailable();
-
-  pinMode(Board::Config::PIN_LCD_RST, OUTPUT);
-  digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
-  delay(30);
-  digitalWrite(Board::Config::PIN_LCD_RST, LOW);
-  delay(150);
-  digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
-  delay(150);
+  if (context.config.resetPin >= 0) {
+    pinMode(context.config.resetPin, OUTPUT);
+    digitalWrite(context.config.resetPin, HIGH);
+    delay(30);
+    digitalWrite(context.config.resetPin, LOW);
+    delay(150);
+    digitalWrite(context.config.resetPin, HIGH);
+    delay(150);
+  }
 
   if (!context.busReady) {
     spi_bus_config_t busConfig = {};
-    busConfig.data0_io_num = Board::Config::PIN_LCD_DATA0;
-    busConfig.data1_io_num = Board::Config::PIN_LCD_DATA1;
-    busConfig.sclk_io_num = Board::Config::PIN_LCD_SCLK;
-    busConfig.data2_io_num = Board::Config::PIN_LCD_DATA2;
-    busConfig.data3_io_num = Board::Config::PIN_LCD_DATA3;
-    busConfig.max_transfer_sz = (kSendBufferPixels * static_cast<int>(sizeof(uint16_t))) + 8;
+    busConfig.data0_io_num = context.config.data0Pin;
+    busConfig.data1_io_num = context.config.data1Pin;
+    busConfig.sclk_io_num = context.config.sclkPin;
+    busConfig.data2_io_num = context.config.data2Pin;
+    busConfig.data3_io_num = context.config.data3Pin;
+    busConfig.max_transfer_sz =
+        static_cast<int>(sendBufferPixels(context) * sizeof(uint16_t)) + 8;
     busConfig.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS;
 
     spi_device_interface_config_t deviceConfig = {};
@@ -168,7 +125,7 @@ void init(Context &context) {
     deviceConfig.address_bits = 24;
     deviceConfig.mode = SPI_MODE0;
     deviceConfig.clock_speed_hz = kSpiFrequency;
-    deviceConfig.spics_io_num = Board::Config::PIN_LCD_CS;
+    deviceConfig.spics_io_num = context.config.csPin;
     deviceConfig.flags = SPI_DEVICE_HALFDUPLEX;
     deviceConfig.queue_size = 10;
 
@@ -178,13 +135,17 @@ void init(Context &context) {
   }
 
   for (const auto &command : kQspiInit) {
-    sendCommand(context, command.cmd, command.data, command.len);
+    uint8_t data[4] = {command.data[0], command.data[1], command.data[2], command.data[3]};
+    if (command.cmd == 0x36 && command.len == 1) {
+      data[0] = defaultMadctl(context);
+    }
+    sendCommand(context, command.cmd, data, command.len);
     if (command.delayMs != 0) {
       delay(command.delayMs);
     }
   }
 
-  context.displayOn = true;
+  context.displayOn = false;
   applyBrightness(context);
   ESP_LOGI(kRm690b0Tag, "RM690B0 QSPI init complete");
 }
@@ -236,8 +197,9 @@ void pushColors(Context &context, uint16_t x, uint16_t y, uint16_t width, uint16
 
   while (pixelsRemaining > 0) {
     size_t chunkPixels = pixelsRemaining;
-    if (chunkPixels > static_cast<size_t>(kSendBufferPixels)) {
-      chunkPixels = kSendBufferPixels;
+    const size_t maxChunkPixels = sendBufferPixels(context);
+    if (chunkPixels > maxChunkPixels) {
+      chunkPixels = maxChunkPixels;
     }
 
     spi_transaction_ext_t transaction = {};

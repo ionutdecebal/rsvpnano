@@ -3,6 +3,7 @@
 #include <driver/gpio.h>
 
 #include "drivers/power/BatteryCurve.h"
+#include "platforms/waveshare_amoled_241/WaveshareAmoled241.h"
 
 namespace {
 
@@ -17,43 +18,41 @@ PowerContext gPower;
 namespace Board::Power {
 
 void begin() {
-  if (Config::PIN_BATTERY_HOLD >= 0) {
-    const gpio_num_t batteryHoldPin = static_cast<gpio_num_t>(Config::PIN_BATTERY_HOLD);
+  if constexpr (WaveshareAmoled241::Power::kBatteryHoldPin >= 0) {
+    constexpr gpio_num_t batteryHoldGpio = WaveshareAmoled241::Power::kBatteryHoldGpio;
     gpio_deep_sleep_hold_dis();
-    gpio_hold_dis(batteryHoldPin);
-    pinMode(Config::PIN_BATTERY_HOLD, OUTPUT);
-    digitalWrite(Config::PIN_BATTERY_HOLD, HIGH);
+    gpio_hold_dis(batteryHoldGpio);
+    pinMode(WaveshareAmoled241::Power::kBatteryHoldPin, OUTPUT);
+    digitalWrite(WaveshareAmoled241::Power::kBatteryHoldPin, HIGH);
     gPower.batteryPowerHoldEnabled = true;
   }
 
-  if (Config::PIN_BATTERY_ADC >= 0) {
-    pinMode(Config::PIN_BATTERY_ADC, INPUT);
+  if constexpr (WaveshareAmoled241::Power::kBatteryAdcPin >= 0) {
+    pinMode(WaveshareAmoled241::Power::kBatteryAdcPin, INPUT);
     analogReadResolution(12);
-    analogSetPinAttenuation(Config::PIN_BATTERY_ADC, ADC_11db);
+    analogSetPinAttenuation(WaveshareAmoled241::Power::kBatteryAdcPin, ADC_11db);
   }
 }
 
 void prepareDeepSleepPowerHold() {
-  if (Config::PIN_BATTERY_HOLD < 0) {
+  if constexpr (WaveshareAmoled241::Power::kBatteryHoldPin < 0) {
     return;
   }
 
-  const gpio_num_t batteryHoldPin = static_cast<gpio_num_t>(Config::PIN_BATTERY_HOLD);
-  pinMode(Config::PIN_BATTERY_HOLD, OUTPUT);
-  digitalWrite(Config::PIN_BATTERY_HOLD, HIGH);
-  gpio_set_direction(batteryHoldPin, GPIO_MODE_OUTPUT);
-  gpio_set_level(batteryHoldPin, 1);
-  gpio_hold_en(batteryHoldPin);
+  constexpr gpio_num_t batteryHoldGpio = WaveshareAmoled241::Power::kBatteryHoldGpio;
+  pinMode(WaveshareAmoled241::Power::kBatteryHoldPin, OUTPUT);
+  digitalWrite(WaveshareAmoled241::Power::kBatteryHoldPin, HIGH);
+  gpio_set_direction(batteryHoldGpio, GPIO_MODE_OUTPUT);
+  gpio_set_level(batteryHoldGpio, 1);
+  gpio_hold_en(batteryHoldGpio);
   gpio_deep_sleep_hold_en();
 }
-
-void resetWakePeripherals() {}
 
 bool enableAudioPowerIfAvailable() { return false; }
 
 bool readBatteryStatus(BatteryStatus &status) {
   status = BatteryStatus{};
-  if (Config::PIN_BATTERY_ADC < 0) {
+  if constexpr (WaveshareAmoled241::Power::kBatteryAdcPin < 0) {
     return false;
   }
 
@@ -61,7 +60,7 @@ bool readBatteryStatus(BatteryStatus &status) {
   uint32_t millivoltsTotal = 0;
   uint8_t samples = 0;
   for (uint8_t i = 0; i < 8; ++i) {
-    const uint32_t sample = analogReadMilliVolts(Config::PIN_BATTERY_ADC);
+    const uint32_t sample = analogReadMilliVolts(WaveshareAmoled241::Power::kBatteryAdcPin);
     if (sample > 0) {
       millivoltsTotal += sample;
       ++samples;
@@ -72,7 +71,7 @@ bool readBatteryStatus(BatteryStatus &status) {
   if (samples == 0) {
     uint32_t rawTotal = 0;
     for (uint8_t i = 0; i < 8; ++i) {
-      rawTotal += analogRead(Config::PIN_BATTERY_ADC);
+      rawTotal += analogRead(WaveshareAmoled241::Power::kBatteryAdcPin);
       delayMicroseconds(250);
     }
     const float pinMillivolts = (static_cast<float>(rawTotal) / 8.0f) * 3300.0f / 4095.0f;
@@ -97,22 +96,26 @@ DiagnosticSnapshot diagnosticSnapshot() { return PowerDiagnosticSnapshot{}; }
 bool externalPowerPresent() { return false; }
 
 bool releaseBatteryPowerHold() {
-  if (Config::PIN_BATTERY_HOLD < 0) {
+  if constexpr (WaveshareAmoled241::Power::kBatteryHoldPin < 0) {
     return false;
   }
 
-  digitalWrite(Config::PIN_BATTERY_HOLD, LOW);
+  digitalWrite(WaveshareAmoled241::Power::kBatteryHoldPin, LOW);
   gPower.batteryPowerHoldEnabled = false;
   Serial.println("[board] Battery power hold released");
   return true;
 }
 
+bool supportsSoftwarePowerOff() { return true; }
+
 bool powerOffUsesControllerWake() { return false; }
 
-bool shouldRequestShutdownOnPowerOff() { return Config::REQUEST_PMU_SHUTDOWN_ON_POWEROFF; }
+bool shouldRequestShutdownOnPowerOff() {
+  return WaveshareAmoled241::Power::kRequestPmuShutdownOnPowerOff;
+}
 
 bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-  return Config::RELEASE_BATTERY_HOLD_BEFORE_DEEP_SLEEP;
+  return WaveshareAmoled241::Power::kReleaseBatteryHoldBeforeDeepSleep;
 }
 
 }  // namespace Board::Power

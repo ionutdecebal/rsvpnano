@@ -1,15 +1,14 @@
 #include "benchmark/BenchmarkRunner.h"
 
 #include <Arduino.h>
-#include <FS.h>
-#include <SD_MMC.h>
-#include <algorithm>
+#include "board/BoardStorage.h"
 #include <esp_heap_caps.h>
 
 #include "board/Board.h"
+#include "board/BoardInput.h"
 #include "converter/EpubConverter.h"
 #include "display/DisplayManager.h"
-#include "input/InputTouch.h"
+#include "input/Input.h"
 #include "storage/fs/SdDiagnostics.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
@@ -23,7 +22,6 @@ constexpr const char *kDraculaRsvpPath = "/benchmark/Dracula-epub.rsvp";
 constexpr size_t kDisplayRowsPerChunk = 16;
 constexpr size_t kSdProbeBytes = 256UL * 1024UL;
 constexpr size_t kSdChunkBytes = 4096;
-constexpr uint32_t kTouchSampleWindowMs = 8000;
 constexpr uint16_t kDisplayColorA = 0x0000;
 constexpr uint16_t kDisplayColorB = 0xFFFF;
 
@@ -44,9 +42,9 @@ void logMetric(const char *name, bool ok, uint32_t elapsedMs, size_t bytes = 0) 
           ? static_cast<uint32_t>((static_cast<uint64_t>(bytes) * 1000ULL) /
                                   (static_cast<uint64_t>(elapsedMs) * 1024ULL))
           : 0;
-  Serial.printf("[bench] metric=%s ok=%u ms=%lu bytes=%lu rate_kib_s=%lu\n", name, ok ? 1 : 0,
-                static_cast<unsigned long>(elapsedMs), static_cast<unsigned long>(bytes),
-                static_cast<unsigned long>(rateKiBPerSecond));
+  Serial.printf("[bench] metric=%s ok=%u ms=%lu bytes=%lu rate_kib_s=%lu\n", name,
+                ok ? 1 : 0, static_cast<unsigned long>(elapsedMs),
+                static_cast<unsigned long>(bytes), static_cast<unsigned long>(rateKiBPerSecond));
 }
 
 void fillBytes(uint8_t *buffer, size_t bytes, uint32_t offset) {
@@ -66,14 +64,9 @@ uint32_t checksumBytes(const uint8_t *buffer, size_t bytes) {
 }
 
 bool benchmarkDisplayPush() {
-  if (!gDisplayReady) {
-    return false;
-  }
-
   const uint16_t width = Board::Display::nativeWidth();
   const uint16_t height = Board::Display::nativeHeight();
-  const uint16_t rows =
-      static_cast<uint16_t>(std::min<size_t>(height, kDisplayRowsPerChunk));
+  const uint16_t rows = height < kDisplayRowsPerChunk ? height : kDisplayRowsPerChunk;
   const size_t pixels = static_cast<size_t>(width) * rows;
 
   uint16_t *buffer = static_cast<uint16_t *>(
@@ -88,7 +81,7 @@ bool benchmarkDisplayPush() {
 
   bool ok = true;
   for (uint16_t y = 0; y < height && ok; y = static_cast<uint16_t>(y + rows)) {
-    const uint16_t chunkRows = static_cast<uint16_t>(std::min<size_t>(rows, height - y));
+    const uint16_t chunkRows = static_cast<uint16_t>(min<uint16_t>(rows, height - y));
     ok = Board::Display::pushColors(0, y, width, chunkRows, buffer);
   }
 
@@ -107,49 +100,43 @@ bool benchmarkSdWriteRead() {
   }
 
   uint32_t expectedChecksum = 2166136261UL;
-  File file = SD_MMC.open(kSdWritePath, FILE_WRITE);
+  File file = Board::Storage::filesystem().open(kSdWritePath, FILE_WRITE);
   if (!file) {
     free(buffer);
     return false;
   }
 
   for (size_t offset = 0; offset < kSdProbeBytes; offset += kSdChunkBytes) {
-    const size_t chunk = std::min<size_t>(kSdChunkBytes, kSdProbeBytes - offset);
+    const size_t chunk = min(kSdChunkBytes, kSdProbeBytes - offset);
     fillBytes(buffer, chunk, static_cast<uint32_t>(offset));
     expectedChecksum = checksumBytes(buffer, chunk) ^ (expectedChecksum * 16777619UL);
     if (file.write(buffer, chunk) != chunk) {
       file.close();
       free(buffer);
-      SD_MMC.remove(kSdWritePath);
       return false;
     }
-    yield();
   }
   file.flush();
   file.close();
 
   uint32_t actualChecksum = 2166136261UL;
-  file = SD_MMC.open(kSdWritePath, FILE_READ);
+  file = Board::Storage::filesystem().open(kSdWritePath, FILE_READ);
   if (!file) {
     free(buffer);
-    SD_MMC.remove(kSdWritePath);
     return false;
   }
 
   for (size_t offset = 0; offset < kSdProbeBytes; offset += kSdChunkBytes) {
-    const size_t chunk = std::min<size_t>(kSdChunkBytes, kSdProbeBytes - offset);
-    const size_t read = file.read(buffer, chunk);
-    if (read != chunk) {
+    const size_t chunk = min(kSdChunkBytes, kSdProbeBytes - offset);
+    if (file.read(buffer, chunk) != static_cast<int>(chunk)) {
       file.close();
       free(buffer);
-      SD_MMC.remove(kSdWritePath);
       return false;
     }
     actualChecksum = checksumBytes(buffer, chunk) ^ (actualChecksum * 16777619UL);
-    yield();
   }
   file.close();
-  SD_MMC.remove(kSdWritePath);
+  Board::Storage::filesystem().remove(kSdWritePath);
   free(buffer);
   return expectedChecksum == actualChecksum;
 }
@@ -171,9 +158,9 @@ bool benchmarkDraculaConversion() {
     return false;
   }
 
-  SD_MMC.remove(kDraculaRsvpPath);
-  SD_MMC.remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kTempExtension));
-  SD_MMC.remove(
+  Board::Storage::filesystem().remove(kDraculaRsvpPath);
+  Board::Storage::filesystem().remove(StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kTempExtension));
+  Board::Storage::filesystem().remove(
       StoragePaths::siblingPathWithExtension(kDraculaEpubPath, StoragePaths::kFailedExtension));
 
   EpubConverter::Options options;
@@ -198,58 +185,50 @@ bool beginDisplay() {
   gDisplayReady = gDisplay.begin();
   return gDisplayReady;
 }
+bool beginInput() { return Input::begin(); }
+bool beginAudio() { return Board::Audio::begin(); }
+bool beepAudio() { return Board::Audio::beep(); }
 
-bool beginAudio() {
-  return Board::Audio::begin();
+bool startButtonHeld() {
+  const Input::ControlMask controls = Board::Input::currentControls();
+  return Input::hasControl(controls, Input::InputPrimary) ||
+         Input::hasControl(controls, Input::InputPower);
 }
 
-bool beepAudio() {
-  return Board::Audio::beep();
-}
+void waitForStartInput() {
+  showStatus("Benchmark", "Tap or press button", "SD data stays in /benchmark");
+  Serial.println("[bench] waiting_for_start_input");
 
-const char *touchPhaseLabel(Input::Touch::Phase phase) {
-  switch (phase) {
-    case Input::Touch::Phase::Start:
-      return "Start";
-    case Input::Touch::Phase::Move:
-      return "Move";
-    case Input::Touch::Phase::End:
-      return "End";
-  }
-  return "Unknown";
-}
-
-bool beginTouch() {
-  Serial.printf("[bench] touch config address=0x%02X irq=%d reset=%d poll_ms=%lu\n",
-                Board::Config::TOUCH_I2C_ADDRESS, Board::Config::PIN_TOUCH_IRQ,
-                Board::Config::PIN_TOUCH_RST,
-                static_cast<unsigned long>(Board::Config::TOUCH_POLL_INTERVAL_MS));
-  return Input::Touch::begin();
-}
-
-bool benchmarkTouchSample() {
-  showStatus("Touch test", "Tap screen", "Waiting");
-  Serial.printf("[bench] touch_wait ms=%lu\n",
-                static_cast<unsigned long>(kTouchSampleWindowMs));
-
-  const uint32_t startedMs = millis();
-  while (millis() - startedMs < kTouchSampleWindowMs) {
-    Input::Touch::Event event;
-    if (Input::Touch::readEvent(event)) {
-      Serial.printf("[bench] touch_event phase=%s touched=%u x=%u y=%u gesture=%u\n",
-                    touchPhaseLabel(event.phase), event.touched ? 1 : 0, event.x, event.y,
-                    event.gesture);
-      showStatus("Touch OK", String(event.x) + "," + String(event.y),
-                 touchPhaseLabel(event.phase));
-      delay(250);
-      return true;
-    }
+  const uint32_t settleStartMs = millis();
+  while (millis() - settleStartMs < 500) {
     delay(10);
   }
 
-  Serial.printf("[bench] touch_no_event ms=%lu\n",
-                static_cast<unsigned long>(kTouchSampleWindowMs));
-  return false;
+  bool inputWasHeld = startButtonHeld();
+  uint32_t lastReminderMs = millis();
+  while (true) {
+    Input::Event event;
+    if (Input::poll(event, millis()) && Input::isTouchEvent(event) &&
+        event.gesture == Input::Gesture::TouchStart) {
+      break;
+    }
+
+    const bool held = startButtonHeld();
+    if (!inputWasHeld && held) {
+      break;
+    }
+    inputWasHeld = held;
+
+    if (millis() - lastReminderMs > 3000) {
+      Serial.println("[bench] still_waiting_for_start_input");
+      lastReminderMs = millis();
+    }
+    delay(20);
+  }
+
+  Serial.println("[bench] start_input_received");
+  showStatus("Benchmark", "Starting", "");
+  delay(300);
 }
 
 }  // namespace
@@ -263,12 +242,11 @@ void run() {
   bool mounted = false;
   int mountedFrequencyKhz = 0;
   runTimed("display_begin", beginDisplay);
+  runTimed("input_begin", beginInput);
+  waitForStartInput();
   runTimed("display_push_full", benchmarkDisplayPush,
            static_cast<size_t>(Board::Display::nativeWidth()) *
                static_cast<size_t>(Board::Display::nativeHeight()) * sizeof(uint16_t));
-  runTimed("touch_begin", beginTouch);
-  runTimed("touch_sample", benchmarkTouchSample);
-
   if (Board::Audio::available()) {
     runTimed("audio_begin", beginAudio);
     runTimed("audio_beep", beepAudio);

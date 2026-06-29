@@ -1,6 +1,6 @@
 #include "converter/EpubConverter.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <algorithm>
 
 #include "converter/EpubPackage.h"
@@ -203,13 +203,13 @@ namespace {
     }
 
     bool promoteTempFile(const String& tempPath, const String& rsvpPath) {
-        SD_MMC.remove(rsvpPath);
-        if (SD_MMC.rename(tempPath, rsvpPath)) {
+        Board::Storage::filesystem().remove(rsvpPath);
+        if (Board::Storage::filesystem().rename(tempPath, rsvpPath)) {
             return true;
         }
 
         Serial.printf("[epub] Could not rename %s to %s\n", tempPath.c_str(), rsvpPath.c_str());
-        SD_MMC.remove(tempPath);
+        Board::Storage::filesystem().remove(tempPath);
         return false;
     }
 
@@ -240,8 +240,8 @@ namespace {
         }
         reportReadingOrderReady(options, readingOrder);
 
-        SD_MMC.remove(tempPath);
-        File output = SD_MMC.open(tempPath, FILE_WRITE);
+        Board::Storage::filesystem().remove(tempPath);
+        File output = Board::Storage::filesystem().open(tempPath, FILE_WRITE);
         if (!output) {
             Serial.printf("[epub] Could not create temporary RSVP file: %s\n", tempPath.c_str());
             return failWithClosedZip();
@@ -259,7 +259,7 @@ namespace {
 
         if (wordCount == 0) {
             Serial.printf("[epub] No readable words extracted from %s\n", epubPath.c_str());
-            SD_MMC.remove(tempPath);
+            Board::Storage::filesystem().remove(tempPath);
             return false;
         }
 
@@ -275,9 +275,9 @@ namespace {
     }
 
     void writeFailureMarker(const String& markerPath, const char* message) {
-        SD_MMC.remove(markerPath);
+        Board::Storage::filesystem().remove(markerPath);
 
-        File marker = SD_MMC.open(markerPath, FILE_WRITE);
+        File marker = Board::Storage::filesystem().open(markerPath, FILE_WRITE);
         if (!marker) {
             Serial.printf("[epub] Could not create failure marker: %s\n", markerPath.c_str());
             return;
@@ -350,7 +350,7 @@ namespace {
     }
 
     bool removeStaleCacheOrReuseCurrent(const String& rsvpPath) {
-        File existing = SD_MMC.open(rsvpPath);
+        File existing = Board::Storage::filesystem().open(rsvpPath);
         if (!existing) {
             return false;
         }
@@ -367,13 +367,13 @@ namespace {
         }
 
         Serial.printf("[epub] Rebuilding stale RSVP cache after converter update: %s\n", rsvpPath.c_str());
-        SD_MMC.remove(rsvpPath);
+        Board::Storage::filesystem().remove(rsvpPath);
         return false;
     }
 
     bool previousCurrentAttemptRestarted(const String& epubPath, const ConversionPaths& paths,
                                          const EpubConverter::Options& options) {
-        File lock = SD_MMC.open(paths.lock);
+        File lock = Board::Storage::filesystem().open(paths.lock);
         if (!lock) {
             return false;
         }
@@ -386,8 +386,8 @@ namespace {
             return false;
         }
 
-        SD_MMC.remove(paths.lock);
-        SD_MMC.remove(paths.temp);
+        Board::Storage::filesystem().remove(paths.lock);
+        Board::Storage::filesystem().remove(paths.temp);
         if (!currentLock) {
             Serial.printf("[epub] Retrying interrupted EPUB after converter update: %s\n", epubPath.c_str());
             return false;
@@ -400,7 +400,7 @@ namespace {
     }
 
     void removeOrphanedTempFile(const String& epubPath, const String& tempPath) {
-        File temp = SD_MMC.open(tempPath);
+        File temp = Board::Storage::filesystem().open(tempPath);
         if (!temp) {
             return;
         }
@@ -412,11 +412,11 @@ namespace {
         }
 
         Serial.printf("[epub] Removing stale temporary conversion file and retrying: %s\n", epubPath.c_str());
-        SD_MMC.remove(tempPath);
+        Board::Storage::filesystem().remove(tempPath);
     }
 
     bool shouldSkipCurrentFailure(const String& epubPath, const String& failedPath) {
-        File failed = SD_MMC.open(failedPath);
+        File failed = Board::Storage::filesystem().open(failedPath);
         if (!failed) {
             return false;
         }
@@ -434,14 +434,14 @@ namespace {
         }
 
         Serial.printf("[epub] Retrying EPUB after converter update: %s\n", epubPath.c_str());
-        SD_MMC.remove(failedPath);
+        Board::Storage::filesystem().remove(failedPath);
         return false;
     }
 
 } // namespace
 
 bool EpubConverter::isCurrentCache(const String& rsvpPath) {
-    File existing = SD_MMC.open(rsvpPath);
+    File existing = Board::Storage::filesystem().open(rsvpPath);
     const bool current = rsvpWasWrittenByCurrentConverter(existing);
     if (existing) {
         existing.close();
@@ -467,12 +467,12 @@ bool EpubConverter::convertIfNeeded(const String& epubPath, const String& rsvpPa
     Serial.printf("[epub] Converting on device: %s\n", epubPath.c_str());
     writeFailureMarker(paths.lock, "Conversion in progress. Delete this file only if retrying.");
     const bool converted = convertEpubToRsvp(epubPath, paths.temp, rsvpPath, options);
-    SD_MMC.remove(paths.lock);
+    Board::Storage::filesystem().remove(paths.lock);
     if (!converted) {
         writeFailureMarker(paths.failed, "Conversion failed. Remove this marker to retry.");
         return false;
     }
 
-    SD_MMC.remove(paths.failed);
+    Board::Storage::filesystem().remove(paths.failed);
     return true;
 }

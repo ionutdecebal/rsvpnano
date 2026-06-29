@@ -16,99 +16,65 @@ MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest.json"
 REV2_MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest-rev2.json"
 DEFAULT_REPO = "ionutdecebal/rsvpnano"
 DEFAULT_REQUIRED_ASSETS = (
-    "rsvp-nano.bin",
-    "rsvp-nano-ota.bin",
+    "rsvp-nano-esp32-s3-touch-lcd-3.49.bin",
     "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin",
-)
-DEFAULT_OPTIONAL_ASSETS = (
-    "rsvp-nano-rev2.bin",
-    "rsvp-nano-rev2-ota.bin",
-    "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
     "rsvp-nano-esp32-s3-touch-amoled-1.8.bin",
     "rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin",
     "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin",
     "rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-2.06.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.16.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.41.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin",
 )
-
-
-def default_manifest(name: str, binary: str, features: list[str]) -> dict:
-    return {
-        "name": name,
-        "version": "dev",
-        "new_install_prompt_erase": True,
-        "new_install_improv_wait_time": 0,
-        "features": features,
-        "builds": [
-            {
-                "chipFamily": "ESP32-S3",
-                "improv": False,
-                "parts": [
-                    {
-                        "path": binary,
-                        "offset": 0,
-                    }
-                ],
-            }
-        ],
-    }
-
-
-COMMON_FEATURES = [
-    "Books and articles library",
-    "Device-hosted web companion",
-    "RSS feed downloads",
-    "USB SD-card transfer mode",
-]
-
-FLASH_MANIFESTS = {
-    "rsvp-nano.bin": {
-        "path": MANIFEST_PATH,
-        "fallback": default_manifest("RSVP Nano", "rsvp-nano.bin", COMMON_FEATURES),
-    },
-    "rsvp-nano-rev2.bin": {
-        "path": REV2_MANIFEST_PATH,
-        "fallback": default_manifest(
-            "RSVP Nano Rev2",
-            "rsvp-nano-rev2.bin",
-            COMMON_FEATURES + ["GPIO42 backlight profile"],
-        ),
-    },
-    "rsvp-nano-esp32-s3-touch-amoled-1.8.bin": {
-        "path": WEB_FIRMWARE_DIR / "manifest-esp32-s3-touch-amoled-1.8.json",
-        "fallback": default_manifest(
-            "RSVP Nano Touch AMOLED 1.8",
-            "rsvp-nano-esp32-s3-touch-amoled-1.8.bin",
-            COMMON_FEATURES + ["Touch AMOLED 1.8 profile"],
-        ),
-    },
-    "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin": {
-        "path": WEB_FIRMWARE_DIR / "manifest-esp32-s3-touch-amoled-1.8-v2.json",
-        "fallback": default_manifest(
-            "RSVP Nano Touch AMOLED 1.8 V2 Test",
-            "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin",
-            COMMON_FEATURES + ["Touch AMOLED 1.8 V2 test profile"],
-        ),
-    },
-    "rsvp-nano-esp32-s3-touch-amoled-2.16.bin": {
-        "path": WEB_FIRMWARE_DIR / "manifest-esp32-s3-touch-amoled-2.16.json",
-        "fallback": default_manifest(
-            "RSVP Nano Touch AMOLED 2.16",
-            "rsvp-nano-esp32-s3-touch-amoled-2.16.bin",
-            COMMON_FEATURES + ["Touch AMOLED 2.16 profile"],
-        ),
-    },
-    "rsvp-nano-esp32-s3-touch-amoled-2.41.bin": {
-        "path": WEB_FIRMWARE_DIR / "manifest-esp32-s3-touch-amoled-2.41.json",
-        "fallback": default_manifest(
-            "RSVP Nano Touch AMOLED 2.41",
-            "rsvp-nano-esp32-s3-touch-amoled-2.41.bin",
-            COMMON_FEATURES + ["Touch AMOLED 2.41 profile"],
-        ),
-    },
+DEFAULT_OPTIONAL_ASSETS = (
+    "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
+    "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
+)
+DEFAULT_MANIFEST = {
+    "name": "RSVP Nano",
+    "version": "dev",
+    "new_install_prompt_erase": True,
+    "new_install_improv_wait_time": 0,
+    "builds": [
+        {
+            "chipFamily": "ESP32-S3",
+            "improv": False,
+            "parts": [
+                {
+                    "path": "rsvp-nano-esp32-s3-touch-lcd-3.49.bin",
+                    "offset": 0,
+                }
+            ],
+        }
+    ],
+}
+DEFAULT_REV2_MANIFEST = {
+    "name": "RSVP Nano Rev2",
+    "version": "dev",
+    "new_install_prompt_erase": True,
+    "new_install_improv_wait_time": 0,
+    "features": [
+        "Books and articles library",
+        "Device-hosted web companion",
+        "RSS feed downloads",
+        "USB SD-card transfer mode",
+        "LCD 3.49 rev2 board profile",
+    ],
+    "builds": [
+        {
+            "chipFamily": "ESP32-S3",
+            "improv": False,
+            "parts": [
+                {
+                    "path": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
+                    "offset": 0,
+                }
+            ],
+        }
+    ],
 }
 
 
@@ -166,15 +132,17 @@ def load_manifest(path: Path, fallback: dict) -> dict:
     return json.loads(path.read_text())
 
 
-def write_manifests(version: str, available_flash_assets: set[str], prune_missing: bool) -> None:
-    for asset_name, manifest_info in FLASH_MANIFESTS.items():
-        path = manifest_info["path"]
-        if asset_name in available_flash_assets:
-            manifest = load_manifest(path, manifest_info["fallback"])
-            manifest["version"] = version
-            path.write_text(json.dumps(manifest, indent=2) + "\n")
-        elif prune_missing and path.exists():
-            path.unlink()
+def write_manifest(version: str, include_rev2: bool) -> None:
+    manifest = load_manifest(MANIFEST_PATH, DEFAULT_MANIFEST)
+    manifest["version"] = version
+    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
+
+    if include_rev2:
+        rev2_manifest = load_manifest(REV2_MANIFEST_PATH, DEFAULT_REV2_MANIFEST)
+        rev2_manifest["version"] = version
+        REV2_MANIFEST_PATH.write_text(json.dumps(rev2_manifest, indent=2) + "\n")
+    elif REV2_MANIFEST_PATH.exists():
+        REV2_MANIFEST_PATH.unlink()
 
 
 def main() -> int:
@@ -203,7 +171,7 @@ def main() -> int:
 
     if args.assets:
         requested_assets = tuple(args.assets)
-        downloaded_assets: set[str] = set()
+        include_rev2 = any("rev2" in asset_name for asset_name in requested_assets)
         for asset_name in requested_assets:
             asset = find_asset(release, asset_name)
             url = str(asset.get("browser_download_url", "")).strip()
@@ -212,9 +180,7 @@ def main() -> int:
             destination = WEB_FIRMWARE_DIR / asset_name
             print(f"Downloading {asset_name} from {tag_name} -> {destination}")
             download_file(url, destination)
-            downloaded_assets.add(asset_name)
     else:
-        downloaded_assets = set()
         for asset_name in DEFAULT_REQUIRED_ASSETS:
             asset = find_asset(release, asset_name)
             url = str(asset.get("browser_download_url", "")).strip()
@@ -223,27 +189,24 @@ def main() -> int:
             destination = WEB_FIRMWARE_DIR / asset_name
             print(f"Downloading {asset_name} from {tag_name} -> {destination}")
             download_file(url, destination)
-            downloaded_assets.add(asset_name)
 
+        include_rev2 = True
         for asset_name in DEFAULT_OPTIONAL_ASSETS:
             asset = find_asset(release, asset_name, required=False)
             if asset is None:
                 print(f"Skipping optional release asset not present in {tag_name}: {asset_name}")
+                include_rev2 = False
                 continue
             url = str(asset.get("browser_download_url", "")).strip()
             if not url:
                 print(f"Skipping optional release asset with no download URL: {asset_name}")
+                include_rev2 = False
                 continue
             destination = WEB_FIRMWARE_DIR / asset_name
             print(f"Downloading {asset_name} from {tag_name} -> {destination}")
             download_file(url, destination)
-            downloaded_assets.add(asset_name)
 
-    write_manifests(
-        tag_name,
-        {asset_name for asset_name in downloaded_assets if asset_name in FLASH_MANIFESTS},
-        prune_missing=not args.assets,
-    )
+    write_manifest(tag_name, include_rev2)
     print(f"Web firmware updated to release {tag_name}")
     return 0
 

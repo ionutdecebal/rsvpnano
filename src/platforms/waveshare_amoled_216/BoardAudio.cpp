@@ -3,19 +3,19 @@
 #include <Wire.h>
 
 #include "board/BoardAudio.h"
-#include "board/BoardConfig.h"
 #include "drivers/audio/es8311/Es8311.h"
+#include "platforms/waveshare_amoled_216/WaveshareAmoled216.h"
 
 namespace {
 
 BoardDrivers::Es8311::Context gAudioContext = {
     &Wire,
-    Board::Config::ES8311_ADDRESS,
+    WaveshareAmoled216::AudioWiring::kEs8311Address,
     I2S_NUM_0,
-    Board::Config::PIN_AUDIO_MCLK,
-    Board::Config::PIN_AUDIO_BCLK,
-    Board::Config::PIN_AUDIO_WS,
-    Board::Config::PIN_AUDIO_DOUT,
+    WaveshareAmoled216::AudioWiring::kMclkPin,
+    WaveshareAmoled216::AudioWiring::kBclkPin,
+    WaveshareAmoled216::AudioWiring::kWsPin,
+    WaveshareAmoled216::AudioWiring::kDoutPin,
 };
 
 }  // namespace

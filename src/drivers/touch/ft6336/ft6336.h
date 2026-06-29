@@ -7,8 +7,13 @@
 
 namespace Ft6336Touch {
 
-size_t packetLength();
-bool readPacket(TwoWire &wire, uint8_t address, uint8_t *buffer, size_t len);
-bool decodePacket(const uint8_t *data, size_t len, BoardDrivers::Touch::Sample &sample);
+constexpr size_t kPacketLength = 5;
+
+bool probe(TwoWire &wire, uint8_t address);
+bool configureMonitorMode(TwoWire &wire, uint8_t address);
+bool readPacket(TwoWire &wire, uint8_t address, bool releaseBusBeforeRead, uint8_t *buffer,
+                size_t len);
+bool decodePacket(const uint8_t *data, size_t len, uint16_t panelWidth, uint16_t panelHeight,
+                  BoardDrivers::Touch::Sample &sample);
 
 }  // namespace Ft6336Touch

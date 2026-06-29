@@ -1,0 +1,25 @@
+{
+  "name": "RSVP Nano Touch AMOLED 2.06",
+  "version": "dev",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "features": [
+    "Books and articles library",
+    "Device-hosted web companion",
+    "RSS feed downloads",
+    "USB SD-card transfer mode",
+    "Touch AMOLED 2.06 profile"
+  ],
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": false,
+      "parts": [
+        {
+          "path": "rsvp-nano-esp32-s3-touch-amoled-2.06.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

@@ -107,16 +107,16 @@ jobs:
           RSVP Nano firmware release.
 
           Assets:
-          - `rsvp-nano.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
-          - `rsvp-nano-ota.bin` is the legacy app-only OTA binary for existing Touch LCD 3.49 devices.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
           - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
-          - `rsvp-nano-rev2.bin` is the full browser-flasher image for Touch LCD 3.49 rev2/GPIO42 boards.
-          - `rsvp-nano-rev2-ota.bin` is the legacy app-only OTA binary for Touch LCD 3.49 rev2/GPIO42 boards.
-          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin` is the Touch LCD 3.49 rev2/GPIO42 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin` is the full browser-flasher image for Touch LCD 3.49 rev2 boards.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin` is the Touch LCD 3.49 rev2 OTA binary.
           - `rsvp-nano-esp32-s3-touch-amoled-1.8.bin` is the full browser-flasher image for Touch AMOLED 1.8 V1 boards.
           - `rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin` is the Touch AMOLED 1.8 V1 OTA binary.
           - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin` is the full browser-flasher image for Touch AMOLED 1.8 V2 test boards.
           - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin` is the Touch AMOLED 1.8 V2 test OTA binary.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.06.bin` is the full browser-flasher image for Touch AMOLED 2.06 boards.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin` is the Touch AMOLED 2.06 OTA binary.
           - `rsvp-nano-esp32-s3-touch-amoled-2.16.bin` is the full browser-flasher image for Touch AMOLED 2.16 boards.
           - `rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin` is the Touch AMOLED 2.16 OTA binary.
           - `rsvp-nano-esp32-s3-touch-amoled-2.41.bin` is the full browser-flasher image for Touch AMOLED 2.41 boards.
@@ -132,16 +132,16 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" \
-              web/firmware/rsvp-nano.bin \
-              web/firmware/rsvp-nano-ota.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
-              web/firmware/rsvp-nano-rev2.bin \
-              web/firmware/rsvp-nano-rev2-ota.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin \
@@ -149,16 +149,16 @@ jobs:
               --clobber
           else
             gh release create "$RELEASE_TAG" \
-              web/firmware/rsvp-nano.bin \
-              web/firmware/rsvp-nano-ota.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
-              web/firmware/rsvp-nano-rev2.bin \
-              web/firmware/rsvp-nano-rev2-ota.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06.bin \
+              web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin \
               web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin \

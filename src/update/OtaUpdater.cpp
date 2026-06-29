@@ -4,7 +4,7 @@
 
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
@@ -133,7 +133,7 @@ bool OtaUpdater::isConfigured(const Config &config) const {
 String OtaUpdater::currentVersion() const { return RSVP_FIRMWARE_VERSION; }
 
 bool OtaUpdater::loadConfigFromPath(const char *path, Config &config) const {
-  File file = SD_MMC.open(path);
+  File file = Board::Storage::filesystem().open(path);
   if (!file || file.isDirectory()) {
     if (file) {
       file.close();

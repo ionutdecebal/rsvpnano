@@ -5,12 +5,9 @@
 #include <driver/spi_master.h>
 #include <esp_log.h>
 
-#include "board/BoardConfig.h"
-
 namespace {
 
 constexpr int kSpiFrequency = 40000000;
-constexpr int kSendBufferPixels = 0x4000;
 static const char *kAxs15231bTag = "axs15231b";
 
 struct LcdCommand {
@@ -29,7 +26,11 @@ constexpr LcdCommand kQspiInit[] = {
 };
 
 void writeBacklightPwm(Axs15231b::Context &context) {
-  pinMode(Board::Config::PIN_LCD_BACKLIGHT, OUTPUT);
+  if (context.config.backlightPin < 0) {
+    return;
+  }
+
+  pinMode(context.config.backlightPin, OUTPUT);
   analogWriteResolution(8);
   // AP3032 CTRL PWM dimming:
   // Datasheet recommends high-frequency PWM to avoid audio noise,
@@ -38,26 +39,22 @@ void writeBacklightPwm(Axs15231b::Context &context) {
   analogWriteFrequency(25000);
 
   if (!context.backlightOn) {
-    analogWrite(Board::Config::PIN_LCD_BACKLIGHT, 255);
+    analogWrite(context.config.backlightPin, 255);
     return;
   }
 
-  if (context.brightnessPercent == 0) {
-    analogWrite(Board::Config::PIN_LCD_BACKLIGHT, 255);
-    return;
-  }
-
-  // Waveshare drives the LCD backlight as active-low PWM. Keep nonzero levels
-  // above the LED cutoff so very low user percentages do not look fully off.
-  constexpr uint8_t kMinHardwareBrightnessPercent = 35;
-  const uint8_t hardwarePercent = static_cast<uint8_t>(
-      kMinHardwareBrightnessPercent +
-      (static_cast<uint16_t>(context.brightnessPercent) *
-       (100U - kMinHardwareBrightnessPercent)) /
-          100U);
+  // Waveshare drives the LCD backlight as active-low PWM; lower duty is brighter.
+  const uint8_t brightness = context.brightnessPercent == 0 ? 1 : context.brightnessPercent;
   const uint8_t activeDuty =
-      static_cast<uint8_t>((static_cast<uint16_t>(hardwarePercent) * 255U) / 100U);
-  analogWrite(Board::Config::PIN_LCD_BACKLIGHT, 255 - activeDuty);
+      static_cast<uint8_t>((static_cast<uint16_t>(brightness) * 255U) / 100U);
+  analogWrite(context.config.backlightPin, 255 - activeDuty);
+}
+
+size_t sendBufferPixels(const Axs15231b::Context &context) {
+  constexpr size_t kFallbackPixels = 0x4000;
+  return context.config.txChunkBytes == 0
+             ? kFallbackPixels
+             : context.config.txChunkBytes / sizeof(uint16_t);
 }
 
 void setBacklight(Axs15231b::Context &context, bool on) {
@@ -100,22 +97,25 @@ namespace Axs15231b {
 void init(Context &context) {
   setBacklight(context, false);
 
-  pinMode(Board::Config::PIN_LCD_RST, OUTPUT);
-  digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
-  delay(30);
-  digitalWrite(Board::Config::PIN_LCD_RST, LOW);
-  delay(250);
-  digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
-  delay(30);
+  if (context.config.resetPin >= 0) {
+    pinMode(context.config.resetPin, OUTPUT);
+    digitalWrite(context.config.resetPin, HIGH);
+    delay(30);
+    digitalWrite(context.config.resetPin, LOW);
+    delay(250);
+    digitalWrite(context.config.resetPin, HIGH);
+    delay(30);
+  }
 
   if (!context.busReady) {
     spi_bus_config_t busConfig = {};
-    busConfig.data0_io_num = Board::Config::PIN_LCD_DATA0;
-    busConfig.data1_io_num = Board::Config::PIN_LCD_DATA1;
-    busConfig.sclk_io_num = Board::Config::PIN_LCD_SCLK;
-    busConfig.data2_io_num = Board::Config::PIN_LCD_DATA2;
-    busConfig.data3_io_num = Board::Config::PIN_LCD_DATA3;
-    busConfig.max_transfer_sz = (kSendBufferPixels * static_cast<int>(sizeof(uint16_t))) + 8;
+    busConfig.data0_io_num = context.config.data0Pin;
+    busConfig.data1_io_num = context.config.data1Pin;
+    busConfig.sclk_io_num = context.config.sclkPin;
+    busConfig.data2_io_num = context.config.data2Pin;
+    busConfig.data3_io_num = context.config.data3Pin;
+    busConfig.max_transfer_sz =
+        static_cast<int>(sendBufferPixels(context) * sizeof(uint16_t)) + 8;
     busConfig.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS;
 
     spi_device_interface_config_t deviceConfig = {};
@@ -123,7 +123,7 @@ void init(Context &context) {
     deviceConfig.address_bits = 24;
     deviceConfig.mode = SPI_MODE3;
     deviceConfig.clock_speed_hz = kSpiFrequency;
-    deviceConfig.spics_io_num = Board::Config::PIN_LCD_CS;
+    deviceConfig.spics_io_num = context.config.csPin;
     deviceConfig.flags = SPI_DEVICE_HALFDUPLEX;
     deviceConfig.queue_size = 10;
 
@@ -145,7 +145,9 @@ void init(Context &context) {
 void setBacklight(Context &context, bool on) { ::setBacklight(context, on); }
 
 void setBrightnessPercent(Context &context, uint8_t percent) {
-  if (percent > 100) {
+  if (percent == 0) {
+    percent = 1;
+  } else if (percent > 100) {
     percent = 100;
   }
 
@@ -180,8 +182,9 @@ void pushColors(Context &context, uint16_t x, uint16_t y, uint16_t width, uint16
 
   while (pixelsRemaining > 0) {
     size_t chunkPixels = pixelsRemaining;
-    if (chunkPixels > static_cast<size_t>(kSendBufferPixels)) {
-      chunkPixels = kSendBufferPixels;
+    const size_t maxChunkPixels = sendBufferPixels(context);
+    if (chunkPixels > maxChunkPixels) {
+      chunkPixels = maxChunkPixels;
     }
 
     spi_transaction_ext_t transaction = {};

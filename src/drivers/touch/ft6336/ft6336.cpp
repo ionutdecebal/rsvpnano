@@ -2,38 +2,58 @@
 
 #include <algorithm>
 
-#include "board/BoardConfig.h"
-
 namespace {
 
 constexpr uint8_t kPointsReg = 0x02;
+constexpr uint8_t kMonitorModeRegister = 0xA5;
+constexpr uint8_t kMonitorModeValue = 0x01;
 
-uint16_t clampPhysicalX(uint16_t x) {
-  return std::min<uint16_t>(x, static_cast<uint16_t>(Board::Config::PANEL_NATIVE_WIDTH - 1));
-}
+bool validAddress(uint8_t address) { return address <= 0x7F; }
 
-uint16_t clampPhysicalY(uint16_t y) {
-  return std::min<uint16_t>(y, static_cast<uint16_t>(Board::Config::PANEL_NATIVE_HEIGHT - 1));
+uint16_t clampPhysical(uint16_t value, uint16_t limit) {
+  return limit == 0 ? 0 : std::min<uint16_t>(value, static_cast<uint16_t>(limit - 1));
 }
 
 }  // namespace
 
 namespace Ft6336Touch {
 
-size_t packetLength() { return 5; }
-
-bool readPacket(TwoWire &wire, uint8_t address, uint8_t *buffer, size_t len) {
-  wire.beginTransmission(address);
-  wire.write(kPointsReg);
-  if (wire.endTransmission(Board::Config::TOUCH_RELEASE_BUS_BEFORE_READ) != 0) {
+bool probe(TwoWire &wire, uint8_t address) {
+  if (!validAddress(address)) {
     return false;
   }
-  if (Board::Config::TOUCH_RELEASE_BUS_BEFORE_READ) {
+
+  wire.beginTransmission(address);
+  return wire.endTransmission() == 0;
+}
+
+bool configureMonitorMode(TwoWire &wire, uint8_t address) {
+  if (!validAddress(address)) {
+    return false;
+  }
+
+  wire.beginTransmission(address);
+  wire.write(kMonitorModeRegister);
+  wire.write(kMonitorModeValue);
+  return wire.endTransmission(true) == 0;
+}
+
+bool readPacket(TwoWire &wire, uint8_t address, bool releaseBusBeforeRead, uint8_t *buffer,
+                size_t len) {
+  if (!validAddress(address) || buffer == nullptr || len < kPacketLength) {
+    return false;
+  }
+
+  wire.beginTransmission(address);
+  wire.write(kPointsReg);
+  if (wire.endTransmission(releaseBusBeforeRead) != 0) {
+    return false;
+  }
+  if (releaseBusBeforeRead) {
     delayMicroseconds(50);
   }
 
-  const size_t readLen =
-      wire.requestFrom(static_cast<uint8_t>(address), static_cast<size_t>(len), true);
+  const size_t readLen = wire.requestFrom(address, static_cast<size_t>(len), true);
   if (readLen != len) {
     return false;
   }
@@ -44,20 +64,23 @@ bool readPacket(TwoWire &wire, uint8_t address, uint8_t *buffer, size_t len) {
   return true;
 }
 
-bool decodePacket(const uint8_t *data, size_t len, BoardDrivers::Touch::Sample &sample) {
-  if (data == nullptr || len < packetLength()) {
+bool decodePacket(const uint8_t *data, size_t len, uint16_t panelWidth, uint16_t panelHeight,
+                  BoardDrivers::Touch::Sample &sample) {
+  if (data == nullptr || len < kPacketLength) {
     return false;
   }
 
-  const uint8_t points = static_cast<uint8_t>(data[0] & 0x0F);
+  const uint8_t points = data[0] & 0x0F;
   if (points == 0 || points > 4) {
     sample.touched = false;
     return true;
   }
 
   sample.touched = true;
-  sample.physicalX = clampPhysicalX(static_cast<uint16_t>(((data[1] & 0x0F) << 8) | data[2]));
-  sample.physicalY = clampPhysicalY(static_cast<uint16_t>(((data[3] & 0x0F) << 8) | data[4]));
+  sample.physicalX =
+      clampPhysical(static_cast<uint16_t>(((data[1] & 0x0F) << 8) | data[2]), panelWidth);
+  sample.physicalY =
+      clampPhysical(static_cast<uint16_t>(((data[3] & 0x0F) << 8) | data[4]), panelHeight);
   return true;
 }
 

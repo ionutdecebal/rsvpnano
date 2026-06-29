@@ -2,23 +2,23 @@
 
 #include <Arduino.h>
 
-#include "board/BoardConfig.h"
+#include "board/BoardTypes.h"
 
 namespace Board::Power {
 
-using BatteryStatus = Board::Config::BatteryStatus;
-using DiagnosticSnapshot = Board::Config::PowerDiagnosticSnapshot;
+    using BatteryStatus = Board::BatteryStatus;
+    using DiagnosticSnapshot = Board::PowerDiagnosticSnapshot;
 
-void begin();
-void prepareDeepSleepPowerHold();
-void resetWakePeripherals();
-bool enableAudioPowerIfAvailable();
-bool readBatteryStatus(BatteryStatus &status);
-DiagnosticSnapshot diagnosticSnapshot();
-bool externalPowerPresent();
-bool releaseBatteryPowerHold();
-bool powerOffUsesControllerWake();
-bool shouldRequestShutdownOnPowerOff();
-bool shouldReleaseBatteryPowerBeforeDeepSleep();
+    void begin();
+    void prepareDeepSleepPowerHold();
+    bool enableAudioPowerIfAvailable();
+    bool readBatteryStatus(BatteryStatus& status);
+    DiagnosticSnapshot diagnosticSnapshot();
+    bool externalPowerPresent();
+    bool releaseBatteryPowerHold();
+    bool supportsSoftwarePowerOff();
+    bool powerOffUsesControllerWake();
+    bool shouldRequestShutdownOnPowerOff();
+    bool shouldReleaseBatteryPowerBeforeDeepSleep();
 
-}  // namespace Board::Power
+} // namespace Board::Power

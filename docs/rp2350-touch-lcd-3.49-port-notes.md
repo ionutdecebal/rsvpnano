@@ -22,10 +22,10 @@ This is not a simple pin remap.
 
 The current firmware is deeply tied to the ESP32-S3 platform:
 
-- Display transport uses ESP-IDF SPI APIs in `src/display/axs15231b.cpp`.
-- Storage uses `SD_MMC` in `src/storage/StorageManager.cpp` and `src/storage/EpubConverter.cpp`.
+- Display transport uses ESP-IDF SPI APIs in `src/drivers/display/axs15231b/axs15231b.cpp`.
+- Storage uses `SD_MMC` through the board storage implementation and the storage modules.
 - USB mass storage uses ESP32 TinyUSB + `sdmmc` in `src/usb/UsbMassStorageManager.cpp`.
-- Sleep, wake, battery hold, and ADC behavior use ESP32 APIs in `src/board/BoardConfig.cpp`.
+- Sleep, wake, battery hold, and ADC behavior use ESP32 APIs behind `Board::Power`.
 - Settings use `Preferences` in `src/app/App.h`.
 - OTA and Wi-Fi flows use ESP32 networking in `src/update/OtaUpdater.cpp` and `src/app/App.cpp`.
 - Audio uses ESP32 I2S driver APIs in `src/audio/AudioManager.cpp`.
@@ -41,7 +41,7 @@ These parts are mostly platform-agnostic and should be reusable with minimal or 
 - Most app state and menu flow in `src/app/`, once Wi-Fi/OTA paths are feature-gated.
 - Font assets and word layout logic in `src/display/DisplayManager.cpp`.
 - Book parsing and format logic, after the storage backend is replaced.
-- Touch packet decoding in `src/input/TouchHandler.cpp`, because the RP2350 board still uses AXS15231B touch over I2C.
+- Touch packet decoding in `src/drivers/touch/axs15231b_touch`, because the RP2350 board still uses AXS15231B touch over I2C.
 
 ## What must be rewritten or abstracted
 
@@ -52,7 +52,7 @@ The transport layer is not.
 
 Needed work:
 
-- Replace ESP32 `spi_master` usage in `src/display/axs15231b.cpp`.
+- Replace ESP32 `spi_master` usage in `src/drivers/display/axs15231b/axs15231b.cpp`.
 - Rework backlight PWM control.
 - Reconfirm rotation and coordinate mapping on the new panel wiring.
 
@@ -98,7 +98,7 @@ Practical direction:
 The current ESP32 board uses a `TCA9554` expander for battery-path control and audio rail enable.
 The RP2350 schematic instead exposes direct nets such as `BAT_ADC`, `SYS_OUT`, and `SYS_EN`.
 
-That means `src/board/BoardConfig.cpp` needs a board-specific rewrite for:
+That means a future RP2350 platform implementation needs its own `Board::Power` backend for:
 
 - boot/power button handling
 - battery measurement

@@ -1,34 +1,72 @@
 #include "board/BoardDisplay.h"
 
+#include <Wire.h>
+#include <esp_log.h>
+
 #include "drivers/display/rm690b0/rm690b0.h"
+#include "drivers/gpio/tca9554/Tca9554.h"
+#include "platforms/waveshare_amoled_241/WaveshareAmoled241.h"
 
 namespace {
 
-Rm690b0::Context gDisplayContext;
+constexpr char kBoardDisplayTag[] = "board-display";
+
+Rm690b0::Context gDisplayContext = {
+    {
+        WaveshareAmoled241::DisplayWiring::kCsPin,
+        WaveshareAmoled241::DisplayWiring::kSclkPin,
+        WaveshareAmoled241::DisplayWiring::kData0Pin,
+        WaveshareAmoled241::DisplayWiring::kData1Pin,
+        WaveshareAmoled241::DisplayWiring::kData2Pin,
+        WaveshareAmoled241::DisplayWiring::kData3Pin,
+        WaveshareAmoled241::DisplayWiring::kResetPin,
+        WaveshareAmoled241::DisplayWiring::kBacklightPin,
+        WaveshareAmoled241::DisplayWiring::kPanelWidth,
+        WaveshareAmoled241::DisplayWiring::kPanelHeight,
+        WaveshareAmoled241::DisplayWiring::kTxChunkBytes,
+        WaveshareAmoled241::DisplayWiring::kPanelMemoryRotated180,
+    },
+};
+
+void enableDisplayRail() {
+  if (!BoardDrivers::Tca9554::configureOutputPin(
+          Wire1, WaveshareAmoled241::Tca9554Wiring::kDisplayRailAddress,
+          WaveshareAmoled241::Tca9554Wiring::kDisplayRailEnablePin, true,
+          WaveshareAmoled241::Tca9554Wiring::kDisplayRailReleaseBusBeforeRead)) {
+    ESP_LOGW(kBoardDisplayTag, "Failed to enable display rail");
+    return;
+  }
+
+  delay(25);
+}
 
 }  // namespace
 
 namespace Board::Display {
 
 bool begin() {
+  enableDisplayRail();
   Rm690b0::init(gDisplayContext);
   return true;
 }
 
-void enablePowerIfAvailable() {}
-
 void holdBacklightOffForDeepSleep() {}
 
-void setBacklight(bool on) { Rm690b0::setDisplayOn(gDisplayContext, on); }
-
-void flashBacklight(uint8_t count, uint32_t onMs, uint32_t offMs) {
-  for (uint8_t i = 0; i < count; ++i) {
-    setBacklight(true);
-    delay(onMs);
-    setBacklight(false);
-    delay(offMs);
-  }
+Board::UiOrientation defaultUiOrientation() {
+  return WaveshareAmoled241::DisplayWiring::kDefaultUiOrientation;
 }
+
+Board::UiOrientation rotatedUiOrientation() {
+  return Board::oppositeUiOrientation(WaveshareAmoled241::DisplayWiring::kDefaultUiOrientation);
+}
+
+uint16_t nativeWidth() { return WaveshareAmoled241::DisplayWiring::kPanelWidth; }
+
+uint16_t nativeHeight() { return WaveshareAmoled241::DisplayWiring::kPanelHeight; }
+
+size_t txChunkBytes() { return WaveshareAmoled241::DisplayWiring::kTxChunkBytes; }
+
+void setBacklight(bool on) { Rm690b0::setDisplayOn(gDisplayContext, on); }
 
 void setBrightness(uint8_t percent) { Rm690b0::setBrightnessPercent(gDisplayContext, percent); }
 

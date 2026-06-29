@@ -3,19 +3,19 @@
 #include <Wire.h>
 
 #include "board/BoardAudio.h"
-#include "board/BoardConfig.h"
 #include "drivers/audio/es8311/Es8311.h"
+#include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
 namespace {
 
 BoardDrivers::Es8311::Context gAudioContext = {
     &Wire1,
-    Board::Config::ES8311_ADDRESS,
+    WaveshareLcd349::AudioWiring::kEs8311Address,
     I2S_NUM_0,
-    Board::Config::PIN_AUDIO_MCLK,
-    Board::Config::PIN_AUDIO_BCLK,
-    Board::Config::PIN_AUDIO_WS,
-    Board::Config::PIN_AUDIO_DOUT,
+    WaveshareLcd349::AudioWiring::kMclkPin,
+    WaveshareLcd349::AudioWiring::kBclkPin,
+    WaveshareLcd349::AudioWiring::kWsPin,
+    WaveshareLcd349::AudioWiring::kDoutPin,
 };
 
 }  // namespace

@@ -3,9 +3,12 @@
 #include <Arduino.h>
 #include <driver/spi_master.h>
 
+#include "drivers/display/DisplayBusConfig.h"
+
 namespace Axs15231b {
 
 struct Context {
+  BoardDrivers::Display::BusConfig config;
   spi_device_handle_t spi = nullptr;
   bool busReady = false;
   bool backlightOn = false;

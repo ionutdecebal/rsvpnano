@@ -1,6 +1,6 @@
 #include "text/RsvpDirectives.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <cstring>
 
 #include "storage/fs/StoragePaths.h"
@@ -84,7 +84,7 @@ RsvpDirectiveValues readRsvpDirectiveValues(const String &path) {
     return values;
   }
 
-  File file = SD_MMC.open(path);
+  File file = Board::Storage::filesystem().open(path);
   if (!file || file.isDirectory()) {
     if (file) {
       file.close();
@@ -141,7 +141,7 @@ String readRsvpDirectiveValue(const String &path, const char *directive) {
     return "";
   }
 
-  File file = SD_MMC.open(path);
+  File file = Board::Storage::filesystem().open(path);
   if (!file || file.isDirectory()) {
     if (file) {
       file.close();

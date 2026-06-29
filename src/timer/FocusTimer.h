@@ -3,7 +3,8 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-#include "board/BoardConfig.h"
+#include "board/BoardImu.h"
+#include "board/BoardTypes.h"
 
 class FocusTimer {
  public:
@@ -48,7 +49,7 @@ class FocusTimer {
   bool isActiveTimerRunning() const;
   State state() const;
   Genre genre() const;
-  Board::Config::UiOrientation uiOrientation() const;
+  Board::UiOrientation uiOrientation() const;
   uint32_t remainingMs(uint32_t nowMs) const;
   uint32_t selectedTouchDurationMs() const;
   uint8_t progressPercent(uint32_t nowMs) const;
@@ -92,11 +93,10 @@ class FocusTimer {
   uint8_t genreIdx() const;
   static bool isShortSide(OrientationState orientation);
   static OrientationState oppositeShortSide(OrientationState orientation);
-  static Board::Config::UiOrientation portraitOrientationForShortSide(
-      OrientationState orientation);
+  static Board::UiOrientation portraitOrientationForShortSide(OrientationState orientation);
 
   bool imuAvailable_ = false;
-  uint8_t imuAddress_ = Board::Config::IMU_I2C_ADDRESS;
+  uint8_t imuAddress_ = Board::Imu::address();
   float accelScale_ = 4.0f / 32768.0f;
   uint8_t touchDurationByGenre_[kGenreCount] = {};
   OrientationState rawOrientation_ = OrientationState::Unknown;

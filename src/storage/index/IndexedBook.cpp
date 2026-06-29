@@ -1,6 +1,6 @@
 #include "storage/index/IndexedBook.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <algorithm>
 #include <array>
 #include <cerrno>
@@ -122,7 +122,7 @@ namespace IndexedBook {
         }
 
         bool readIndexHeader(const String& path, IndexHeader& header) {
-            File file = SD_MMC.open(indexedIndexPathFor(path), FILE_READ);
+            File file = Board::Storage::filesystem().open(indexedIndexPathFor(path), FILE_READ);
             if (!file) {
                 return false;
             }
@@ -335,7 +335,7 @@ namespace IndexedBook {
 
             {
                 // Validate that the sidecar still matches the source file.
-                File source = SD_MMC.open(path, FILE_READ);
+                File source = Board::Storage::filesystem().open(path, FILE_READ);
                 if (!source || source.isDirectory()) {
                     if (source) {
                         source.close();
@@ -362,7 +362,7 @@ namespace IndexedBook {
 
             {
                 // Ensure the word data sidecar is present and large enough.
-                File data = SD_MMC.open(indexedDataPathFor(path), FILE_READ);
+                File data = Board::Storage::filesystem().open(indexedDataPathFor(path), FILE_READ);
                 if (!data || data.isDirectory() || data.size() < header.dataSize) {
                     const size_t dataBytes = data ? data.size() : 0;
                     if (data) {
@@ -376,7 +376,7 @@ namespace IndexedBook {
                 data.close();
             }
 
-            File indexFile = SD_MMC.open(indexedIndexPathFor(path), FILE_READ);
+            File indexFile = Board::Storage::filesystem().open(indexedIndexPathFor(path), FILE_READ);
             if (!indexFile || indexFile.isDirectory()) {
                 if (indexFile) {
                     indexFile.close();
@@ -386,7 +386,7 @@ namespace IndexedBook {
             }
 
             // Validate index table offsets before loading paragraph/chapter metadata.
-            File dataFile = SD_MMC.open(indexedDataPathFor(path), FILE_READ);
+            File dataFile = Board::Storage::filesystem().open(indexedDataPathFor(path), FILE_READ);
             const size_t dataBytes = dataFile ? dataFile.size() : 0;
             if (dataFile) {
                 dataFile.close();
@@ -483,7 +483,7 @@ namespace IndexedBook {
                 }
             };
 
-            File source = SD_MMC.open(path, FILE_READ);
+            File source = Board::Storage::filesystem().open(path, FILE_READ);
             if (!source || source.isDirectory()) {
                 if (source) {
                     source.close();
@@ -525,11 +525,11 @@ namespace IndexedBook {
                 return false;
             }
 
-            SD_MMC.remove(tmpIndexPath);
-            SD_MMC.remove(tmpDataPath);
+            Board::Storage::filesystem().remove(tmpIndexPath);
+            Board::Storage::filesystem().remove(tmpDataPath);
             auto removeTempSidecars = [&]() {
-                SD_MMC.remove(tmpIndexPath);
-                SD_MMC.remove(tmpDataPath);
+                Board::Storage::filesystem().remove(tmpIndexPath);
+                Board::Storage::filesystem().remove(tmpDataPath);
             };
 
             // One streaming parser feeds either data sidecar writes or index record
@@ -617,7 +617,7 @@ namespace IndexedBook {
             {
                 // First pass writes word data and records metadata.
                 errno = 0;
-                File dataFile = SD_MMC.open(tmpDataPath, FILE_WRITE);
+                File dataFile = Board::Storage::filesystem().open(tmpDataPath, FILE_WRITE);
                 const int dataOpenErrno = errno;
                 if (!dataFile) {
                     StorageFiles::logError("storage-index", "open data FILE_WRITE", tmpDataPath, dataOpenErrno);
@@ -691,7 +691,7 @@ namespace IndexedBook {
 
             {
                 // Second pass writes index records and metadata tables.
-                source = SD_MMC.open(path, FILE_READ);
+                source = Board::Storage::filesystem().open(path, FILE_READ);
                 if (!source || source.isDirectory()) {
                     if (source) {
                         source.close();
@@ -704,7 +704,7 @@ namespace IndexedBook {
                 }
 
                 errno = 0;
-                File indexFile = SD_MMC.open(tmpIndexPath, FILE_WRITE);
+                File indexFile = Board::Storage::filesystem().open(tmpIndexPath, FILE_WRITE);
                 const int indexOpenErrno = errno;
                 if (!indexFile) {
                     StorageFiles::logError("storage-index", "open index FILE_WRITE", tmpIndexPath, indexOpenErrno);
@@ -798,16 +798,16 @@ namespace IndexedBook {
             }
 
             // Commit both sidecars only after the full two-pass build succeeds.
-            SD_MMC.remove(indexPath);
-            SD_MMC.remove(dataPath);
+            Board::Storage::filesystem().remove(indexPath);
+            Board::Storage::filesystem().remove(dataPath);
             errno = 0;
-            const bool dataRenamed = SD_MMC.rename(tmpDataPath, dataPath);
+            const bool dataRenamed = Board::Storage::filesystem().rename(tmpDataPath, dataPath);
             const int dataRenameErrno = errno;
             bool indexRenamed = false;
             int indexRenameErrno = 0;
             if (dataRenamed) {
                 errno = 0;
-                indexRenamed = SD_MMC.rename(tmpIndexPath, indexPath);
+                indexRenamed = Board::Storage::filesystem().rename(tmpIndexPath, indexPath);
                 indexRenameErrno = errno;
             }
             const bool renamed = indexRenamed && dataRenamed;
@@ -818,10 +818,10 @@ namespace IndexedBook {
                 if (!indexRenamed) {
                     StorageFiles::logError("storage-index", "rename index", tmpIndexPath, indexPath, indexRenameErrno);
                 }
-                SD_MMC.remove(tmpIndexPath);
-                SD_MMC.remove(tmpDataPath);
-                SD_MMC.remove(indexPath);
-                SD_MMC.remove(dataPath);
+                Board::Storage::filesystem().remove(tmpIndexPath);
+                Board::Storage::filesystem().remove(tmpDataPath);
+                Board::Storage::filesystem().remove(indexPath);
+                Board::Storage::filesystem().remove(dataPath);
                 metadata.clear();
                 report("Index failed", label.c_str(), "Rename failed", 100);
                 return false;
@@ -900,7 +900,7 @@ namespace IndexedBook {
 
         {
             // Source readability check.
-            File entry = SD_MMC.open(path, FILE_READ);
+            File entry = Board::Storage::filesystem().open(path, FILE_READ);
             if (!entry || entry.isDirectory()) {
                 if (entry) {
                     entry.close();

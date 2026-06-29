@@ -1,6 +1,6 @@
 #include "storage/library/BookLibrary.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <algorithm>
 #include <vector>
 
@@ -39,7 +39,7 @@ namespace BookLibrary {
                 return info;
             };
             auto appendDirectoryEntries = [&](const char* directoryPath) {
-                File dir = SD_MMC.open(directoryPath);
+                File dir = Board::Storage::filesystem().open(directoryPath);
                 if (!dir || !dir.isDirectory()) {
                     if (dir) {
                         dir.close();
@@ -218,7 +218,7 @@ namespace BookLibrary {
         Serial.println("[storage] Listing /books, /books/books, /books/articles "
                        "(.rsvp/.txt/.epub pending conversion):");
         for (const String& path: listing.paths) {
-            File entry = SD_MMC.open(path);
+            File entry = Board::Storage::filesystem().open(path);
             if (!entry || entry.isDirectory()) {
                 if (entry) {
                     entry.close();

@@ -5,16 +5,9 @@
 #include <driver/spi_master.h>
 #include <esp_log.h>
 
-#include "board/BoardConfig.h"
-
 namespace {
 
 constexpr int kSpiFrequency = 20000000;
-constexpr int kSendBufferRows =
-    Board::Config::DISPLAY_TX_CHUNK_BYTES /
-    (Board::Config::PANEL_NATIVE_WIDTH * static_cast<int>(sizeof(uint16_t)));
-static_assert(kSendBufferRows > 0, "SH8601 transfer buffer must hold at least one full row");
-constexpr int kSendBufferPixels = Board::Config::PANEL_NATIVE_WIDTH * kSendBufferRows;
 constexpr uint8_t kRamWriteCommand = 0x2C;
 constexpr uint8_t kRamWriteContinueCommand = 0x3C;
 static const char *kSh8601Tag = "sh8601";
@@ -39,8 +32,17 @@ constexpr LcdCommand kQspiInit[] = {
     {0x53, {0x20}, 1, 10},
     {0x2A, {0x00, 0x00, 0x01, 0x6F}, 4, 0},
     {0x2B, {0x00, 0x00, 0x01, 0xBF}, 4, 0},
-    {0x29, {0x00}, 0, 10},
 };
+
+size_t sendBufferPixels(const Sh8601::Context &context) {
+  constexpr size_t kFallbackPixels = 0x4000;
+  const size_t rowBytes = static_cast<size_t>(context.config.panelWidth) * sizeof(uint16_t);
+  if (rowBytes == 0 || context.config.txChunkBytes < rowBytes) {
+    return context.config.panelWidth == 0 ? kFallbackPixels : context.config.panelWidth;
+  }
+
+  return context.config.panelWidth * (context.config.txChunkBytes / rowBytes);
+}
 
 void sendCommand(Sh8601::Context &context, uint8_t command, const uint8_t *data,
                  uint32_t length) {
@@ -92,24 +94,25 @@ void applyBrightness(Sh8601::Context &context) {
 namespace Sh8601 {
 
 void init(Context &context) {
-  if (Board::Config::PIN_LCD_RST >= 0) {
-    pinMode(Board::Config::PIN_LCD_RST, OUTPUT);
-    digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
+  if (context.config.resetPin >= 0) {
+    pinMode(context.config.resetPin, OUTPUT);
+    digitalWrite(context.config.resetPin, HIGH);
     delay(10);
-    digitalWrite(Board::Config::PIN_LCD_RST, LOW);
+    digitalWrite(context.config.resetPin, LOW);
     delay(150);
-    digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
+    digitalWrite(context.config.resetPin, HIGH);
     delay(150);
   }
 
   if (!context.busReady) {
     spi_bus_config_t busConfig = {};
-    busConfig.data0_io_num = Board::Config::PIN_LCD_DATA0;
-    busConfig.data1_io_num = Board::Config::PIN_LCD_DATA1;
-    busConfig.sclk_io_num = Board::Config::PIN_LCD_SCLK;
-    busConfig.data2_io_num = Board::Config::PIN_LCD_DATA2;
-    busConfig.data3_io_num = Board::Config::PIN_LCD_DATA3;
-    busConfig.max_transfer_sz = (kSendBufferPixels * static_cast<int>(sizeof(uint16_t))) + 8;
+    busConfig.data0_io_num = context.config.data0Pin;
+    busConfig.data1_io_num = context.config.data1Pin;
+    busConfig.sclk_io_num = context.config.sclkPin;
+    busConfig.data2_io_num = context.config.data2Pin;
+    busConfig.data3_io_num = context.config.data3Pin;
+    busConfig.max_transfer_sz =
+        static_cast<int>(sendBufferPixels(context) * sizeof(uint16_t)) + 8;
     busConfig.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS;
 
     spi_device_interface_config_t deviceConfig = {};
@@ -117,7 +120,7 @@ void init(Context &context) {
     deviceConfig.address_bits = 24;
     deviceConfig.mode = SPI_MODE0;
     deviceConfig.clock_speed_hz = kSpiFrequency;
-    deviceConfig.spics_io_num = Board::Config::PIN_LCD_CS;
+    deviceConfig.spics_io_num = context.config.csPin;
     deviceConfig.flags = SPI_DEVICE_HALFDUPLEX;
     deviceConfig.queue_size = 10;
 
@@ -133,7 +136,7 @@ void init(Context &context) {
     }
   }
 
-  context.displayOn = true;
+  context.displayOn = false;
   applyBrightness(context);
   ESP_LOGI(kSh8601Tag, "SH8601 QSPI init complete");
 }
@@ -185,8 +188,9 @@ void pushColors(Context &context, uint16_t x, uint16_t y, uint16_t width, uint16
 
   while (pixelsRemaining > 0) {
     size_t chunkPixels = pixelsRemaining;
-    if (chunkPixels > static_cast<size_t>(kSendBufferPixels)) {
-      chunkPixels = kSendBufferPixels;
+    const size_t maxChunkPixels = sendBufferPixels(context);
+    if (chunkPixels > maxChunkPixels) {
+      chunkPixels = maxChunkPixels;
     }
 
     spi_transaction_ext_t transaction = {};

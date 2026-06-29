@@ -5,16 +5,9 @@
 #include <driver/spi_master.h>
 #include <esp_log.h>
 
-#include "board/BoardConfig.h"
-
 namespace {
 
 constexpr int kSpiFrequency = 20000000;
-constexpr int kSendBufferRows =
-    Board::Config::DISPLAY_TX_CHUNK_BYTES /
-    (Board::Config::PANEL_NATIVE_WIDTH * static_cast<int>(sizeof(uint16_t)));
-static_assert(kSendBufferRows > 0, "CO5300 transfer buffer must hold at least one full row");
-constexpr int kSendBufferPixels = Board::Config::PANEL_NATIVE_WIDTH * kSendBufferRows;
 constexpr uint8_t kRamWriteCommand = 0x2C;
 constexpr uint8_t kRamWriteContinueCommand = 0x3C;
 static const char *kCo5300Tag = "co5300";
@@ -26,9 +19,6 @@ struct LcdCommand {
   uint16_t delayMs;
 };
 
-// Keep the panel memory in its native orientation and let the shared mapping layer handle the
-// landscape transform, just like the stabilized 2.41 port.
-constexpr uint8_t kDefaultMadctl = Board::Config::UI_ROTATED_180 ? 0xC0 : 0x00;
 constexpr LcdCommand kQspiInit[] = {
     {0x11, {0x00}, 0, 120},
     {0xFE, {0x20}, 1, 0},
@@ -41,11 +31,22 @@ constexpr LcdCommand kQspiInit[] = {
     {0x53, {0x20}, 1, 0},
     {0x51, {0xFF}, 1, 0},
     {0x63, {0xFF}, 1, 0},
-    {0x2A, {0x00, 0x00, 0x01, 0xDF}, 4, 0},
-    {0x2B, {0x00, 0x00, 0x01, 0xDF}, 4, 0},
-    {0x36, {kDefaultMadctl}, 1, 0},
-    {0x29, {0x00}, 0, 10},
+    {0x36, {0x00}, 1, 0},
 };
+
+uint8_t defaultMadctl(const Co5300::Context &context) {
+  return context.config.panelMemoryRotated180 ? 0xC0 : 0x00;
+}
+
+size_t sendBufferPixels(const Co5300::Context &context) {
+  constexpr size_t kFallbackPixels = 0x4000;
+  const size_t rowBytes = static_cast<size_t>(context.config.panelWidth) * sizeof(uint16_t);
+  if (rowBytes == 0 || context.config.txChunkBytes < rowBytes) {
+    return context.config.panelWidth == 0 ? kFallbackPixels : context.config.panelWidth;
+  }
+
+  return context.config.panelWidth * (context.config.txChunkBytes / rowBytes);
+}
 
 void sendCommand(Co5300::Context &context, uint8_t command, const uint8_t *data,
                  uint32_t length) {
@@ -65,6 +66,8 @@ void sendCommand(Co5300::Context &context, uint8_t command, const uint8_t *data,
 }
 
 void setColumnWindow(Co5300::Context &context, uint16_t x1, uint16_t x2) {
+  x1 = static_cast<uint16_t>(x1 + context.config.columnOffset);
+  x2 = static_cast<uint16_t>(x2 + context.config.columnOffset);
   const uint8_t data[] = {
       static_cast<uint8_t>(x1 >> 8),
       static_cast<uint8_t>(x1),
@@ -75,6 +78,8 @@ void setColumnWindow(Co5300::Context &context, uint16_t x1, uint16_t x2) {
 }
 
 void setRowWindow(Co5300::Context &context, uint16_t y1, uint16_t y2) {
+  y1 = static_cast<uint16_t>(y1 + context.config.rowOffset);
+  y2 = static_cast<uint16_t>(y2 + context.config.rowOffset);
   const uint8_t data[] = {
       static_cast<uint8_t>(y1 >> 8),
       static_cast<uint8_t>(y1),
@@ -97,24 +102,30 @@ void applyBrightness(Co5300::Context &context) {
 namespace Co5300 {
 
 void init(Context &context) {
-  if (Board::Config::PIN_LCD_RST >= 0) {
-    pinMode(Board::Config::PIN_LCD_RST, OUTPUT);
-    digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
+  if (context.config.panelWidth == 0 || context.config.panelHeight == 0) {
+    ESP_LOGE(kCo5300Tag, "Invalid CO5300 panel geometry");
+    return;
+  }
+
+  if (context.config.resetPin >= 0) {
+    pinMode(context.config.resetPin, OUTPUT);
+    digitalWrite(context.config.resetPin, HIGH);
     delay(10);
-    digitalWrite(Board::Config::PIN_LCD_RST, LOW);
+    digitalWrite(context.config.resetPin, LOW);
     delay(200);
-    digitalWrite(Board::Config::PIN_LCD_RST, HIGH);
+    digitalWrite(context.config.resetPin, HIGH);
     delay(200);
   }
 
   if (!context.busReady) {
     spi_bus_config_t busConfig = {};
-    busConfig.data0_io_num = Board::Config::PIN_LCD_DATA0;
-    busConfig.data1_io_num = Board::Config::PIN_LCD_DATA1;
-    busConfig.sclk_io_num = Board::Config::PIN_LCD_SCLK;
-    busConfig.data2_io_num = Board::Config::PIN_LCD_DATA2;
-    busConfig.data3_io_num = Board::Config::PIN_LCD_DATA3;
-    busConfig.max_transfer_sz = (kSendBufferPixels * static_cast<int>(sizeof(uint16_t))) + 8;
+    busConfig.data0_io_num = context.config.data0Pin;
+    busConfig.data1_io_num = context.config.data1Pin;
+    busConfig.sclk_io_num = context.config.sclkPin;
+    busConfig.data2_io_num = context.config.data2Pin;
+    busConfig.data3_io_num = context.config.data3Pin;
+    busConfig.max_transfer_sz =
+        static_cast<int>(sendBufferPixels(context) * sizeof(uint16_t)) + 8;
     busConfig.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS;
 
     spi_device_interface_config_t deviceConfig = {};
@@ -122,7 +133,7 @@ void init(Context &context) {
     deviceConfig.address_bits = 24;
     deviceConfig.mode = SPI_MODE0;
     deviceConfig.clock_speed_hz = kSpiFrequency;
-    deviceConfig.spics_io_num = Board::Config::PIN_LCD_CS;
+    deviceConfig.spics_io_num = context.config.csPin;
     deviceConfig.flags = SPI_DEVICE_HALFDUPLEX;
     deviceConfig.queue_size = 10;
 
@@ -132,13 +143,20 @@ void init(Context &context) {
   }
 
   for (const auto &command : kQspiInit) {
-    sendCommand(context, command.cmd, command.data, command.len);
+    uint8_t data[4] = {command.data[0], command.data[1], command.data[2], command.data[3]};
+    if (command.cmd == 0x36 && command.len == 1) {
+      data[0] = defaultMadctl(context);
+    }
+    sendCommand(context, command.cmd, data, command.len);
     if (command.delayMs != 0) {
       delay(command.delayMs);
     }
   }
 
-  context.displayOn = true;
+  setColumnWindow(context, 0, static_cast<uint16_t>(context.config.panelWidth - 1));
+  setRowWindow(context, 0, static_cast<uint16_t>(context.config.panelHeight - 1));
+
+  context.displayOn = false;
   applyBrightness(context);
   ESP_LOGI(kCo5300Tag, "CO5300 QSPI init complete");
 }
@@ -190,8 +208,9 @@ void pushColors(Context &context, uint16_t x, uint16_t y, uint16_t width, uint16
 
   while (pixelsRemaining > 0) {
     size_t chunkPixels = pixelsRemaining;
-    if (chunkPixels > static_cast<size_t>(kSendBufferPixels)) {
-      chunkPixels = kSendBufferPixels;
+    const size_t maxChunkPixels = sendBufferPixels(context);
+    if (chunkPixels > maxChunkPixels) {
+      chunkPixels = maxChunkPixels;
     }
 
     spi_transaction_ext_t transaction = {};

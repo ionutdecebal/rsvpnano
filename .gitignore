@@ -31,5 +31,8 @@ web/firmware/*.bin
 RSVPNanoCompanion/web/generated/
 web/generated/
 .cache/
+.tmp/
 compile_commands.json
-logs/
+src/idf_component.yml
+benchmark/logs/
+benchmark/summary.md

@@ -39,6 +39,12 @@ class InstallFirmware extends HTMLElement {
         note: "Experimental build for 1.8 V2 boards with CO5300 display and CST816 touch.",
       },
       {
+        manifest: "firmware/manifest-esp32-s3-touch-amoled-2.06.json",
+        title: "Waveshare Touch AMOLED 2.06",
+        badge: "AMOLED",
+        note: "Use this for the 2.06 inch AMOLED board.",
+      },
+      {
         manifest: "firmware/manifest-esp32-s3-touch-amoled-2.16.json",
         title: "Waveshare Touch AMOLED 2.16",
         badge: "AMOLED",
@@ -59,6 +65,10 @@ class InstallFirmware extends HTMLElement {
       {
         title: "Waveshare Touch AMOLED 1.8",
         url: "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal",
+      },
+      {
+        title: "Waveshare Touch AMOLED 2.06",
+        url: "https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal",
       },
       {
         title: "Waveshare Touch AMOLED 2.16",

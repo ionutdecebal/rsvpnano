@@ -1,9 +1,15 @@
 #include "converter/EpubZip.h"
 
-#include <SD_MMC.h>
+#include "board/BoardStorage.h"
 #include <algorithm>
 #include <array>
+#if __has_include(<miniz.h>)
+#include <miniz.h>
+#elif __has_include(<esp_rom/miniz.h>)
+#include <esp_rom/miniz.h>
+#else
 #include <esp32s3/rom/miniz.h>
+#endif
 #include <esp_heap_caps.h>
 
 #include "converter/EpubContentWriter.h"
@@ -266,7 +272,7 @@ namespace EpubZip {
 
     bool Archive::open(const String& path) {
         archivePath_ = path;
-        file_ = SD_MMC.open(path);
+        file_ = Board::Storage::filesystem().open(path);
 
         const auto failWithClosedArchive = [&]() {
             close();

@@ -20,6 +20,7 @@ The browser flasher supports these device targets:
 - Waveshare ESP32-S3 Touch LCD 3.49 rev2.
 - Waveshare ESP32-S3 Touch AMOLED 1.8 V1.
 - Waveshare ESP32-S3 Touch AMOLED 1.8 V2 Test.
+- Waveshare ESP32-S3 Touch AMOLED 2.06.
 - Waveshare ESP32-S3 Touch AMOLED 2.16.
 - Waveshare ESP32-S3 Touch AMOLED 2.41.
 
@@ -28,6 +29,7 @@ extra cost to you:
 
 - [ESP32-S3 Touch LCD 3.49](https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal)
 - [ESP32-S3 Touch AMOLED 1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal)
+- [ESP32-S3 Touch AMOLED 2.06](https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal)
 - [ESP32-S3 Touch AMOLED 2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal)
 - [ESP32-S3 Touch AMOLED 2.41](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal)
 
@@ -438,15 +440,41 @@ Firmware builds with PlatformIO:
 pio run
 ```
 
-All firmware targets enable USB transfer mode. The default build is the Touch LCD 3.49
-rev1 target; use explicit targets for other boards:
+Firmware builds with PlatformIO. The default environment is the Touch LCD 3.49 rev1 USB
+transfer build:
+
+```bash
+pio run
+```
+
+Current firmware environments:
+
+- `waveshare_esp32s3`: Touch LCD 3.49 rev1.
+- `waveshare_esp32s3_rev2`: Touch LCD 3.49 rev2.
+- `waveshare_esp32s3_usb_msc`: Touch LCD 3.49 rev1 USB transfer build.
+- `waveshare_esp32s3_usb_msc_rev2`: Touch LCD 3.49 rev2 USB transfer build.
+- `waveshare_esp32s3_touch_amoled_18_v1`: Touch AMOLED 1.8 v1.
+- `waveshare_esp32s3_touch_amoled_18`: Touch AMOLED 1.8 v1 compatibility alias.
+- `waveshare_esp32s3_touch_amoled_18_v2`: Touch AMOLED 1.8 v2.
+- `waveshare_esp32s3_touch_amoled_206`: Touch AMOLED 2.06.
+- `waveshare_esp32s3_touch_amoled_216`: Touch AMOLED 2.16.
+- `waveshare_esp32s3_touch_amoled_241`: Touch AMOLED 2.41.
+- `waveshare_esp32c6_touch_lcd_147`: ESP32-C6 Touch LCD 1.47.
+
+Board-independent app code uses the stable `src/board` API and `src/input/Input.*`. Board-specific
+wiring, rails, buses, and chip choices live under `src/platforms/<board>`, while reusable chip code
+lives under `src/drivers`.
+
+Use explicit targets for non-default boards:
 
 ```bash
 pio run -e waveshare_esp32s3_rev2
-pio run -e waveshare_esp32s3_touch_amoled_18
+pio run -e waveshare_esp32s3_touch_amoled_18_v1
 pio run -e waveshare_esp32s3_touch_amoled_18_v2
-pio run -e waveshare_esp32s3_touch_amoled_241
+pio run -e waveshare_esp32s3_touch_amoled_206
 pio run -e waveshare_esp32s3_touch_amoled_216
+pio run -e waveshare_esp32s3_touch_amoled_241
+pio run -e waveshare_esp32c6_touch_lcd_147
 ```
 
 Upload to a connected device:
@@ -478,16 +506,16 @@ python3 tools/export_web_firmware.py --version v0.0.8
 That writes:
 
 ```text
-web/firmware/rsvp-nano.bin
-web/firmware/rsvp-nano-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin
 web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin
-web/firmware/rsvp-nano-rev2.bin
-web/firmware/rsvp-nano-rev2-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin
 web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06.bin
+web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-2.41.bin
@@ -496,6 +524,7 @@ web/firmware/manifest.json
 web/firmware/manifest-rev2.json
 web/firmware/manifest-esp32-s3-touch-amoled-1.8.json
 web/firmware/manifest-esp32-s3-touch-amoled-1.8-v2.json
+web/firmware/manifest-esp32-s3-touch-amoled-2.06.json
 web/firmware/manifest-esp32-s3-touch-amoled-2.16.json
 web/firmware/manifest-esp32-s3-touch-amoled-2.41.json
 ```

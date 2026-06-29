@@ -3,83 +3,104 @@
 #include <Wire.h>
 #include <driver/gpio.h>
 
-#include "drivers/gpio/Tca9554.h"
 #include "drivers/display/axs15231b/axs15231b.h"
+#include "drivers/gpio/tca9554/Tca9554.h"
+#include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
 namespace {
 
-struct DisplayContext {
-  bool backlightEnableConfigured = false;
-  Axs15231b::Context panel;
-};
+    Axs15231b::Context gDisplayContext = {
+        {
+            WaveshareLcd349::DisplayWiring::kCsPin,
+            WaveshareLcd349::DisplayWiring::kSclkPin,
+            WaveshareLcd349::DisplayWiring::kData0Pin,
+            WaveshareLcd349::DisplayWiring::kData1Pin,
+            WaveshareLcd349::DisplayWiring::kData2Pin,
+            WaveshareLcd349::DisplayWiring::kData3Pin,
+            WaveshareLcd349::DisplayWiring::kResetPin,
+            WaveshareLcd349::DisplayWiring::kBacklightPin,
+            WaveshareLcd349::DisplayWiring::kPanelWidth,
+            WaveshareLcd349::DisplayWiring::kPanelHeight,
+            WaveshareLcd349::DisplayWiring::kTxChunkBytes,
+            WaveshareLcd349::DisplayWiring::kPanelMemoryRotated180,
 
-DisplayContext gDisplay;
 
-bool configureOutputPin(uint8_t pin, bool high) {
-  return BoardDrivers::Tca9554::configureOutputPin(
-      Wire1, static_cast<uint8_t>(Board::Config::TCA9554_ADDRESS), pin, high,
-      Board::Config::TCA9554_RELEASE_BUS_BEFORE_READ);
-}
-
-}  // namespace
+        },
+    };
+} // namespace
 
 namespace Board::Display {
 
-bool begin() {
-  Axs15231b::init(gDisplay.panel);
-  return true;
-}
+    void enableBacklightPower() {
+        if (!BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+                                                       WaveshareLcd349::Tca9554Wiring::kBacklightEnablePin, true,
+                                                       WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead)) {
+            Serial.println("[board] TCA9554 backlight enable not configured");
+            return;
+        }
 
-void enablePowerIfAvailable() {
-  if (gDisplay.backlightEnableConfigured) {
-    return;
-  }
+        Serial.println("[board] Backlight enable configured");
+    }
 
-  if (!configureOutputPin(Config::TCA9554_PIN_BACKLIGHT_ENABLE, true)) {
-    Serial.println("[board] TCA9554 backlight enable not configured");
-    return;
-  }
+    bool begin() {
+        Axs15231b::init(gDisplayContext);
+        enableBacklightPower();
+        return true;
+    }
 
-  gDisplay.backlightEnableConfigured = true;
-  Serial.println("[board] Backlight enable configured");
-}
+    void holdBacklightOffForDeepSleep() {
+        if constexpr (WaveshareLcd349::DisplayWiring::kBacklightPin < 0) {
+            return;
+        }
 
-void holdBacklightOffForDeepSleep() {
-  if (!Config::HAS_LCD_BACKLIGHT || Config::PIN_LCD_BACKLIGHT < 0) {
-    return;
-  }
+        analogWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, 255);
+        pinMode(WaveshareLcd349::DisplayWiring::kBacklightPin, OUTPUT);
+        digitalWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, HIGH);
+        gpio_set_direction(WaveshareLcd349::DisplayWiring::kBacklightGpio, GPIO_MODE_OUTPUT);
+        gpio_set_level(WaveshareLcd349::DisplayWiring::kBacklightGpio, 1);
+        gpio_hold_en(WaveshareLcd349::DisplayWiring::kBacklightGpio);
+        gpio_deep_sleep_hold_en();
+    }
 
-  const gpio_num_t backlightPin = static_cast<gpio_num_t>(Config::PIN_LCD_BACKLIGHT);
-  analogWrite(Config::PIN_LCD_BACKLIGHT, 255);
-  pinMode(Config::PIN_LCD_BACKLIGHT, OUTPUT);
-  digitalWrite(Config::PIN_LCD_BACKLIGHT, HIGH);
-  gpio_set_direction(backlightPin, GPIO_MODE_OUTPUT);
-  gpio_set_level(backlightPin, 1);
-  gpio_hold_en(backlightPin);
-  gpio_deep_sleep_hold_en();
-}
+    Board::UiOrientation defaultUiOrientation() {
+        return WaveshareLcd349::DisplayWiring::kDefaultUiOrientation;
+    }
 
-void setBacklight(bool on) { Axs15231b::setBacklight(gDisplay.panel, on); }
+    Board::UiOrientation rotatedUiOrientation() {
+        return Board::oppositeUiOrientation(WaveshareLcd349::DisplayWiring::kDefaultUiOrientation);
+    }
 
-void flashBacklight(uint8_t count, uint32_t onMs, uint32_t offMs) {
-  for (uint8_t i = 0; i < count; ++i) {
-    setBacklight(true);
-    delay(onMs);
-    setBacklight(false);
-    delay(offMs);
-  }
-}
+    uint16_t nativeWidth() {
+        return WaveshareLcd349::DisplayWiring::kPanelWidth;
+    }
 
-void setBrightness(uint8_t percent) { Axs15231b::setBrightnessPercent(gDisplay.panel, percent); }
+    uint16_t nativeHeight() {
+        return WaveshareLcd349::DisplayWiring::kPanelHeight;
+    }
 
-void sleep() { Axs15231b::sleep(gDisplay.panel); }
+    size_t txChunkBytes() {
+        return WaveshareLcd349::DisplayWiring::kTxChunkBytes;
+    }
 
-void wake() { Axs15231b::wake(gDisplay.panel); }
+    void setBacklight(bool on) {
+        Axs15231b::setBacklight(gDisplayContext, on);
+    }
 
-bool pushColors(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
-                const uint16_t *data) {
-  Axs15231b::pushColors(gDisplay.panel, x, y, width, height, data);
-  return true;
-}
+    void setBrightness(uint8_t percent) {
+        Axs15231b::setBrightnessPercent(gDisplayContext, percent);
+    }
 
-}  // namespace Board::Display
+    void sleep() {
+        Axs15231b::sleep(gDisplayContext);
+    }
+
+    void wake() {
+        Axs15231b::wake(gDisplayContext);
+    }
+
+    bool pushColors(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const uint16_t* data) {
+        Axs15231b::pushColors(gDisplayContext, x, y, width, height, data);
+        return true;
+    }
+
+} // namespace Board::Display

@@ -1,7 +1,7 @@
 #include "storage/StorageManager.h"
 
-#include <SD_MMC.h>
 #include <cstdint>
+#include "board/BoardStorage.h"
 
 #include "book/BookMetadata.h"
 #include "storage/fs/SdDiagnostics.h"
@@ -41,7 +41,7 @@ bool StorageManager::begin() {
     statusCallback_(statusContext_, "SD", "Mounting card", "", 5);
     int mountedFrequencyKhz = 0;
     if (SdDiagnostics::mountCard(mounted_, &mountedFrequencyKhz)) {
-        const uint64_t sizeMb = SD_MMC.cardSize() / kBytesPerMegabyte;
+        const uint64_t sizeMb = Board::Storage::cardSize() / kBytesPerMegabyte;
         Serial.printf("[storage] SD initialized (%llu MB, %d kHz)\n", sizeMb, mountedFrequencyKhz);
         statusCallback_(statusContext_, "SD", "Scanning books", "EPUB converts on open", 10);
         refreshBookPaths(false);
@@ -54,7 +54,7 @@ bool StorageManager::begin() {
 
 void StorageManager::end() {
     if (mounted_) {
-        SD_MMC.end();
+        Board::Storage::end();
     }
     mounted_ = false;
     listedOnce_ = false;

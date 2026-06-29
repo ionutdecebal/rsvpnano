@@ -7,6 +7,8 @@
 #include <esp_system.h>
 #include <esp_sleep.h>
 
+#include "platforms/waveshare_amoled_216/WaveshareAmoled216.h"
+
 namespace Board {
 
 namespace {
@@ -21,73 +23,40 @@ void beginWire(TwoWire &wire, int sda, int scl, uint32_t clockHz, uint32_t timeo
   wire.setTimeOut(timeoutMs);
 }
 
-void pulseDirectTouchResetPin(uint32_t lowDelayMs, uint32_t highDelayMs) {
-  if (Config::PIN_TOUCH_RST < 0) {
-    return;
-  }
-
-  pinMode(Config::PIN_TOUCH_RST, OUTPUT);
-  digitalWrite(Config::PIN_TOUCH_RST, LOW);
-  delay(lowDelayMs);
-  digitalWrite(Config::PIN_TOUCH_RST, HIGH);
-  delay(highDelayMs);
-}
-
 }  // namespace
 
 namespace System {
 
 void begin() {
-  if (Config::PIN_BOOT_BUTTON >= 0) {
-    pinMode(Config::PIN_BOOT_BUTTON, INPUT_PULLUP);
+  if constexpr (WaveshareAmoled216::Buttons::kBootPin >= 0) {
+    pinMode(WaveshareAmoled216::Buttons::kBootPin, INPUT_PULLUP);
   }
-  if (Config::PIN_PWR_BUTTON >= 0) {
-    pinMode(Config::PIN_PWR_BUTTON, INPUT_PULLUP);
+  if constexpr (WaveshareAmoled216::Buttons::kPowerPin >= 0) {
+    pinMode(WaveshareAmoled216::Buttons::kPowerPin, INPUT_PULLUP);
   }
-  if (Config::PIN_TOUCH_IRQ >= 0) {
-    pinMode(Config::PIN_TOUCH_IRQ, INPUT_PULLUP);
+  if constexpr (WaveshareAmoled216::System::kTouchIrqPin >= 0) {
+    pinMode(WaveshareAmoled216::System::kTouchIrqPin, INPUT_PULLUP);
   }
-  if (Config::HAS_LCD_BACKLIGHT && Config::PIN_LCD_BACKLIGHT >= 0) {
-    gpio_deep_sleep_hold_dis();
-    gpio_hold_dis(static_cast<gpio_num_t>(Config::PIN_LCD_BACKLIGHT));
-    pinMode(Config::PIN_LCD_BACKLIGHT, OUTPUT);
-    digitalWrite(Config::PIN_LCD_BACKLIGHT, LOW);
-  }
-
-  if (Config::TOUCH_USES_WIRE1) {
-    beginWire(Wire1, Config::PIN_TOUCH_SDA, Config::PIN_TOUCH_SCL, Config::TOUCH_I2C_CLOCK_HZ,
-              Config::TOUCH_I2C_TIMEOUT_MS);
-  } else {
-    beginWire(Wire, Config::PIN_TOUCH_SDA, Config::PIN_TOUCH_SCL, Config::TOUCH_I2C_CLOCK_HZ,
-              Config::TOUCH_I2C_TIMEOUT_MS);
-  }
-
-  if (!Config::TOUCH_USES_WIRE1 && Config::PIN_I2C_SDA >= 0 && Config::PIN_I2C_SCL >= 0 &&
-      (Config::PIN_I2C_SDA != Config::PIN_TOUCH_SDA ||
-       Config::PIN_I2C_SCL != Config::PIN_TOUCH_SCL)) {
-    beginWire(Wire1, Config::PIN_I2C_SDA, Config::PIN_I2C_SCL, Config::SYSTEM_I2C_CLOCK_HZ,
-              Config::SYSTEM_I2C_TIMEOUT_MS);
-  }
+  beginWire(Wire, WaveshareAmoled216::System::kTouchSdaPin,
+            WaveshareAmoled216::System::kTouchSclPin,
+            WaveshareAmoled216::System::kTouchI2cClockHz,
+            WaveshareAmoled216::System::kTouchI2cTimeoutMs);
 
   Board::Power::begin();
-  Board::Display::enablePowerIfAvailable();
 }
 
 void lightSleepUntilBootButton() {
-  const int wakePin =
-      Config::PIN_DEEP_SLEEP_WAKE >= 0
-          ? Config::PIN_DEEP_SLEEP_WAKE
-          : (Config::PIN_BOOT_BUTTON >= 0 ? Config::PIN_BOOT_BUTTON : Config::PIN_PWR_BUTTON);
-  if (wakePin < 0) {
+  if constexpr (WaveshareAmoled216::System::kDeepSleepWakePin < 0) {
     return;
   }
 
+  constexpr int wakePin = WaveshareAmoled216::System::kDeepSleepWakePin;
   pinMode(wakePin, INPUT_PULLUP);
-  gpio_wakeup_enable(static_cast<gpio_num_t>(wakePin), GPIO_INTR_LOW_LEVEL);
+  gpio_wakeup_enable(WaveshareAmoled216::System::kDeepSleepWakeGpio, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
   Serial.flush();
   esp_light_sleep_start();
-  gpio_wakeup_disable(static_cast<gpio_num_t>(wakePin));
+  gpio_wakeup_disable(WaveshareAmoled216::System::kDeepSleepWakeGpio);
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
 }
 
@@ -96,17 +65,19 @@ void holdBacklightOffForDeepSleep() {
   Board::Display::holdBacklightOffForDeepSleep();
 }
 
-void resetWakePeripherals() { Board::Power::resetWakePeripherals(); }
-
-void resetTouchController() { pulseDirectTouchResetPin(12, 12); }
-
 void deepSleepUntilConfiguredWake() {
-  const int wakePin = Config::PIN_DEEP_SLEEP_WAKE;
-  if (wakePin >= 0) {
-    pinMode(wakePin, INPUT_PULLUP);
-    esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(wakePin), 0);
+  constexpr int wakePin = WaveshareAmoled216::System::kDeepSleepWakePin;
+  pinMode(wakePin, INPUT_PULLUP);
+  const uint32_t waitStartMs = millis();
+  while (!digitalRead(wakePin) && millis() - waitStartMs < 1000) {
+    delay(10);
   }
+  esp_sleep_enable_ext0_wakeup(WaveshareAmoled216::System::kDeepSleepWakeGpio, 0);
   esp_deep_sleep_start();
+}
+
+const char *wakeLabel(bool externalPowerPresent) {
+  return externalPowerPresent ? "Press PWR to wake" : "Press PWR to start";
 }
 
 namespace {

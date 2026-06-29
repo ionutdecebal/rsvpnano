@@ -11,7 +11,6 @@ constexpr const char *kPrefsNamespace = "rsvp";
 
 // Library / reading position.
 constexpr const char *kPrefBookPath = "book";
-constexpr const char *kPrefLegacyWordIndex = "word";
 constexpr const char *kPrefRecentSeq = "seq";
 
 // Reader + display.
@@ -44,9 +43,6 @@ constexpr const char *kPrefTypographyGuideWidth = "type_wid";
 constexpr const char *kPrefTypographyGuideGap = "type_gap";
 
 // Word pacing.
-constexpr const char *kPrefLegacyPacingLong = "pace_len";
-constexpr const char *kPrefLegacyPacingComplex = "pace_cpx";
-constexpr const char *kPrefLegacyPacingPunctuation = "pace_pnc";
 constexpr const char *kPrefPacingLongMs = "pace_lms";
 constexpr const char *kPrefPacingComplexMs = "pace_cms";
 constexpr const char *kPrefPacingPunctuationMs = "pace_pms";
