@@ -254,7 +254,6 @@ namespace {
     constexpr size_t kFocusTimerGenreFirstIndex = 1;
     constexpr const char* kPrefsNamespace = "rsvp";
     constexpr const char* kPrefBookPath = "book";
-    constexpr const char* kPrefLegacyWordIndex = "word";
     constexpr const char* kPrefWpm = "wpm";
     constexpr const char* kPrefBrightness = "bright";
     constexpr const char* kPrefDarkMode = "dark";
@@ -273,9 +272,6 @@ namespace {
     constexpr const char* kPrefReaderFontSize = "font_size";
     constexpr const char* kPrefReaderTypeface = "typeface";
     constexpr const char* kPrefTypographyFocusHighlight = "type_hlt";
-    constexpr const char* kPrefLegacyPacingLong = "pace_len";
-    constexpr const char* kPrefLegacyPacingComplex = "pace_cpx";
-    constexpr const char* kPrefLegacyPacingPunctuation = "pace_pnc";
     constexpr const char* kPrefPacingLongMs = "pace_lms";
     constexpr const char* kPrefPacingComplexMs = "pace_cms";
     constexpr const char* kPrefPacingPunctuationMs = "pace_pms";
@@ -620,29 +616,9 @@ namespace {
         }
     }
 
-    uint16_t pacingDelayMsForLegacyLevel(uint8_t levelIndex) {
-        constexpr uint16_t kLegacyPacingDelayMs[] = {100, 150, 200, 250, 300};
-        constexpr size_t kLegacyPacingLevelCount = sizeof(kLegacyPacingDelayMs) / sizeof(kLegacyPacingDelayMs[0]);
-
-        if (levelIndex >= kLegacyPacingLevelCount) {
-            levelIndex = 2;
-        }
-        return kLegacyPacingDelayMs[levelIndex];
-    }
-
-    uint16_t loadPacingDelayMs(Preferences& preferences, const char* key, const char* legacyKey) {
-        if (preferences.isKey(key)) {
-            return static_cast<uint16_t>(clampIntSetting(preferences.getUShort(key, kDefaultPacingDelayMs),
-                                                         kPacingDelayMinMs, kPacingDelayMaxMs));
-        }
-
-        if (preferences.isKey(legacyKey)) {
-            const uint16_t migratedDelayMs = pacingDelayMsForLegacyLevel(preferences.getUChar(legacyKey, 2));
-            preferences.putUShort(key, migratedDelayMs);
-            return migratedDelayMs;
-        }
-
-        return kDefaultPacingDelayMs;
+    uint16_t loadPacingDelayMs(Preferences& preferences, const char* key) {
+        return static_cast<uint16_t>(clampIntSetting(preferences.getUShort(key, kDefaultPacingDelayMs),
+                                                     kPacingDelayMinMs, kPacingDelayMaxMs));
     }
 
     bool readLogicalPrimaryButtonHeld() {
@@ -730,9 +706,9 @@ void App::begin() {
         break;
     }
     standbyTimerIndex_ = preferences_.getUChar(kPrefStandbyTimer, 0);
-    pacingLongWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
-    pacingComplexWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
-    pacingPunctuationDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
+    pacingLongWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingLongMs);
+    pacingComplexWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingComplexMs);
+    pacingPunctuationDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs);
     accurateTimeEstimateEnabled_ = true;
     typographyConfig_ = defaultTypographyConfig();
     typographyConfig_.typeface =
@@ -1454,9 +1430,9 @@ void App::reloadRuntimePreferences(uint32_t nowMs, bool rerender) {
         break;
     }
 
-    pacingLongWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingLongMs, kPrefLegacyPacingLong);
-    pacingComplexWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingComplexMs, kPrefLegacyPacingComplex);
-    pacingPunctuationDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs, kPrefLegacyPacingPunctuation);
+    pacingLongWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingLongMs);
+    pacingComplexWordDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingComplexMs);
+    pacingPunctuationDelayMs_ = loadPacingDelayMs(preferences_, kPrefPacingPunctuationMs);
     accurateTimeEstimateEnabled_ = true;
 
     typographyConfig_ = defaultTypographyConfig();
@@ -5364,7 +5340,6 @@ bool App::restoreSavedBook(uint32_t nowMs) {
     }
 
     BookOpenOptions loadOptions;
-    loadOptions.allowLegacyPositionFallback = true;
     loadOptions.allowIndexBuild = false;
     loadOptions.allowEpubConversion = false;
     loadOptions.rebuildTimeEstimate = false;
@@ -5379,8 +5354,6 @@ bool App::restoreSavedBook(uint32_t nowMs) {
 
 bool App::prepareBootBookLoad() {
     pendingBootBookIndex_ = 0;
-    pendingBootBookLegacyFallback_ = false;
-
     if (!storageReady_ || storage_.bookCount() == 0) {
         return false;
     }
@@ -5390,7 +5363,6 @@ bool App::prepareBootBookLoad() {
         const int savedBookIndex = findBookIndexByPath(savedPath);
         if (savedBookIndex >= 0) {
             pendingBootBookIndex_ = static_cast<size_t>(savedBookIndex);
-            pendingBootBookLegacyFallback_ = true;
             Serial.printf("[app] deferred saved book load: %s\n", savedPath.c_str());
             return true;
         }
@@ -5399,7 +5371,6 @@ bool App::prepareBootBookLoad() {
     }
 
     pendingBootBookIndex_ = 0;
-    pendingBootBookLegacyFallback_ = false;
     Serial.println("[app] deferred first book load");
     return true;
 }
@@ -5413,8 +5384,7 @@ void App::loadPendingBootBook(uint32_t nowMs) {
     display_.renderStatus("Loading book", currentBookTitle_, "Please wait");
     const uint32_t startedMs = millis();
     BookOpenOptions loadOptions;
-    loadOptions.allowLegacyPositionFallback = pendingBootBookLegacyFallback_;
-    loadOptions.allowIndexBuild = pendingBootBookLegacyFallback_;
+    loadOptions.allowIndexBuild = true;
     loadOptions.allowEpubConversion = false;
     loadOptions.rebuildTimeEstimate = false;
     const bool loaded = loadBookAtIndex(pendingBootBookIndex_, nowMs, loadOptions);
@@ -5452,7 +5422,6 @@ void App::saveReadingPosition(bool force) {
     preferences_.putString(kPrefBookPath, currentBookPath_);
     preferences_.putUInt(bookPositionKey(currentBookPath_).c_str(), static_cast<uint32_t>(wordIndex));
     preferences_.putUInt(bookWordCountKey(currentBookPath_).c_str(), static_cast<uint32_t>(reader_.wordCount()));
-    preferences_.putUInt(kPrefLegacyWordIndex, static_cast<uint32_t>(wordIndex));
     preferences_.putUShort(kPrefWpm, reader_.wpm());
     markBookRecent(currentBookPath_);
     lastSavedWordIndex_ = wordIndex;
@@ -5517,7 +5486,7 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, const BookOpenOptions& o
 
     {
         // Restore saved position after the active book identity has been committed.
-        const uint32_t savedWordIndex = savedWordIndexForBook(currentBookPath_, options.allowLegacyPositionFallback);
+        const uint32_t savedWordIndex = savedWordIndexForBook(currentBookPath_);
         if (savedWordIndex != kNoSavedWordIndex) {
             renderStorageStatus("Opening book", currentBookTitle_.c_str(), "Restoring position", 78);
             reader_.seekTo(savedWordIndex);
@@ -5586,18 +5555,10 @@ void App::markBookRecent(const String& bookPath) {
     preferences_.putUInt(bookRecentKey(bookPath).c_str(), nextRecentSequence());
 }
 
-uint32_t App::savedWordIndexForBook(const String& bookPath, bool allowLegacyFallback) {
+uint32_t App::savedWordIndexForBook(const String& bookPath) {
     const String key = bookPositionKey(bookPath);
     if (preferences_.isKey(key.c_str())) {
         return preferences_.getUInt(key.c_str(), 0);
-    }
-
-    if (allowLegacyFallback && preferences_.isKey(kPrefLegacyWordIndex)) {
-        const uint32_t legacyWordIndex = preferences_.getUInt(kPrefLegacyWordIndex, 0);
-        preferences_.putUInt(key.c_str(), legacyWordIndex);
-        Serial.printf("[app] migrated legacy position word=%u to key=%s\n", static_cast<unsigned int>(legacyWordIndex),
-                      key.c_str());
-        return legacyWordIndex;
     }
 
     return kNoSavedWordIndex;

@@ -506,11 +506,9 @@ python3 tools/export_web_firmware.py --version v0.0.8
 That writes:
 
 ```text
-web/firmware/rsvp-nano.bin
-web/firmware/rsvp-nano-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49.bin
 web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin
-web/firmware/rsvp-nano-rev2.bin
-web/firmware/rsvp-nano-rev2-ota.bin
+web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin
 web/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8.bin
 web/firmware/rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin

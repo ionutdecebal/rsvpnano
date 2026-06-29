@@ -16,18 +16,21 @@ MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest.json"
 REV2_MANIFEST_PATH = WEB_FIRMWARE_DIR / "manifest-rev2.json"
 DEFAULT_REPO = "ionutdecebal/rsvpnano"
 DEFAULT_REQUIRED_ASSETS = (
-    "rsvp-nano.bin",
-    "rsvp-nano-ota.bin",
+    "rsvp-nano-esp32-s3-touch-lcd-3.49.bin",
     "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-1.8.bin",
     "rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin",
     "rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-2.06.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-2.16.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin",
+    "rsvp-nano-esp32-s3-touch-amoled-2.41.bin",
     "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin",
 )
 DEFAULT_OPTIONAL_ASSETS = (
-    "rsvp-nano-rev2.bin",
-    "rsvp-nano-rev2-ota.bin",
+    "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
     "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
 )
 DEFAULT_MANIFEST = {
@@ -41,7 +44,7 @@ DEFAULT_MANIFEST = {
             "improv": False,
             "parts": [
                 {
-                    "path": "rsvp-nano.bin",
+                    "path": "rsvp-nano-esp32-s3-touch-lcd-3.49.bin",
                     "offset": 0,
                 }
             ],
@@ -66,7 +69,7 @@ DEFAULT_REV2_MANIFEST = {
             "improv": False,
             "parts": [
                 {
-                    "path": "rsvp-nano-rev2.bin",
+                    "path": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
                     "offset": 0,
                 }
             ],

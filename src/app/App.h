@@ -336,12 +336,10 @@ private:
     void saveReadingPosition(bool force = false);
     struct BookOpenOptions {
         BookOpenOptions() :
-                allowLegacyPositionFallback(false),
                 allowIndexBuild(true),
                 allowEpubConversion(true),
                 rebuildTimeEstimate(true) {}
 
-        bool allowLegacyPositionFallback;
         bool allowIndexBuild;
         bool allowEpubConversion;
         bool rebuildTimeEstimate;
@@ -353,7 +351,7 @@ private:
     uint32_t nextRecentSequence();
     uint32_t bookRecentSequence(const String& bookPath);
     void markBookRecent(const String& bookPath);
-    uint32_t savedWordIndexForBook(const String& bookPath, bool allowLegacyFallback = false);
+    uint32_t savedWordIndexForBook(const String& bookPath);
     bool bookProgressPercent(size_t bookIndex, uint8_t& percent);
     int findBookIndexByPath(const String& path) const;
     void renderMenu();
@@ -561,7 +559,6 @@ private:
     bool usingStorageBook_ = false;
     bool storageReady_ = false;
     bool pendingBootBookLoad_ = false;
-    bool pendingBootBookLegacyFallback_ = false;
     bool batteryPresent_ = false;
     bool batterySampleInitialized_ = false;
     bool batteryRuntimeEstimateReady_ = false;

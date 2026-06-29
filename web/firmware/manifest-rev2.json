@@ -16,7 +16,7 @@
       "improv": false,
       "parts": [
         {
-          "path": "rsvp-nano-rev2.bin",
+          "path": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
           "offset": 0
         }
       ]

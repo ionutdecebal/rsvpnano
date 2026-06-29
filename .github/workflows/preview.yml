@@ -87,11 +87,9 @@ jobs:
         id: assets
         shell: bash
         run: |
-          FULL_BIN="$(find . -type f -name 'rsvp-nano.bin' -not -path './.git/*' -print -quit)"
-          OTA_BIN="$(find . -type f -name 'rsvp-nano-ota.bin' -not -path './.git/*' -print -quit)"
+          LCD349_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49.bin' -not -path './.git/*' -print -quit)"
           LCD349_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin' -not -path './.git/*' -print -quit)"
-          REV2_FULL_BIN="$(find . -type f -name 'rsvp-nano-rev2.bin' -not -path './.git/*' -print -quit)"
-          REV2_OTA_BIN="$(find . -type f -name 'rsvp-nano-rev2-ota.bin' -not -path './.git/*' -print -quit)"
+          LCD349_REV2_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin' -not -path './.git/*' -print -quit)"
           LCD349_REV2_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin' -not -path './.git/*' -print -quit)"
           AMOLED18_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-1.8.bin' -not -path './.git/*' -print -quit)"
           AMOLED18_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin' -not -path './.git/*' -print -quit)"
@@ -104,13 +102,11 @@ jobs:
           AMOLED241_FULL_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.41.bin' -not -path './.git/*' -print -quit)"
           AMOLED241_OTA_BIN="$(find . -type f -name 'rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin' -not -path './.git/*' -print -quit)"
 
-          if [ -z "$FULL_BIN" ] || [ -z "$OTA_BIN" ] || [ -z "$LCD349_OTA_BIN" ] || [ -z "$REV2_FULL_BIN" ] || [ -z "$REV2_OTA_BIN" ] || [ -z "$LCD349_REV2_OTA_BIN" ] || [ -z "$AMOLED18_FULL_BIN" ] || [ -z "$AMOLED18_OTA_BIN" ] || [ -z "$AMOLED18_V2_FULL_BIN" ] || [ -z "$AMOLED18_V2_OTA_BIN" ] || [ -z "$AMOLED206_FULL_BIN" ] || [ -z "$AMOLED206_OTA_BIN" ] || [ -z "$AMOLED216_FULL_BIN" ] || [ -z "$AMOLED216_OTA_BIN" ] || [ -z "$AMOLED241_FULL_BIN" ] || [ -z "$AMOLED241_OTA_BIN" ]; then
+          if [ -z "$LCD349_FULL_BIN" ] || [ -z "$LCD349_OTA_BIN" ] || [ -z "$LCD349_REV2_FULL_BIN" ] || [ -z "$LCD349_REV2_OTA_BIN" ] || [ -z "$AMOLED18_FULL_BIN" ] || [ -z "$AMOLED18_OTA_BIN" ] || [ -z "$AMOLED18_V2_FULL_BIN" ] || [ -z "$AMOLED18_V2_OTA_BIN" ] || [ -z "$AMOLED206_FULL_BIN" ] || [ -z "$AMOLED206_OTA_BIN" ] || [ -z "$AMOLED216_FULL_BIN" ] || [ -z "$AMOLED216_OTA_BIN" ] || [ -z "$AMOLED241_FULL_BIN" ] || [ -z "$AMOLED241_OTA_BIN" ]; then
             echo "::error::Could not find firmware assets."
-            echo "FULL_BIN=$FULL_BIN"
-            echo "OTA_BIN=$OTA_BIN"
+            echo "LCD349_FULL_BIN=$LCD349_FULL_BIN"
             echo "LCD349_OTA_BIN=$LCD349_OTA_BIN"
-            echo "REV2_FULL_BIN=$REV2_FULL_BIN"
-            echo "REV2_OTA_BIN=$REV2_OTA_BIN"
+            echo "LCD349_REV2_FULL_BIN=$LCD349_REV2_FULL_BIN"
             echo "LCD349_REV2_OTA_BIN=$LCD349_REV2_OTA_BIN"
             echo "AMOLED18_FULL_BIN=$AMOLED18_FULL_BIN"
             echo "AMOLED18_OTA_BIN=$AMOLED18_OTA_BIN"
@@ -125,11 +121,9 @@ jobs:
             exit 1
           fi
 
-          echo "full=$FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "ota=$OTA_BIN" >> "$GITHUB_OUTPUT"
+          echo "lcd349_full=$LCD349_FULL_BIN" >> "$GITHUB_OUTPUT"
           echo "lcd349_ota=$LCD349_OTA_BIN" >> "$GITHUB_OUTPUT"
-          echo "rev2_full=$REV2_FULL_BIN" >> "$GITHUB_OUTPUT"
-          echo "rev2_ota=$REV2_OTA_BIN" >> "$GITHUB_OUTPUT"
+          echo "lcd349_rev2_full=$LCD349_REV2_FULL_BIN" >> "$GITHUB_OUTPUT"
           echo "lcd349_rev2_ota=$LCD349_REV2_OTA_BIN" >> "$GITHUB_OUTPUT"
           echo "amoled18_full=$AMOLED18_FULL_BIN" >> "$GITHUB_OUTPUT"
           echo "amoled18_ota=$AMOLED18_OTA_BIN" >> "$GITHUB_OUTPUT"
@@ -142,10 +136,9 @@ jobs:
           echo "amoled241_full=$AMOLED241_FULL_BIN" >> "$GITHUB_OUTPUT"
           echo "amoled241_ota=$AMOLED241_OTA_BIN" >> "$GITHUB_OUTPUT"
 
-          echo "[preview] Full image: $FULL_BIN"
-          echo "[preview] OTA image: $OTA_BIN"
+          echo "[preview] Touch LCD 3.49 full image: $LCD349_FULL_BIN"
           echo "[preview] Touch LCD 3.49 OTA image: $LCD349_OTA_BIN"
-          echo "[preview] Touch LCD 3.49 rev2 full image: $REV2_FULL_BIN"
+          echo "[preview] Touch LCD 3.49 rev2 full image: $LCD349_REV2_FULL_BIN"
           echo "[preview] Touch LCD 3.49 rev2 OTA image: $LCD349_REV2_OTA_BIN"
           echo "[preview] Touch AMOLED 1.8 V1 full image: $AMOLED18_FULL_BIN"
           echo "[preview] Touch AMOLED 1.8 V1 OTA image: $AMOLED18_OTA_BIN"
@@ -160,30 +153,28 @@ jobs:
 
       - name: Write preview release notes
         run: |
-          cat > release-notes.md <<NOTES
+          cat > release-notes.md <<'NOTES'
           Preview firmware build.
 
-          Tag/channel: \`${{ steps.preview.outputs.channel }}\`
-          Commit: \`${{ steps.preview.outputs.commit_sha }}\`
-          Build version: \`${{ steps.preview.outputs.version }}\`
+          Tag/channel: `${{ steps.preview.outputs.channel }}`
+          Commit: `${{ steps.preview.outputs.commit_sha }}`
+          Build version: `${{ steps.preview.outputs.version }}`
 
           Assets:
-          - \`rsvp-nano.bin\` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
-          - \`rsvp-nano-ota.bin\` is the legacy app-only OTA binary for existing Touch LCD 3.49 devices.
-          - \`rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin\` is the Touch LCD 3.49 OTA binary.
-          - \`rsvp-nano-rev2.bin\` is the full browser-flasher image for Touch LCD 3.49 rev2 boards.
-          - \`rsvp-nano-rev2-ota.bin\` is the legacy app-only OTA binary for Touch LCD 3.49 rev2 boards.
-          - \`rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin\` is the Touch LCD 3.49 rev2 OTA binary.
-          - \`rsvp-nano-esp32-s3-touch-amoled-1.8.bin\` is the full browser-flasher image for Touch AMOLED 1.8 V1 boards.
-          - \`rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin\` is the Touch AMOLED 1.8 V1 OTA binary.
-          - \`rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin\` is the full browser-flasher image for Touch AMOLED 1.8 V2 test boards.
-          - \`rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin\` is the Touch AMOLED 1.8 V2 test OTA binary.
-          - \`rsvp-nano-esp32-s3-touch-amoled-2.06.bin\` is the full browser-flasher image for Touch AMOLED 2.06 boards.
-          - \`rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin\` is the Touch AMOLED 2.06 OTA binary.
-          - \`rsvp-nano-esp32-s3-touch-amoled-2.16.bin\` is the full browser-flasher image for Touch AMOLED 2.16 boards.
-          - \`rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin\` is the Touch AMOLED 2.16 OTA binary.
-          - \`rsvp-nano-esp32-s3-touch-amoled-2.41.bin\` is the full browser-flasher image for Touch AMOLED 2.41 boards.
-          - \`rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin\` is the Touch AMOLED 2.41 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49.bin` is the full browser-flasher image for fresh installs on the Touch LCD 3.49.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin` is the Touch LCD 3.49 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin` is the full browser-flasher image for Touch LCD 3.49 rev2 boards.
+          - `rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin` is the Touch LCD 3.49 rev2 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-amoled-1.8.bin` is the full browser-flasher image for Touch AMOLED 1.8 V1 boards.
+          - `rsvp-nano-esp32-s3-touch-amoled-1.8-ota.bin` is the Touch AMOLED 1.8 V1 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin` is the full browser-flasher image for Touch AMOLED 1.8 V2 test boards.
+          - `rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin` is the Touch AMOLED 1.8 V2 test OTA binary.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.06.bin` is the full browser-flasher image for Touch AMOLED 2.06 boards.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.06-ota.bin` is the Touch AMOLED 2.06 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.16.bin` is the full browser-flasher image for Touch AMOLED 2.16 boards.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.16-ota.bin` is the Touch AMOLED 2.16 OTA binary.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.41.bin` is the full browser-flasher image for Touch AMOLED 2.41 boards.
+          - `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` is the Touch AMOLED 2.41 OTA binary.
           NOTES
 
       - name: Move preview tag to this commit
@@ -204,11 +195,9 @@ jobs:
           RELEASE_TAG: ${{ steps.preview.outputs.channel }}
           RELEASE_TITLE: ${{ steps.preview.outputs.title }}
           BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
-          FULL_BIN: ${{ steps.assets.outputs.full }}
-          OTA_BIN: ${{ steps.assets.outputs.ota }}
+          LCD349_FULL_BIN: ${{ steps.assets.outputs.lcd349_full }}
           LCD349_OTA_BIN: ${{ steps.assets.outputs.lcd349_ota }}
-          REV2_FULL_BIN: ${{ steps.assets.outputs.rev2_full }}
-          REV2_OTA_BIN: ${{ steps.assets.outputs.rev2_ota }}
+          LCD349_REV2_FULL_BIN: ${{ steps.assets.outputs.lcd349_rev2_full }}
           LCD349_REV2_OTA_BIN: ${{ steps.assets.outputs.lcd349_rev2_ota }}
           AMOLED18_FULL_BIN: ${{ steps.assets.outputs.amoled18_full }}
           AMOLED18_OTA_BIN: ${{ steps.assets.outputs.amoled18_ota }}
@@ -236,11 +225,9 @@ jobs:
           fi
 
           gh release upload "$RELEASE_TAG" \
-            "$FULL_BIN" \
-            "$OTA_BIN" \
+            "$LCD349_FULL_BIN" \
             "$LCD349_OTA_BIN" \
-            "$REV2_FULL_BIN" \
-            "$REV2_OTA_BIN" \
+            "$LCD349_REV2_FULL_BIN" \
             "$LCD349_REV2_OTA_BIN" \
             "$AMOLED18_FULL_BIN" \
             "$AMOLED18_OTA_BIN" \
