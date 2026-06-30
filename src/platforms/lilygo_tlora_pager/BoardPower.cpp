@@ -25,6 +25,14 @@ bool enableAudioPowerIfAvailable() {
 bool readBatteryStatus(BatteryStatus &status) {
   status = BatteryStatus{};
 
+  // The BQ27220 getters return a cached register snapshot; refresh() performs the
+  // actual I2C read that repopulates it. Without this, getVoltage() returns the
+  // zero-initialized cache and the battery reads as absent. LilyGoLib only calls
+  // gauge.begin()/setNewCapacity() at init, so we must refresh on every sample.
+  if (!tpager::hw().gauge.refresh()) {
+    return false;
+  }
+
   // BQ27220 fuel gauge reports voltage in millivolts and a calibrated SoC.
   const uint16_t millivolts = tpager::hw().gauge.getVoltage();
   status.voltage = static_cast<float>(millivolts) / 1000.0f;
