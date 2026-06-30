@@ -322,7 +322,7 @@ namespace IndexedBook {
             return appendLineWords(line, buildContext, stats);
         }
 
-        bool readMetadata(const String& path, BookMetadata& metadata, IndexHeader* headerOut = nullptr) {
+        bool readIndexedMetadata(const String& path, BookMetadata& metadata, IndexHeader* headerOut = nullptr) {
             metadata.clear();
 
             IndexHeader header;
@@ -916,7 +916,7 @@ namespace IndexedBook {
             // Index validation, optional rebuild, and store open.
             IndexHeader header;
             auto ensureIndexedBook = [&]() -> bool {
-                if (readMetadata(path, metadata, &header)) {
+                if (readIndexedMetadata(path, metadata, &header)) {
                     report("Opening book", displayNameForPath(path).c_str(), "Index is current", 45);
                     return true;
                 }
@@ -931,7 +931,7 @@ namespace IndexedBook {
                 if (!build(path, metadata, hasRsvpExtension(path), request.statusCallback, request.statusContext)) {
                     return false;
                 }
-                if (!readMetadata(path, metadata, &header)) {
+                if (!readIndexedMetadata(path, metadata, &header)) {
                     Serial.printf("[storage-index] freshly built index failed validation: %s\n", path.c_str());
                     report("Index failed", displayNameForPath(path).c_str(), "Validation failed", 100);
                     return false;
@@ -964,6 +964,10 @@ namespace IndexedBook {
                       static_cast<unsigned int>(metadata.wordCount),
                       static_cast<unsigned int>(metadata.chapters.size()));
         return true;
+    }
+
+    bool readMetadata(const String& path, BookMetadata& metadata, IndexedBookStore::Header* headerOut) {
+        return readIndexedMetadata(path, metadata, headerOut);
     }
 
 } // namespace IndexedBook

@@ -164,6 +164,7 @@ fun CompanionApp(
         onDeleteDraft = viewModel::deleteDraft,
         onSyncArticles = viewModel::syncSavedArticles,
         onDeleteBook = viewModel::deleteDeviceBook,
+        onSetBookPosition = viewModel::setBookPosition,
         onPickBook = viewModel::uploadSelectedFile,
         onRssFeedChange = viewModel::setRssFeedDraft,
         onAddRssFeed = viewModel::addRssFeed,

@@ -724,6 +724,24 @@ class CompanionPresenter(
         }
     }
 
+    fun setBookPosition(book: NanoBook, wordIndex: Int) {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before setting book position."))
+                return@launch
+            }
+            val title = book.displayTitle
+            setNotice(CompanionNotice.Attention("Saving position for $title..."))
+            if (!ensureReaderReachable("setting book position")) return@launch
+            runCatching {
+                withNanoApi { companionController.setBookPosition(state.address, book, wordIndex) }
+            }.onSuccess { snapshot ->
+                updateState { it.copy(books = snapshot.books, notice = CompanionNotice.Success("Saved position for $title.")) }
+            }.onFailure { error -> markDisconnected(error.message ?: "Reader disconnected before setting book position.") }
+        }
+    }
+
     fun uploadSelectedFile(displayName: String, data: ByteArray) {
         scope.launch {
             val state = current

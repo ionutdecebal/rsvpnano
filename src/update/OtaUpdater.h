@@ -14,6 +14,7 @@ class OtaUpdater {
     String wifiPassword;
     String githubOwner = "ionutdecebal";
     String githubRepo = "rsvpnano";
+    String githubTag;
     String assetName = Board::Config::OTA_ASSET_NAME;
     bool autoCheck = false;
   };
@@ -56,8 +57,8 @@ class OtaUpdater {
   bool loadConfigFromPath(const char *path, Config &config) const;
   bool connectWiFi(const Config &config, StatusCallback callback, void *context) const;
   void disconnectWiFi() const;
-  bool fetchLatestRelease(const Config &config, LatestRelease &release, String &errorDetail,
-                          StatusCallback callback, void *context) const;
+  bool fetchRelease(const Config &config, LatestRelease &release, String &errorDetail,
+                    StatusCallback callback, void *context) const;
   bool resolveDownloadUrl(const String &assetUrl, const String &version, String &resolvedUrl,
                           String &errorDetail, StatusCallback callback, void *context) const;
   void reportStatus(StatusCallback callback, void *context, const char *title,

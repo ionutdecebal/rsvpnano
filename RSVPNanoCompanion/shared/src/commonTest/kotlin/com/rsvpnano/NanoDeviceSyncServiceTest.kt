@@ -37,23 +37,34 @@ class NanoDeviceSyncServiceTest {
             category = "article",
             onProgress = { sent, total -> uploadProgress = sent to total },
         )
-        val delete = service.deleteBook("http://device.local", "Story.rsvp")
+        val delete = service.deleteBook("http://device.local", "b12345678")
+        val position = service.setBookPosition(
+            baseUrl = "http://device.local",
+            id = "b12345678",
+            sourceSize = 1234,
+            sourceFingerprint = 3456,
+            wordCount = 1000,
+            wordIndex = 250,
+        )
 
         assertEquals(listOf("https://example.com/feed"), feeds.feeds)
         assertEquals("/books/Story.rsvp", upload.path)
         assertEquals(true, delete.ok)
+        assertEquals(true, position.ok)
         assertEquals("Story.rsvp", client.uploadedName)
         assertEquals("article", client.uploadedCategory)
         assertContentEquals(byteArrayOf(1, 2, 3), client.uploadedData)
         assertEquals(3L to 3L, uploadProgress)
-        assertEquals("Story.rsvp", client.deletedName)
+        assertEquals("b12345678", client.deletedId)
+        assertEquals(250, client.savedWordIndex)
     }
 
     private class FakeClient : NanoClient {
         var uploadedName: String? = null
         var uploadedCategory: String? = null
         var uploadedData: ByteArray? = null
-        var deletedName: String? = null
+        var deletedId: String? = null
+        var savedWordIndex: Int? = null
 
         override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
         override suspend fun listBooks(baseUrl: String): List<NanoBook> = listOf(NanoBook(id = "1", title = "Book"))
@@ -78,8 +89,20 @@ class NanoDeviceSyncServiceTest {
             return NanoUploadResponse(ok = true, path = "/books/$name")
         }
 
-        override suspend fun deleteBook(baseUrl: String, name: String): NanoUploadResponse {
-            deletedName = name
+        override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
+            deletedId = id
+            return NanoUploadResponse(ok = true)
+        }
+
+        override suspend fun setBookPosition(
+            baseUrl: String,
+            id: String,
+            sourceSize: Long,
+            sourceFingerprint: Long,
+            wordCount: Int,
+            wordIndex: Int,
+        ): NanoUploadResponse {
+            savedWordIndex = wordIndex
             return NanoUploadResponse(ok = true)
         }
     }

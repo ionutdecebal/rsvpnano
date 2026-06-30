@@ -27,6 +27,12 @@ const char *kRedirectHeaderKeys[] = {
     "Location",
 };
 
+struct ReleaseSource {
+  String owner;
+  String repo;
+  String tag;
+};
+
 String trimCopy(String value) {
   value.trim();
   return value;
@@ -36,6 +42,74 @@ bool parseBoolValue(const String &value) {
   String lowered = trimCopy(value);
   lowered.toLowerCase();
   return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
+}
+
+bool isUrlUnreserved(char value) {
+  return (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z') ||
+         (value >= '0' && value <= '9') || value == '-' || value == '.' || value == '_' ||
+         value == '~';
+}
+
+String urlEncodePathSegment(const String &value) {
+  constexpr char kHex[] = "0123456789ABCDEF";
+  String encoded;
+  encoded.reserve(value.length());
+  for (size_t i = 0; i < value.length(); ++i) {
+    const char c = value[i];
+    if (isUrlUnreserved(c)) {
+      encoded += c;
+      continue;
+    }
+
+    const uint8_t byte = static_cast<uint8_t>(c);
+    encoded += '%';
+    encoded += kHex[byte >> 4];
+    encoded += kHex[byte & 0x0F];
+  }
+  return encoded;
+}
+
+bool splitOwnerRepo(const String &value, String &owner, String &repo) {
+  const String trimmed = trimCopy(value);
+  const int slash = trimmed.indexOf('/');
+  if (slash <= 0 || slash >= static_cast<int>(trimmed.length() - 1)) {
+    return false;
+  }
+
+  owner = trimmed.substring(0, slash);
+  repo = trimmed.substring(slash + 1);
+  owner.trim();
+  repo.trim();
+  return !owner.isEmpty() && !repo.isEmpty();
+}
+
+ReleaseSource releaseSourceForConfig(const OtaUpdater::Config &config) {
+  ReleaseSource source{trimCopy(config.githubOwner), trimCopy(config.githubRepo),
+                       trimCopy(config.githubTag)};
+
+  splitOwnerRepo(source.owner, source.owner, source.repo);
+  splitOwnerRepo(source.repo, source.owner, source.repo);
+
+  const int at = source.tag.indexOf('@');
+  if (at > 0 && at < static_cast<int>(source.tag.length() - 1)) {
+    String repoPart = source.tag.substring(0, at);
+    source.tag = source.tag.substring(at + 1);
+    source.tag.trim();
+    repoPart.trim();
+    if (!splitOwnerRepo(repoPart, source.owner, source.repo) && !repoPart.isEmpty()) {
+      source.repo = repoPart;
+    }
+  }
+
+  return source;
+}
+
+String httpClientErrorDetail(const String &prefix, int statusCode) {
+  if (statusCode >= 0) {
+    return prefix + " HTTP " + String(statusCode);
+  }
+
+  return prefix + " " + HTTPClient::errorToString(statusCode);
 }
 
 String readBodyLimited(HTTPClient &http, size_t maxBytes) {
@@ -167,6 +241,8 @@ bool OtaUpdater::loadConfigFromPath(const char *path, Config &config) const {
       config.githubOwner = value;
     } else if (key == "github_repo") {
       config.githubRepo = value;
+    } else if (key == "github_tag") {
+      config.githubTag = value;
     } else if (key == "asset_name") {
       config.assetName = value;
     } else if (key == "auto_check") {
@@ -187,14 +263,22 @@ bool OtaUpdater::connectWiFi(const Config &config, StatusCallback callback,
 
 void OtaUpdater::disconnectWiFi() const { net::disconnect(); }
 
-bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release,
-                                    String &errorDetail, StatusCallback callback,
-                                    void *context) const {
+bool OtaUpdater::fetchRelease(const Config &config, LatestRelease &release,
+                              String &errorDetail, StatusCallback callback, void *context) const {
   const String version = currentVersion();
-  const String url = "https://api.github.com/repos/" + config.githubOwner + "/" +
-                     config.githubRepo + "/releases/latest";
+  const ReleaseSource source = releaseSourceForConfig(config);
+  if (source.owner.isEmpty() || source.repo.isEmpty()) {
+    errorDetail = "GitHub source missing";
+    return false;
+  }
 
-  reportStatus(callback, context, kStatusTitle, "Checking GitHub", config.githubRepo, 22);
+  const String releasePath =
+      source.tag.isEmpty() ? "latest" : "tags/" + urlEncodePathSegment(source.tag);
+  const String url = "https://api.github.com/repos/" + source.owner + "/" + source.repo +
+                     "/releases/" + releasePath;
+  const String sourceLabel = source.tag.isEmpty() ? source.repo : source.repo + ":" + source.tag;
+
+  reportStatus(callback, context, kStatusTitle, "Checking GitHub", sourceLabel, 22);
 
   WiFiClientSecure client;
   // GitHub release metadata and assets can redirect across multiple hosts, so keep the transport
@@ -215,9 +299,9 @@ bool OtaUpdater::fetchLatestRelease(const Config &config, LatestRelease &release
   const int statusCode = http.GET();
   if (statusCode != HTTP_CODE_OK) {
     if (statusCode == HTTP_CODE_NOT_FOUND) {
-      errorDetail = "No published release";
+      errorDetail = source.tag.isEmpty() ? "No published release" : "Release tag not found";
     } else {
-      errorDetail = "GitHub HTTP " + String(statusCode);
+      errorDetail = httpClientErrorDetail("GitHub", statusCode);
     }
     http.end();
     return false;
@@ -281,7 +365,7 @@ bool OtaUpdater::resolveDownloadUrl(const String &assetUrl, const String &versio
     return false;
   }
 
-  errorDetail = "Asset HTTP " + String(statusCode);
+  errorDetail = httpClientErrorDetail("Asset", statusCode);
   http.end();
   return false;
 }
@@ -326,7 +410,7 @@ OtaUpdater::Result OtaUpdater::checkOnly(const Config &config, StatusCallback ca
 
   LatestRelease release;
   String metadataError;
-  if (!fetchLatestRelease(config, release, metadataError, callback, context)) {
+  if (!fetchRelease(config, release, metadataError, callback, context)) {
     disconnectWiFi();
     result.code = ResultCode::MetadataFailed;
     result.summary = "GitHub failed";
@@ -386,7 +470,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const Config &config, StatusCallb
 
   LatestRelease release;
   String metadataError;
-  if (!fetchLatestRelease(config, release, metadataError, callback, context)) {
+  if (!fetchRelease(config, release, metadataError, callback, context)) {
     disconnectWiFi();
     result.code = ResultCode::MetadataFailed;
     result.summary = "GitHub failed";

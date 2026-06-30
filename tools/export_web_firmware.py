@@ -16,13 +16,13 @@ BOOT_APP0_GLOB = "framework-arduinoespressif32*/tools/partitions/boot_app0.bin"
 
 FLASH_EXPORTS = (
     {
-        "env": "waveshare_esp32s3_usb_msc",
+        "env": "waveshare_esp32s3_touch_lcd_349_rev1",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49.bin",
         "manifest": "manifest.json",
         "label": "RSVP Nano Touch LCD 3.49 rev1 firmware",
     },
     {
-        "env": "waveshare_esp32s3_usb_msc_rev2",
+        "env": "waveshare_esp32s3_touch_lcd_349_rev2",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin",
         "manifest": "manifest-rev2.json",
         "label": "RSVP Nano Touch LCD 3.49 rev2 firmware",
@@ -61,12 +61,12 @@ FLASH_EXPORTS = (
 
 OTA_EXPORTS = (
     {
-        "env": "waveshare_esp32s3_usb_msc",
+        "env": "waveshare_esp32s3_touch_lcd_349_rev1",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin",
         "label": "RSVP Nano Touch LCD 3.49 OTA firmware",
     },
     {
-        "env": "waveshare_esp32s3_usb_msc_rev2",
+        "env": "waveshare_esp32s3_touch_lcd_349_rev2",
         "binary": "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin",
         "label": "RSVP Nano Touch LCD 3.49 rev2 OTA firmware",
     },

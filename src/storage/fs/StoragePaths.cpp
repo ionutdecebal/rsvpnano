@@ -81,6 +81,10 @@ namespace StoragePaths {
         return path + kDataExtension;
     }
 
+    String progressSidecarPathFor(const String& path) {
+        return siblingPathWithExtension(path, kProgressExtension);
+    }
+
     String indexedTempPathFor(const String& path) {
         return path + kTempExtension;
     }
@@ -97,7 +101,8 @@ namespace StoragePaths {
             return true;
         }
 
-        if (lowered.endsWith(kIndexExtension) || lowered.endsWith(kDataExtension) || lowered.endsWith(kTempExtension)) {
+        if (lowered.endsWith(kIndexExtension) || lowered.endsWith(kDataExtension)
+            || lowered.endsWith(kProgressExtension) || lowered.endsWith(kTempExtension)) {
             return true;
         }
 

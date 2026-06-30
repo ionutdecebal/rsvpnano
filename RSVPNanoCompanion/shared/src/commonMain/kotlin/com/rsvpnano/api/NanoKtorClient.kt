@@ -1,6 +1,7 @@
 package com.rsvpnano.api
 
 import com.rsvpnano.models.NanoBook
+import com.rsvpnano.models.NanoChapter
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoSettings
@@ -122,8 +123,32 @@ class NanoKtorClient(
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
     }
 
-    override suspend fun deleteBook(baseUrl: String, name: String): NanoUploadResponse {
-        val response = httpClient.delete(buildUrl(baseUrl, "api/books", query = listOf("name" to name)))
+    override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
+        val response = httpClient.delete(buildUrl(baseUrl, "api/books", query = listOf("id" to id)))
+        val body = response.body<String>()
+        return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
+    }
+
+    override suspend fun setBookPosition(
+        baseUrl: String,
+        id: String,
+        sourceSize: Long,
+        sourceFingerprint: Long,
+        wordCount: Int,
+        wordIndex: Int,
+    ): NanoUploadResponse {
+        val response = httpClient.patch(buildUrl(baseUrl, "api/books/position")) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                BookPositionUpdate(
+                    id = id,
+                    sourceSize = sourceSize,
+                    sourceFingerprint = sourceFingerprint,
+                    wordCount = wordCount,
+                    wordIndex = wordIndex,
+                )
+            )
+        }
         val body = response.body<String>()
         return decodeDeviceResponse(response.status, body, NanoUploadResponse.serializer())
     }
@@ -164,20 +189,41 @@ class NanoKtorClient(
 
     @Serializable
     private data class DeviceBook(
+        val id: String? = null,
         val name: String,
         val title: String? = null,
         val author: String? = null,
         val bytes: Int = 0,
         val progressPercent: Int? = null,
         val category: String? = null,
+        val sourceSize: Long? = null,
+        val sourceFingerprint: Long? = null,
+        val wordCount: Int? = null,
+        val wordIndex: Int? = null,
+        val chapters: List<NanoChapter> = emptyList(),
     ) {
         fun toNanoBook(): NanoBook = NanoBook(
-            id = name,
+            id = id ?: name,
+            name = name,
             title = title,
             author = author,
             bytes = bytes,
             progressPercent = progressPercent,
             category = category,
+            sourceSize = sourceSize,
+            sourceFingerprint = sourceFingerprint,
+            wordCount = wordCount,
+            wordIndex = wordIndex,
+            chapters = chapters,
         )
     }
+
+    @Serializable
+    private data class BookPositionUpdate(
+        val id: String,
+        val sourceSize: Long,
+        val sourceFingerprint: Long,
+        val wordCount: Int,
+        val wordIndex: Int,
+    )
 }

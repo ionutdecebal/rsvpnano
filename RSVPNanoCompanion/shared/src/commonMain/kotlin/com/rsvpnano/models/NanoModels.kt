@@ -3,16 +3,31 @@ package com.rsvpnano.models
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class NanoChapter(
+    val title: String,
+    val wordIndex: Int,
+)
+
+@Serializable
 data class NanoBook(
     val id: String,
+    val name: String? = null,
     val title: String? = null,
     val author: String? = null,
     val bytes: Int = 0,
     val progressPercent: Int? = null,
-    val category: String? = null
+    val category: String? = null,
+    val sourceSize: Long? = null,
+    val sourceFingerprint: Long? = null,
+    val wordCount: Int? = null,
+    val wordIndex: Int? = null,
+    val chapters: List<NanoChapter> = emptyList(),
 ) {
     val displayTitle: String
-        get() = title?.takeIf { it.isNotBlank() } ?: id.substringAfterLast('/').ifBlank { "Untitled" }
+        get() = title?.takeIf { it.isNotBlank() } ?: displayName.substringAfterLast('/').ifBlank { "Untitled" }
+
+    val displayName: String
+        get() = name?.takeIf { it.isNotBlank() } ?: id
 }
 
 @Serializable

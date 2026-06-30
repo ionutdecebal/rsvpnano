@@ -135,7 +135,16 @@ class PendingUploadSyncServiceTest {
             return NanoUploadResponse(ok = true, path = "/books/$name")
         }
 
-        override suspend fun deleteBook(baseUrl: String, name: String): NanoUploadResponse = NanoUploadResponse(ok = true)
+        override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse = NanoUploadResponse(ok = true)
+
+        override suspend fun setBookPosition(
+            baseUrl: String,
+            id: String,
+            sourceSize: Long,
+            sourceFingerprint: Long,
+            wordCount: Int,
+            wordIndex: Int,
+        ): NanoUploadResponse = NanoUploadResponse(ok = true)
     }
 
     private fun sampleSettings(): NanoSettings = NanoSettings(

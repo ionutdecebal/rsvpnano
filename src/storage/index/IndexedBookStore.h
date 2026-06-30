@@ -58,6 +58,12 @@ public:
     const String& dataPath() const {
         return dataPath_;
     }
+    uint32_t sourceSize() const {
+        return isOpen() ? header_.sourceSize : 0;
+    }
+    uint32_t sourceFingerprint() const {
+        return isOpen() ? header_.sourceFingerprint : 0;
+    }
 
 private:
     bool loadWordWindow(size_t index) const;

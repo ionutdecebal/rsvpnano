@@ -11,19 +11,19 @@ extension shared.NanoBook: Identifiable {
     }
 
     var filename: String {
-        id.split(separator: "/").last.map(String.init) ?? id
+        displayName.split(separator: "/").last.map(String.init) ?? displayName
     }
 
     var detailLabel: String {
         let cleanedAuthor = author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let pathLabel = displayTitle == filename ? nil : id
+        let pathLabel = displayTitle == filename ? nil : displayName
         return [cleanedAuthor.isEmpty ? nil : cleanedAuthor, pathLabel, byteLabel]
             .compactMap { $0 }
             .joined(separator: " · ")
     }
 
     var isArticle: Bool {
-        category == "article" || id.lowercased().hasPrefix("articles/")
+        category == "article" || displayName.lowercased().hasPrefix("articles/")
     }
 
     var byteLabel: String {

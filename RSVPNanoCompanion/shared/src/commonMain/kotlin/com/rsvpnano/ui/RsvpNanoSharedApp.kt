@@ -95,6 +95,7 @@ fun RsvpNanoSharedApp(
     onDeleteDraft: (PendingUpload) -> Unit,
     onSyncArticles: () -> Unit,
     onDeleteBook: (NanoBook) -> Unit,
+    onSetBookPosition: (NanoBook, Int) -> Unit,
     onPickBook: (displayName: String, data: ByteArray) -> Unit,
     onRssFeedChange: (String) -> Unit,
     onAddRssFeed: () -> Unit,
@@ -204,6 +205,7 @@ fun RsvpNanoSharedApp(
                         onDeleteDraft = onDeleteDraft,
                         onSyncArticles = onSyncArticles,
                         onDeleteBook = onDeleteBook,
+                        onSetBookPosition = onSetBookPosition,
                         onShowUpload = { showAddPicker = true },
                     )
 

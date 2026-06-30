@@ -130,6 +130,7 @@ private:
         None,
         WifiPassword,
         OtaOwner,
+        OtaTag,
     };
 
     enum class KeyboardMode : uint8_t {
@@ -281,6 +282,8 @@ private:
     String configuredWifiSsid();
     bool otaAutoCheckEnabled();
     String otaOwnerLabel();
+    String otaTagValue();
+    String otaTagLabel();
     String pacingDelayLabel(uint16_t delayMs) const;
     String firmwareUpdateMenuLabel() const;
     String firmwareVersionLabel() const;
@@ -334,6 +337,10 @@ private:
     bool prepareBootBookLoad();
     void loadPendingBootBook(uint32_t nowMs);
     void saveReadingPosition(bool force = false);
+    void mirrorReadingPositionToSidecar();
+    void cacheReadingPosition(uint32_t wordIndex);
+    bool writeReadingPositionSidecar(uint32_t wordIndex, uint32_t wordCount);
+    bool readReadingPositionSidecar(uint32_t& wordIndex);
     struct BookOpenOptions {
         BookOpenOptions() :
                 allowIndexBuild(true),
@@ -347,10 +354,13 @@ private:
     bool loadBookAtIndex(size_t index, uint32_t nowMs, const BookOpenOptions& options = BookOpenOptions());
     String bookPositionKey(const String& bookPath) const;
     String bookWordCountKey(const String& bookPath) const;
+    String bookSourceSizeKey(const String& bookPath) const;
+    String bookSourceFingerprintKey(const String& bookPath) const;
     String bookRecentKey(const String& bookPath) const;
     uint32_t nextRecentSequence();
     uint32_t bookRecentSequence(const String& bookPath);
     void markBookRecent(const String& bookPath);
+    uint32_t restoredWordIndexForBook();
     uint32_t savedWordIndexForBook(const String& bookPath);
     bool bookProgressPercent(size_t bookIndex, uint8_t& percent);
     int findBookIndexByPath(const String& path) const;

@@ -205,6 +205,8 @@ RSS support in `v0.0.8` includes:
 Some feeds still block embedded clients, require JavaScript, return very large pages, or publish summaries instead of full articles. Those are feed or website limitations rather than SD card problems.
 
 OTA updates use GitHub Releases. Open `Settings -> Firmware update` on the device after Wi-Fi is configured.
+By default the updater follows the latest release; advanced `/config/ota.conf` setups can set
+`github_tag` to pin checks to one release tag.
 
 ## Device Controls
 
@@ -337,6 +339,7 @@ Settings are grouped by how people actually use the device.
 - Choose or forget network.
 - Auto OTA.
 - OTA owner/source.
+- OTA release tag.
 
 `Battery` includes:
 
@@ -440,8 +443,8 @@ Firmware builds with PlatformIO:
 pio run
 ```
 
-Firmware builds with PlatformIO. The default environment is the Touch LCD 3.49 rev1 USB
-transfer build:
+Firmware builds with PlatformIO. The default environment is the Touch LCD 3.49 rev1
+build:
 
 ```bash
 pio run
@@ -449,12 +452,9 @@ pio run
 
 Current firmware environments:
 
-- `waveshare_esp32s3`: Touch LCD 3.49 rev1.
-- `waveshare_esp32s3_rev2`: Touch LCD 3.49 rev2.
-- `waveshare_esp32s3_usb_msc`: Touch LCD 3.49 rev1 USB transfer build.
-- `waveshare_esp32s3_usb_msc_rev2`: Touch LCD 3.49 rev2 USB transfer build.
+- `waveshare_esp32s3_touch_lcd_349_rev1`: Touch LCD 3.49 rev1.
+- `waveshare_esp32s3_touch_lcd_349_rev2`: Touch LCD 3.49 rev2.
 - `waveshare_esp32s3_touch_amoled_18_v1`: Touch AMOLED 1.8 v1.
-- `waveshare_esp32s3_touch_amoled_18`: Touch AMOLED 1.8 v1 compatibility alias.
 - `waveshare_esp32s3_touch_amoled_18_v2`: Touch AMOLED 1.8 v2.
 - `waveshare_esp32s3_touch_amoled_206`: Touch AMOLED 2.06.
 - `waveshare_esp32s3_touch_amoled_216`: Touch AMOLED 2.16.
@@ -468,7 +468,7 @@ lives under `src/drivers`.
 Use explicit targets for non-default boards:
 
 ```bash
-pio run -e waveshare_esp32s3_rev2
+pio run -e waveshare_esp32s3_touch_lcd_349_rev2
 pio run -e waveshare_esp32s3_touch_amoled_18_v1
 pio run -e waveshare_esp32s3_touch_amoled_18_v2
 pio run -e waveshare_esp32s3_touch_amoled_206

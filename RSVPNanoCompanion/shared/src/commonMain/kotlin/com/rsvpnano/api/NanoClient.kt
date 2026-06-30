@@ -28,5 +28,13 @@ interface NanoClient {
         category: String? = null,
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
     ): NanoUploadResponse
-    suspend fun deleteBook(baseUrl: String, name: String): NanoUploadResponse
+    suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse
+    suspend fun setBookPosition(
+        baseUrl: String,
+        id: String,
+        sourceSize: Long,
+        sourceFingerprint: Long,
+        wordCount: Int,
+        wordIndex: Int,
+    ): NanoUploadResponse
 }

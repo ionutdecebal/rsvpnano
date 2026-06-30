@@ -88,6 +88,7 @@ fun LibraryTab(
     onDeleteDraft: (PendingUpload) -> Unit,
     onSyncArticles: () -> Unit,
     onDeleteBook: (NanoBook) -> Unit,
+    onSetBookPosition: (NanoBook, Int) -> Unit,
     onShowUpload: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -115,7 +116,7 @@ fun LibraryTab(
         val matchesQuery = query.isEmpty() ||
             book.displayTitle.contains(query, ignoreCase = true) ||
             book.author.orEmpty().contains(query, ignoreCase = true) ||
-            book.id.contains(query, ignoreCase = true)
+            book.displayName.contains(query, ignoreCase = true)
         matchesFilter && matchesQuery
     }
     PullRefreshBox(
@@ -212,6 +213,10 @@ fun LibraryTab(
         LibraryBookDialog(
             book = book,
             onDismiss = { selectedBook = null },
+            onSetPosition = { wordIndex ->
+                selectedBook = null
+                onSetBookPosition(book, wordIndex)
+            },
         )
     }
 
@@ -402,7 +407,41 @@ private fun LibraryBookRow(
 private fun LibraryBookDialog(
     book: NanoBook,
     onDismiss: () -> Unit,
+    onSetPosition: (Int) -> Unit,
 ) {
+    val wordCount = book.wordCount?.takeIf { it > 0 }
+    val initialWordIndex = if (wordCount == null) {
+        0
+    } else {
+        (book.wordIndex ?: 0).coerceIn(0, wordCount - 1)
+    }
+    var targetWordIndex by remember(book.id) { mutableStateOf(initialWordIndex) }
+    var wordText by remember(book.id) { mutableStateOf((initialWordIndex + 1).toString()) }
+    val chapters = if (wordCount == null) {
+        emptyList()
+    } else {
+        book.chapters.filter { it.wordIndex in 0 until wordCount }.sortedBy { it.wordIndex }
+    }
+    fun updateTarget(index: Int) {
+        if (wordCount == null) {
+            return
+        }
+        targetWordIndex = index.coerceIn(0, wordCount - 1)
+        wordText = (targetWordIndex + 1).toString()
+    }
+    fun currentChapterIndex(): Int {
+        if (chapters.isEmpty()) {
+            return -1
+        }
+        var selected = 0
+        chapters.forEachIndexed { index, chapter ->
+            if (chapter.wordIndex <= targetWordIndex) {
+                selected = index
+            }
+        }
+        return selected
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -418,29 +457,94 @@ private fun LibraryBookDialog(
                     Text(text = "Author: ${book.author}")
                 }
                 Text(text = "Size: ${book.byteLabel}")
-                Text(text = "Path: ${book.id}")
+                Text(text = "Path: ${book.displayName}")
                 Text(text = "Type: ${if (book.isArticle) "Article" else "Book"}")
                 book.progressPercent?.let { progress ->
                     Text(text = "Progress: ${progress.coerceIn(0, 100)}%")
                 }
+                if (wordCount == null || book.sourceSize == null || book.sourceFingerprint == null) {
+                    Text(
+                        text = "Resume location unavailable until the book has been indexed on the reader.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    val chapterIndex = currentChapterIndex()
+                    val chapterStart = chapters.getOrNull(chapterIndex)?.wordIndex ?: 0
+                    val chapterEnd = chapters.getOrNull(chapterIndex + 1)?.wordIndex ?: wordCount
+                    Text(text = "Resume location: word ${targetWordIndex + 1} of $wordCount")
+                    if (chapters.isNotEmpty()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = { updateTarget(chapters[(chapterIndex - 1).coerceAtLeast(0)].wordIndex) },
+                                enabled = chapterIndex > 0,
+                            ) {
+                                Text("Previous")
+                            }
+                            Text(
+                                text = "${chapterIndex + 1}/${chapters.size} ${chapters[chapterIndex].title}",
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = { updateTarget(chapters[(chapterIndex + 1).coerceAtMost(chapters.lastIndex)].wordIndex) },
+                                enabled = chapterIndex in 0 until chapters.lastIndex,
+                            ) {
+                                Text("Next")
+                            }
+                        }
+                    }
+                    if (chapterEnd - chapterStart > 1) {
+                        Slider(
+                            value = targetWordIndex.toFloat(),
+                            onValueChange = { updateTarget(it.toInt()) },
+                            valueRange = chapterStart.toFloat()..(chapterEnd - 1).toFloat(),
+                        )
+                    }
+                    OutlinedTextField(
+                        value = wordText,
+                        onValueChange = { value ->
+                            wordText = value.filter { it.isDigit() }.take(9)
+                            wordText.toIntOrNull()?.let { updateTarget(it - 1) }
+                        },
+                        label = { Text("Word number") },
+                        singleLine = true,
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = "Close")
+            if (wordCount != null && book.sourceSize != null && book.sourceFingerprint != null) {
+                Button(onClick = { onSetPosition(targetWordIndex) }) {
+                    Text(text = "Save location")
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text(text = "Close")
+                }
             }
+        },
+        dismissButton = if (wordCount != null && book.sourceSize != null && book.sourceFingerprint != null) {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text(text = "Cancel")
+                }
+            }
+        } else {
+            null
         },
     )
 }
 
 val NanoBook.isArticle: Boolean
-    get() = category == "article" || id.lowercase().startsWith("articles/")
+    get() = category == "article" || displayName.lowercase().startsWith("articles/")
 
 val NanoBook.libraryMetaLabel: String
     get() = listOfNotNull(
         author?.takeIf { it.isNotBlank() },
         byteLabel,
-        id.takeIf { displayTitle != id.substringAfterLast('/') },
+        displayName.takeIf { displayTitle != displayName.substringAfterLast('/') },
     ).joinToString(" · ").ifBlank { id }
 
 val NanoBook.byteLabel: String

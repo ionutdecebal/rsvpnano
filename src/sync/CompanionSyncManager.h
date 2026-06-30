@@ -39,6 +39,7 @@ class CompanionSyncManager {
   static void handleWifiStatic();
   static void handleRssFeedsStatic();
   static void handleBookDeleteStatic();
+  static void handleBookPositionStatic();
   static void handleBooksStatic();
   static void handleBookUploadStatic();
   static void handleNotFoundStatic();
@@ -53,6 +54,7 @@ class CompanionSyncManager {
   void handleWifi();
   void handleRssFeeds();
   void handleBookDelete();
+  void handleBookPosition();
   void handleBooks();
   void handleBookUpload();
   void handleNotFound();
@@ -66,9 +68,17 @@ class CompanionSyncManager {
   String jsonEscape(const String &value) const;
   String sanitizeFilename(const String &name) const;
   RsvpMetadata readRsvpMetadata(const String &path) const;
-  bool progressPercentForPath(const String &path, uint8_t &percent);
+  bool progressForPath(const String &path, uint32_t sourceSize, uint32_t sourceFingerprint,
+                       uint32_t wordCount, uint32_t &wordIndex, uint8_t &percent);
+  void cacheBookPosition(const String &path, uint32_t wordIndex, uint32_t sourceSize,
+                         uint32_t sourceFingerprint, uint32_t wordCount);
+  String bookIdForPath(const String &path) const;
+  bool resolveBookId(const String &id, String &path) const;
+  bool resolveBookName(const String &requested, String &path) const;
   String bookPositionKey(const String &bookPath) const;
   String bookWordCountKey(const String &bookPath) const;
+  String bookSourceSizeKey(const String &bookPath) const;
+  String bookSourceFingerprintKey(const String &bookPath) const;
   uint32_t hashBookPath(const String &path) const;
   void finishUpload(bool success);
 

@@ -70,5 +70,6 @@ constexpr const char *kPrefWifiSsid = "wifi_ssid";
 constexpr const char *kPrefWifiPass = "wifi_pass";
 constexpr const char *kPrefOtaAuto = "ota_auto";
 constexpr const char *kPrefOtaOwner = "ota_owner";
+constexpr const char *kPrefOtaTag = "ota_tag";
 
 }  // namespace settings

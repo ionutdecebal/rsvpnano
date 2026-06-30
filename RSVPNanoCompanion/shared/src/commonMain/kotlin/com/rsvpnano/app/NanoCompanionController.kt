@@ -198,6 +198,25 @@ class NanoCompanionController(
         return CompanionBooksSnapshot(books = deviceSyncService.refreshBooks(baseUrl))
     }
 
+    suspend fun setBookPosition(baseUrl: String, book: NanoBook, wordIndex: Int): CompanionBooksSnapshot {
+        val sourceSize = book.sourceSize
+        val sourceFingerprint = book.sourceFingerprint
+        val wordCount = book.wordCount
+        require(sourceSize != null && sourceFingerprint != null && wordCount != null && wordCount > 0) {
+            "Book position is unavailable."
+        }
+        verifyReachable(baseUrl)
+        deviceSyncService.setBookPosition(
+            baseUrl = baseUrl,
+            id = book.id,
+            sourceSize = sourceSize,
+            sourceFingerprint = sourceFingerprint,
+            wordCount = wordCount,
+            wordIndex = wordIndex.coerceIn(0, wordCount - 1),
+        )
+        return CompanionBooksSnapshot(books = deviceSyncService.refreshBooks(baseUrl))
+    }
+
     suspend fun refreshSettings(baseUrl: String): CompanionSettingsSnapshot {
         verifyReachable(baseUrl)
         return CompanionSettingsSnapshot(

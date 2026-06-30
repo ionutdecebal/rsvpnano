@@ -58,6 +58,7 @@ class CompanionViewModel(
     fun refreshRssFeeds() = presenter.refreshRssFeeds()
     fun syncSavedArticles() = presenter.syncSavedArticles()
     fun deleteDeviceBook(book: NanoBook) = presenter.deleteDeviceBook(book)
+    fun setBookPosition(book: NanoBook, wordIndex: Int) = presenter.setBookPosition(book, wordIndex)
     fun uploadSelectedFile(displayName: String, data: ByteArray) = presenter.uploadSelectedFile(displayName, data)
     fun needsArticleFetch(draft: PendingUpload): Boolean = presenter.needsArticleFetch(draft)
 

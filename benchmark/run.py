@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 
-DEFAULT_ENV = "benchmark_waveshare_esp32s3"
+DEFAULT_ENV = "benchmark_waveshare_esp32s3_touch_lcd_349_rev1"
 DEFAULT_EPUB_FIXTURE = "RSVPNanoCompanion/testdata/conversion/Dracula-epub.epub"
 DEVICE_EPUB_PATH = "/benchmark/Dracula-epub.epub"
 

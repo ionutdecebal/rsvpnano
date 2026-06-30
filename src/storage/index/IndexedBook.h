@@ -25,5 +25,6 @@ namespace IndexedBook {
               IndexedBookStore& store,
               BookMetadata& metadata,
               const OpenRequest& request);
+    bool readMetadata(const String& path, BookMetadata& metadata, IndexedBookStore::Header* headerOut = nullptr);
 
 } // namespace IndexedBook

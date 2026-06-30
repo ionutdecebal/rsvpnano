@@ -7,6 +7,7 @@
 
 #include "board/BoardConfig.h"
 #include "board/BoardInput.h"
+#include "storage/index/ReadingProgress.h"
 
 #ifndef RSVP_USB_TRANSFER_ENABLED
 #define RSVP_USB_TRANSFER_ENABLED 0
@@ -239,9 +240,11 @@ namespace {
     constexpr size_t kWifiSettingsAutoUpdateIndex = 3;
     constexpr size_t kWifiSettingsForgetIndex = 4;
     constexpr size_t kWifiSettingsOtaOwnerIndex = 5;
+    constexpr size_t kWifiSettingsOtaTagIndex = 6;
     constexpr size_t kWifiSettingsRestructuredNetworkIndex = 1;
     constexpr size_t kWifiSettingsRestructuredAutoUpdateIndex = 2;
     constexpr size_t kWifiSettingsRestructuredOtaOwnerIndex = 3;
+    constexpr size_t kWifiSettingsRestructuredOtaTagIndex = 4;
     constexpr size_t kWifiNetworkSettingsChooseIndex = 1;
     constexpr size_t kWifiNetworkSettingsForgetIndex = 2;
 
@@ -286,6 +289,7 @@ namespace {
     constexpr const char* kPrefWifiPass = "wifi_pass";
     constexpr const char* kPrefOtaAuto = "ota_auto";
     constexpr const char* kPrefOtaOwner = "ota_owner";
+    constexpr const char* kPrefOtaTag = "ota_tag";
     constexpr size_t kReaderFontSizeCount = 3;
     constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
     constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
@@ -3325,6 +3329,10 @@ void App::selectRestructuredSettingsItem(uint32_t nowMs) {
             openTextEntry(TextEntryPurpose::OtaOwner, "OTA Source", "GitHub owner", "",
                           preferences_.getString(kPrefOtaOwner, ""), "", false, 39, MenuScreen::WifiSettings);
             return;
+        case kWifiSettingsRestructuredOtaTagIndex:
+            openTextEntry(TextEntryPurpose::OtaTag, "OTA Tag", "Release tag", "Leave empty for latest",
+                          otaTagValue(), "", false, 64, MenuScreen::WifiSettings);
+            return;
         default:
             return;
         }
@@ -3402,6 +3410,10 @@ void App::selectWifiSettingsItem(uint32_t nowMs) {
     case kWifiSettingsOtaOwnerIndex:
         openTextEntry(TextEntryPurpose::OtaOwner, "OTA Source", "GitHub owner", "",
                       preferences_.getString(kPrefOtaOwner, ""), "", false, 39, MenuScreen::WifiSettings);
+        return;
+    case kWifiSettingsOtaTagIndex:
+        openTextEntry(TextEntryPurpose::OtaTag, "OTA Tag", "Release tag", "Leave empty for latest",
+                      otaTagValue(), "", false, 64, MenuScreen::WifiSettings);
         return;
     default:
         return;
@@ -3760,6 +3772,22 @@ void App::commitTextEntry(uint32_t nowMs) {
         openWifiSettings();
         return;
     }
+    case TextEntryPurpose::OtaTag: {
+        String tag = textEntrySession_.value;
+        tag.trim();
+        if (tag.isEmpty()) {
+            preferences_.remove(kPrefOtaTag);
+            display_.renderStatus("OTA", "Following latest", "");
+        } else {
+            preferences_.putString(kPrefOtaTag, tag);
+            display_.renderStatus("OTA", "Tag saved", tag);
+        }
+        delay(900);
+        textEntrySession_ = TextEntrySession();
+        textEntryButtons_.clear();
+        openWifiSettings();
+        return;
+    }
     case TextEntryPurpose::None:
     default:
         menuScreen_ = textEntrySession_.returnScreen;
@@ -3905,6 +3933,7 @@ void App::rebuildSettingsMenuItems() {
             settingsMenuItems_.push_back("Network: " + storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
             settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
             settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+            settingsMenuItems_.push_back("OTA Tag: " + otaTagLabel());
         } else if (menuScreen_ == MenuScreen::WifiNetworkSettings) {
             settingsMenuItems_.push_back(uiText(UiText::Back));
             settingsMenuItems_.push_back("Choose network: " + storedOrFallbackLabel(configuredWifiSsid(), "Not set"));
@@ -3954,6 +3983,7 @@ void App::rebuildSettingsMenuItems() {
         settingsMenuItems_.push_back("Auto OTA: " + String(otaAutoCheckEnabled() ? "On" : "Off"));
         settingsMenuItems_.push_back("Forget network");
         settingsMenuItems_.push_back("OTA Owner: " + otaOwnerLabel());
+        settingsMenuItems_.push_back("OTA Tag: " + otaTagLabel());
     }
 
     if (settingsSelectedIndex_ >= settingsMenuItems_.size()) {
@@ -3995,6 +4025,24 @@ String App::otaOwnerLabel() {
     return cfg.githubOwner;
 }
 
+String App::otaTagValue() {
+    String tag;
+    if (preferences_.isKey(kPrefOtaTag)) {
+        tag = preferences_.getString(kPrefOtaTag, "");
+    } else {
+        OtaUpdater::Config cfg;
+        otaUpdater_.loadConfig(cfg);
+        tag = cfg.githubTag;
+    }
+    tag.trim();
+    return tag;
+}
+
+String App::otaTagLabel() {
+    const String tag = otaTagValue();
+    return tag.isEmpty() ? "Latest" : tag;
+}
+
 OtaUpdater::Config App::preferredOtaConfig() {
     OtaUpdater::Config otaConfig;
     otaUpdater_.loadConfig(otaConfig);
@@ -4010,6 +4058,9 @@ OtaUpdater::Config App::preferredOtaConfig() {
     }
     if (preferences_.isKey(kPrefOtaOwner)) {
         otaConfig.githubOwner = preferences_.getString(kPrefOtaOwner, "");
+    }
+    if (preferences_.isKey(kPrefOtaTag)) {
+        otaConfig.githubTag = preferences_.getString(kPrefOtaTag, "");
     }
 
     return otaConfig;
@@ -4456,6 +4507,7 @@ void App::selectBookPickerItem(uint32_t nowMs) {
 
     const size_t bookIndex = bookPickerBookIndices_[rowIndex];
     saveReadingPosition(true);
+    mirrorReadingPositionToSidecar();
     if (!loadBookAtIndex(bookIndex, nowMs)) {
         Serial.println("[book-picker] Failed to load selected book");
         display_.renderStatus("Book open failed", storage_.bookDisplayName(bookIndex), "Check serial log");
@@ -5214,6 +5266,7 @@ void App::enterPowerOff(uint32_t nowMs) {
     powerOffStarted_ = true;
     Serial.println("[app] powering off; hold PWR to start again");
     saveReadingPosition(true);
+    mirrorReadingPositionToSidecar();
     pausedTouch_.active = false;
     pausedTouchIntent_ = TouchIntent::None;
     touchPlayHeld_ = false;
@@ -5270,6 +5323,7 @@ void App::enterPowerOff(uint32_t nowMs) {
 void App::enterSleep(uint32_t nowMs) {
     Serial.println("[app] entering light sleep; press BOOT to wake");
     saveReadingPosition(true);
+    mirrorReadingPositionToSidecar();
     setState(AppState::Sleeping, nowMs);
     Serial.flush();
     delay(200);
@@ -5419,14 +5473,67 @@ void App::saveReadingPosition(bool force) {
         return;
     }
 
+    cacheReadingPosition(static_cast<uint32_t>(wordIndex));
+    Serial.printf("[app] saved position word=%u book=%s\n", static_cast<unsigned int>(wordIndex),
+                  currentBookPath_.c_str());
+}
+
+void App::cacheReadingPosition(uint32_t wordIndex) {
+    if (!usingStorageBook_ || currentBookPath_.isEmpty()) {
+        return;
+    }
+
+    const size_t wordCount = reader_.wordCount();
+    if (wordCount > 0) {
+        wordIndex = std::min<uint32_t>(wordIndex, static_cast<uint32_t>(wordCount - 1));
+    }
     preferences_.putString(kPrefBookPath, currentBookPath_);
-    preferences_.putUInt(bookPositionKey(currentBookPath_).c_str(), static_cast<uint32_t>(wordIndex));
-    preferences_.putUInt(bookWordCountKey(currentBookPath_).c_str(), static_cast<uint32_t>(reader_.wordCount()));
+    preferences_.putUInt(bookPositionKey(currentBookPath_).c_str(), wordIndex);
+    preferences_.putUInt(bookWordCountKey(currentBookPath_).c_str(), static_cast<uint32_t>(wordCount));
+    if (activeBookStore_.isOpen()) {
+        preferences_.putUInt(bookSourceSizeKey(currentBookPath_).c_str(), activeBookStore_.sourceSize());
+        preferences_.putUInt(bookSourceFingerprintKey(currentBookPath_).c_str(), activeBookStore_.sourceFingerprint());
+    }
     preferences_.putUShort(kPrefWpm, reader_.wpm());
     markBookRecent(currentBookPath_);
     lastSavedWordIndex_ = wordIndex;
-    Serial.printf("[app] saved position word=%u book=%s\n", static_cast<unsigned int>(wordIndex),
-                  currentBookPath_.c_str());
+}
+
+bool App::writeReadingPositionSidecar(uint32_t wordIndex, uint32_t wordCount) {
+    if (!usingStorageBook_ || currentBookPath_.isEmpty() || !activeBookStore_.isOpen() || wordCount == 0) {
+        return false;
+    }
+
+    return ReadingProgress::writePositionSidecar(currentBookPath_,
+                                                 {activeBookStore_.sourceSize(), activeBookStore_.sourceFingerprint(),
+                                                  wordCount},
+                                                 wordIndex);
+}
+
+void App::mirrorReadingPositionToSidecar() {
+    if (!usingStorageBook_ || currentBookPath_.isEmpty()) {
+        return;
+    }
+
+    writeReadingPositionSidecar(static_cast<uint32_t>(reader_.currentIndex()),
+                                static_cast<uint32_t>(reader_.wordCount()));
+}
+
+bool App::readReadingPositionSidecar(uint32_t& wordIndex) {
+    wordIndex = kNoSavedWordIndex;
+    if (!usingStorageBook_ || currentBookPath_.isEmpty() || !activeBookStore_.isOpen()) {
+        return false;
+    }
+
+    const uint32_t currentWordCount = static_cast<uint32_t>(reader_.wordCount());
+    if (currentWordCount == 0) {
+        return false;
+    }
+
+    return ReadingProgress::readPositionSidecar(currentBookPath_,
+                                                {activeBookStore_.sourceSize(), activeBookStore_.sourceFingerprint(),
+                                                 currentWordCount},
+                                                wordIndex);
 }
 
 bool App::loadBookAtIndex(size_t index, uint32_t nowMs, const BookOpenOptions& options) {
@@ -5486,11 +5593,11 @@ bool App::loadBookAtIndex(size_t index, uint32_t nowMs, const BookOpenOptions& o
 
     {
         // Restore saved position after the active book identity has been committed.
-        const uint32_t savedWordIndex = savedWordIndexForBook(currentBookPath_);
+        const uint32_t savedWordIndex = restoredWordIndexForBook();
         if (savedWordIndex != kNoSavedWordIndex) {
             renderStorageStatus("Opening book", currentBookTitle_.c_str(), "Restoring position", 78);
             reader_.seekTo(savedWordIndex);
-            lastSavedWordIndex_ = reader_.currentIndex();
+            cacheReadingPosition(static_cast<uint32_t>(reader_.currentIndex()));
             Serial.printf("[app] restored book position word=%u key=%s\n",
                           static_cast<unsigned int>(reader_.currentIndex()), bookPositionKey(currentBookPath_).c_str());
         }
@@ -5527,6 +5634,18 @@ String App::bookWordCountKey(const String& bookPath) const {
     return String(key);
 }
 
+String App::bookSourceSizeKey(const String& bookPath) const {
+    char key[10];
+    std::snprintf(key, sizeof(key), "s%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
+    return String(key);
+}
+
+String App::bookSourceFingerprintKey(const String& bookPath) const {
+    char key[10];
+    std::snprintf(key, sizeof(key), "f%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
+    return String(key);
+}
+
 String App::bookRecentKey(const String& bookPath) const {
     char key[10];
     std::snprintf(key, sizeof(key), "r%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
@@ -5555,9 +5674,40 @@ void App::markBookRecent(const String& bookPath) {
     preferences_.putUInt(bookRecentKey(bookPath).c_str(), nextRecentSequence());
 }
 
+uint32_t App::restoredWordIndexForBook() {
+    uint32_t sidecarWordIndex = kNoSavedWordIndex;
+    if (readReadingPositionSidecar(sidecarWordIndex)) {
+        return sidecarWordIndex;
+    }
+
+    const uint32_t nvsWordIndex = savedWordIndexForBook(currentBookPath_);
+    if (nvsWordIndex != kNoSavedWordIndex) {
+        writeReadingPositionSidecar(nvsWordIndex, static_cast<uint32_t>(reader_.wordCount()));
+        return nvsWordIndex;
+    }
+
+    return kNoSavedWordIndex;
+}
+
 uint32_t App::savedWordIndexForBook(const String& bookPath) {
     const String key = bookPositionKey(bookPath);
     if (preferences_.isKey(key.c_str())) {
+        const String countKey = bookWordCountKey(bookPath);
+        if (preferences_.isKey(countKey.c_str())
+            && preferences_.getUInt(countKey.c_str(), 0) != static_cast<uint32_t>(reader_.wordCount())) {
+            Serial.printf("[app] ignored stale NVS position count for %s\n", bookPath.c_str());
+            return kNoSavedWordIndex;
+        }
+
+        const String sizeKey = bookSourceSizeKey(bookPath);
+        const String fingerprintKey = bookSourceFingerprintKey(bookPath);
+        if (preferences_.isKey(sizeKey.c_str()) && preferences_.isKey(fingerprintKey.c_str())
+            && (preferences_.getUInt(sizeKey.c_str(), 0) != activeBookStore_.sourceSize()
+                || preferences_.getUInt(fingerprintKey.c_str(), 0) != activeBookStore_.sourceFingerprint())) {
+            Serial.printf("[app] ignored stale NVS position source for %s\n", bookPath.c_str());
+            return kNoSavedWordIndex;
+        }
+
         return preferences_.getUInt(key.c_str(), 0);
     }
 
@@ -5860,6 +6010,8 @@ bool App::maybeStartChapterTransition(size_t previousWordIndex, size_t currentWo
         contextViewVisible_ = false;
         wpmFeedbackVisible_ = false;
         reader_.seekTo(chapterWordIndex);
+        saveReadingPosition(true);
+        mirrorReadingPositionToSidecar();
         renderChapterTransition();
         Serial.printf("[chapter] transition %u/%u word=%u title=%s\n", static_cast<unsigned int>(i + 1),
                       static_cast<unsigned int>(chapterMarkers_.size()), static_cast<unsigned int>(chapterWordIndex),

@@ -64,12 +64,9 @@ out of the build instead of relying on runtime checks.
 
 Current firmware environments:
 
-- `waveshare_esp32s3`
-- `waveshare_esp32s3_rev2`
-- `waveshare_esp32s3_usb_msc`
-- `waveshare_esp32s3_usb_msc_rev2`
+- `waveshare_esp32s3_touch_lcd_349_rev1`
+- `waveshare_esp32s3_touch_lcd_349_rev2`
 - `waveshare_esp32s3_touch_amoled_18_v1`
-- `waveshare_esp32s3_touch_amoled_18` compatibility alias for v1
 - `waveshare_esp32s3_touch_amoled_18_v2`
 - `waveshare_esp32s3_touch_amoled_206`
 - `waveshare_esp32s3_touch_amoled_216`

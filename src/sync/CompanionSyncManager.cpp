@@ -10,6 +10,8 @@
 #include "settings/PreferenceKeys.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
+#include "storage/index/IndexedBook.h"
+#include "storage/index/ReadingProgress.h"
 #include "text/AsciiText.h"
 
 namespace {
@@ -180,7 +182,7 @@ ul{padding-left:20px}code{background:var(--soft);border-radius:4px;padding:1px 4
 <li>For best book conversion, use the hosted web converter/flasher first. This page is the wireless upload and settings companion, not the full conversion engine.</li>
 <li><code>.txt</code> and <code>.epub</code> uploads are accepted, but EPUB conversion is handled on the device when opened.</li>
 <li>Use Wi-Fi to save your home network for RSS and OTA. You can still use the on-device Wi-Fi keyboard if you prefer the standalone path.</li>
-<li>Use <code>/books/books</code> for books and <code>/books/articles</code> for articles. Legacy files in <code>/books</code> still show up.</li>
+<li>Use <code>/books/books</code> for books and <code>/books/articles</code> for articles. Files in <code>/books</code> still show up.</li>
 </ul>
 </div>
 </section>
@@ -283,7 +285,7 @@ String libraryCategoryForPath(const String &path) {
   if (relative.startsWith("books/")) {
     return "book";
   }
-  return "legacy";
+  return "root";
 }
 
 uint16_t clampU16(uint16_t value, uint16_t minValue, uint16_t maxValue) {
@@ -361,6 +363,30 @@ bool readJsonInt(const String &body, const char *key, int &value) {
     ++index;
   }
   value = negative ? -result : result;
+  return true;
+}
+
+bool readJsonUInt32(const String &body, const char *key, uint32_t &value) {
+  int colonIndex = -1;
+  if (!findJsonKey(body, key, colonIndex)) {
+    return false;
+  }
+  int index = skipJsonWhitespace(body, colonIndex + 1);
+  if (index >= static_cast<int>(body.length()) || !AsciiText::isDigit(body[index])) {
+    return false;
+  }
+
+  uint32_t result = 0;
+  while (index < static_cast<int>(body.length()) && AsciiText::isDigit(body[index])) {
+    const uint32_t digit = static_cast<uint32_t>(body[index] - '0');
+    if (result > (0xFFFFFFFFUL - digit) / 10UL) {
+      return false;
+    }
+    result = result * 10UL + digit;
+    ++index;
+  }
+
+  value = result;
   return true;
 }
 
@@ -623,6 +649,12 @@ void CompanionSyncManager::handleBookDeleteStatic() {
   }
 }
 
+void CompanionSyncManager::handleBookPositionStatic() {
+  if (instance_ != nullptr) {
+    instance_->handleBookPosition();
+  }
+}
+
 void CompanionSyncManager::handleBooksStatic() {
   if (instance_ != nullptr) {
     instance_->handleBooks();
@@ -663,6 +695,7 @@ bool CompanionSyncManager::startServer() {
   server_.on("/api/books", HTTP_GET, handleBooksListStatic);
   server_.on("/api/books", HTTP_DELETE, handleBookDeleteStatic);
   server_.on("/api/books", HTTP_POST, handleBooksStatic, handleBookUploadStatic);
+  server_.on("/api/books/position", HTTP_PATCH, handleBookPositionStatic);
   server_.on("/api/settings", HTTP_GET, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PATCH, handleSettingsStatic);
   server_.on("/api/settings", HTTP_PUT, handleSettingsStatic);
@@ -730,19 +763,41 @@ void CompanionSyncManager::handleBooksList() {
         lowered.toLowerCase();
         if (isSupportedBookName(lowered)) {
           const RsvpMetadata metadata = readRsvpMetadata(path);
+          BookMetadata indexedMetadata;
+          IndexedBookStore::Header indexHeader;
+          const bool hasIndexedMetadata = IndexedBook::readMetadata(path, indexedMetadata, &indexHeader);
           uint8_t progressPercent = 0;
-          const bool hasProgress = progressPercentForPath(path, progressPercent);
+          uint32_t wordIndex = 0;
+          const bool hasProgress = hasIndexedMetadata &&
+              progressForPath(path, indexHeader.sourceSize, indexHeader.sourceFingerprint,
+                              indexHeader.wordCount, wordIndex, progressPercent);
           if (!first) {
             body += ",";
           }
           first = false;
-          body += "{\"name\":\"" + jsonEscape(relativeLibraryName(path)) + "\",\"category\":\"" +
+          body += "{\"id\":\"" + jsonEscape(bookIdForPath(path)) + "\",\"name\":\"" +
+                  jsonEscape(relativeLibraryName(path)) + "\",\"category\":\"" +
                   libraryCategoryForPath(path) + "\",\"title\":\"" +
                   jsonEscape(metadata.title) + "\",\"author\":\"" + jsonEscape(metadata.author) +
                   "\",\"bytes\":" +
                   String(static_cast<uint32_t>(entry.size()));
+          if (hasIndexedMetadata) {
+            body += ",\"sourceSize\":" + String(indexHeader.sourceSize) +
+                    ",\"sourceFingerprint\":" + String(indexHeader.sourceFingerprint) +
+                    ",\"wordCount\":" + String(indexHeader.wordCount) +
+                    ",\"chapters\":[";
+            for (size_t i = 0; i < indexedMetadata.chapters.size(); ++i) {
+              if (i > 0) {
+                body += ",";
+              }
+              body += "{\"title\":\"" + jsonEscape(indexedMetadata.chapters[i].title) +
+                      "\",\"wordIndex\":" + String(static_cast<uint32_t>(indexedMetadata.chapters[i].wordIndex)) + "}";
+            }
+            body += "]";
+          }
           if (hasProgress) {
-            body += ",\"progressPercent\":" + String(progressPercent);
+            body += ",\"wordIndex\":" + String(wordIndex) +
+                    ",\"progressPercent\":" + String(progressPercent);
           }
           body += "}";
         }
@@ -844,60 +899,25 @@ void CompanionSyncManager::handleBooks() {
 }
 
 void CompanionSyncManager::handleBookDelete() {
-  String requested = server_.arg("name");
-  requested.trim();
-  if (requested.isEmpty()) {
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing filename\"}");
-    return;
-  }
-
-  String filename = requested;
   String path;
-  const int separator = requested.indexOf('/');
-  if (separator >= 0) {
-    const String directory = requested.substring(0, separator);
-    filename = sanitizeFilename(requested.substring(separator + 1));
-    if (filename.isEmpty() || requested.indexOf("..") >= 0 ||
-        (directory != "books" && directory != "articles")) {
-      server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid library path\"}");
+  const String id = server_.arg("id");
+  if (!id.isEmpty()) {
+    if (!resolveBookId(id, path)) {
+      server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
       return;
     }
-    path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
   } else {
-    filename = sanitizeFilename(requested);
-    path = String(StoragePaths::kBooksPath) + "/" + filename;
-  }
-
-  String lowered = filename;
-  lowered.toLowerCase();
-  if (!isSupportedBookName(lowered)) {
-    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Unsupported file type\"}");
-    return;
-  }
-
-  File file = Board::Storage::filesystem().open(path);
-  if ((!file || file.isDirectory()) && separator < 0) {
-    if (file) {
-      file.close();
+    String requested = server_.arg("name");
+    requested.trim();
+    if (requested.isEmpty()) {
+      server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing book id\"}");
+      return;
     }
-    path = String(StoragePaths::kBookFilesPath) + "/" + filename;
-    file = Board::Storage::filesystem().open(path);
-  }
-  if ((!file || file.isDirectory()) && separator < 0) {
-    if (file) {
-      file.close();
+    if (!resolveBookName(requested, path)) {
+      server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
+      return;
     }
-    path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
-    file = Board::Storage::filesystem().open(path);
   }
-  if (!file || file.isDirectory()) {
-    if (file) {
-      file.close();
-    }
-    server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
-    return;
-  }
-  file.close();
 
   if (!Board::Storage::filesystem().remove(path)) {
     server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Delete failed\"}");
@@ -905,10 +925,68 @@ void CompanionSyncManager::handleBookDelete() {
   }
 
   statusLine1_ = "Book deleted";
-  statusLine2_ = filename;
+  statusLine2_ = relativeLibraryName(path);
   Serial.printf("[sync] deleted %s\n", path.c_str());
   server_.send(200, "application/json",
                String("{\"ok\":true,\"path\":\"") + jsonEscape(path) + "\"}");
+}
+
+void CompanionSyncManager::handleBookPosition() {
+  const String body = server_.arg("plain");
+  if (body.length() > 512) {
+    server_.send(413, "application/json", "{\"ok\":false,\"error\":\"Position payload too large\"}");
+    return;
+  }
+
+  String id;
+  uint32_t requestedSourceSize = 0;
+  uint32_t requestedSourceFingerprint = 0;
+  uint32_t requestedWordCount = 0;
+  uint32_t requestedWordIndex = 0;
+  if (!readJsonString(body, "id", id) ||
+      !readJsonUInt32(body, "sourceSize", requestedSourceSize) ||
+      !readJsonUInt32(body, "sourceFingerprint", requestedSourceFingerprint) ||
+      !readJsonUInt32(body, "wordCount", requestedWordCount) ||
+      !readJsonUInt32(body, "wordIndex", requestedWordIndex)) {
+    server_.send(400, "application/json", "{\"ok\":false,\"error\":\"Missing position fields\"}");
+    return;
+  }
+
+  String path;
+  if (!resolveBookId(id, path)) {
+    server_.send(404, "application/json", "{\"ok\":false,\"error\":\"Book not found\"}");
+    return;
+  }
+
+  BookMetadata metadata;
+  IndexedBookStore::Header header;
+  if (!IndexedBook::readMetadata(path, metadata, &header)) {
+    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book index unavailable\"}");
+    return;
+  }
+  if (header.wordCount == 0) {
+    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book has no words\"}");
+    return;
+  }
+  if (requestedSourceSize != header.sourceSize ||
+      requestedSourceFingerprint != header.sourceFingerprint ||
+      requestedWordCount != header.wordCount) {
+    server_.send(409, "application/json", "{\"ok\":false,\"error\":\"Book identity changed\"}");
+    return;
+  }
+
+  const uint32_t wordIndex = std::min<uint32_t>(requestedWordIndex, header.wordCount - 1);
+  if (!ReadingProgress::writePositionSidecar(
+          path, {header.sourceSize, header.sourceFingerprint, header.wordCount}, wordIndex)) {
+    server_.send(500, "application/json", "{\"ok\":false,\"error\":\"Progress save failed\"}");
+    return;
+  }
+
+  cacheBookPosition(path, wordIndex, header.sourceSize, header.sourceFingerprint, header.wordCount);
+  statusLine1_ = "Position saved";
+  statusLine2_ = relativeLibraryName(path);
+  server_.send(200, "application/json",
+               String("{\"ok\":true,\"id\":\"") + jsonEscape(id) + "\",\"wordIndex\":" + String(wordIndex) + "}");
 }
 
 void CompanionSyncManager::handleBookUpload() {
@@ -1564,22 +1642,150 @@ CompanionSyncManager::RsvpMetadata CompanionSyncManager::readRsvpMetadata(
   return metadata;
 }
 
-bool CompanionSyncManager::progressPercentForPath(const String &path, uint8_t &percent) {
+bool CompanionSyncManager::progressForPath(const String &path, uint32_t sourceSize,
+                                           uint32_t sourceFingerprint, uint32_t wordCount,
+                                           uint32_t &wordIndex, uint8_t &percent) {
+  if (wordCount <= 1) {
+    return false;
+  }
+
+  if (ReadingProgress::readPositionSidecar(
+          path, {sourceSize, sourceFingerprint, wordCount}, wordIndex)) {
+    const size_t progress = (static_cast<size_t>(wordIndex) * static_cast<size_t>(100)) /
+                            static_cast<size_t>(wordCount - 1);
+    percent = static_cast<uint8_t>(std::min(static_cast<size_t>(100), progress));
+    return true;
+  }
+
   const String positionKey = bookPositionKey(path);
   const String countKey = bookWordCountKey(path);
   if (!preferences_.isKey(positionKey.c_str()) || !preferences_.isKey(countKey.c_str())) {
     return false;
   }
-
-  const size_t wordCount = preferences_.getUInt(countKey.c_str(), 0);
-  if (wordCount <= 1) {
+  if (preferences_.getUInt(countKey.c_str(), 0) != wordCount) {
     return false;
   }
 
-  size_t wordIndex = preferences_.getUInt(positionKey.c_str(), 0);
-  wordIndex = std::min(wordIndex, wordCount - 1);
-  const size_t progress = (wordIndex * static_cast<size_t>(100)) / (wordCount - 1);
+  if (preferences_.isKey(bookSourceSizeKey(path).c_str()) &&
+      preferences_.getUInt(bookSourceSizeKey(path).c_str(), 0) != sourceSize) {
+    return false;
+  }
+  if (preferences_.isKey(bookSourceFingerprintKey(path).c_str()) &&
+      preferences_.getUInt(bookSourceFingerprintKey(path).c_str(), 0) != sourceFingerprint) {
+    return false;
+  }
+
+  wordIndex = std::min<uint32_t>(preferences_.getUInt(positionKey.c_str(), 0), wordCount - 1);
+  const size_t progress = (static_cast<size_t>(wordIndex) * static_cast<size_t>(100)) /
+                          static_cast<size_t>(wordCount - 1);
   percent = static_cast<uint8_t>(std::min(static_cast<size_t>(100), progress));
+  return true;
+}
+
+void CompanionSyncManager::cacheBookPosition(const String &path, uint32_t wordIndex,
+                                             uint32_t sourceSize, uint32_t sourceFingerprint,
+                                             uint32_t wordCount) {
+  if (wordCount == 0) {
+    return;
+  }
+  wordIndex = std::min<uint32_t>(wordIndex, wordCount - 1);
+  preferences_.putUInt(bookPositionKey(path).c_str(), wordIndex);
+  preferences_.putUInt(bookWordCountKey(path).c_str(), wordCount);
+  preferences_.putUInt(bookSourceSizeKey(path).c_str(), sourceSize);
+  preferences_.putUInt(bookSourceFingerprintKey(path).c_str(), sourceFingerprint);
+}
+
+String CompanionSyncManager::bookIdForPath(const String &path) const {
+  char id[10];
+  std::snprintf(id, sizeof(id), "b%08lx", static_cast<unsigned long>(hashBookPath(path)));
+  return String(id);
+}
+
+bool CompanionSyncManager::resolveBookId(const String &id, String &path) const {
+  const char *directories[] = {
+      StoragePaths::kBooksPath,
+      StoragePaths::kBookFilesPath,
+      StoragePaths::kArticleFilesPath,
+  };
+
+  for (const char *directoryPath : directories) {
+    File dir = Board::Storage::filesystem().open(directoryPath);
+    if (!dir || !dir.isDirectory()) {
+      if (dir) {
+        dir.close();
+      }
+      continue;
+    }
+
+    File entry = dir.openNextFile();
+    while (entry) {
+      if (!entry.isDirectory()) {
+        const String name = displayNameForPath(String(entry.name()));
+        String lowered = name;
+        lowered.toLowerCase();
+        if (isSupportedBookName(lowered)) {
+          const String candidate = String(directoryPath) + "/" + name;
+          if (bookIdForPath(candidate) == id) {
+            path = candidate;
+            entry.close();
+            dir.close();
+            return true;
+          }
+        }
+      }
+      entry.close();
+      entry = dir.openNextFile();
+    }
+    dir.close();
+  }
+
+  return false;
+}
+
+bool CompanionSyncManager::resolveBookName(const String &requested, String &path) const {
+  String filename = requested;
+  const int separator = requested.indexOf('/');
+  if (separator >= 0) {
+    const String directory = requested.substring(0, separator);
+    filename = sanitizeFilename(requested.substring(separator + 1));
+    if (filename.isEmpty() || requested.indexOf("..") >= 0 ||
+        (directory != "books" && directory != "articles")) {
+      return false;
+    }
+    path = String(StoragePaths::kBooksPath) + "/" + directory + "/" + filename;
+  } else {
+    filename = sanitizeFilename(requested);
+    path = String(StoragePaths::kBooksPath) + "/" + filename;
+  }
+
+  String lowered = filename;
+  lowered.toLowerCase();
+  if (!isSupportedBookName(lowered)) {
+    return false;
+  }
+
+  File file = Board::Storage::filesystem().open(path);
+  if ((!file || file.isDirectory()) && separator < 0) {
+    if (file) {
+      file.close();
+    }
+    path = String(StoragePaths::kBookFilesPath) + "/" + filename;
+    file = Board::Storage::filesystem().open(path);
+  }
+  if ((!file || file.isDirectory()) && separator < 0) {
+    if (file) {
+      file.close();
+    }
+    path = String(StoragePaths::kArticleFilesPath) + "/" + filename;
+    file = Board::Storage::filesystem().open(path);
+  }
+  if (!file || file.isDirectory()) {
+    if (file) {
+      file.close();
+    }
+    return false;
+  }
+  file.close();
   return true;
 }
 
@@ -1592,6 +1798,18 @@ String CompanionSyncManager::bookPositionKey(const String &bookPath) const {
 String CompanionSyncManager::bookWordCountKey(const String &bookPath) const {
   char key[10];
   std::snprintf(key, sizeof(key), "c%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
+  return String(key);
+}
+
+String CompanionSyncManager::bookSourceSizeKey(const String &bookPath) const {
+  char key[10];
+  std::snprintf(key, sizeof(key), "s%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
+  return String(key);
+}
+
+String CompanionSyncManager::bookSourceFingerprintKey(const String &bookPath) const {
+  char key[10];
+  std::snprintf(key, sizeof(key), "f%08lx", static_cast<unsigned long>(hashBookPath(bookPath)));
   return String(key);
 }
 

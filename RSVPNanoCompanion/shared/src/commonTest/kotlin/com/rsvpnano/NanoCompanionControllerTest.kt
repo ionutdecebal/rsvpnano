@@ -127,19 +127,44 @@ class NanoCompanionControllerTest {
     fun deleteBooksDeletesEachBookAndRefreshesBooks() = runBlocking {
         val client = RecordingNanoClient(
             initialBooks = listOf(
-                NanoBook(id = "One.rsvp", title = "One"),
-                NanoBook(id = "Two.rsvp", title = "Two"),
+                NanoBook(id = "b00000001", name = "One.rsvp", title = "One"),
+                NanoBook(id = "b00000002", name = "Two.rsvp", title = "Two"),
             )
         )
         val controller = controller(InMemoryPendingStore(), client)
 
         val snapshot = controller.deleteBooks(
             baseUrl = "http://device.local",
-            bookIds = listOf("One.rsvp", "Two.rsvp"),
+            bookIds = listOf("b00000001", "b00000002"),
         )
 
-        assertEquals(listOf("One.rsvp", "Two.rsvp"), client.deletedFilenames)
+        assertEquals(listOf("b00000001", "b00000002"), client.deletedFilenames)
         assertEquals(emptyList(), snapshot.books)
+    }
+
+    @Test
+    fun setBookPositionSavesAndRefreshesBooks() = runBlocking {
+        val book = NanoBook(
+            id = "b12345678",
+            name = "Manual.rsvp",
+            title = "Manual",
+            sourceSize = 1234,
+            sourceFingerprint = 3456,
+            wordCount = 1000,
+            wordIndex = 100,
+        )
+        val client = RecordingNanoClient(initialBooks = listOf(book))
+        val controller = controller(InMemoryPendingStore(), client)
+
+        val snapshot = controller.setBookPosition(
+            baseUrl = "http://device.local",
+            book = book,
+            wordIndex = 250,
+        )
+
+        assertEquals("b12345678", client.savedPositionId)
+        assertEquals(250, client.savedPositionWordIndex)
+        assertEquals(listOf(book), snapshot.books)
     }
 
     @Test
@@ -206,6 +231,8 @@ class NanoCompanionControllerTest {
         var savedFeeds: List<String>? = null
         var savedSettings: NanoSettings? = null
         var savedWifi: Pair<String, String>? = null
+        var savedPositionId: String? = null
+        var savedPositionWordIndex: Int? = null
         val deletedFilenames = mutableListOf<String>()
 
         override suspend fun fetchInfo(baseUrl: String): NanoInfo = NanoInfo(name = "Nano")
@@ -252,9 +279,22 @@ class NanoCompanionControllerTest {
             return NanoUploadResponse(ok = true, path = "/books/$name")
         }
 
-        override suspend fun deleteBook(baseUrl: String, name: String): NanoUploadResponse {
-            deletedFilenames += name
-            books = books.filterNot { it.id == name }
+        override suspend fun deleteBook(baseUrl: String, id: String): NanoUploadResponse {
+            deletedFilenames += id
+            books = books.filterNot { it.id == id }
+            return NanoUploadResponse(ok = true)
+        }
+
+        override suspend fun setBookPosition(
+            baseUrl: String,
+            id: String,
+            sourceSize: Long,
+            sourceFingerprint: Long,
+            wordCount: Int,
+            wordIndex: Int,
+        ): NanoUploadResponse {
+            savedPositionId = id
+            savedPositionWordIndex = wordIndex
             return NanoUploadResponse(ok = true)
         }
     }

@@ -52,6 +52,7 @@ private fun RsvpNanoComposeApp(presenter: CompanionPresenter) {
         onDeleteDraft = presenter::deleteDraft,
         onSyncArticles = presenter::syncSavedArticles,
         onDeleteBook = presenter::deleteDeviceBook,
+        onSetBookPosition = presenter::setBookPosition,
         onPickBook = presenter::uploadSelectedFile,
         onRssFeedChange = presenter::setRssFeedDraft,
         onAddRssFeed = presenter::addRssFeed,
