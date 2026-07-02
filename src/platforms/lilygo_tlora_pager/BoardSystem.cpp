@@ -7,6 +7,7 @@
 #include <esp_sleep.h>
 #include <esp_system.h>
 
+#include "board/BoardConfig.h"
 #include "platforms/lilygo_tlora_pager/TPagerHardware.h"
 
 // LilyGo T-LoRa-Pager system backend. LilyGoLib owns the buses, expander, power
@@ -22,16 +23,17 @@ void begin() {
   // Full BSP init must run before any Board:: backend touches a peripheral.
   tpager::ensureBegun();
 
-  if (Config::PIN_PWR_BUTTON >= 0) {
-    pinMode(Config::PIN_PWR_BUTTON, INPUT_PULLUP);
+  if (Board::Config::PIN_PWR_BUTTON >= 0) {
+    pinMode(Board::Config::PIN_PWR_BUTTON, INPUT_PULLUP);
   }
 
   Board::Power::begin();
 }
 
 void lightSleepUntilBootButton() {
-  const int wakePin = Config::PIN_DEEP_SLEEP_WAKE >= 0 ? Config::PIN_DEEP_SLEEP_WAKE
-                                                       : Config::PIN_PWR_BUTTON;
+  const int wakePin = Board::Config::PIN_DEEP_SLEEP_WAKE >= 0
+                          ? Board::Config::PIN_DEEP_SLEEP_WAKE
+                          : Board::Config::PIN_PWR_BUTTON;
   if (wakePin < 0) {
     return;
   }
@@ -53,7 +55,7 @@ void holdBacklightOffForDeepSleep() {
 const char *wakeLabel(bool) { return "Press BOOT to start"; }
 
 void deepSleepUntilConfiguredWake() {
-  const int wakePin = Config::PIN_DEEP_SLEEP_WAKE;
+  const int wakePin = Board::Config::PIN_DEEP_SLEEP_WAKE;
   if (wakePin >= 0) {
     pinMode(wakePin, INPUT_PULLUP);
     esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(wakePin), 0);

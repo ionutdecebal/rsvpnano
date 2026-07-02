@@ -1,5 +1,6 @@
 #include "board/BoardPower.h"
 
+#include "board/BoardConfig.h"
 #include "platforms/lilygo_tlora_pager/TPagerHardware.h"
 
 // LilyGo T-LoRa-Pager power backend. The BQ25896 charger and BQ27220 fuel gauge
@@ -61,14 +62,14 @@ bool releaseBatteryPowerHold() {
   return true;
 }
 
-bool supportsSoftwarePowerOff() { return Config::SUPPORTS_SOFTWARE_POWEROFF; }
+bool supportsSoftwarePowerOff() { return Board::Config::SUPPORTS_SOFTWARE_POWEROFF; }
 
 bool powerOffUsesControllerWake() { return false; }
 
-bool shouldRequestShutdownOnPowerOff() { return Config::REQUEST_PMU_SHUTDOWN_ON_POWEROFF; }
+bool shouldRequestShutdownOnPowerOff() { return Board::Config::REQUEST_PMU_SHUTDOWN_ON_POWEROFF; }
 
 bool shouldReleaseBatteryPowerBeforeDeepSleep() {
-  return Config::RELEASE_BATTERY_HOLD_BEFORE_DEEP_SLEEP;
+  return Board::Config::RELEASE_BATTERY_HOLD_BEFORE_DEEP_SLEEP;
 }
 
 }  // namespace Board::Power
