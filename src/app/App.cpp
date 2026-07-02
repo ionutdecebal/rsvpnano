@@ -3765,7 +3765,6 @@ void App::handleTextEntryKeyboard(uint32_t nowMs) {
     }
 
     lastActivityMs_ = nowMs;
-    restoreFromAutoDim(nowMs);
 
     if (c == '\n') {  // Enter: confirm/save.
         commitTextEntry(nowMs);
