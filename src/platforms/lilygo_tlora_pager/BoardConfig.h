@@ -65,10 +65,10 @@ constexpr bool ENABLE_BOTTOM_EDGE_QUICK_SETTINGS_SWIPE = true;
 constexpr bool FIRMWARE_POWER_BUTTON_ENABLED = true;
 constexpr bool BOOT_BUTTON_TOGGLES_READER = true;
 // Touchless board: a reader center tap (synthesized from the rotary push) toggles
-// playback, since there is no dedicated KEY/BOOT button to start RSVP. In the
-// post-PR#120 Board layer this is the app-facing TOUCH_READER_PLAYBACK_ENABLED
-// knob; READER_TAP_TOGGLES_PLAYBACK is kept only for this platform's own
-// backends and is otherwise unused by shared code.
+// playback, since there is no dedicated KEY/BOOT button to start RSVP. Because the
+// tap is a deliberate rotary center push (not an accidental screen touch), App
+// treats it as a single-tap play/pause toggle when READER_TAP_TOGGLES_PLAYBACK is
+// set, instead of the double-tap handleReaderTap() path the touch boards use.
 constexpr bool READER_TAP_TOGGLES_PLAYBACK = true;
 constexpr bool TOUCH_READER_PLAYBACK_ENABLED = true;
 // The center tap toggles playback rather than only pausing a locked reader.

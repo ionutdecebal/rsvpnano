@@ -2063,6 +2063,11 @@ void App::applyPausedTouchGesture(const TouchEvent& event, uint32_t nowMs) {
                     && (playLocked_ || pauseAtSentenceEndRequested_)) {
                     resetReaderTapTracking();
                     requestReaderPauseAtSentenceEnd(nowMs);
+                } else if (Board::Config::READER_TAP_TOGGLES_PLAYBACK) {
+                    // Touchless board: a single deliberate tap (the rotary center push)
+                    // toggles playback -- no double-tap required.
+                    resetReaderTapTracking();
+                    toggleReaderPlaybackFromShortcut(nowMs);
                 } else if (Board::Config::TOUCH_READER_PLAYBACK_ENABLED) {
                     handleReaderTap(event.x, event.y, nowMs);
                 } else {
@@ -2152,6 +2157,11 @@ void App::applyPausedTouchGesture(const TouchEvent& event, uint32_t nowMs) {
             resetReaderTapTracking();
             contextViewVisible_ = false;
             renderActiveReader(nowMs);
+        } else if (tapLike && Board::Config::READER_TAP_TOGGLES_PLAYBACK) {
+            // Touchless board: a single deliberate tap (the rotary center push)
+            // toggles playback -- no double-tap required.
+            resetReaderTapTracking();
+            toggleReaderPlaybackFromShortcut(nowMs);
         } else if (tapLike && Board::Config::TOUCH_READER_PLAYBACK_ENABLED) {
             handleReaderTap(event.x, event.y, nowMs);
         } else {
