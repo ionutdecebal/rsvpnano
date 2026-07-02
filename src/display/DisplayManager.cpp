@@ -3141,7 +3141,12 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
   progressPercent = std::max(-1, std::min(100, progressPercent));
   const int virtualWidth = logicalWidth();
   const int virtualHeight = logicalHeight();
-  const bool portrait = isPortraitOrientation(uiOrientation_);
+  // Use the portrait layout only when the logical panel is actually taller than
+  // it is wide. Some boards (e.g. the T-LoRa-Pager) run at their identity
+  // orientation -- reported as "Portrait" -- on a physically landscape panel
+  // (480x222); the tall-portrait layout would push the timer text below the
+  // visible area, so those fall through to the landscape layout instead.
+  const bool portrait = isPortraitOrientation(uiOrientation_) && virtualHeight >= virtualWidth;
   const bool timerRunning = progressPercent >= 0;
 
   String renderKey;
@@ -3335,7 +3340,8 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
     return std::max(blockX, blockX + ((blockWidth - textWidth) / 2));
   };
 
-  const bool portraitFocusLayout = portrait && !breakAccent && (mode == "BEGIN" || mode == "WORK");
+  const bool portraitFocusLayout =
+      portrait && !breakAccent && (mode == "BEGIN" || mode == "WORK" || mode == "FOCUS");
   int titleScale = portrait ? 5 : 7;
   if (portraitFocusLayout && timerRunning) {
     titleScale = 4;
@@ -3394,14 +3400,32 @@ void DisplayManager::renderFocusTimerScreen(const String &mode, const String &ge
 
     drawTinyTextAt(mode, centeredXForTiny(mode, titleScale), titleY, baseTextColor, titleScale);
 
+    int instructionY = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 42 : 28);
+    if (portraitFocusLayout) {
+      instructionY = dividerY + 66;
+    }
+
+    // A non-empty timer in a non-running state is the selectable pre-start
+    // duration: touchless boards let the rotary pick the block length before
+    // starting. Draw it between the title and the instruction so the rotary
+    // feedback is visible. (Orientation boards leave this empty and are
+    // unaffected.)
+    if (!timer.isEmpty()) {
+      int durationScale = portrait ? 4 : 6;
+      while (durationScale > 1 && measureTinyTextWidth(timer, durationScale) > contentWidth) {
+        --durationScale;
+      }
+      const int durationY = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 20 : 14);
+      drawTinyTextAt(timer, centeredXForTiny(timer, durationScale), durationY, accent,
+                     durationScale);
+      instructionY = durationY + (kTinyGlyphHeight * durationScale) + (portrait ? 22 : 16);
+    }
+
     if (!instruction.isEmpty()) {
       const std::vector<String> lines =
           wrapTinyLines(instruction, instructionBlockWidth, instructionScale);
       const int lineHeight = (kTinyGlyphHeight * instructionScale) + instructionScale + 4;
-      int y = titleY + (kTinyGlyphHeight * titleScale) + (portrait ? 42 : 28);
-      if (portraitFocusLayout) {
-        y = dividerY + 66;
-      }
+      int y = instructionY;
       for (const String &line : lines) {
         drawTinyTextAt(line,
                        centeredXWithin(line, instructionScale, instructionBlockX,

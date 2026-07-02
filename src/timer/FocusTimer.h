@@ -38,6 +38,9 @@ class FocusTimer {
   void update(uint32_t nowMs);
   void chooseGenre(Genre genre, uint32_t nowMs);
   void cancelActiveTimer(uint32_t nowMs);
+  // Start the touch countdown explicitly (rotary/button-driven boards that have
+  // no place-on-side gesture). No-op unless in the WaitForTouchStart state.
+  void startTouchTimer(uint32_t nowMs);
   void cycleTouchDuration();
   void stepTouchDuration(int direction);
   void setTouchDurationIndexForGenre(Genre genre, uint8_t index);

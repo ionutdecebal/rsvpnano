@@ -1,6 +1,7 @@
 .pio
 .gradle/
 .kotlin/
+local.properties
 .local/
 build/
 **/build/
@@ -36,3 +37,8 @@ compile_commands.json
 src/idf_component.yml
 benchmark/logs/
 benchmark/summary.md
+logs/
+# T-Pager build artifacts / transient backups
+tpager_build.log
+tpager_pkg.log
+*.orig
