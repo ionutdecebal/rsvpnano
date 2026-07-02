@@ -758,6 +758,11 @@ void App::begin() {
 
     Board::Audio::begin();
     focusTimer_.begin();
+    for (uint8_t i = 0; i < FocusTimer::kGenreCount; ++i) {
+        focusTimer_.setTouchDurationIndexForGenre(
+            static_cast<FocusTimer::Genre>(i),
+            preferences_.getUChar(settings::kPrefTimerDurationByGenre[i], 0));
+    }
 
 #if RSVP_USB_TRANSFER_ENABLED && RSVP_USB_TRANSFER_AUTO_START
     state_ = AppState::Booting;
@@ -2383,7 +2388,7 @@ void App::applyFocusTimerTouch(const TouchEvent& event, uint32_t nowMs) {
             focusTimer_.stepTouchDuration(tpagerDeltaY > 0 ? 1 : -1);
             const uint8_t genreIndex = static_cast<uint8_t>(focusTimer_.genre());
             if (genreIndex < FocusTimer::kGenreCount) {
-                preferences_.putUChar(kPrefTimerDurationByGenre[genreIndex],
+                preferences_.putUChar(settings::kPrefTimerDurationByGenre[genreIndex],
                                       focusTimer_.touchDurationIndex());
             }
             renderFocusTimerSession();
@@ -5926,7 +5931,14 @@ void App::renderFocusTimerSession() {
         return;
 #endif
     case FocusTimer::State::TouchRunning:
+#ifdef RSVP_BOARD_TPAGER
+        // The panel does not rotate between the pre-start and running screens on
+        // this board, so a shared "BEGIN" title makes starting look like nothing
+        // happened (the word merely shrinks). Use a distinct running title.
+        display_.renderFocusTimerScreen("FOCUS", "", remainingLabel, "", "", focusTimer_.progressPercent(millis()));
+#else
         display_.renderFocusTimerScreen("BEGIN", "", remainingLabel, "", "", focusTimer_.progressPercent(millis()));
+#endif
         return;
     case FocusTimer::State::WaitAfterTouch:
         display_.renderFocusTimerScreen("WORK", "", "", "Flip to continue");
