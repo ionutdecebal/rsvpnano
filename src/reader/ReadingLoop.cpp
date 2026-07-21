@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "text/CyrillicText.h"
 #include "text/LatinText.h"
 
 namespace {
@@ -131,11 +132,50 @@ constexpr uint8_t kMaxCatchUpWords = 4;
 constexpr uint16_t kMaxPacingDelayMs = 600;
 
 bool isWordCharacter(char c) {
-  return LatinText::isWordCharacter(static_cast<uint8_t>(c));
+  const uint8_t value = static_cast<uint8_t>(c);
+  return LatinText::isWordCharacter(value) || CyrillicText::isLeadByte(value) ||
+         CyrillicText::isTrailByte(value);
+}
+
+bool isWordCharacterAt(const String &word, size_t index) {
+  if (CyrillicText::isWordCharacterAt(word, index)) {
+    return true;
+  }
+  return LatinText::isWordCharacter(static_cast<uint8_t>(word[index]));
 }
 
 bool isLetterCharacter(char c) {
-  return LatinText::isLetter(static_cast<uint8_t>(c));
+  const uint8_t value = static_cast<uint8_t>(c);
+  return LatinText::isLetter(value) || CyrillicText::isLeadByte(value) ||
+         CyrillicText::isTrailByte(value);
+}
+
+bool isLetterCharacterAt(const String &word, size_t index) {
+  if (CyrillicText::isLetterAt(word, index)) {
+    return true;
+  }
+  return LatinText::isLetter(static_cast<uint8_t>(word[index]));
+}
+
+bool isLowercaseLetterAt(const String &word, size_t index) {
+  if (CyrillicText::isLowercaseAt(word, index)) {
+    return true;
+  }
+  return LatinText::isLowercaseLetter(static_cast<uint8_t>(word[index]));
+}
+
+bool isUppercaseLetterAt(const String &word, size_t index) {
+  if (CyrillicText::isUppercaseAt(word, index)) {
+    return true;
+  }
+  return LatinText::isUppercaseLetter(static_cast<uint8_t>(word[index]));
+}
+
+bool isVowelCharacterAt(const String &word, size_t index) {
+  if (CyrillicText::isVowelAt(word, index)) {
+    return true;
+  }
+  return LatinText::isVowel(static_cast<uint8_t>(word[index]));
 }
 
 bool isDigitCharacter(char c) {
@@ -194,8 +234,8 @@ bool isIgnoredTrailingChar(char c) {
 
 int letterCharacterCount(const String &word) {
   int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isLetterCharacter(word[i])) {
+  for (size_t i = 0; i < word.length(); i = CyrillicText::advanceIndex(word, i)) {
+    if (isLetterCharacterAt(word, i)) {
       ++count;
     }
   }
@@ -214,8 +254,8 @@ int digitCharacterCount(const String &word) {
 
 int uppercaseLetterCount(const String &word) {
   int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isUppercaseLetter(word[i])) {
+  for (size_t i = 0; i < word.length(); i = CyrillicText::advanceIndex(word, i)) {
+    if (isUppercaseLetterAt(word, i)) {
       ++count;
     }
   }
@@ -224,8 +264,8 @@ int uppercaseLetterCount(const String &word) {
 
 int readableCharacterCount(const String &word) {
   int count = 0;
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isWordCharacter(word[i])) {
+  for (size_t i = 0; i < word.length(); i = CyrillicText::advanceIndex(word, i)) {
+    if (isWordCharacterAt(word, i)) {
       ++count;
     }
   }
@@ -239,15 +279,26 @@ int approximateSyllableGroupCount(const String &word) {
   String lettersOnly;
   lettersOnly.reserve(word.length());
 
-  for (size_t i = 0; i < word.length(); ++i) {
-    const char c = word[i];
-    if (!isLetterCharacter(c)) {
+  for (size_t i = 0; i < word.length(); i = CyrillicText::advanceIndex(word, i)) {
+    if (!isLetterCharacterAt(word, i)) {
       previousWasVowel = false;
       continue;
     }
 
     ++letterCount;
-    const char lowered = static_cast<char>(LatinText::toLowercaseByte(static_cast<uint8_t>(c)));
+    if (CyrillicText::isLeadByte(static_cast<uint8_t>(word[i])) && i + 1 < word.length()) {
+      const uint8_t lead = static_cast<uint8_t>(word[i]);
+      const uint8_t trail = static_cast<uint8_t>(word[i + 1]);
+      lettersOnly += static_cast<char>(CyrillicText::fallbackAsciiByte(lead, trail));
+      const bool vowel = CyrillicText::isVowelAt(word, i);
+      if (vowel && !previousWasVowel) {
+        ++groups;
+      }
+      previousWasVowel = vowel;
+      continue;
+    }
+
+    const char lowered = static_cast<char>(LatinText::toLowercaseByte(static_cast<uint8_t>(word[i])));
     lettersOnly += lowered;
 
     const bool vowel = LatinText::isVowel(static_cast<uint8_t>(lowered));
@@ -331,11 +382,11 @@ bool endsWithEllipsis(const String &word) {
 }
 
 bool startsWithLowercaseLetter(const String &word) {
-  for (size_t i = 0; i < word.length(); ++i) {
-    if (isLowercaseLetter(word[i])) {
+  for (size_t i = 0; i < word.length(); i = CyrillicText::advanceIndex(word, i)) {
+    if (isLowercaseLetterAt(word, i)) {
       return true;
     }
-    if (isLetterCharacter(word[i])) {
+    if (isLetterCharacterAt(word, i)) {
       return false;
     }
   }

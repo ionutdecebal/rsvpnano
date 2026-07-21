@@ -2,14 +2,27 @@
 
 #include <algorithm>
 
+#include "text/CyrillicText.h"
 #include "text/LatinText.h"
 
 namespace RsvpText {
 
 namespace Detail {
 
+bool isWordBoundary(const String &text, size_t index) {
+  if (CyrillicText::isWordCharacterAt(text, index)) {
+    return false;
+  }
+  const uint8_t value = LatinText::byteValue(text[index]);
+  return value <= ' ' && !LatinText::isWordCharacter(value) &&
+         !LatinText::isLowCustomSlotByte(value);
+}
+
 bool isWordBoundary(char c) {
   const uint8_t value = LatinText::byteValue(c);
+  if (CyrillicText::isLeadByte(value) || CyrillicText::isTrailByte(value)) {
+    return false;
+  }
   return value <= ' ' && !LatinText::isWordCharacter(value) &&
          !LatinText::isLowCustomSlotByte(value);
 }
@@ -48,7 +61,9 @@ bool isEllipsisToken(const String &token) {
 } // namespace Detail
 
 bool isReadableTokenChar(char c) {
-  return LatinText::isWordCharacter(LatinText::byteValue(c));
+  const uint8_t value = LatinText::byteValue(c);
+  return LatinText::isWordCharacter(value) || CyrillicText::isLeadByte(value) ||
+         CyrillicText::isTrailByte(value);
 }
 
 bool isRhythmToken(const String &token) { return Detail::isHyphenToken(token); }

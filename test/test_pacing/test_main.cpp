@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "reader/ReadingLoop.h"
+#include "text/CyrillicText.h"
 #include "text/LatinText.h"
 
 // ---------------------------------------------------------------------------
@@ -269,6 +270,48 @@ void test_hungarian_double_acute_vowel_affects_syllable_bonus(void) {
 
 void test_sami_custom_letter_counts_as_readable(void) {
   TEST_ASSERT_EQUAL(200u, duration(300, "\xF7""ahti", "ja"));
+}
+
+static String encodedCyrillicWord(uint32_t first, uint32_t second) {
+  String word;
+  uint8_t lead = 0;
+  uint8_t trail = 0;
+  if (!CyrillicText::storageBytesForCodepoint(first, lead, trail)) {
+    return word;
+  }
+  word += static_cast<char>(lead);
+  word += static_cast<char>(trail);
+  if (!CyrillicText::storageBytesForCodepoint(second, lead, trail)) {
+    return String();
+  }
+  word += static_cast<char>(lead);
+  word += static_cast<char>(trail);
+  return word;
+}
+
+void test_cyrillic_storage_roundtrip(void) {
+  uint8_t lead = 0;
+  uint8_t trail = 0;
+  TEST_ASSERT_TRUE(CyrillicText::storageBytesForCodepoint(0x041C, lead, trail));
+  TEST_ASSERT_EQUAL_UINT8(CyrillicText::kLeadByte, lead);
+  TEST_ASSERT_TRUE(CyrillicText::isTrailByte(trail));
+  TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>('M'),
+                          CyrillicText::fallbackAsciiByte(lead, trail));
+}
+
+void test_cyrillic_word_counts_as_readable(void) {
+  const String word = encodedCyrillicWord(0x043C, 0x0438);
+  TEST_ASSERT_FALSE(word.isEmpty());
+  TEST_ASSERT_EQUAL(200u, duration(300, word.c_str(), "next"));
+}
+
+void test_cyrillic_lowercase_next_word_suppresses_sentence_pause(void) {
+  const String word = encodedCyrillicWord(0x043C, 0x0438);
+  const String next = encodedCyrillicWord(0x0434, 0x0430);
+  TEST_ASSERT_FALSE(word.isEmpty());
+  TEST_ASSERT_FALSE(next.isEmpty());
+  ReadingLoop reader = makeReader(300, {word, next});
+  TEST_ASSERT_EQUAL(200u, reader.currentWordDurationMs());
 }
 
 void test_ascii_fallback_maps_accented_latin_to_base_letter(void) {
@@ -579,6 +622,9 @@ int main(void) {
   RUN_TEST(test_czech_extended_word_counts_as_readable);
   RUN_TEST(test_hungarian_double_acute_vowel_affects_syllable_bonus);
   RUN_TEST(test_sami_custom_letter_counts_as_readable);
+  RUN_TEST(test_cyrillic_storage_roundtrip);
+  RUN_TEST(test_cyrillic_word_counts_as_readable);
+  RUN_TEST(test_cyrillic_lowercase_next_word_suppresses_sentence_pause);
   RUN_TEST(test_ascii_fallback_maps_accented_latin_to_base_letter);
   RUN_TEST(test_ascii_fallback_maps_hungarian_double_acute_to_base_letter);
   RUN_TEST(test_ascii_fallback_maps_spanish_enye_to_base_letter);

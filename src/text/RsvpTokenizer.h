@@ -7,6 +7,7 @@
 #define RSVP_MAX_BOOK_WORDS 0
 #endif
 
+#include "text/CyrillicText.h"
 #include "text/TextNormalizer.h"
 
 namespace RsvpText {
@@ -20,6 +21,7 @@ bool isRhythmToken(const String &token);
 namespace Detail {
 
 bool isWordBoundary(char c);
+bool isWordBoundary(const String &text, size_t index);
 bool isInlineWordHyphen(const String &text, size_t index);
 bool isHyphenToken(const String &token);
 bool isEllipsisToken(const String &token);
@@ -105,10 +107,11 @@ bool appendNormalizedLineWords(const String &normalizedLine,
     }
 
     const char c = normalizedLine[i];
-    if (Detail::isWordBoundary(c)) {
+    if (Detail::isWordBoundary(normalizedLine, i)) {
       if (!flushCurrent()) {
         return false;
       }
+      i = CyrillicText::advanceIndex(normalizedLine, i);
       continue;
     }
 

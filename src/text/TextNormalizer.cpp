@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "text/AsciiText.h"
+#include "text/CyrillicText.h"
 #include "text/LatinText.h"
 
 namespace RsvpText {
@@ -97,6 +98,14 @@ void appendDisplayApproximation(String &target, uint32_t codepoint) {
   uint8_t storedByte = 0;
   if (LatinText::storageByteForCodepoint(codepoint, storedByte)) {
     target += static_cast<char>(storedByte);
+    return;
+  }
+
+  uint8_t cyrillicLead = 0;
+  uint8_t cyrillicTrail = 0;
+  if (CyrillicText::storageBytesForCodepoint(codepoint, cyrillicLead, cyrillicTrail)) {
+    target += static_cast<char>(cyrillicLead);
+    target += static_cast<char>(cyrillicTrail);
     return;
   }
 
@@ -741,7 +750,8 @@ String normalizeDisplayText(const String &text, ParseStats *stats) {
     index = before + 1;
     const uint8_t rawByte = static_cast<uint8_t>(text[before]);
     if (LatinText::isWordCharacter(rawByte) ||
-        LatinText::isLowCustomSlotByte(rawByte)) {
+        LatinText::isLowCustomSlotByte(rawByte) ||
+        CyrillicText::isLeadByte(rawByte) || CyrillicText::isTrailByte(rawByte)) {
       normalized += static_cast<char>(rawByte);
     } else {
       appendSingleByteApproximation(normalized, rawByte);
@@ -751,19 +761,30 @@ String normalizeDisplayText(const String &text, ParseStats *stats) {
   String collapsed;
   collapsed.reserve(normalized.length());
   bool previousSpace = true;
-  for (size_t i = 0; i < normalized.length(); ++i) {
+  for (size_t i = 0; i < normalized.length();) {
     const uint8_t value = LatinText::byteValue(normalized[i]);
+    if (CyrillicText::isLeadByte(value) && i + 1 < normalized.length() &&
+        CyrillicText::isTrailByte(static_cast<uint8_t>(normalized[i + 1]))) {
+      collapsed += normalized[i];
+      collapsed += normalized[i + 1];
+      previousSpace = false;
+      i += 2;
+      continue;
+    }
+
     if (value <= ' ' && !LatinText::isWordCharacter(value) &&
-        !LatinText::isLowCustomSlotByte(value)) {
+        !LatinText::isLowCustomSlotByte(value) && !CyrillicText::isTrailByte(value)) {
       if (!previousSpace) {
         collapsed += ' ';
         previousSpace = true;
       }
+      ++i;
       continue;
     }
 
     collapsed += static_cast<char>(value);
     previousSpace = false;
+    ++i;
   }
 
   if (!collapsed.isEmpty() && collapsed[collapsed.length() - 1] == ' ') {

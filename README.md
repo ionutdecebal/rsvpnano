@@ -413,7 +413,7 @@ If the old folder layout needs repair, the device now asks before changing the c
 
 `v0.0.8` includes the long-book and unsupported-character improvements from earlier releases. Common punctuation is normalized, ellipses and hyphenated sentence breaks are handled more carefully, and many accented Latin characters render directly or fall back to readable plain Latin equivalents.
 
-The current renderer is best for English and European Latin-script languages. Complex scripts still need additional font and shaping work.
+The current renderer supports English, European Latin-script languages, and Russian/Cyrillic book text in the Standard serif typeface. Other complex scripts still need additional font and shaping work.
 
 ## Companion App Status
 

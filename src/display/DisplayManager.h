@@ -181,6 +181,12 @@ class DisplayManager {
   void drawRsvpWordScaledAt(const String &word, int x, int y, int focusIndex, int divisor);
   void drawRsvpWordScaledPercentAt(const String &word, int x, int y, int focusIndex,
                                    uint8_t scalePercent);
+  void drawGlyphBitmapScaled(int x, int y, const uint8_t *bitmap, int glyphWidth, int glyphHeight,
+                             uint16_t color, int divisor);
+  void drawGlyphBitmapScaledPercent(int x, int y, const uint8_t *bitmap, int glyphWidth,
+                                    int glyphHeight, uint16_t color, uint8_t scalePercent);
+  void drawGlyphBitmap(int x, int y, const uint8_t *bitmap, int glyphWidth, int glyphHeight,
+                       uint16_t color);
   void drawWordLine(const String &word, int y, uint16_t color);
   void drawMenuItem(const String &item, int y, bool selected);
   void applyBrightness();
