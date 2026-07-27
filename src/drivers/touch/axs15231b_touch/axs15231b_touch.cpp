@@ -55,6 +55,15 @@ bool decodePacket(const uint8_t *data, size_t len, uint16_t panelWidth, uint16_t
     return false;
   }
 
+  // Some panels stream filler frames (0x02- or 0xFF-fill) continuously while
+  // idle instead of a proper zero-point packet. A real packet always carries
+  // 0x00 in the gesture byte; anything else would otherwise decode as a
+  // phantom touch pinned to one spot, blocking all real input.
+  if (data[0] != 0x00) {
+    sample.touched = false;
+    return true;
+  }
+
   const uint8_t points = data[1];
   if (points == 0 || points > 4) {
     sample.touched = false;
