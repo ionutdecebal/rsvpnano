@@ -144,5 +144,7 @@ void begin();
 void lightSleepUntilBootButton();
 bool readBatteryStatus(BatteryStatus &status);
 bool releaseBatteryPowerHold();
+void holdTouchResetForDeepSleep();
+void enableBootButtonDeepSleepWakeup();
 
 }  // namespace BoardConfig

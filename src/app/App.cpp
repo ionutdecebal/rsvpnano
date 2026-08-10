@@ -85,6 +85,7 @@ enum SettingsItem : size_t {
   SettingsTheme,
   SettingsPhantomWords,
   SettingsFontSize,
+  SettingsSleepTimeout,
   SettingsLongWords,
   SettingsComplexWords,
   SettingsPunctuation,
@@ -123,7 +124,8 @@ constexpr size_t kSettingsDisplayThemeIndex = 1;
 constexpr size_t kSettingsDisplayBrightnessIndex = 2;
 constexpr size_t kSettingsDisplayPhantomWordsIndex = 3;
 constexpr size_t kSettingsDisplayFontSizeIndex = 4;
-constexpr size_t kSettingsDisplayTypographyIndex = 5;
+constexpr size_t kSettingsDisplaySleepTimeoutIndex = 5;
+constexpr size_t kSettingsDisplayTypographyIndex = 6;
 constexpr size_t kSettingsPacingLongWordsIndex = 1;
 constexpr size_t kSettingsPacingComplexityIndex = 2;
 constexpr size_t kSettingsPacingPunctuationIndex = 3;
@@ -141,6 +143,7 @@ constexpr const char *kPrefDarkMode = "dark";
 constexpr const char *kPrefNightMode = "night";
 constexpr const char *kPrefPhantomWords = "phantom_on";
 constexpr const char *kPrefReaderFontSize = "font_size";
+constexpr const char *kPrefSleepTimeoutMin = "sleep_min";
 constexpr const char *kPrefPacingLong = "pace_len";
 constexpr const char *kPrefPacingComplex = "pace_cpx";
 constexpr const char *kPrefPacingPunctuation = "pace_pnc";
@@ -152,6 +155,9 @@ constexpr const char *kPrefRecentSeq = "seq";
 constexpr const char *kReaderFontSizeLabels[] = {"Large", "Medium", "Small"};
 constexpr size_t kReaderFontSizeCount =
     sizeof(kReaderFontSizeLabels) / sizeof(kReaderFontSizeLabels[0]);
+constexpr uint8_t kMinSleepTimeoutMinutes = 1;
+constexpr uint8_t kMaxSleepTimeoutMinutes = 10;
+constexpr uint8_t kDefaultSleepTimeoutMinutes = 2;
 constexpr size_t kPhantomBeforeCharTargets[] = {64, 96, 144};
 constexpr size_t kPhantomAfterCharTargets[] = {96, 144, 208};
 constexpr uint32_t kNoSavedWordIndex = 0xFFFFFFFFUL;
@@ -281,11 +287,15 @@ void App::begin() {
       kTypographyGuideGapMin, kTypographyGuideGapMax));
   darkMode_ = preferences_.getBool(kPrefDarkMode, darkMode_);
   nightMode_ = preferences_.getBool(kPrefNightMode, nightMode_);
+  sleepTimeoutMinutes_ = static_cast<uint8_t>(
+      clampIntSetting(preferences_.getUChar(kPrefSleepTimeoutMin, kDefaultSleepTimeoutMinutes),
+                      kMinSleepTimeoutMinutes, kMaxSleepTimeoutMinutes));
   applyDisplayPreferences(0, false);
   applyTypographySettings(0, false);
   applyPacingSettings();
   bootStartedMs_ = millis();
   lastStateLogMs_ = bootStartedMs_;
+  lastActivityMs_ = bootStartedMs_;
 
   logApp("Initializing hardware modules");
   const bool displayReady = display_.begin();
@@ -338,6 +348,10 @@ void App::begin() {
 void App::update(uint32_t nowMs) {
   button_.update(nowMs);
   powerButton_.update(nowMs);
+  if (button_.isHeld() || button_.wasPressedEvent() || button_.wasReleasedEvent() ||
+      powerButton_.isHeld() || powerButton_.wasPressedEvent() || powerButton_.wasReleasedEvent()) {
+    lastActivityMs_ = nowMs;
+  }
   handleBootButton(nowMs);
   handlePowerButton(nowMs);
   if (powerOffStarted_) {
@@ -347,9 +361,20 @@ void App::update(uint32_t nowMs) {
   const bool batteryChanged = updateBatteryStatus(nowMs);
   updateState(nowMs);
   updateReader(nowMs);
+  if (state_ == AppState::Playing) {
+    // Auto-advancing playback is active use even with no touch/button input;
+    // keep the idle clock from starting until the reader is actually paused.
+    lastActivityMs_ = nowMs;
+  }
   handleTouch(nowMs);
   updateWpmFeedback(nowMs);
   maybeSaveReadingPosition(nowMs);
+
+  if ((state_ == AppState::Paused || state_ == AppState::Menu) &&
+      nowMs - lastActivityMs_ >= static_cast<uint32_t>(sleepTimeoutMinutes_) * 60000UL) {
+    enterPowerOff(nowMs);
+    return;
+  }
 
   if (batteryChanged && (state_ == AppState::Paused || state_ == AppState::Playing)) {
     if (contextViewVisible_) {
@@ -735,6 +760,14 @@ void App::cycleReaderFontSize(uint32_t nowMs) {
   applyDisplayPreferences(nowMs);
 }
 
+void App::cycleSleepTimeoutMinutes(uint32_t nowMs) {
+  sleepTimeoutMinutes_ = static_cast<uint8_t>(nextCyclicSetting(
+      sleepTimeoutMinutes_, kMinSleepTimeoutMinutes, kMaxSleepTimeoutMinutes));
+  preferences_.putUChar(kPrefSleepTimeoutMin, sleepTimeoutMinutes_);
+  Serial.printf("[power] sleep timeout=%s\n", sleepTimeoutLabel().c_str());
+  applyDisplayPreferences(nowMs);
+}
+
 bool App::updateBatteryStatus(uint32_t nowMs, bool force) {
   // Battery sampling toggles shared board hardware; avoid doing that during active reading.
   if (!force && state_ == AppState::Playing) {
@@ -806,6 +839,7 @@ void App::handleTouch(uint32_t nowMs) {
   if (!touch_.poll(ev)) {
     return;
   }
+  lastActivityMs_ = nowMs;
 
   Serial.printf("[touch] phase=%s touched=%u x=%u y=%u gesture=%u state=%s\n",
                 touchPhaseName(ev.phase), ev.touched ? 1 : 0, ev.x, ev.y, ev.gesture,
@@ -1159,6 +1193,9 @@ void App::selectSettingsItem(uint32_t nowMs) {
       case kSettingsDisplayFontSizeIndex:
         cycleReaderFontSize(nowMs);
         return;
+      case kSettingsDisplaySleepTimeoutIndex:
+        cycleSleepTimeoutMinutes(nowMs);
+        return;
       case kSettingsDisplayTypographyIndex:
         openTypographyTuning();
         return;
@@ -1296,6 +1333,7 @@ void App::rebuildSettingsMenuItems() {
     settingsMenuItems_.push_back("Brightness: " + String(currentBrightnessPercent()) + "%");
     settingsMenuItems_.push_back("Phantom words: " + phantomWordsLabel());
     settingsMenuItems_.push_back("Font size: " + readerFontSizeLabel());
+    settingsMenuItems_.push_back("Sleep timer: " + sleepTimeoutLabel());
     settingsMenuItems_.push_back("Typography tune");
   } else if (menuScreen_ == MenuScreen::SettingsPacing) {
     settingsMenuItems_.push_back("Back");
@@ -1345,6 +1383,10 @@ String App::readerFontSizeLabel() const {
     levelIndex = 0;
   }
   return kReaderFontSizeLabels[levelIndex];
+}
+
+String App::sleepTimeoutLabel() const {
+  return String(sleepTimeoutMinutes_) + "m";
 }
 
 String App::typographyTuningLabel() const {
@@ -1623,8 +1665,6 @@ void App::enterPowerOff(uint32_t nowMs) {
   }
 
   powerOffStarted_ = true;
-  Serial.println("[app] powering off; hold PWR to start again");
-  saveReadingPosition(true);
   pausedTouch_.active = false;
   pausedTouchIntent_ = TouchIntent::None;
   touchPlayHeld_ = false;
@@ -1633,7 +1673,18 @@ void App::enterPowerOff(uint32_t nowMs) {
   menuScreen_ = MenuScreen::Main;
   state_ = AppState::Sleeping;
 
+#if CONFIG_IDF_TARGET_ESP32C6
+  // This board has no PWR button and no RTC-capable GPIO wired to a button
+  // (see BoardConfig::enableBootButtonDeepSleepWakeup), so nothing can wake
+  // it from deep sleep except a reset/EN pulse or a USB replug.
+  Serial.println("[app] powering off; press RESET to start again");
+  saveReadingPosition(true);
+  display_.renderStatus("OFF", "", "Press RESET to start");
+#else
+  Serial.println("[app] powering off; hold PWR to start again");
+  saveReadingPosition(true);
   display_.renderStatus("OFF", "Release PWR", "Hold PWR to start");
+#endif
   delay(300);
 
   storage_.end();
@@ -1650,7 +1701,10 @@ void App::enterPowerOff(uint32_t nowMs) {
   }
 
   display_.prepareForSleep();
-#if !CONFIG_IDF_TARGET_ESP32C6
+#if CONFIG_IDF_TARGET_ESP32C6
+  BoardConfig::holdTouchResetForDeepSleep();
+  BoardConfig::enableBootButtonDeepSleepWakeup();
+#else
   if (BoardConfig::PIN_PWR_BUTTON >= 0) {
     esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BoardConfig::PIN_PWR_BUTTON), 0);
   }
@@ -1677,6 +1731,7 @@ void App::enterSleep(uint32_t nowMs) {
 void App::wakeFromSleep() {
   const uint32_t nowMs = millis();
   Serial.println("[app] woke from light sleep");
+  lastActivityMs_ = nowMs;
 
   BoardConfig::begin();
   button_.begin();

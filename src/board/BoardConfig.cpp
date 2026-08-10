@@ -198,6 +198,12 @@ void disableBatteryAdcPathIfAvailable() {
 }  // namespace
 
 void begin() {
+  // Release any pad hold left over from a prior deep sleep (see
+  // holdTouchResetForDeepSleep) so this boot can freely reconfigure the pin.
+  if (PIN_TOUCH_RST >= 0) {
+    gpio_hold_dis(static_cast<gpio_num_t>(PIN_TOUCH_RST));
+  }
+
   pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP);
   if (PIN_PWR_BUTTON >= 0) {
     pinMode(PIN_PWR_BUTTON, INPUT_PULLUP);
@@ -347,6 +353,45 @@ bool releaseBatteryPowerHold() {
   Serial.println("[board] Battery power hold released");
   return true;
 #endif
+}
+
+void holdTouchResetForDeepSleep() {
+  // This board has no power switch to cut 3V3 to the touch controller, so
+  // drive its reset line low and latch it there through deep sleep to keep
+  // the AXS5106L in hardware reset (its lowest-current state) instead of
+  // leaving it running off the shared rail.
+  if (PIN_TOUCH_RST < 0) {
+    return;
+  }
+
+  pinMode(PIN_TOUCH_RST, OUTPUT);
+  digitalWrite(PIN_TOUCH_RST, LOW);
+  gpio_hold_en(static_cast<gpio_num_t>(PIN_TOUCH_RST));
+}
+
+void enableBootButtonDeepSleepWakeup() {
+#if CONFIG_IDF_TARGET_ESP32C6
+  // ESP32-C6 deep-sleep GPIO wakeup only works on GPIOs with RTC/LP-domain
+  // support (GPIO0-7 on this chip; see SOC_RTCIO_VALID_RTCIO_MASK). BOOT is
+  // GPIO9, so this call is expected to fail on this board: none of GPIO0-7
+  // are wired to a button here (they carry the battery ADC and the shared
+  // SD/LCD SPI bus), so there is currently no button that can wake this
+  // board from deep sleep. Log clearly instead of failing silently, in case
+  // a future board revision wires a wake button to an RTC-capable pin.
+  if (PIN_BOOT_BUTTON < 0) {
+    return;
+  }
+
+  pinMode(PIN_BOOT_BUTTON, INPUT_PULLUP);
+  const esp_err_t err =
+      esp_deep_sleep_enable_gpio_wakeup(1ULL << PIN_BOOT_BUTTON, ESP_GPIO_WAKEUP_GPIO_LOW);
+  if (err != ESP_OK) {
+    Serial.printf(
+        "[board] BOOT (GPIO%d) can't wake from deep sleep (not RTC-capable on this chip); "
+        "only reset/EN or USB replug will wake this board\n",
+        PIN_BOOT_BUTTON);
+  }
+#endif  // CONFIG_IDF_TARGET_ESP32C6
 }
 
 }  // namespace BoardConfig

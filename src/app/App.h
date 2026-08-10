@@ -63,6 +63,8 @@ class App {
   void cycleThemeMode(uint32_t nowMs);
   void togglePhantomWords(uint32_t nowMs);
   void cycleReaderFontSize(uint32_t nowMs);
+  void cycleSleepTimeoutMinutes(uint32_t nowMs);
+  String sleepTimeoutLabel() const;
   void applyDisplayPreferences(uint32_t nowMs, bool rerender = true);
   void applyTypographySettings(uint32_t nowMs, bool rerender = true);
   uint8_t currentBrightnessPercent() const;
@@ -159,6 +161,7 @@ class App {
   uint32_t wpmFeedbackUntilMs_ = 0;
   uint32_t lastProgressSaveMs_ = 0;
   uint32_t lastBatterySampleMs_ = 0;
+  uint32_t lastActivityMs_ = 0;
   size_t lastSavedWordIndex_ = static_cast<size_t>(-1);
   size_t contextPreviewStartIndex_ = 0;
   size_t currentBookIndex_ = 0;
@@ -172,6 +175,7 @@ class App {
   uint8_t pacingLongWordLevelIndex_ = 2;
   uint8_t pacingComplexWordLevelIndex_ = 2;
   uint8_t pacingPunctuationLevelIndex_ = 2;
+  uint8_t sleepTimeoutMinutes_ = 2;
   size_t typographyTuningSelectedIndex_ = 1;
   size_t typographyPreviewSampleIndex_ = 0;
   MenuScreen menuScreen_ = MenuScreen::Main;
