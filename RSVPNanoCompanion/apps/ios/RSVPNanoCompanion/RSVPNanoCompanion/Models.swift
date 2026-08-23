@@ -6,24 +6,20 @@ enum SharedInbox {
 }
 
 extension shared.NanoBook: Identifiable {
-    var displayTitle: String {
-        title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? title! : filename
-    }
-
     var filename: String {
-        displayName.split(separator: "/").last.map(String.init) ?? displayName
+        name.split(separator: "/").last.map(String.init) ?? name
     }
 
     var detailLabel: String {
-        let cleanedAuthor = author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let pathLabel = displayTitle == filename ? nil : displayName
+        let cleanedAuthor = metadata.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pathLabel = displayTitle == filename ? nil : name
         return [cleanedAuthor.isEmpty ? nil : cleanedAuthor, pathLabel, byteLabel]
             .compactMap { $0 }
-            .joined(separator: " · ")
+            .joined(separator: " | ")
     }
 
     var isArticle: Bool {
-        category == "article" || displayName.lowercased().hasPrefix("articles/")
+        name.lowercased().hasPrefix("articles/")
     }
 
     var byteLabel: String {
