@@ -8,8 +8,8 @@ Quick start:
 - Run Android checks with `bash ./gradlew checkAndroid`.
 - Run iOS checks with `bash ./gradlew checkIos`.
 - Run the Compose/Wasm browser checks and stage the Pages site with `bash ./gradlew checkWeb`.
-- Build the iOS XCFramework with `bash RSVPNanoCompanion/tools/build_shared_xcframework.sh`.
-- Add the produced iOS framework to Xcode or add the module to your Android project.
+- Build the iOS app in Xcode. Its direct-integration phase builds the matching Kotlin framework.
+- Open the Xcode project or add the module to your Android project.
 
 Design goals:
 - Keep platform-specific code minimal by using interfaces.

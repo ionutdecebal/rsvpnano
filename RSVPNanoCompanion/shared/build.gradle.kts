@@ -1,6 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
 	alias(libs.plugins.kotlin.multiplatform)
@@ -12,22 +11,18 @@ plugins {
 
 @OptIn(ExperimentalKotlinGradlePluginApi::class)
 kotlin {
-	val sharedXcFramework = XCFramework("shared")
-
 	compilerOptions {
 		freeCompilerArgs.add("-Xexpect-actual-classes")
 	}
 
 	androidTarget()
 
-	iosArm64 {
-		binaries.framework {
+	listOf(iosArm64(), iosSimulatorArm64()).forEach { iosTarget ->
+		iosTarget.binaries.framework {
 			baseName = "shared"
 			isStatic = true
-			sharedXcFramework.add(this)
 		}
 	}
-	iosSimulatorArm64()
 
 	@OptIn(ExperimentalWasmDsl::class)
 	wasmJs {

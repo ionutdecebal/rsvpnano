@@ -17,23 +17,11 @@ Free Apple IDs can install development builds on personal devices, but provision
 quickly and may not support every share-extension/App Group capability. TestFlight/App Store
 distribution requires the Apple Developer Program.
 
-## Build Shared Framework
+## Kotlin Framework Integration
 
-Build the Kotlin Multiplatform XCFramework from the repository root:
-
-```bash
-bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
-```
-
-The script writes:
-
-```text
-RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework
-```
-
-The iOS project expects that framework to be embedded and signed by Xcode. If Xcode loses the
-reference, add `SharedFrameworks/shared.xcframework` back to `Frameworks, Libraries, and Embedded
-Content` for the app target and set it to `Embed & Sign`.
+The Xcode project uses Kotlin Multiplatform direct integration. Its `Compile Kotlin Framework`
+build phase runs `:shared:embedAndSignAppleFrameworkForXcode` for the selected device or simulator.
+There is no generated XCFramework to copy into the repository.
 
 ## Open In Xcode
 
@@ -75,15 +63,21 @@ RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion/Models.swift
 
 ## CI Expectations
 
-The macOS CI workflow compiles the converter for device iOS, builds the Kotlin XCFramework, and
-uploads the generated framework artifact. CI validates the shared iOS framework path, but real
-app/share-extension behavior still needs Xcode and device testing.
+The macOS CI workflow runs the shared iOS checks, then uses `xcodebuild` to build the app and share
+extension for an Apple Silicon simulator without signing. Real app and share-extension behavior
+still needs device testing.
 
 Run this locally on macOS when touching shared/iOS integration:
 
 ```bash
 ./gradlew checkIos --no-daemon
-bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
+xcodebuild \
+  -project RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj \
+  -scheme RSVPNanoCompanion \
+  -sdk iphonesimulator \
+  -destination 'generic/platform=iOS Simulator' \
+  ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+  CODE_SIGNING_ALLOWED=NO build
 ```
 
 ## Connect To The Reader

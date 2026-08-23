@@ -48,6 +48,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: Run iOS checks
         run: bash ./gradlew checkIos --no-daemon
+      - name: Build iOS app
+        run: >-
+          xcodebuild
+          -project RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/RSVPNanoCompanion.xcodeproj
+          -scheme RSVPNanoCompanion
+          -configuration Debug
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          ARCHS=arm64
+          ONLY_ACTIVE_ARCH=YES
+          CODE_SIGNING_ALLOWED=NO
+          build
       - name: Upload Gradle reports
         if: failure()
         uses: actions/upload-artifact@v7
@@ -56,11 +68,3 @@ jobs:
           path: |
             **/build/reports/tests/
             **/build/test-results/
-      - name: Build shared XCFramework
-        run: bash RSVPNanoCompanion/tools/build_shared_xcframework.sh
-      - name: Upload shared artifacts
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: shared-xcframework
-          path: RSVPNanoCompanion/apps/ios/RSVPNanoCompanion/SharedFrameworks/shared.xcframework

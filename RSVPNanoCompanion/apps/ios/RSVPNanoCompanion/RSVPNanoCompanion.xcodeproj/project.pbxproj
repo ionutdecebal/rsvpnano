@@ -11,8 +11,6 @@
 		0A1000080000000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000110000000000000001 /* ShareViewController.swift */; };
 		0A1000110000000000000001 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A2000040000000000000001 /* Models.swift */; };
 		0A1000120000000000000001 /* RSVPNanoShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 0A2000100000000000000001 /* RSVPNanoShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		0A1000200000000000000001 /* shared.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A2000200000000000000001 /* shared.xcframework */; };
-		0A1000210000000000000001 /* shared.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A2000200000000000000001 /* shared.xcframework */; };
 		0A1000220000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A2000220000000000000001 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -50,7 +48,6 @@
 		0A2000120000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A2000160000000000000001 /* RSVPNanoCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RSVPNanoCompanion.entitlements; sourceTree = "<group>"; };
 		0A2000170000000000000001 /* RSVPNanoShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RSVPNanoShareExtension.entitlements; sourceTree = "<group>"; };
-		0A2000200000000000000001 /* shared.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = shared.xcframework; sourceTree = "<group>"; };
 		0A2000220000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -59,7 +56,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0A1000200000000000000001 /* shared.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,7 +63,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0A1000210000000000000001 /* shared.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,7 +74,6 @@
 			children = (
 				0A4000020000000000000001 /* RSVPNanoCompanion */,
 				0A4000040000000000000001 /* RSVPNanoShareExtension */,
-				0A4000050000000000000001 /* SharedFrameworks */,
 				0A4000030000000000000001 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -115,14 +109,6 @@
 			path = RSVPNanoShareExtension;
 			sourceTree = "<group>";
 		};
-		0A4000050000000000000001 /* SharedFrameworks */ = {
-			isa = PBXGroup;
-			children = (
-				0A2000200000000000000001 /* shared.xcframework */,
-			);
-			path = SharedFrameworks;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -130,6 +116,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0A8000020000000000000001 /* Build configuration list for PBXNativeTarget "RSVPNanoCompanion" */;
 			buildPhases = (
+				0A6000070000000000000001 /* Compile Kotlin Framework */,
 				0A6000010000000000000001 /* Sources */,
 				0A3000010000000000000001 /* Frameworks */,
 				0A6000020000000000000001 /* Resources */,
@@ -149,6 +136,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0A8000030000000000000001 /* Build configuration list for PBXNativeTarget "RSVPNanoShareExtension" */;
 			buildPhases = (
+				0A6000080000000000000001 /* Compile Kotlin Framework */,
 				0A6000030000000000000001 /* Sources */,
 				0A3000020000000000000001 /* Frameworks */,
 				0A6000040000000000000001 /* Resources */,
@@ -217,6 +205,47 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		0A6000070000000000000001 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES\"\n exit 0\nfi\ncd \"$SRCROOT/../../../..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+		0A6000080000000000000001 /* Compile Kotlin Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES\"\n exit 0\nfi\ncd \"$SRCROOT/../../../..\"\n./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		0A6000010000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -283,7 +312,7 @@
 				DEVELOPMENT_TEAM = KMH8MDY3M7;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -346,7 +375,7 @@
 				DEVELOPMENT_TEAM = KMH8MDY3M7;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -377,7 +406,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/SharedFrameworks",
+					"$(PROJECT_DIR)/../../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				INFOPLIST_FILE = RSVPNanoCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "RSVP NANO";
@@ -388,6 +417,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					shared,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.rsvpnano.companion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -410,7 +444,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/SharedFrameworks",
+					"$(PROJECT_DIR)/../../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				INFOPLIST_FILE = RSVPNanoCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "RSVP NANO";
@@ -421,6 +455,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					shared,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.rsvpnano.companion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -443,7 +482,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/SharedFrameworks",
+					"$(PROJECT_DIR)/../../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				INFOPLIST_FILE = RSVPNanoShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -453,6 +492,11 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					shared,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.rsvpnano.companion.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -474,7 +518,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/SharedFrameworks",
+					"$(PROJECT_DIR)/../../../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
 				INFOPLIST_FILE = RSVPNanoShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -484,6 +528,11 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					shared,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.rsvpnano.companion.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
