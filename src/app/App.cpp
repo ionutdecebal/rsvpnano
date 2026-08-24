@@ -784,13 +784,20 @@ void App::enterUsbTransfer(uint32_t nowMs) {
         return;
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
-    settingsStore_.flush();
-    if (!usbTransfer_.begin(true)) {
-        showTransientStatus("USB", immediateUi_.text(UiText::CouldNotStart), usbTransfer_.statusMessage(), 1200,
+    if (auto result = settingsStore_.flush(); !result) {
+        showTransientStatus("USB", immediateUi_.text(UiText::CouldNotStart), result.error().message, 1200,
                             screens::Screen::Reader);
         return;
     }
     ReadingLoop::pause(readerScreen_.session);
+    readerScreen_.store.close();
+    storage_.end();
+    if (!usbTransfer_.begin(true)) {
+        const std::string failure = usbTransfer_.statusMessage();
+        exitUsbTransfer();
+        showTransientStatus("USB", immediateUi_.text(UiText::CouldNotStart), failure, 1200, screens::Screen::Reader);
+        return;
+    }
     screen_ = screens::Screen::Usb;
     renderScreen(nowMs);
 #else
@@ -800,10 +807,19 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 
 void App::exitUsbTransfer(screens::Screen destination) {
     usbTransfer_.end();
-    storage_.refreshBooks();
-    localeCatalog_ =
-        locales::scanInstalled(Board::Storage::filesystem(), static_cast<size_t>(UiText::Count));
-    readerScreen_.fonts.loadFromSd();
+    const bool mounted = storage_.begin();
+    fs::FS* filesystem = mounted ? &Board::Storage::filesystem() : nullptr;
+    if (auto result = settingsStore_.begin(filesystem); !result)
+        ESP_LOGW("settings", "USB transfer reload warning: %s", result.error().message.c_str());
+    localeCatalog_ = mounted ? locales::scanInstalled(*filesystem, static_cast<size_t>(UiText::Count))
+                             : locales::Catalog{};
+    if (mounted) {
+        readerScreen_.fonts.loadFromSd();
+        focusScreen_.begin(*filesystem);
+        readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, millis());
+    } else {
+        focusScreen_.begin();
+    }
     applySettings();
     libraryScreen_.invalidate();
     screen_ = destination;
