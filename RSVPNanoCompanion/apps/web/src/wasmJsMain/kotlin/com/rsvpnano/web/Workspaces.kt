@@ -281,7 +281,11 @@ internal fun ColumnScope.AppearanceWorkspace(presenter: CompanionPresenter, stat
                 val online = catalog[id]
                 add(CatalogEntry(
                     id = id,
-                    title = local?.name ?: online?.name ?: id,
+                    title = online?.englishName
+                        ?.replace("ChineseSimplified", "Simplified Chinese")
+                        ?.replace("ChineseTraditional", "Traditional Chinese")
+                        ?: local?.locale
+                        ?: id,
                     subtitle = online?.let { localeDetails(it.englishName, it.direction, it.translationStatus, it.version) }
                         ?: local?.locale.orEmpty(),
                     selected = local != null && state.settings?.`interface`?.locale == local.locale,
@@ -428,38 +432,120 @@ internal fun ColumnScope.SettingsWorkspace(presenter: CompanionPresenter, state:
         "wifi" to "Wi-Fi",
     )
     val selected = routeHash.substringAfterLast('/').takeIf { id -> sections.any { it.first == id } } ?: "reading"
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        sections.forEach { (id, label) ->
-            FilterChip(
-                selected = selected == id,
-                onClick = { window.location.hash = "#/settings/$id" },
-                label = { Text(label) },
-            )
+    BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+        if (maxWidth >= 900.dp) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                Column(Modifier.width(170.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    sections.forEach { (id, label) ->
+                        SettingsNavigationItem(label, selected == id) { window.location.hash = "#/settings/$id" }
+                    }
+                }
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    SettingsContent(selected, presenter, state, settings)
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    sections.forEach { (id, label) ->
+                        FilterChip(
+                            selected = selected == id,
+                            onClick = { window.location.hash = "#/settings/$id" },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                    SettingsContent(selected, presenter, state, settings)
+                }
+            }
         }
     }
-    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
-        when (selected) {
-            "display" -> DisplaySettings(presenter, settings)
-            "updates" -> UpdateSettings(presenter, state, settings)
-            "wifi" -> NetworkSettings(presenter, state)
-            else -> ReadingSettings(presenter, settings)
-        }
+}
+
+@Composable
+private fun SettingsNavigationItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(shape).clickable(onClick = onClick),
+        shape = shape,
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
+        contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+    ) {
+        Text(label, Modifier.padding(horizontal = 16.dp, vertical = 13.dp), fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun SettingsContent(
+    selected: String,
+    presenter: CompanionPresenter,
+    state: CompanionUiState,
+    settings: NanoSettings,
+) {
+    when (selected) {
+        "display" -> DisplaySettings(presenter, settings)
+        "updates" -> UpdateSettings(presenter, state, settings)
+        "wifi" -> NetworkSettings(presenter, state)
+        else -> ReadingSettings(presenter, settings)
+    }
+}
+
+@Composable
+private fun SettingsPageHeader(title: String, description: String) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(description, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f))
     }
 }
 
 @Composable
 private fun ReadingSettings(presenter: CompanionPresenter, settings: NanoSettings) {
     val reading = settings.reading
-    SectionCard {
-        Text("Reading", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        TypographyPreview(
-            typography = reading.typography,
-            phantomWords = reading.phantomWords,
-            modifier = Modifier.fillMaxWidth().height(180.dp),
-        )
+    SettingsPageHeader("Reading", "Tune pacing, typography, and what stays visible while you read.")
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth >= 760.dp) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SettingsPanel("Preview") {
+                        TypographyPreview(
+                            typography = reading.typography,
+                            phantomWords = reading.phantomWords,
+                            modifier = Modifier.fillMaxWidth().height(210.dp),
+                        )
+                    }
+                    ReadingRhythmSettings(presenter, reading)
+                    PacingSettings(presenter, reading)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TypographySettings(presenter, reading)
+                    ReadingVisibilitySettings(presenter, reading)
+                }
+            }
+        } else {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                SettingsPanel("Preview") {
+                    TypographyPreview(
+                        typography = reading.typography,
+                        phantomWords = reading.phantomWords,
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                    )
+                }
+                ReadingRhythmSettings(presenter, reading)
+                TypographySettings(presenter, reading)
+                PacingSettings(presenter, reading)
+                ReadingVisibilitySettings(presenter, reading)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReadingRhythmSettings(presenter: CompanionPresenter, reading: NanoSettings.Reading) {
+    SettingsPanel("Reading rhythm") {
         IntSlider("Words per minute", reading.wpm, NanoSettingsSchema.WPM_MIN..NanoSettingsSchema.WPM_MAX) {
             presenter.updateSettings { current -> current.withWpm(it) }
         }
@@ -476,6 +562,12 @@ private fun ReadingSettings(presenter: CompanionPresenter, settings: NanoSetting
         ToggleRow("Left-handed controls", reading.leftHanded) { value ->
             presenter.updateSettings { it.withHandedness(if (value) "left" else "right") }
         }
+    }
+}
+
+@Composable
+private fun TypographySettings(presenter: CompanionPresenter, reading: NanoSettings.Reading) {
+    SettingsPanel("Typography") {
         ToggleRow("Focus highlight", reading.typography.focusHighlight) { value ->
             presenter.updateSettings { it.withFocusHighlight(value) }
         }
@@ -494,6 +586,12 @@ private fun ReadingSettings(presenter: CompanionPresenter, settings: NanoSetting
         IntSlider("Guide gap", reading.typography.guideGap, NanoSettingsSchema.GUIDE_GAP_MIN..NanoSettingsSchema.GUIDE_GAP_MAX) {
             presenter.updateSettings { current -> current.withGuideGap(it) }
         }
+    }
+}
+
+@Composable
+private fun PacingSettings(presenter: CompanionPresenter, reading: NanoSettings.Reading) {
+    SettingsPanel("Word timing") {
         IntSlider("Long word delay", reading.pacing.longWordDelayMs, NanoSettingsSchema.PACING_MS_MIN..NanoSettingsSchema.PACING_MS_MAX, " ms") {
             presenter.updateSettings { current -> current.withPacingLongWordMs(it) }
         }
@@ -503,6 +601,12 @@ private fun ReadingSettings(presenter: CompanionPresenter, settings: NanoSetting
         IntSlider("Punctuation delay", reading.pacing.punctuationDelayMs, NanoSettingsSchema.PACING_MS_MIN..NanoSettingsSchema.PACING_MS_MAX, " ms") {
             presenter.updateSettings { current -> current.withPacingPunctuationMs(it) }
         }
+    }
+}
+
+@Composable
+private fun ReadingVisibilitySettings(presenter: CompanionPresenter, reading: NanoSettings.Reading) {
+    SettingsPanel("Reading screen") {
         ChoiceRow("Footer", reading.footerMetric, listOf("percentage" to "Percentage", "chapterTime" to "Chapter time", "bookTime" to "Book time")) { value ->
             presenter.updateSettings { it.withFooterMetric(value) }
         }
@@ -519,55 +623,138 @@ private fun ReadingSettings(presenter: CompanionPresenter, settings: NanoSetting
 @Composable
 private fun DisplaySettings(presenter: CompanionPresenter, settings: NanoSettings) {
     val display = settings.`interface`
-    SectionCard {
-        Text("Display", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        IntSlider("Brightness", display.brightnessPercent, NanoSettingsSchema.BRIGHTNESS_MIN..NanoSettingsSchema.BRIGHTNESS_MAX, "%") {
-            presenter.updateSettings { current -> current.withBrightnessPercent(it) }
+    SettingsPageHeader("Display", "Choose how the Nano looks when it is active or waiting.")
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val content: @Composable () -> Unit = {
+            SettingsPanel("Screen") {
+                IntSlider("Brightness", display.brightnessPercent, NanoSettingsSchema.BRIGHTNESS_MIN..NanoSettingsSchema.BRIGHTNESS_MAX, "%") {
+                    presenter.updateSettings { current -> current.withBrightnessPercent(it) }
+                }
+                ChoiceRow("Standby", display.standbyTimerIndex.toString(), listOf("0" to "Never", "1" to "1 minute", "2" to "5 minutes", "3" to "15 minutes", "4" to "30 minutes")) { value ->
+                    presenter.updateSettings { it.withStandbyTimerIndex(value.toInt()) }
+                }
+            }
         }
-        ChoiceRow("Standby", display.standbyTimerIndex.toString(), listOf("0" to "Never", "1" to "1 minute", "2" to "5 minutes", "3" to "15 minutes", "4" to "30 minutes")) { value ->
-            presenter.updateSettings { it.withStandbyTimerIndex(value.toInt()) }
+        val screensaver: @Composable () -> Unit = {
+            SettingsPanel("Screensaver") {
+                ChoiceRow("Animation", display.screensaver, listOf("life" to "Life", "maze" to "Maze", "voronoi" to "Voronoi", "reaction" to "Reaction", "screenOff" to "Screen off")) { value ->
+                    presenter.updateSettings { it.withScreensaver(value) }
+                }
+            }
         }
-        ChoiceRow("Screensaver", display.screensaver, listOf("life" to "Life", "maze" to "Maze", "voronoi" to "Voronoi", "reaction" to "Reaction", "screenOff" to "Screen off")) { value ->
-            presenter.updateSettings { it.withScreensaver(value) }
+        if (maxWidth >= 680.dp) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) { content() }
+                Column(Modifier.weight(1f)) { screensaver() }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { content(); screensaver() }
         }
     }
 }
 
 @Composable
 private fun UpdateSettings(presenter: CompanionPresenter, state: CompanionUiState, settings: NanoSettings) {
-    SectionCard {
-        Text("Updates", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        ToggleRow("Check on reader startup", settings.updates.checkOnStartup) { value ->
-            presenter.updateSettings { it.withUpdateChecksOnStartup(value) }
-        }
-        ToggleRow("Browser update notifications", state.firmwareNotificationsEnabled, presenter::setFirmwareNotificationsEnabled)
-        OutlinedTextField(
-            value = settings.updates.repositoryOwner,
-            onValueChange = { value -> presenter.updateSettings { it.withUpdateOwner(value) } },
-            label = { Text("Repository owner or owner/repository") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = settings.updates.releaseTag,
-            onValueChange = { value -> presenter.updateSettings { it.withUpdateTag(value) } },
-            label = { Text("Release tag") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-    }
+    var ownerDraft by remember(settings.updates.repositoryOwner) { mutableStateOf(settings.updates.repositoryOwner) }
+    var tagDraft by remember(settings.updates.releaseTag) { mutableStateOf(settings.updates.releaseTag) }
+    SettingsPageHeader("Updates", "Control automatic checks and the release source used by this Nano.")
+    ResponsiveSettingsColumns(
+        first = {
+            SettingsPanel("Checks") {
+                ToggleRow("Check on reader startup", settings.updates.checkOnStartup) { value ->
+                    presenter.updateSettings { it.withUpdateChecksOnStartup(value) }
+                }
+                ToggleRow("Browser update notifications", state.firmwareNotificationsEnabled, presenter::setFirmwareNotificationsEnabled)
+            }
+        },
+        second = {
+            SettingsPanel("Release source") {
+                OutlinedTextField(
+                    value = ownerDraft,
+                    onValueChange = { ownerDraft = it },
+                    label = { Text("Repository owner or owner/repository") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = tagDraft,
+                    onValueChange = { tagDraft = it },
+                    label = { Text("Release tag") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                Text(
+                    "Leave both blank to use the official RSVP Nano releases.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                )
+                Button(
+                    onClick = {
+                        presenter.updateSettings {
+                            it.withUpdateOwner(ownerDraft.trim()).withUpdateTag(tagDraft.trim())
+                        }
+                    },
+                    enabled = ownerDraft.trim() != settings.updates.repositoryOwner ||
+                        tagDraft.trim() != settings.updates.releaseTag,
+                ) { Text("Save source") }
+            }
+        },
+    )
 }
 
 @Composable
 private fun NetworkSettings(presenter: CompanionPresenter, state: CompanionUiState) {
-    SectionCard {
-        Text("Nano Wi-Fi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("Saved network: ${state.wifiSettings?.ssid?.ifBlank { "none" } ?: "loading…"}")
-        OutlinedTextField(state.wifiSsidDraft, presenter::setWifiSsidDraft, Modifier.fillMaxWidth(), label = { Text("SSID") }, singleLine = true)
-        OutlinedTextField(state.wifiPasswordDraft, presenter::setWifiPasswordDraft, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = presenter::saveWifiSettings) { Text("Save Wi-Fi") }
-            OutlinedButton(onClick = presenter::clearWifiSettings) { Text("Forget network") }
+    SettingsPageHeader("Wi-Fi", "Save the network the Nano should use away from USB.")
+    ResponsiveSettingsColumns(
+        first = {
+            SettingsPanel("Current network") {
+                Text(state.wifiSettings?.ssid?.ifBlank { "No network saved" } ?: "Loading network…", style = MaterialTheme.typography.titleMedium)
+                Text("The password stays on the Nano and is never shown here.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f))
+                OutlinedButton(onClick = presenter::clearWifiSettings) { Text("Forget network") }
+            }
+        },
+        second = {
+            SettingsPanel("Connect the Nano") {
+                OutlinedTextField(state.wifiSsidDraft, presenter::setWifiSsidDraft, Modifier.fillMaxWidth(), label = { Text("Network name") }, singleLine = true)
+                OutlinedTextField(state.wifiPasswordDraft, presenter::setWifiPasswordDraft, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
+                Button(onClick = presenter::saveWifiSettings) { Text("Save Wi-Fi") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ResponsiveSettingsColumns(first: @Composable () -> Unit, second: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth >= 620.dp) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                Column(Modifier.weight(1f)) { first() }
+                Column(Modifier.weight(1f)) { second() }
+            }
+        } else {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                first()
+                second()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPanel(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = RoundedCornerShape(18.dp)
+    Surface(
+        modifier = modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f), shape),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            content()
         }
     }
 }
@@ -649,11 +836,13 @@ private fun FocusEditor(presenter: CompanionPresenter, state: CompanionUiState) 
 
 @Composable
 private fun IntSlider(label: String, value: Int, range: IntRange, suffix: String = "", onChange: (Int) -> Unit) {
+    var sliderValue by remember(value) { mutableStateOf(value) }
     Column {
-        DetailRow(label, "$value$suffix")
+        DetailRow(label, "$sliderValue$suffix")
         Slider(
-            value = value.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
+            value = sliderValue.toFloat(),
+            onValueChange = { sliderValue = it.toInt() },
+            onValueChangeFinished = { onChange(sliderValue) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
         )
     }

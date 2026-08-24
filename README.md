@@ -88,7 +88,7 @@ the device's OTA flow.
 | Waveshare ESP32-S3 Touch AMOLED 2.06 | `waveshare_esp32s3_touch_amoled_206` | Web installer, OTA, source |
 | Waveshare ESP32-S3 Touch AMOLED 2.16 | `waveshare_esp32s3_touch_amoled_216` | Web installer, OTA, source |
 | Waveshare ESP32-S3 Touch AMOLED 2.41 | `waveshare_esp32s3_touch_amoled_241` | Web installer, OTA, source |
-| Waveshare ESP32-C6 Touch LCD 1.47 | `waveshare_esp32c6_touch_lcd_147` | Source build |
+| Waveshare ESP32-C6 Touch LCD 1.47 | `waveshare_esp32c6_touch_lcd_147` | Web installer, OTA, source |
 
 Most LCD 3.49 readers use rev1. Try rev2 when the display works but backlight control does not.
 
@@ -100,6 +100,7 @@ to you:
 - [Touch AMOLED 2.06](https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal)
 - [Touch AMOLED 2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal)
 - [Touch AMOLED 2.41](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal)
+- [ESP32-C6 Touch LCD 1.47](https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm?&aff_id=ionutdecebal)
 
 ## Companion apps
 

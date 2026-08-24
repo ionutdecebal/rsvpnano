@@ -16,6 +16,10 @@ class FirmwareFilenameTest {
             FirmwareFilenameMatch.Match,
             firmwareFilenameMatch("amoled18-v2", "rsvp-nano-esp32-s3-touch-amoled-1.8-v2.bin"),
         )
+        assertEquals(
+            FirmwareFilenameMatch.Match,
+            firmwareFilenameMatch("lcd147-c6", "rsvp-nano-esp32-c6-touch-lcd-1.47.bin"),
+        )
     }
 
     @Test

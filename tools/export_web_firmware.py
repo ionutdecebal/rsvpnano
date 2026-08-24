@@ -59,6 +59,12 @@ FLASH_EXPORTS = (
         "binary": "rsvp-nano-esp32-s3-touch-amoled-2.41.bin",
         "label": "RSVP Nano Touch AMOLED 2.41 firmware",
     },
+    {
+        "id": "lcd147-c6",
+        "env": "waveshare_esp32c6_touch_lcd_147",
+        "binary": "rsvp-nano-esp32-c6-touch-lcd-1.47.bin",
+        "label": "RSVP Nano ESP32-C6 Touch LCD 1.47 firmware",
+    },
 )
 
 OTA_EXPORTS = (
@@ -96,6 +102,11 @@ OTA_EXPORTS = (
         "env": "waveshare_esp32s3_touch_amoled_241",
         "binary": "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin",
         "label": "RSVP Nano Touch AMOLED 2.41 OTA firmware",
+    },
+    {
+        "env": "waveshare_esp32c6_touch_lcd_147",
+        "binary": "rsvp-nano-esp32-c6-touch-lcd-1.47-ota.bin",
+        "label": "RSVP Nano ESP32-C6 Touch LCD 1.47 OTA firmware",
     },
 )
 

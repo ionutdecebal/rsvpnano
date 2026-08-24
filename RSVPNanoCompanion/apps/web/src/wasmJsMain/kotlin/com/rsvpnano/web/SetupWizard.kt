@@ -88,16 +88,22 @@ private data class InstallerBoard(
     val badge: String,
     val note: String,
     val storeUrl: String,
+    val chipFamily: String,
+    val bootloaderHelp: String,
 )
 
+private const val BootloaderWithReset = "Hold BOOT, tap RESET, then release BOOT."
+private const val BootloaderWithPower = "Turn the Nano off, hold BOOT while turning it on, then release BOOT."
+
 private val InstallerBoards = listOf(
-    InstallerBoard("lcd349-v1", "LCD 3.49 / rev1", "RECOMMENDED", "For most 3.49-inch readers.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("lcd349-v2", "LCD 3.49 / rev2", "REVISION 2", "Try this if rev1 brightness does not work.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled18-v1", "AMOLED 1.8 / V1", "VERSION 1", "The original 1.8-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled18-v2", "AMOLED 1.8 / V2", "VERSION 2", "The newer revision; still being tested.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled206", "AMOLED 2.06", "AMOLED", "The 2.06-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled216", "AMOLED 2.16", "3 BUTTON", "The three-button 2.16-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal"),
-    InstallerBoard("amoled241", "AMOLED 2.41", "AMOLED", "The 2.41-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal"),
+    InstallerBoard("lcd349-v1", "LCD 3.49 / rev1", "RECOMMENDED", "For most 3.49-inch readers.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
+    InstallerBoard("lcd349-v2", "LCD 3.49 / rev2", "REVISION 2", "Try this if rev1 brightness does not work.", "https://www.waveshare.com/esp32-s3-touch-lcd-3.49.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
+    InstallerBoard("amoled18-v1", "AMOLED 1.8 / V1", "VERSION 1", "The original 1.8-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
+    InstallerBoard("amoled18-v2", "AMOLED 1.8 / V2", "VERSION 2", "The newer revision; still being tested.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
+    InstallerBoard("amoled206", "AMOLED 2.06", "AMOLED", "The 2.06-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
+    InstallerBoard("amoled216", "AMOLED 2.16", "3 BUTTON", "The three-button 2.16-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
+    InstallerBoard("amoled241", "AMOLED 2.41", "AMOLED", "The 2.41-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
+    InstallerBoard("lcd147-c6", "LCD 1.47 / C6", "COMPACT", "The compact 1.47-inch touch board.", "https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm?&aff_id=ionutdecebal", "ESP32-C6", BootloaderWithReset),
 )
 
 internal enum class FirmwareFilenameMatch { Match, DifferentBoard, Unknown, Ota }
@@ -392,6 +398,11 @@ private fun InstallPage(
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         WizardIntro("FIRMWARE", "Install RSVP Nano", "Plug in ${board.name}, then choose it when your browser asks.")
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Bootloader mode for ${board.name}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(board.bootloaderHelp, style = MaterialTheme.typography.bodyMedium)
+            Text("Existing settings are kept unless you choose to erase the device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f))
+        }
         if (!secure) Text("Open this page over HTTPS before installing.", color = MaterialTheme.colorScheme.error)
         if (!serialAvailable) Text("Use Chrome or Edge on a computer to install over USB.", color = MaterialTheme.colorScheme.tertiary)
         if (!installerReady) Text("Preparing USB for the installer...", color = MaterialTheme.colorScheme.tertiary)
@@ -710,6 +721,7 @@ internal fun firmwareFilenameMatch(selectedBoardId: String, filename: String): F
         "touch-amoled-2.06" in normalized -> "amoled206"
         "touch-amoled-2.16" in normalized -> "amoled216"
         "touch-amoled-2.41" in normalized -> "amoled241"
+        "esp32-c6-touch-lcd-1.47" in normalized -> "lcd147-c6"
         else -> null
     }
     return when (fileBoardId) {
@@ -739,13 +751,15 @@ private fun launchFirmware(board: InstallerBoard, version: String, firmwareUrl: 
         put("new_install_improv_wait_time", 30)
         put("builds", buildJsonArray {
             add(buildJsonObject {
-                put("chipFamily", "ESP32-S3")
+                put("chipFamily", board.chipFamily)
                 put("improv", true)
                 put("parts", buildJsonArray {
-                    add(buildJsonObject {
-                        put("path", firmwareUrl)
-                        put("offset", 0)
-                    })
+                    for (offset in listOf(0, 0x8000, 0xE000, 0x10000)) {
+                        add(buildJsonObject {
+                            put("path", firmwareUrl)
+                            put("offset", offset)
+                        })
+                    }
                 })
             })
         })
@@ -785,5 +799,5 @@ private external fun absoluteUrl(path: String): String
 @JsFun("(ok, fail) => fetch(new URL('firmware/release.json', document.baseURI), { cache: 'no-store' }).then(response => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.text(); }).then(ok).catch(error => fail(error?.message || String(error)))")
 private external fun fetchDeployedReleaseJson(ok: (String) -> Unit, fail: (String) -> Unit)
 
-@JsFun("(manifestJson, firmwareUrl) => { const host = document.getElementById('rsvp-installer'); const trigger = document.getElementById('rsvp-installer-trigger'); if (globalThis.rsvpNanoManifestUrl) URL.revokeObjectURL(globalThis.rsvpNanoManifestUrl); if (globalThis.rsvpNanoFirmwareUrl) URL.revokeObjectURL(globalThis.rsvpNanoFirmwareUrl); const manifestUrl = URL.createObjectURL(new Blob([manifestJson], { type: 'application/json' })); globalThis.rsvpNanoManifestUrl = manifestUrl; globalThis.rsvpNanoFirmwareUrl = firmwareUrl; host.manifest = manifestUrl; trigger.click(); }")
+@JsFun("(manifestJson, firmwareUrl) => { (async () => { const response = await fetch(firmwareUrl); if (!response.ok) throw new Error('Could not load the firmware file'); const firmware = await response.blob(); if (firmwareUrl.startsWith('blob:')) URL.revokeObjectURL(firmwareUrl); if (firmware.size <= 65536) throw new Error('The full installer firmware is incomplete'); const manifest = JSON.parse(manifestJson); const ranges = new Map([[0, [0, 32768]], [32768, [32768, 36864]], [57344, [57344, 65536]], [65536, [65536, firmware.size]]]); if (globalThis.rsvpNanoManifestUrl) URL.revokeObjectURL(globalThis.rsvpNanoManifestUrl); for (const url of globalThis.rsvpNanoPartUrls || []) URL.revokeObjectURL(url); const partUrls = []; for (const part of manifest.builds[0].parts) { const range = ranges.get(part.offset); if (!range) throw new Error('Unsupported firmware offset'); const url = URL.createObjectURL(firmware.slice(range[0], range[1])); part.path = url; partUrls.push(url); } const manifestUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' })); globalThis.rsvpNanoManifestUrl = manifestUrl; globalThis.rsvpNanoPartUrls = partUrls; const host = document.getElementById('rsvp-installer'); host.overrides = { checkSameFirmware: (_manifest, info) => info?.name === 'RSVP Nano' }; host.manifest = manifestUrl; document.getElementById('rsvp-installer-trigger').click(); })().catch(error => window.alert(error?.message || String(error))); }")
 private external fun launchDynamicEspInstaller(manifestJson: String, firmwareUrl: String)
