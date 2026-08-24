@@ -15,6 +15,7 @@ import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
@@ -151,6 +152,8 @@ internal class WebSerialNanoApi : NanoApi {
     }
 
     override suspend fun fetchDevice(baseUrl: String): NanoInfo = get("/api/v2/device", NanoInfo.serializer())
+    override suspend fun repairStorage(baseUrl: String): NanoStorageRepair =
+        decode(request("POST", "/api/v2/storage/repair"), NanoStorageRepair.serializer())
     override suspend fun listLibrary(baseUrl: String): List<NanoBook> = get("/api/v2/library", ListSerializer(NanoBook.serializer()))
     override suspend fun listThemes(baseUrl: String): List<NanoThemeSummary> = get("/api/v2/themes", ListSerializer(NanoThemeSummary.serializer()))
     override suspend fun listFonts(baseUrl: String): List<NanoFontSummary> = get("/api/v2/fonts", ListSerializer(NanoFontSummary.serializer()))

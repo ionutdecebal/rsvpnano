@@ -243,6 +243,7 @@ private fun SettingsContent(
                 onSaveWifi = presenter::saveWifiSettings,
                 onClearWifi = presenter::clearWifiSettings,
                 onForgetRememberedNano = presenter::forgetRememberedNano,
+                onRepairStorage = presenter::repairStorage,
                 onUpdateSettings = presenter::updateSettings,
                 onFirmwareNotificationsChange = onFirmwareNotificationsChange,
                 hasPermissions = hasPermissions,
@@ -325,6 +326,7 @@ private fun DeviceSettings(
     onSaveWifi: () -> Unit,
     onClearWifi: () -> Unit,
     onForgetRememberedNano: () -> Unit,
+    onRepairStorage: () -> Unit,
     onUpdateSettings: ((NanoSettings) -> NanoSettings) -> Unit,
     onFirmwareNotificationsChange: (Boolean) -> Unit,
     hasPermissions: Boolean,
@@ -494,6 +496,34 @@ private fun DeviceSettings(
                 checked = uiState.firmwareNotificationsEnabled,
                 onCheckedChange = onFirmwareNotificationsChange,
             )
+        }
+
+        SettingsSection(
+            title = "SD card",
+            subtitle = "Check the card and organize supported files into the current layout.",
+        ) {
+            val report = uiState.storageRepair
+            SettingsStatusRow(
+                icon = Icons.Outlined.Sync,
+                title = when {
+                    uiState.isRepairingStorage -> "Repairing SD card"
+                    report == null -> "Storage repair"
+                    report.healthy -> "SD card ready"
+                    else -> "SD card needs attention"
+                },
+                body = when {
+                    report == null -> "Checks folders, interrupted files, books, themes, fonts, language packs, and settings."
+                    report.issues.isNotEmpty() -> report.issues.joinToString("\n")
+                    else -> "Checked ${report.checked} files, moved ${report.moved}, and cleaned ${report.removed}."
+                },
+            )
+            if (uiState.isRepairingStorage) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                Button(onClick = onRepairStorage, enabled = uiState.isConnected) {
+                    Text("Repair SD card")
+                }
+            }
         }
     }
 }

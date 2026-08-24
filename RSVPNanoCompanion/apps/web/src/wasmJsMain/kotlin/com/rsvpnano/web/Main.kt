@@ -494,7 +494,7 @@ private fun Workspace(
         ) {
             when (activeRoute) {
                 WebRoute.Setup -> SetupWizard(presenter, state, Modifier.fillMaxSize())
-                WebRoute.Device -> DeviceWorkspace(state)
+                WebRoute.Device -> DeviceWorkspace(presenter, state)
                 WebRoute.Library -> LibraryWorkspace(presenter, state)
                 WebRoute.Appearance -> AppearanceWorkspace(presenter, state)
                 WebRoute.Settings -> SettingsWorkspace(presenter, state, routeHash)
@@ -506,17 +506,82 @@ private fun Workspace(
 }
 
 @Composable
-private fun DeviceWorkspace(state: CompanionUiState) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(6.dp)) {
-        Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            DetailRow("Connection", when (state.connectionState.transport) {
-                NanoConnectionTransport.LocalNetwork -> "Local network"
-                NanoConnectionTransport.AccessPoint -> "Nano access point"
-                NanoConnectionTransport.Usb -> "USB"
-                null -> "Not connected"
-            })
-            DetailRow("Connection address", state.baseUrl)
-            DetailRow("Software version", state.firmwareVersion.ifBlank { "Not available" })
+private fun DeviceWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 860.dp
+        val content: @Composable (Modifier) -> Unit = { modifier ->
+            Card(
+                modifier,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(6.dp),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Reader", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    DetailRow("Connection", when (state.connectionState.transport) {
+                        NanoConnectionTransport.LocalNetwork -> "Local network"
+                        NanoConnectionTransport.AccessPoint -> "Nano access point"
+                        NanoConnectionTransport.Usb -> "USB"
+                        null -> "Not connected"
+                    })
+                    DetailRow("Connection address", state.baseUrl)
+                    DetailRow("Software version", state.firmwareVersion.ifBlank { "Not available" })
+                }
+            }
+        }
+        val storage: @Composable (Modifier) -> Unit = { modifier ->
+            Card(
+                modifier,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(6.dp),
+            ) {
+                Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("SD card", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Check the card, organize its folders, clean interrupted files, and verify supported books, themes, fonts, language packs, and settings.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    )
+                    Button(
+                        onClick = presenter::repairStorage,
+                        enabled = state.isConnected && !state.isRepairingStorage,
+                    ) {
+                        if (state.isRepairingStorage) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Repairing")
+                        } else {
+                            Text("Repair SD card")
+                        }
+                    }
+                    state.storageRepair?.let { report ->
+                        DetailRow("Result", if (report.healthy) "Ready" else "Needs attention")
+                        DetailRow("Files checked", report.checked.toString())
+                        DetailRow("Files moved", report.moved.toString())
+                        DetailRow("Temporary files cleaned", report.removed.toString())
+                        Text(report.diagnosticSummary, fontWeight = FontWeight.Bold)
+                        if (report.diagnosticDetail.isNotBlank()) {
+                            Text(report.diagnosticDetail, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+                        }
+                        report.actions.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        report.issues.forEach {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+        if (wide) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                content(Modifier.weight(1f))
+                storage(Modifier.weight(1.15f))
+            }
+        } else {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                content(Modifier.fillMaxWidth())
+                storage(Modifier.fillMaxWidth())
+            }
         }
     }
 }

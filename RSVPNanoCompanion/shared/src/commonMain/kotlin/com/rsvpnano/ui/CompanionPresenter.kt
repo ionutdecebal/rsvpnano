@@ -423,6 +423,42 @@ class CompanionPresenter(
         }
     }
 
+    fun repairStorage() {
+        scope.launch {
+            val state = current
+            if (!state.isConnected) {
+                setNotice(CompanionNotice.Error("Connect to your Nano before repairing its SD card."))
+                return@launch
+            }
+            updateState {
+                it.copy(
+                    isRepairingStorage = true,
+                    storageRepair = null,
+                    notice = CompanionNotice.Attention("Checking and repairing the SD card..."),
+                )
+            }
+            runCatching {
+                withNanoApi { companionController.repairStorage(state.baseUrl) }
+            }.onSuccess { report ->
+                updateState {
+                    it.copy(
+                        isRepairingStorage = false,
+                        storageRepair = report,
+                        notice = if (report.healthy) {
+                            CompanionNotice.Success("SD card repair finished successfully.")
+                        } else {
+                            CompanionNotice.Attention("SD card repair finished with items that need attention.")
+                        },
+                    )
+                }
+                refreshLibrary()
+            }.onFailure { error ->
+                updateState { it.copy(isRepairingStorage = false) }
+                handleDeviceFailure(error, "Repairing the SD card failed")
+            }
+        }
+    }
+
     fun refreshSettings() {
         refreshResource(
             resource = CompanionResource.Settings,

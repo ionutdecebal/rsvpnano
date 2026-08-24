@@ -10,6 +10,7 @@ import com.rsvpnano.app.isRequesting
 import com.rsvpnano.app.isWifiAttached
 import com.rsvpnano.models.NanoBook
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoFontCatalogItem
@@ -46,6 +47,8 @@ data class CompanionUiState(
     val loadingResources: Set<CompanionResource> = emptySet(),
     val loadedResources: Set<CompanionResource> = emptySet(),
     val isSavingSettings: Boolean = false,
+    val isRepairingStorage: Boolean = false,
+    val storageRepair: NanoStorageRepair? = null,
     val bookJob: BookJob? = null,
     val themeCatalog: List<NanoThemeCatalogItem> = emptyList(),
     val availableThemes: List<NanoThemeSummary> = emptyList(),

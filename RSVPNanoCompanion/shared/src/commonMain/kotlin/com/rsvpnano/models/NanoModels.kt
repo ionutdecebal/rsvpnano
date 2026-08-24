@@ -66,6 +66,18 @@ data class NanoInfo(
 )
 
 @Serializable
+data class NanoStorageRepair(
+    val healthy: Boolean,
+    val checked: Int,
+    val moved: Int,
+    val removed: Int,
+    val diagnosticSummary: String,
+    val diagnosticDetail: String,
+    val actions: List<String> = emptyList(),
+    val issues: List<String> = emptyList(),
+)
+
+@Serializable
 data class NanoRssFeeds(
     val feeds: List<String>,
 )

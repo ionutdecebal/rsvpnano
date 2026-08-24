@@ -11,6 +11,7 @@ import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 import com.rsvpnano.models.NanoWifiUpdate
@@ -72,6 +73,16 @@ class NanoKtorClientAndroidTest {
             seen += "${request.method.value} ${request.url.encodedPath}"
             when (request.url.encodedPath) {
                 "/api/v2/device" -> testJson.encodeToString(NanoInfo.serializer(), device)
+                "/api/v2/storage/repair" -> testJson.encodeToString(
+                    NanoStorageRepair(
+                        healthy = true,
+                        checked = 12,
+                        moved = 2,
+                        removed = 1,
+                        diagnosticSummary = "Storage OK",
+                        diagnosticDetail = "FAT32",
+                    ),
+                )
                 "/api/v2/library" -> libraryJson(books)
                 "/api/v2/themes" -> """[{"id":"default","name":"Default"}]"""
                 "/api/v2/fonts" -> "[]"
@@ -81,9 +92,11 @@ class NanoKtorClientAndroidTest {
         })
 
         val info = client.fetchDevice("http://device.local")
+        val repair = client.repairStorage("http://device.local")
         val book = client.listLibrary("http://device.local").single()
         assertEquals("RSVP-Nano-123456", info.ssid)
         assertEquals("preview-v0.0.9+abc", info.firmwareVersion)
+        assertEquals(2, repair.moved)
         assertEquals("Default", client.listThemes("http://device.local").single().name)
         assertEquals(emptyList(), client.listFonts("http://device.local"))
         assertEquals(emptyList(), client.listLocales("http://device.local"))
@@ -93,6 +106,7 @@ class NanoKtorClientAndroidTest {
         assertEquals(
             listOf(
                 "GET /api/v2/device",
+                "POST /api/v2/storage/repair",
                 "GET /api/v2/library",
                 "GET /api/v2/themes",
                 "GET /api/v2/fonts",

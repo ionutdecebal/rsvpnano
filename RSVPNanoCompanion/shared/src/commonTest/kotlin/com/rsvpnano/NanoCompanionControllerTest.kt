@@ -19,6 +19,7 @@ import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.NanoReadingProgress
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
@@ -202,6 +203,15 @@ class NanoCompanionControllerTest {
             if (deviceFailures-- > 0) throw NanoClientError("device not ready")
             return NanoInfo("RSVP-Nano-123456", "preview-v0.0.9+abc", "reader-ota.bin")
         }
+
+        override suspend fun repairStorage(baseUrl: String) = NanoStorageRepair(
+            healthy = true,
+            checked = 0,
+            moved = 0,
+            removed = 0,
+            diagnosticSummary = "Storage OK",
+            diagnosticDetail = "",
+        )
 
         override suspend fun listLibrary(baseUrl: String): List<NanoBook> {
             listLibraryCalls++

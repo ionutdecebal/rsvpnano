@@ -8,6 +8,7 @@ import com.rsvpnano.models.NanoLanguageFont
 import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoWifiSettings
 
@@ -15,6 +16,7 @@ interface NanoApi {
     fun close() = Unit
 
     suspend fun fetchDevice(baseUrl: String): NanoInfo
+    suspend fun repairStorage(baseUrl: String): NanoStorageRepair
     suspend fun listLibrary(baseUrl: String): List<NanoBook>
     suspend fun listThemes(baseUrl: String): List<NanoThemeSummary>
     suspend fun listFonts(baseUrl: String): List<NanoFontSummary>

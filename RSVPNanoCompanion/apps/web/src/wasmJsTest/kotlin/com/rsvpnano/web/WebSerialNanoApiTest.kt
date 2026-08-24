@@ -23,7 +23,13 @@ class WebSerialNanoApiTest {
                 SerialFrameCodec.encode(SerialFrame(SerialFrameType.Response, 1u, payload = responseMetadata.encodeToByteArray())) +
                     SerialFrameCodec.encode(SerialFrame(SerialFrameType.Data, 1u, payload = deviceBody)) +
                     SerialFrameCodec.encode(SerialFrame(SerialFrameType.End, 1u))
-            val reads = listOf("RSVPNANO/COMPANION/1 READY\n".encodeToByteArray(), response)
+            val repairBody = """{"healthy":true,"checked":8,"moved":1,"removed":0,"diagnosticSummary":"Storage OK","diagnosticDetail":"FAT32","actions":[],"issues":[]}""".encodeToByteArray()
+            val repairMetadata = """{"status":200,"contentType":"application/json","totalBytes":${repairBody.size}}"""
+            val repairResponse =
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.Response, 2u, payload = repairMetadata.encodeToByteArray())) +
+                    SerialFrameCodec.encode(SerialFrame(SerialFrameType.Data, 2u, payload = repairBody)) +
+                    SerialFrameCodec.encode(SerialFrame(SerialFrameType.End, 2u))
+            val reads = listOf("RSVPNANO/COMPANION/1 READY\n".encodeToByteArray(), response, repairResponse)
                 .joinToString("|") { Base64.encode(it) }
             installFakeSerial(reads)
             val api = WebSerialNanoApi()
@@ -34,6 +40,7 @@ class WebSerialNanoApiTest {
             val device = api.fetchDevice("usb://active")
             assertEquals("RSVP-Nano", device.ssid)
             assertEquals("0.0.9", device.firmwareVersion)
+            assertEquals(1, api.repairStorage("usb://active").moved)
 
             api.release()
 

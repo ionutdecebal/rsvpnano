@@ -24,6 +24,7 @@ internal class BrowserNanoApi(
     }
 
     override suspend fun fetchDevice(baseUrl: String) = transport(baseUrl).fetchDevice(baseUrl)
+    override suspend fun repairStorage(baseUrl: String) = transport(baseUrl).repairStorage(baseUrl)
     override suspend fun listLibrary(baseUrl: String) = transport(baseUrl).listLibrary(baseUrl)
     override suspend fun listThemes(baseUrl: String) = transport(baseUrl).listThemes(baseUrl)
     override suspend fun listFonts(baseUrl: String) = transport(baseUrl).listFonts(baseUrl)

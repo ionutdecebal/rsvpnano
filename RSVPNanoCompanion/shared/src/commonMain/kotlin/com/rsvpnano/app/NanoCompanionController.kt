@@ -11,6 +11,7 @@ import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoReadingProgress
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoFontCatalogItem
 import com.rsvpnano.models.NanoWifiSettings
@@ -46,6 +47,8 @@ class NanoCompanionController(
     suspend fun refreshLocal(): List<PendingUpload> = draftService.loadDrafts()
 
     suspend fun connect(baseUrl: String): NanoInfo = nanoApi.fetchDevice(baseUrl)
+
+    suspend fun repairStorage(baseUrl: String): NanoStorageRepair = nanoApi.repairStorage(baseUrl)
 
     suspend fun refreshLibrary(baseUrl: String): List<NanoBook> = nanoApi.listLibrary(baseUrl)
 

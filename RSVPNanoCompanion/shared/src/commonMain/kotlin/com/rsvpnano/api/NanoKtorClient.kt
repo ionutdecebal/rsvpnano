@@ -8,6 +8,7 @@ import com.rsvpnano.models.NanoInfo
 import com.rsvpnano.models.NanoLocaleSummary
 import com.rsvpnano.models.NanoRssFeeds
 import com.rsvpnano.models.NanoSettings
+import com.rsvpnano.models.NanoStorageRepair
 import com.rsvpnano.models.NanoThemeSummary
 import com.rsvpnano.models.NanoThemeCatalogItem
 import com.rsvpnano.models.NanoFontCatalogItem
@@ -81,6 +82,11 @@ class NanoKtorClient(
 
     override suspend fun fetchDevice(baseUrl: String): NanoInfo =
         requestData(baseUrl, "api/v2/device", NanoInfo.serializer())
+
+    override suspend fun repairStorage(baseUrl: String): NanoStorageRepair {
+        val response = httpClient.post(buildUrl(baseUrl, "api/v2/storage/repair"))
+        return decodeDeviceResponse(response.status, response.body<String>(), NanoStorageRepair.serializer())
+    }
 
     override suspend fun listLibrary(baseUrl: String): List<NanoBook> {
         return requestData(baseUrl, "api/v2/library", ListSerializer(NanoBook.serializer()))
