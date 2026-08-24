@@ -3,7 +3,7 @@ package com.rsvpnano.ui
 enum class BookJobStep(val activeLabel: String, val doneLabel: String) {
     Convert("Converting", "Converted"),
     Prepare("Preparing", "Prepared"),
-    Upload("Uploading", "Uploaded"),
+    Upload("Sending and indexing", "Sent and indexed"),
 }
 
 data class BookJob(

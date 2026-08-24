@@ -3,6 +3,7 @@ package com.rsvpnano.web
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +24,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Newspaper
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.Button
@@ -59,6 +65,7 @@ import com.rsvpnano.models.NanoFocusTimers
 import com.rsvpnano.models.NanoLocales
 import com.rsvpnano.models.NanoSettings
 import com.rsvpnano.models.NanoSettingsSchema
+import com.rsvpnano.models.PendingUpload
 import com.rsvpnano.models.needsArticleFetch
 import com.rsvpnano.ui.CompanionPresenter
 import com.rsvpnano.ui.CatalogInstall
@@ -68,6 +75,10 @@ import com.rsvpnano.ui.CompanionUiState
 import com.rsvpnano.ui.TypographyPreview
 import com.rsvpnano.ui.fontDetails
 import com.rsvpnano.ui.localeDetails
+import com.rsvpnano.ui.byteLabel
+import com.rsvpnano.ui.isArticle
+import com.rsvpnano.ui.librarySubtitle
+import com.rsvpnano.ui.readPercent
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.name
@@ -78,85 +89,367 @@ import kotlinx.browser.window
 @Composable
 internal fun ColumnScope.LibraryWorkspace(presenter: CompanionPresenter, state: CompanionUiState) {
     val scope = rememberCoroutineScope()
+    var filter by remember { mutableStateOf(WebLibraryFilter.Books) }
+    var search by remember { mutableStateOf("") }
+    var selectedBookId by remember { mutableStateOf<String?>(null) }
+    var editingArticle by remember { mutableStateOf(false) }
+    var uploadCategory by remember { mutableStateOf("book") }
     val picker = rememberFilePickerLauncher(
         type = FileKitType.File(extensions = listOf("epub", "txt", "html", "htm", "rsvp")),
     ) { file ->
-        if (file != null) scope.launch { presenter.uploadSelectedFile(file.name, file.readBytes()) }
+        if (file != null) scope.launch {
+            presenter.uploadSelectedFile(file.name, file.readBytes(), uploadCategory)
+        }
     }
 
     LaunchedEffect(state.isConnected) {
         if (state.isConnected && CompanionResource.Library !in state.loadedResources) presenter.refreshLibrary()
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(onClick = { picker.launch() }, enabled = state.isConnected) { Text("Add book") }
-        OutlinedButton(onClick = presenter::refreshLibrary, enabled = state.isConnected) { Text("Refresh") }
-        if (state.drafts.isNotEmpty()) {
-            OutlinedButton(onClick = presenter::syncSavedArticles, enabled = state.isConnected) {
-                Text("Sync ${state.drafts.size} drafts")
+    val query = search.trim()
+    val visibleBooks = state.books.filter { book ->
+        book.isArticle == (filter == WebLibraryFilter.Articles) && (
+            query.isEmpty() || book.displayTitle.contains(query, ignoreCase = true) ||
+                book.metadata.author.contains(query, ignoreCase = true) || book.name.contains(query, ignoreCase = true)
+            )
+    }
+    val visibleDrafts = if (filter == WebLibraryFilter.Articles) {
+        state.drafts.filter { draft ->
+            query.isEmpty() || draft.title.contains(query, ignoreCase = true) ||
+                draft.sourceUrl.orEmpty().contains(query, ignoreCase = true)
+        }
+    } else {
+        emptyList()
+    }
+    val selectedBook = visibleBooks.firstOrNull { it.id == selectedBookId } ?: visibleBooks.firstOrNull()
+
+    LaunchedEffect(filter, search, state.books) {
+        if (!editingArticle) selectedBookId = selectedBook?.id
+    }
+
+    LibraryToolbar(
+        filter = filter,
+        search = search,
+        connected = state.isConnected,
+        onFilter = {
+            filter = it
+            editingArticle = false
+            selectedBookId = null
+        },
+        onSearch = { search = it },
+        onRefresh = presenter::refreshLibrary,
+        onUpload = { category ->
+            uploadCategory = category
+            picker.launch()
+        },
+        onNewArticle = {
+            filter = WebLibraryFilter.Articles
+            selectedBookId = null
+            editingArticle = true
+            presenter.cancelDraftEdit()
+        },
+    )
+
+    state.bookJob?.let { job ->
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.48f),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("${job.active.activeLabel} ${job.name}", fontWeight = FontWeight.Bold)
+                    job.percent?.let { Text("$it%", style = MaterialTheme.typography.labelMedium) }
+                }
+                val progress = job.progress
+                if (progress != null) LinearProgressIndicator(progress = { progress }, Modifier.fillMaxWidth())
+                else LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
     }
-    state.bookJob?.let { job ->
-        SectionCard {
-            Text("${job.active.activeLabel} ${job.name}", fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            val progress = job.progress
-            if (progress != null) LinearProgressIndicator(progress = { progress }, Modifier.fillMaxWidth())
-            else LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-    }
+
     BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
-        if (maxWidth >= 900.dp) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Column(Modifier.weight(3f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                    BookList(presenter, state)
-                }
+        if (maxWidth >= 840.dp) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                LibraryListPane(
+                    books = visibleBooks,
+                    drafts = visibleDrafts,
+                    selectedBookId = selectedBook?.id.takeUnless { editingArticle },
+                    connected = state.isConnected,
+                    loading = CompanionResource.Library in state.loadingResources,
+                    needsArticleFetch = { it.needsArticleFetch() },
+                    onSelectBook = {
+                        selectedBookId = it.id
+                        editingArticle = false
+                    },
+                    onEditDraft = {
+                        presenter.editDraft(it)
+                        editingArticle = true
+                        selectedBookId = null
+                    },
+                    onDeleteDraft = presenter::deleteDraft,
+                    onSyncArticles = presenter::syncSavedArticles,
+                    modifier = Modifier.weight(3f).fillMaxHeight(),
+                )
                 Column(Modifier.weight(2f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                    DraftEditor(presenter, state)
+                    if (editingArticle) {
+                        DraftEditor(presenter, state, onClose = { editingArticle = false })
+                    } else {
+                        LibraryDetailPane(selectedBook, presenter)
+                    }
                 }
             }
         } else {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                BookList(presenter, state)
-                DraftEditor(presenter, state)
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                LibraryListPane(
+                    books = visibleBooks,
+                    drafts = visibleDrafts,
+                    selectedBookId = selectedBook?.id.takeUnless { editingArticle },
+                    connected = state.isConnected,
+                    loading = CompanionResource.Library in state.loadingResources,
+                    needsArticleFetch = { it.needsArticleFetch() },
+                    onSelectBook = {
+                        selectedBookId = it.id
+                        editingArticle = false
+                    },
+                    onEditDraft = {
+                        presenter.editDraft(it)
+                        editingArticle = true
+                        selectedBookId = null
+                    },
+                    onDeleteDraft = presenter::deleteDraft,
+                    onSyncArticles = presenter::syncSavedArticles,
+                )
+                if (editingArticle) DraftEditor(presenter, state, onClose = { editingArticle = false })
+                else LibraryDetailPane(selectedBook, presenter)
+            }
+        }
+    }
+}
+
+private enum class WebLibraryFilter(val label: String) {
+    Books("Books"),
+    Articles("Articles"),
+}
+
+@Composable
+private fun LibraryToolbar(
+    filter: WebLibraryFilter,
+    search: String,
+    connected: Boolean,
+    onFilter: (WebLibraryFilter) -> Unit,
+    onSearch: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onUpload: (String) -> Unit,
+    onNewArticle: () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val narrow = maxWidth < 880.dp
+        val filters: @Composable () -> Unit = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WebLibraryFilter.entries.forEach { option ->
+                    FilterChip(selected = filter == option, onClick = { onFilter(option) }, label = { Text(option.label) })
+                }
+            }
+        }
+        val actions: @Composable () -> Unit = {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("ADD TO READER", Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                Button(onClick = { onUpload("book") }, enabled = connected) {
+                    Icon(Icons.Outlined.UploadFile, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Book file")
+                }
+                OutlinedButton(onClick = { onUpload("article") }, enabled = connected) {
+                    Icon(Icons.Outlined.UploadFile, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Article file")
+                }
+                OutlinedButton(onClick = onNewArticle) { Text("Write article") }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (narrow) {
+                filters()
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    LibrarySearchField(search, onSearch, Modifier.weight(1f))
+                    IconButton(onClick = onRefresh, enabled = connected) {
+                        Icon(Icons.Outlined.Refresh, "Refresh library")
+                    }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    filters()
+                    LibrarySearchField(search, onSearch, Modifier.weight(1f))
+                    IconButton(onClick = onRefresh, enabled = connected) {
+                        Icon(Icons.Outlined.Refresh, "Refresh library")
+                    }
+                }
+            }
+            actions()
+        }
+    }
+}
+
+@Composable
+private fun LibrarySearchField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = { Text("Search title or author") },
+        leadingIcon = { Icon(Icons.Outlined.Search, null) },
+        singleLine = true,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun LibraryListPane(
+    books: List<NanoBook>,
+    drafts: List<PendingUpload>,
+    selectedBookId: String?,
+    connected: Boolean,
+    loading: Boolean,
+    needsArticleFetch: (PendingUpload) -> Boolean,
+    onSelectBook: (NanoBook) -> Unit,
+    onEditDraft: (PendingUpload) -> Unit,
+    onDeleteDraft: (PendingUpload) -> Unit,
+    onSyncArticles: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(modifier) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("ON THE READER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+            Text("${books.size} ${if (books.size == 1) "item" else "items"}", style = MaterialTheme.typography.labelSmall)
+        }
+        Column(Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            drafts.forEach { draft ->
+                LibraryDraftRow(draft, needsArticleFetch(draft), onEditDraft, onDeleteDraft)
+            }
+            books.forEach { book ->
+                LibraryBookRow(book, selectedBookId == book.id) { onSelectBook(book) }
+            }
+            if (books.isEmpty() && drafts.isEmpty()) {
+                Text(
+                    when {
+                        !connected -> "Connect a Nano to load its library."
+                        loading -> "Loading library..."
+                        else -> "Nothing matches this view."
+                    },
+                    Modifier.padding(vertical = 28.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                )
+            }
+        }
+        if (drafts.isNotEmpty()) {
+            OutlinedButton(onClick = onSyncArticles, enabled = connected && drafts.any { !needsArticleFetch(it) }) {
+                Icon(Icons.Outlined.Sync, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Sync ready articles")
             }
         }
     }
 }
 
 @Composable
-private fun BookList(presenter: CompanionPresenter, state: CompanionUiState, modifier: Modifier = Modifier) {
-    SectionCard(modifier) {
-        Text("ON THE READER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-        if (state.books.isEmpty()) {
-            Text(if (state.isConnected) "No books installed." else "Connect a Nano to load its library.")
+private fun LibraryBookRow(book: NanoBook, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(shape)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f) else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
+            null,
+            Modifier.size(20.dp),
+            tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(book.displayTitle, fontWeight = FontWeight.Bold)
+            book.librarySubtitle.takeIf(String::isNotBlank)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            }
+            book.readPercent?.let { progress ->
+                LinearProgressIndicator(progress = { progress / 100f }, Modifier.fillMaxWidth().height(2.dp))
+            }
         }
-        state.books.forEach { book -> BookRow(book, presenter) }
     }
 }
 
 @Composable
-private fun BookRow(book: NanoBook, presenter: CompanionPresenter) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(book.displayTitle, fontWeight = FontWeight.Bold)
-        val detail = buildList {
-            book.metadata.author.takeIf(String::isNotBlank)?.let(::add)
-            if (book.metadata.wordCount > 0) add("${book.metadata.wordCount} words")
-            if (book.bytes > 0) add(formatBytes(book.bytes))
-        }.joinToString(", ")
-        if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall)
+private fun LibraryDraftRow(
+    draft: PendingUpload,
+    needsFetch: Boolean,
+    onEdit: (PendingUpload) -> Unit,
+    onDelete: (PendingUpload) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onEdit(draft) }
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Newspaper, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.tertiary)
+        Column(Modifier.weight(1f)) {
+            Text(draft.title, fontWeight = FontWeight.Bold)
+            Text(
+                if (needsFetch) "Needs article text" else "Saved locally, ready to sync",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+        }
+        IconButton(onClick = { onDelete(draft) }) { Icon(Icons.Outlined.Delete, "Delete saved article") }
+    }
+}
+
+@Composable
+private fun LibraryDetailPane(book: NanoBook?, presenter: CompanionPresenter) {
+    SectionCard {
+        Text("DETAILS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        if (book == null) {
+            Text("Select an item to see its information.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+            return@SectionCard
+        }
+        Icon(
+            if (book.isArticle) Icons.Outlined.Newspaper else Icons.AutoMirrored.Outlined.MenuBook,
+            null,
+            Modifier.size(28.dp),
+            tint = if (book.isArticle) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+        )
+        Text(book.displayTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        book.metadata.author.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)) }
+        DetailRow("Words", book.metadata.wordCount.toString())
+        DetailRow("Chapters", book.metadata.chapters.size.toString())
+        DetailRow("File size", book.byteLabel)
+        book.metadata.locale.takeIf(String::isNotBlank)?.let { DetailRow("Language", it) }
+        book.readPercent?.let { progress ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                DetailRow("Reading progress", "$progress%")
+                LinearProgressIndicator(progress = { progress / 100f }, Modifier.fillMaxWidth())
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { presenter.setBookPosition(book, 0) }) { Text("Reset position") }
-            OutlinedButton(onClick = { presenter.deleteDeviceBook(book) }) { Text("Remove") }
+            OutlinedButton(onClick = { presenter.deleteDeviceBook(book) }) {
+                Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Remove")
+            }
         }
     }
 }
 
 @Composable
-private fun DraftEditor(presenter: CompanionPresenter, state: CompanionUiState, modifier: Modifier = Modifier) {
+private fun DraftEditor(
+    presenter: CompanionPresenter,
+    state: CompanionUiState,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     SectionCard(modifier) {
-        Text("ARTICLE DESK", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        Text(if (state.editingDraftId == null) "NEW ARTICLE" else "EDIT ARTICLE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
         OutlinedTextField(
             value = state.draftTitle,
             onValueChange = presenter::setDraftTitle,
@@ -178,25 +471,20 @@ private fun DraftEditor(presenter: CompanionPresenter, state: CompanionUiState, 
             modifier = Modifier.fillMaxWidth().height(150.dp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = presenter::saveTextDraft) { Text("Save text") }
-            OutlinedButton(onClick = presenter::saveLinkDraft, enabled = state.draftSourceUrl.isNotBlank()) {
+            Button(onClick = {
+                presenter.saveTextDraft()
+                onClose()
+            }) { Text("Save text") }
+            OutlinedButton(onClick = {
+                presenter.saveLinkDraft()
+                onClose()
+            }, enabled = state.draftSourceUrl.isNotBlank()) {
                 Text("Fetch URL")
             }
-        }
-        if (state.drafts.isNotEmpty()) {
-            Text("SAVED LOCALLY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-            state.drafts.forEach { draft ->
-                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Text(draft.title, fontWeight = FontWeight.Bold)
-                    if (draft.needsArticleFetch()) {
-                        Text("The site blocked browser fetching. Edit this draft and paste the article text.", style = MaterialTheme.typography.bodySmall)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { presenter.editDraft(draft) }) { Text("Edit") }
-                        OutlinedButton(onClick = { presenter.deleteDraft(draft) }) { Text("Delete") }
-                    }
-                }
-            }
+            TextButton(onClick = {
+                presenter.cancelDraftEdit()
+                onClose()
+            }) { Text("Cancel") }
         }
     }
 }
@@ -887,10 +1175,4 @@ private fun SectionCard(modifier: Modifier = Modifier, content: @Composable Colu
             content()
         }
     }
-}
-
-private fun formatBytes(bytes: Int): String = when {
-    bytes >= 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-    bytes >= 1024 -> "${bytes / 1024} KB"
-    else -> "$bytes B"
 }

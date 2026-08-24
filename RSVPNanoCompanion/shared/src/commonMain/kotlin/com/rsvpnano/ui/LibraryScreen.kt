@@ -370,7 +370,7 @@ private fun LibraryBookRow(
     }
 }
 
-internal val NanoBook.librarySubtitle: String
+val NanoBook.librarySubtitle: String
     get() = buildList {
         metadata.author.takeIf(String::isNotBlank)?.let(::add)
         metadata.wordCount.takeIf { it > 0 }?.let { add("$it words") }

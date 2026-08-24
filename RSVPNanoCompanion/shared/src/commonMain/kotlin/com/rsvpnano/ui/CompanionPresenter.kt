@@ -1046,7 +1046,7 @@ class CompanionPresenter(
         }
     }
 
-    fun uploadSelectedFile(displayName: String, data: ByteArray) {
+    fun uploadSelectedFile(displayName: String, data: ByteArray, category: String = "book") {
         scope.launch {
             val state = current
             if (!state.isConnected) {
@@ -1081,7 +1081,7 @@ class CompanionPresenter(
                     companionController.uploadBook(
                         baseUrl = state.baseUrl,
                         file = file,
-                        category = "book",
+                        category = category,
                         onProgress = { sent, total ->
                             updateBookJob(
                                 BookJob(
