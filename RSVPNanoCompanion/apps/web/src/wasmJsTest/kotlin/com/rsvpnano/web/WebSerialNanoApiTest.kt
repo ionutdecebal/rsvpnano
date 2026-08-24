@@ -40,11 +40,12 @@ class WebSerialNanoApiTest {
             assertTrue(installerCanOpenFakeSerial())
             assertEquals(2, fakeSerialOpenCount())
             assertEquals(2, fakeSerialCloseCount())
+            assertEquals(SerialFrameType.Close, fakeSerialFrames().last().type)
         }
     }
 }
 
-@JsFun("""(encodedReads) => { const decode = encoded => { const text = atob(encoded); const bytes = new Uint8Array(text.length); for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i); return bytes; }; const reads = encodedReads.split('|').map(decode); const state = { opened: false, opens: 0, closes: 0, reads }; const port = { getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 0x1001 }), open: async () => { if (state.opened) throw new Error('Port is already open'); state.opened = true; state.opens++; }, close: async () => { state.opened = false; state.closes++; }, readable: { getReader: () => ({ read: async () => ({ value: state.reads.shift() || new Uint8Array(), done: false }), cancel: async () => {}, releaseLock: () => {} }) }, writable: { getWriter: () => ({ write: async () => {}, close: async () => {}, releaseLock: () => {} }) } }; state.port = port; globalThis.rsvpNanoFakeSerial = state; Object.defineProperty(navigator, 'serial', { configurable: true, value: { getPorts: async () => [port], requestPort: async () => port } }); localStorage.removeItem('rsvpnano.web.usbDevice'); }""")
+@JsFun("""(encodedReads) => { const decode = encoded => { const text = atob(encoded); const bytes = new Uint8Array(text.length); for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i); return bytes; }; const reads = encodedReads.split('|').map(decode); const state = { opened: false, opens: 0, closes: 0, reads, writes: [], pendingRead: null }; const port = { getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 0x1001 }), open: async () => { if (state.opened) throw new Error('Port is already open'); state.opened = true; state.opens++; }, close: async () => { state.opened = false; state.closes++; }, readable: { getReader: () => ({ read: async () => state.reads.length ? { value: state.reads.shift(), done: false } : new Promise(resolve => { state.pendingRead = resolve; }), cancel: async () => { state.pendingRead?.({ done: true }); state.pendingRead = null; }, releaseLock: () => {} }) }, writable: { getWriter: () => ({ write: async data => { state.writes.push(new Uint8Array(data)); }, close: async () => {}, releaseLock: () => {} }) } }; state.port = port; globalThis.rsvpNanoFakeSerial = state; Object.defineProperty(navigator, 'serial', { configurable: true, value: { getPorts: async () => [port], requestPort: async () => port } }); localStorage.removeItem('rsvpnano.web.usbDevice'); }""")
 private external fun installFakeSerial(encodedReads: String)
 
 private suspend fun installerCanOpenFakeSerial(): Boolean = suspendCancellableCoroutine { continuation ->
@@ -61,3 +62,14 @@ private external fun fakeSerialOpenCount(): Int
 
 @JsFun("""() => globalThis.rsvpNanoFakeSerial.closes""")
 private external fun fakeSerialCloseCount(): Int
+
+private fun fakeSerialFrames(): List<SerialFrame> {
+    val decoder = SerialFrameCodec.Decoder()
+    return fakeSerialWrites()
+        .split('|')
+        .filter { it.isNotEmpty() }
+        .flatMap { decoder.feed(Base64.decode(it)) }
+}
+
+@JsFun("""() => globalThis.rsvpNanoFakeSerial.writes.map(bytes => { let text = ''; for (let i = 0; i < bytes.length; i++) text += String.fromCharCode(bytes[i]); return btoa(text); }).join('|')""")
+private external fun fakeSerialWrites(): String

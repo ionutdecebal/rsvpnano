@@ -72,11 +72,13 @@ internal data class FirmwareReleaseSource(
     val tag: String,
 )
 
+internal const val DefaultFirmwareRepositoryOwner = "ionutdecebal"
+
 internal fun FirmwareReleaseSource.catalogContentUrl(path: String): String =
     "https://raw.githubusercontent.com/$owner/$repository/${tag.ifBlank { "main" }}/$path"
 
 internal fun releaseSource(ownerValue: String, tagValue: String): FirmwareReleaseSource? {
-    var owner = ownerValue.trim()
+    var owner = ownerValue.trim().ifBlank { DefaultFirmwareRepositoryOwner }
     var repository = "rsvpnano"
     var tag = tagValue.trim()
 

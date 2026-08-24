@@ -235,7 +235,8 @@ private fun EditorialShell(
                     val normalized = if ("://" in entered) entered else "http://$entered"
                     endpoint = normalized
                     window.localStorage.setItem(EndpointStorageKey, normalized)
-                    presenter.connectEndpoint(
+                    BrowserSerial.connectNetwork(
+                        presenter,
                         NanoEndpoint(
                             normalized,
                             RememberedNano(normalized.removePrefix("http://").removePrefix("https://")),

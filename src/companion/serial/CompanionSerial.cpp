@@ -209,7 +209,7 @@ bool CompanionSerial::handleImprovCommand(improv::ImprovCommand command, uint32_
     case improv::GET_DEVICE_INFO: {
         const auto info = api_.deviceInfo();
         sendImprovResponse(improv::GET_DEVICE_INFO,
-                           {"RSVP Nano", info.firmwareVersion, info.otaAsset, info.ssid});
+                           {"RSVP Nano", info.firmwareVersion, ESP.getChipModel(), info.ssid});
         return true;
     }
     default:

@@ -11,6 +11,10 @@ class FirmwareUpdatesTest {
     @Test
     fun parsesTheSameCompactReleaseSourceAcceptedByTheNano() {
         assertEquals(
+            FirmwareReleaseSource(DefaultFirmwareRepositoryOwner, "rsvpnano", ""),
+            releaseSource("", ""),
+        )
+        assertEquals(
             FirmwareReleaseSource("reader-owner", "reader-firmware", "preview-v2"),
             releaseSource("ignored/default", "reader-owner/reader-firmware@preview-v2"),
         )

@@ -79,6 +79,13 @@ internal object BrowserSerial {
         api.release()
         presenter.cancelNanoSelection()
     }
+
+    fun connectNetwork(presenter: CompanionPresenter, endpoint: NanoEndpoint) {
+        scope.launch {
+            api.release()
+            presenter.connectEndpoint(endpoint)
+        }
+    }
 }
 
 internal fun requestUsbConnection(presenter: CompanionPresenter) = BrowserSerial.connect(presenter)
