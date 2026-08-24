@@ -261,6 +261,22 @@ companion::api::DeviceInfo CompanionApi::deviceInfo() const {
     };
 }
 
+companion::api::Result<StorageMigration::Report> CompanionApi::repairStorage(httpd_req_t& request) {
+    (void) request;
+    auto report = StorageMigration::repair(storage_.mounted(), {
+                                                                   .libraryItems = storage_.books().size(),
+                                                                   .fonts = readerScreen_.fonts.families().size() - 1,
+                                                                   .themes = interfaceScreen_.themes.themes().size() - 1,
+                                                               });
+    if (storage_.mounted()) {
+        storage_.refreshBooks();
+        readerScreen_.fonts.loadFromSd();
+        interfaceScreen_.themes.loadFromSd();
+        localeCatalog_ = locales::scanInstalled(Board::Storage::filesystem(), static_cast<size_t>(UiText::Count));
+    }
+    return report;
+}
+
 std::string CompanionApi::deviceSuffix() const {
     const uint64_t mac = ESP.getEfuseMac();
     char suffix[7]{};

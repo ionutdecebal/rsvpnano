@@ -329,20 +329,6 @@ namespace SdCard {
         return false;
     }
 
-    bool ensureFolderLayout() {
-        constexpr std::array requiredFolders = {
-            StoragePaths::kBooksPath,  StoragePaths::kBookFilesPath, StoragePaths::kArticleFilesPath,
-            StoragePaths::kConfigPath, StoragePaths::kThemesPath,    StoragePaths::kFontsPath,
-        };
-        for (const char* path: requiredFolders) {
-            if (const auto created = StorageFiles::ensureDirectory(path); !created) {
-                Logger::failure("sd", "create directory", path, created.error());
-                return false;
-            }
-        }
-        return true;
-    }
-
     int mountedFrequencyKhz() {
         return sMountedFrequencyKhz;
     }

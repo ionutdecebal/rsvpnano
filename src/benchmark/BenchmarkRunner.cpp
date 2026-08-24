@@ -947,7 +947,7 @@ namespace {
             return false;
         }
 
-        if (auto created = StorageFiles::ensureDirectory(StoragePaths::kBooksPath); !created) {
+        if (auto created = StorageFiles::ensureDirectory(StoragePaths::kLibraryPath); !created) {
             ESP_LOGE("bench", "reading_books_directory_failed error=%s", created.error().message().c_str());
             return false;
         }

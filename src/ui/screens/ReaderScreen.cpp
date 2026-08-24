@@ -8,6 +8,7 @@
 #include "board/BoardPower.h"
 #include "settings/SettingsRules.h"
 #include "storage/StorageManager.h"
+#include "storage/migration/Migration.h"
 #include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 #include "ui/screens/Screens.h"
@@ -439,7 +440,7 @@ namespace screens {
     void ReaderScreen::loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences,
                                        uint32_t nowMs) {
         storage.refreshBooks();
-        const std::string savedPath = preferences.getString("book").c_str();
+        const std::string savedPath = StorageMigration::currentPath(preferences.getString("book").c_str());
         if (!savedPath.empty()) {
             const int savedBook = storage.findBook(savedPath);
             if (savedBook >= 0 && openBook(ui, storage, preferences, static_cast<size_t>(savedBook), nowMs))

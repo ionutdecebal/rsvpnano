@@ -97,6 +97,7 @@ CompanionApi::OperationResult CompanionApi::startServer() {
 
     const std::array routes{
         makeRoute("/api/v2/device", HTTP_GET, &CompanionApi::handle<&CompanionApi::getDevice>),
+        makeRoute("/api/v2/storage/repair", HTTP_POST, &CompanionApi::handle<&CompanionApi::repairStorage>),
         makeRoute("/api/v2/library", HTTP_GET, &CompanionApi::handleLibrary),
         makeRoute("/api/v2/library", HTTP_POST, &CompanionApi::handleLibraryInstall),
         makeRoute("/api/v2/library/{id}", HTTP_DELETE, &CompanionApi::handle<&CompanionApi::deleteLibraryItem>),

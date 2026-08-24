@@ -21,6 +21,7 @@
 #include "settings/SettingsGlaze.h"
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
+#include "storage/migration/Migration.h"
 #include "timer/FocusTimers.h"
 #include "ui/Ui.h"
 #include "ui/screens/LibraryScreen.h"
@@ -76,6 +77,7 @@ private:
     // Device
     companion::api::Result<companion::api::DeviceInfo> getDevice(httpd_req_t& request);
     [[nodiscard]] companion::api::DeviceInfo deviceInfo() const;
+    companion::api::Result<StorageMigration::Report> repairStorage(httpd_req_t& request);
 
     // Library
     companion::api::Result<std::string> installLibraryItem(httpd_req_t& request);

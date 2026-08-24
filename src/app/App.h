@@ -17,7 +17,6 @@
 #include "rss/RssFeeds.h"
 #include "settings/SettingsStore.h"
 #include "storage/StorageManager.h"
-#include "storage/fs/SdDiagnostics.h"
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/LibraryScreen.h"

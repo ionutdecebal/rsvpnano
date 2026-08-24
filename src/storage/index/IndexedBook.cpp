@@ -888,8 +888,8 @@ namespace IndexedBook {
 
         {
             // Library selection and EPUB preparation.
-            if (!StorageFiles::directoryExists(kBooksPath)) {
-                ESP_LOGE("storage", "/books directory not found");
+            if (!StorageFiles::directoryExists(kLibraryPath)) {
+                ESP_LOGE("storage", "/library directory not found");
                 report("Book open failed", "Folders missing", "Run SD check", 100);
                 return false;
             }
@@ -898,7 +898,7 @@ namespace IndexedBook {
                 BookLibrary::refresh(library, false, RSVP_ON_DEVICE_EPUB_CONVERSION);
             }
             if (library.empty()) {
-                ESP_LOGD("storage", "No readable .rsvp, .txt, or .epub books found under /books");
+                ESP_LOGD("storage", "No readable .rsvp, .txt, or .epub books found under /library");
                 report("Book open failed", "No books found", "Add books to SD", 100);
                 return false;
             }

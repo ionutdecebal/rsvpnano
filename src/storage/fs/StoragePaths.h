@@ -6,10 +6,10 @@
 namespace StoragePaths {
 
     constexpr const char* kMountPoint = "/sdcard";
-    constexpr const char* kBooksPath = "/books";
-    constexpr const char* kBookFilesPath = "/books/books";
-    constexpr const char* kArticleFilesPath = "/books/articles";
-    constexpr const char* kArticleFilesPrefix = "/books/articles/";
+    constexpr const char* kLibraryPath = "/library";
+    constexpr const char* kBookFilesPath = "/library/books";
+    constexpr const char* kArticleFilesPath = "/library/articles";
+    constexpr const char* kArticleFilesPrefix = "/library/articles/";
     constexpr const char* kConfigPath = "/config";
     constexpr const char* kSettingsConfigPath = "/config/settings.toml";
     constexpr const char* kSettingsConfigTempPath = "/config/settings.toml.tmp";

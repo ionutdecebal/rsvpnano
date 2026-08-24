@@ -340,7 +340,7 @@ namespace {
 
     std::expected<void, std::error_code> saveItem(const feedparser::FeedItem& item, Preferences& preferences,
                                                   RssFeeds::Result& result) {
-        if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kBooksPath); !directory)
+        if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kLibraryPath); !directory)
             return directory;
         if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath); !directory)
             return directory;

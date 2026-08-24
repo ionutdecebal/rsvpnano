@@ -122,13 +122,15 @@ address. The web companion can also connect directly over USB on supported deskt
 The firmware creates its standard folders when writable storage is available. The main layout is:
 
 ```text
-/books/books
-/books/articles
+/library/books
+/library/articles
 /config
 /fonts
 /locales
 /themes
 ```
+
+Older cards using `/books` are migrated to `/library` without overwriting existing files. The same repair and validation pass is available from the Nano's Device screen and from the web or mobile companion while connected.
 
 Books and articles may be uploaded by a companion or copied directly to the card. The reader creates
 rebuildable `.ridx` and `.rdat` index files plus hidden `.rstate.toml` files for durable progress and

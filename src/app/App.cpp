@@ -17,6 +17,7 @@
 #include "rss/RssFeeds.h"
 #include "settings/NvsSecurity.h"
 #include "storage/index/ReadingProgress.h"
+#include "storage/migration/Migration.h"
 #include "update/OtaUpdater.h"
 
 namespace {
@@ -656,14 +657,27 @@ void App::runBackgroundJob() {
     }
     case JobKind::StorageCheck: {
         Logger::checkpoint("storage_check");
-        const SdDiagnostics::Result result =
-            SdDiagnostics::run(storage_.mounted(), {
-                                                       .libraryItems = storage_.books().size(),
-                                                       .fonts = readerScreen_.fonts.families().size() - 1,
-                                                       .themes = interfaceScreen_.themes.themes().size() - 1,
-                                                   });
-        copyText(complete.line1, result.summary.c_str());
-        copyText(complete.line2, result.detail.c_str());
+        const StorageMigration::Report report =
+            StorageMigration::repair(storage_.mounted(), {
+                                                            .libraryItems = storage_.books().size(),
+                                                            .fonts = readerScreen_.fonts.families().size() - 1,
+                                                            .themes = interfaceScreen_.themes.themes().size() - 1,
+                                                        });
+        if (storage_.mounted()) {
+            storage_.refreshBooks();
+            readerScreen_.fonts.loadFromSd();
+            interfaceScreen_.themes.loadFromSd();
+            localeCatalog_ =
+                locales::scanInstalled(Board::Storage::filesystem(), static_cast<size_t>(UiText::Count));
+        }
+        const std::string resultDetail = report.issues.empty()
+                                           ? "Checked " + std::to_string(report.checked) + ", moved "
+                                                 + std::to_string(report.moved) + ", cleaned "
+                                                 + std::to_string(report.removed)
+                                           : report.issues.front();
+        copyText(complete.line1,
+                 report.healthy ? report.diagnosticSummary.c_str() : "Storage needs attention");
+        copyText(complete.line2, resultDetail.c_str());
         break;
     }
     case JobKind::OtaCheck: {

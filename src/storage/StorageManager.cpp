@@ -10,6 +10,7 @@
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "storage/index/IndexedBook.h"
+#include "storage/migration/Migration.h"
 
 #ifndef RSVP_ON_DEVICE_EPUB_CONVERSION
 #define RSVP_ON_DEVICE_EPUB_CONVERSION 0
@@ -44,7 +45,7 @@ bool StorageManager::begin() {
     if (SdCard::mount(mounted_, &mountedFrequencyKhz)) {
         const uint64_t sizeMb = Board::Storage::cardSize() / kBytesPerMegabyte;
         ESP_LOGI("storage", "SD initialized (%llu MB, %d kHz)", sizeMb, mountedFrequencyKhz);
-        if (!SdCard::ensureFolderLayout()) {
+        if (!StorageMigration::prepareLayout()) {
             statusCallback_(statusContext_, "SD", "Folder setup failed", "Run storage check", 10);
         }
         statusCallback_(statusContext_, "SD", "Scanning books", "EPUB converts on open", 10);

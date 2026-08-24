@@ -199,7 +199,7 @@ companion::api::Result<std::string> CompanionApi::installLibraryItem(httpd_req_t
         category == "article" ? StoragePaths::kArticleFilesPath : StoragePaths::kBookFilesPath;
 
     for (const char* directory:
-         {StoragePaths::kBooksPath, StoragePaths::kBookFilesPath, StoragePaths::kArticleFilesPath}) {
+         {StoragePaths::kLibraryPath, StoragePaths::kBookFilesPath, StoragePaths::kArticleFilesPath}) {
         if (auto created = StorageFiles::ensureDirectory(directory); !created) {
             return std::unexpected(companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
                                                              "Library folder unavailable: " + created.error().message(),

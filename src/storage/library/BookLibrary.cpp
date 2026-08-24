@@ -69,7 +69,7 @@ namespace BookLibrary {
                 dir.close();
             };
 
-            appendDirectoryEntries(StoragePaths::kBooksPath);
+            appendDirectoryEntries(StoragePaths::kLibraryPath);
             appendDirectoryEntries(StoragePaths::kBookFilesPath);
             appendDirectoryEntries(StoragePaths::kArticleFilesPath);
             return entries;
@@ -222,7 +222,7 @@ namespace BookLibrary {
     }
 
     std::string_view relativeName(const Entry& book) {
-        constexpr std::string_view prefix = "/books/";
+        const std::string prefix = std::string{kLibraryPath} + "/";
         const std::string_view path = book.path;
         if (path.starts_with(prefix))
             return path.substr(prefix.length());

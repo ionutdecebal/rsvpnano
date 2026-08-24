@@ -504,6 +504,10 @@ void CompanionSerial::dispatchRequest(companion::BufferedRequest& buffered) {
         sendLocated(api_.postLocale(request));
         return;
     }
+    if (method == "POST" && path == "/api/v2/storage/repair") {
+        sendValue(api_.repairStorage(request));
+        return;
+    }
 
     if (method == "DELETE" && resourcePath(path, "/api/v2/library/"))
         sendEmpty(api_.deleteLibraryItem(request));

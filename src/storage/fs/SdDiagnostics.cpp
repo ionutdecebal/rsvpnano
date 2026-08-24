@@ -17,8 +17,9 @@ namespace SdDiagnostics {
         constexpr uint64_t kSdxcMinSizeMb = 32ULL * 1024ULL;
         constexpr size_t kFolderProbeBytes = 64UL * 1024UL;
         constexpr std::array requiredFolders = {
-            StoragePaths::kBooksPath,  StoragePaths::kBookFilesPath, StoragePaths::kArticleFilesPath,
-            StoragePaths::kConfigPath, StoragePaths::kThemesPath,    StoragePaths::kFontsPath,
+            StoragePaths::kLibraryPath, StoragePaths::kBookFilesPath, StoragePaths::kArticleFilesPath,
+            StoragePaths::kConfigPath,  StoragePaths::kThemesPath,   StoragePaths::kFontsPath,
+            StoragePaths::kLocalesPath,
         };
         constexpr std::array configFiles = {
             StoragePaths::kSettingsConfigPath,
