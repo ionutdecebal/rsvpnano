@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +35,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
@@ -58,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -237,13 +240,18 @@ fun RsvpNanoSharedApp(
             )
             Row(modifier = Modifier.fillMaxSize()) {
                 if (wide) {
-                    NavigationRail {
+                    NavigationRail(containerColor = MaterialTheme.colorScheme.surface) {
                         CompanionScreen.entries.forEach { screen ->
                             NavigationRailItem(
                                 selected = selectedScreen == screen,
                                 onClick = { selectedScreenName = screen.name },
                                 icon = { Icon(imageVector = screen.icon, contentDescription = null) },
                                 label = { Text(screen.label) },
+                                colors = NavigationRailItemDefaults.colors(
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
                             )
                         }
                     }
@@ -254,9 +262,13 @@ fun RsvpNanoSharedApp(
                 TopAppBar(
                     title = {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Box(
+                                Modifier.width(4.dp).height(28.dp).clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.tertiary),
+                            )
                             Text(
                                 text = if (!wide && selectedScreen == CompanionScreen.Settings) {
                                     settingsDestination?.label ?: "Settings"
@@ -300,7 +312,7 @@ fun RsvpNanoSharedApp(
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 )
             },
             snackbarHost = {
@@ -334,6 +346,15 @@ fun RsvpNanoSharedApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.background,
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f),
+                                MaterialTheme.colorScheme.background,
+                            ),
+                        ),
+                    )
                     .padding(contentPadding)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 contentAlignment = Alignment.TopCenter,
