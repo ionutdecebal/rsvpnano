@@ -39,7 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-internal const val INLINE_DIVIDER = " | "
+internal const val INLINE_DIVIDER = "  │  "
 
 @Composable
 fun DropdownRow(
