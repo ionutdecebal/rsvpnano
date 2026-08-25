@@ -17,7 +17,6 @@
 
 namespace {
 
-    constexpr size_t kMaxReleaseJsonBytes = 32768;
     constexpr const char* kStatusTitle = "OTA";
     const char* kRedirectHeaderKeys[] = {
         "Location",
@@ -75,7 +74,7 @@ namespace {
     }
 
     ReleaseSource releaseSourceForSettings(const settings::UpdateSettings& settings) {
-        ReleaseSource source{settings.repositoryOwner.empty() ? std::string{"ionutdecebal"}
+        ReleaseSource source{settings.repositoryOwner.empty() ? std::string{settings::kDefaultRepositoryOwner}
                                                               : std::string{AsciiText::trim(settings.repositoryOwner)},
                              "rsvpnano", std::string{AsciiText::trim(settings.releaseTag)}};
 
@@ -101,6 +100,12 @@ namespace {
 
         const String detail = HTTPClient::errorToString(statusCode);
         return std::string{prefix} + " " + std::string{detail.c_str(), detail.length()};
+    }
+
+    bool isRedirectStatus(int statusCode) {
+        return statusCode == HTTP_CODE_MOVED_PERMANENTLY || statusCode == HTTP_CODE_FOUND
+            || statusCode == HTTP_CODE_SEE_OTHER || statusCode == HTTP_CODE_TEMPORARY_REDIRECT
+            || statusCode == HTTP_CODE_PERMANENT_REDIRECT;
     }
 
     std::string readBodyLimited(HTTPClient& http, size_t maxBytes) {
@@ -178,57 +183,68 @@ std::string_view OtaUpdater::currentVersion() {
 
 static void reportStatus(OtaUpdater::StatusCallback callback, void* context, const char* title, const char* line1,
                          const char* line2, int progressPercent);
+static std::expected<std::string, std::string> resolveDownloadUrl(std::string_view assetUrl, std::string_view version,
+                                                                  OtaUpdater::StatusCallback callback, void* context);
 
 static std::expected<LatestRelease, std::string> fetchRelease(const settings::UpdateSettings& settings,
-                                                              OtaUpdater::StatusCallback callback, void* context) {
+                                                               OtaUpdater::StatusCallback callback, void* context) {
     const std::string installedVersion{OtaUpdater::currentVersion()};
     const ReleaseSource source = releaseSourceForSettings(settings);
     if (source.owner.empty() || source.repo.empty())
         return std::unexpected(std::string{"GitHub source missing"});
 
-    const std::string releasePath = source.tag.empty() ? "latest" : "tags/" + urlEncodePathSegment(source.tag);
-    const std::string url =
-        "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/releases/" + releasePath;
     const std::string sourceLabel = source.tag.empty() ? source.repo : source.repo + ":" + source.tag;
 
     reportStatus(callback, context, kStatusTitle, "Checking GitHub", sourceLabel.c_str(), 22);
 
     WiFiClientSecure client;
-    // GitHub release metadata and assets can redirect across multiple hosts, so
-    // keep the transport flexible for now. A signed manifest is the best
-    // follow-up hardening step.
+    // GitHub release assets redirect across multiple hosts, so keep the
+    // transport flexible for now. A signed manifest is the best follow-up
+    // hardening step.
     client.setInsecure();
     client.setHandshakeTimeout(15);
 
     HTTPClient http;
+    http.collectHeaders(kRedirectHeaderKeys, 1);
     http.setUserAgent(userAgentForVersion(installedVersion).c_str());
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
     http.setTimeout(15000);
-    if (!http.begin(client, url.c_str()))
-        return std::unexpected(std::string{"HTTP begin failed"});
 
-    http.addHeader("Accept", "application/vnd.github+json");
-    const int statusCode = http.GET();
-    if (statusCode != HTTP_CODE_OK) {
-        const std::string errorDetail = statusCode == HTTP_CODE_NOT_FOUND
-                                          ? (source.tag.empty() ? "No published release" : "Release tag not found")
-                                          : httpClientErrorDetail("GitHub", statusCode);
+    const std::string assetName = urlEncodePathSegment(Board::Config::OTA_ASSET_NAME);
+    std::string releaseTag = source.tag;
+    std::string assetUrl = "https://github.com/" + source.owner + "/" + source.repo + "/releases/";
+    if (releaseTag.empty())
+        assetUrl += "latest/download/" + assetName;
+    else
+        assetUrl += "download/" + urlEncodePathSegment(releaseTag) + "/" + assetName;
+
+    if (releaseTag.empty()) {
+        if (!http.begin(client, assetUrl.c_str()))
+            return std::unexpected(std::string{"HTTP begin failed"});
+
+        http.addHeader("Accept", "application/octet-stream");
+        const int statusCode = http.GET();
+        if (!isRedirectStatus(statusCode)) {
+            const std::string errorDetail = statusCode == HTTP_CODE_NOT_FOUND
+                                              ? "No latest OTA asset"
+                                              : httpClientErrorDetail("GitHub", statusCode);
+            http.end();
+            return std::unexpected(errorDetail);
+        }
+
+        const String location = http.header("Location");
         http.end();
-        return std::unexpected(errorDetail);
+        const std::string_view resolvedUrl{location.c_str(), static_cast<size_t>(location.length())};
+        auto parsedTag = releaseparser::tagFromAssetLocation(resolvedUrl, Board::Config::OTA_ASSET_NAME);
+        if (!parsedTag)
+            return std::unexpected(std::string{"Release redirect invalid"});
+        releaseTag = std::move(*parsedTag);
+        assetUrl.assign(resolvedUrl);
     }
 
-    const std::string body = readBodyLimited(http, kMaxReleaseJsonBytes);
-    http.end();
-
-    auto parsed = releaseparser::parse(body, Board::Config::OTA_ASSET_NAME);
-    if (!parsed)
-        return std::unexpected(std::string{"Release tag missing"});
-    LatestRelease release;
-    release.assetUrl = parsed->assetUrl;
-
-    reportStatus(callback, context, kStatusTitle, "Checking version", parsed->tagName.c_str(), 25);
+    reportStatus(callback, context, kStatusTitle, "Checking version", releaseTag.c_str(), 25);
     const std::string commitUrl = "https://api.github.com/repos/" + source.owner + "/" + source.repo + "/commits/"
-                                + urlEncodePathSegment(parsed->tagName);
+                                + urlEncodePathSegment(releaseTag);
     if (!http.begin(client, commitUrl.c_str()))
         return std::unexpected(std::string{"Commit lookup failed"});
     http.addHeader("Accept", "application/vnd.github.sha");
@@ -240,22 +256,25 @@ static std::expected<LatestRelease, std::string> fetchRelease(const settings::Up
     }
     std::string commitSha = readBodyLimited(http, 64);
     http.end();
-    auto releaseVersion = releaseparser::versionForCommit(parsed->tagName, commitSha);
+    auto releaseVersion = releaseparser::versionForCommit(releaseTag, commitSha);
     if (!releaseVersion)
         return std::unexpected(std::string{"Tag commit invalid"});
-    release.version = std::move(*releaseVersion);
 
-    if (release.assetUrl.empty())
-        return std::unexpected(std::string{Board::Config::OTA_ASSET_NAME} + " missing");
+    auto resolvedAssetUrl = resolveDownloadUrl(assetUrl, *releaseVersion, callback, context);
+    if (!resolvedAssetUrl)
+        return std::unexpected(std::move(resolvedAssetUrl.error()));
 
-    return release;
+    return LatestRelease{
+        .version = std::move(*releaseVersion),
+        .assetUrl = std::move(*resolvedAssetUrl),
+    };
 }
 
 static std::expected<std::string, std::string> resolveDownloadUrl(std::string_view assetUrl, std::string_view version,
                                                                   OtaUpdater::StatusCallback callback, void* context) {
     const std::string assetUrlString{assetUrl};
     const std::string versionString{version};
-    reportStatus(callback, context, kStatusTitle, "Resolving asset", versionString.c_str(), 29);
+    reportStatus(callback, context, kStatusTitle, "Resolving asset", versionString.c_str(), 27);
 
     WiFiClientSecure client;
     client.setInsecure();
@@ -276,8 +295,7 @@ static std::expected<std::string, std::string> resolveDownloadUrl(std::string_vi
         return std::string{assetUrl};
     }
 
-    if (statusCode == HTTP_CODE_MOVED_PERMANENTLY || statusCode == HTTP_CODE_FOUND || statusCode == HTTP_CODE_SEE_OTHER
-        || statusCode == HTTP_CODE_TEMPORARY_REDIRECT || statusCode == HTTP_CODE_PERMANENT_REDIRECT) {
+    if (isRedirectStatus(statusCode)) {
         String resolvedUrl = http.header("Location");
         http.end();
         if (!resolvedUrl.isEmpty())
@@ -386,15 +404,6 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const settings::DeviceSettings& s
     const std::string detail = versionDetail(installedVersion, release->version);
     reportStatus(callback, context, kStatusTitle, "Preparing update", detail.c_str(), 28);
 
-    auto resolvedAssetUrl = resolveDownloadUrl(release->assetUrl, release->version, callback, context);
-    if (!resolvedAssetUrl) {
-        net::disconnect();
-        return {
-            .summary = "Asset failed",
-            .detail = std::move(resolvedAssetUrl.error()),
-        };
-    }
-
     WiFiClientSecure client;
     // Match the metadata request behavior until the update path gains certificate
     // pinning or signature verification above the transport layer.
@@ -422,7 +431,7 @@ OtaUpdater::Result OtaUpdater::checkAndInstall(const settings::DeviceSettings& s
     });
 
     const String version = installedVersion.data();
-    const String resolvedUrl = resolvedAssetUrl->c_str();
+    const String resolvedUrl = release->assetUrl.c_str();
     const t_httpUpdate_return updateResult = updater.update(client, resolvedUrl, version, [version](HTTPClient* http) {
         http->setUserAgent(userAgentForVersion({version.c_str(), version.length()}).c_str());
         http->addHeader("Accept", "application/octet-stream");

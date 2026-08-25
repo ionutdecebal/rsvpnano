@@ -2,38 +2,27 @@
 
 #include <algorithm>
 #include <cctype>
-#include <vector>
-
-#include <glaze/json.hpp>
 
 #include "text/AsciiText.h"
 
 namespace releaseparser {
-    namespace {
-
-        struct Asset {
-            std::string name;
-            std::string browser_download_url;
-        };
-
-        struct Release {
-            std::string tag_name;
-            std::vector<Asset> assets;
-        };
-
-    } // namespace
-
-    std::expected<ReleaseInfo, std::error_code> parse(std::string_view json, std::string_view assetName) {
-        Release release;
-        if (glz::read<glz::opts{.error_on_unknown_keys = false}>(release, json) || release.tag_name.empty()) {
+    std::expected<std::string, std::error_code> tagFromAssetLocation(std::string_view location,
+                                                                    std::string_view assetName) {
+        constexpr std::string_view marker = "/releases/download/";
+        const size_t start = location.find(marker);
+        if (start == std::string_view::npos || assetName.empty() || !location.ends_with(assetName)) {
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         }
 
-        const auto asset = std::ranges::find(release.assets, assetName, &Asset::name);
-        return ReleaseInfo{
-            .tagName = std::move(release.tag_name),
-            .assetUrl = asset == release.assets.end() ? std::string{} : std::move(asset->browser_download_url),
-        };
+        const size_t tagStart = start + marker.size();
+        const size_t assetStart = location.size() - assetName.size();
+        if (assetStart <= tagStart || location[assetStart - 1] != '/')
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+        const std::string_view tag = location.substr(tagStart, assetStart - tagStart - 1);
+        if (tag.empty() || tag.contains('/'))
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return std::string{tag};
     }
 
     std::expected<std::string, std::error_code> versionForCommit(std::string_view tagName, std::string_view commitSha) {

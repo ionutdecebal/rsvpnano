@@ -43,8 +43,8 @@ namespace screens {
         const int16_t thirdRowY = static_cast<int16_t>(secondRowY + rowHeight + gap);
         const int16_t halfWidth = static_cast<int16_t>((content.w - gap) / 2);
         if (ui.setting({content.x, thirdRowY, halfWidth, rowHeight}, ui.text(UiText::OtaOwner),
-                       settings.updates.repositoryOwner.empty() ? ui.text(UiText::Default)
-                                                                : std::string_view{settings.updates.repositoryOwner})) {
+                       settings.updates.repositoryOwner.empty() ? settings::kDefaultRepositoryOwner
+                                                                 : std::string_view{settings.updates.repositoryOwner})) {
             editField_ = EditField::Owner;
             editValue_ = settings.updates.repositoryOwner;
             keyboard_ = {};

@@ -13,6 +13,7 @@
 namespace settings {
 
     inline constexpr std::string_view kMathFontTarget = "math";
+    inline constexpr std::string_view kDefaultRepositoryOwner = "ionutdecebal";
 
     enum class ReadingMode : uint8_t {
         rsvp,
