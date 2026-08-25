@@ -36,8 +36,8 @@ jobs:
               continue
             fi
 
-            echo "Cancelling run ${run_id} from ${head_sha}."
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" >/dev/null 2>&1 || true
+            echo "Force-cancelling run ${run_id} from ${head_sha}."
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/force-cancel" >/dev/null 2>&1 || true
           done < <(list_runs)
 
           for attempt in {1..12}; do
