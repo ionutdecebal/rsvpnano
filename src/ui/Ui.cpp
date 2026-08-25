@@ -174,8 +174,16 @@ namespace ui {
         case TouchSampleResult::None:
             return false;
         case TouchSampleResult::Reset:
-            resetTouchGesture();
-            return false;
+            if (!touchActive_) {
+                resetTouchGesture();
+                return false;
+            }
+            touchActive_ = false;
+            touchHoldEmitted_ = false;
+            touchOutsideSamples_ = 0;
+            touchStartedAtMs_ = 0;
+            touchEvent_ = {TouchRelease, touchLastX_, touchLastY_};
+            return touchPending_ = true;
         case TouchSampleResult::Contact:
             break;
         }

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Arduino_GFX_Library.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <expected>
@@ -33,6 +34,14 @@ namespace ui {
 
     constexpr bool contains(Rect rect, uint16_t x, uint16_t y) {
         return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
+    }
+
+    constexpr Rect intersection(Rect left, Rect right) {
+        const int16_t x = std::max(left.x, right.x);
+        const int16_t y = std::max(left.y, right.y);
+        const int x2 = std::min<int>(left.x + left.w, right.x + right.w);
+        const int y2 = std::min<int>(left.y + left.h, right.y + right.h);
+        return {x, y, static_cast<int16_t>(std::max(0, x2 - x)), static_cast<int16_t>(std::max(0, y2 - y))};
     }
 
     constexpr Rect rotateClockwise(Rect rect, int16_t sourceWidth) {

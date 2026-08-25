@@ -24,7 +24,7 @@ namespace {
 
 
     ui::TouchContact gContact;
-    bool gTouchReadSucceeds;
+    ui::TouchSampleResult gTouchResult;
     std::vector<std::string> gLoadedUiPacks;
 
     std::expected<std::vector<uint8_t>, std::string> loadUiFont(fs::FS&, const locales::InstalledPack& pack) {
@@ -33,8 +33,8 @@ namespace {
     }
 
     ui::TouchSampleResult pollTouch(ui::TouchContact& contact) {
-        if (!gTouchReadSucceeds)
-            return ui::TouchSampleResult::None;
+        if (gTouchResult != ui::TouchSampleResult::Contact)
+            return gTouchResult;
         contact = gContact;
         return ui::TouchSampleResult::Contact;
     }
@@ -207,7 +207,7 @@ namespace {
 
 void setUp() {
     gContact = {};
-    gTouchReadSucceeds = true;
+    gTouchResult = ui::TouchSampleResult::Contact;
 }
 void tearDown() {}
 
@@ -425,9 +425,9 @@ void test_missing_sample_does_not_interrupt_active_touch() {
     TEST_ASSERT_TRUE(context.pollTouch(1));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
 
-    gTouchReadSucceeds = false;
+    gTouchResult = ui::TouchSampleResult::None;
     TEST_ASSERT_FALSE(context.pollTouch(2));
-    gTouchReadSucceeds = true;
+    gTouchResult = ui::TouchSampleResult::Contact;
     TEST_ASSERT_TRUE(context.pollTouch(3));
 
     TEST_ASSERT_TRUE(context.pollTouch(650));
@@ -438,6 +438,29 @@ void test_missing_sample_does_not_interrupt_active_touch() {
     TEST_ASSERT_TRUE(context.pollTouch(651));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
+}
+
+void test_touch_reset_cancels_active_gesture() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    enableTouch(context);
+
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    gContact = {true, 60, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(2));
+
+    gTouchResult = ui::TouchSampleResult::Reset;
+    TEST_ASSERT_TRUE(context.pollTouch(3));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
+    TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
+    TEST_ASSERT_EQUAL(60, context.touch()->x);
+    TEST_ASSERT_EQUAL(10, context.touch()->y);
+
+    gTouchResult = ui::TouchSampleResult::Contact;
+    gContact = {true, 70, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(4));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
 }
 
 void test_queued_touch_uses_sample_time_instead_of_ui_time() {
@@ -553,6 +576,18 @@ void test_layout_cursors_are_deterministic() {
     TEST_ASSERT_EQUAL_INT16(48, grid.next().w);
     TEST_ASSERT_EQUAL_INT16(52, grid.next().x);
     TEST_ASSERT_EQUAL_INT16(24, grid.next().y);
+}
+
+void test_rect_intersection_clips_each_edge() {
+    constexpr ui::Rect clip{148, 0, 444, 121};
+    constexpr ui::Rect left = ui::intersection({140, 10, 20, 30}, clip);
+    constexpr ui::Rect top = ui::intersection({160, -5, 20, 10}, clip);
+    constexpr ui::Rect outside = ui::intersection({100, -30, 20, 20}, clip);
+
+    TEST_ASSERT_TRUE((left == ui::Rect{148, 10, 12, 30}));
+    TEST_ASSERT_TRUE((top == ui::Rect{160, 0, 20, 5}));
+    TEST_ASSERT_EQUAL(0, outside.w);
+    TEST_ASSERT_EQUAL(0, outside.h);
 }
 
 void test_portrait_rects_map_to_the_landscape_framebuffer() {
@@ -1508,11 +1543,13 @@ int main(int, char**) {
     RUN_TEST(test_tap_tolerates_one_coordinate_outlier);
     RUN_TEST(test_slow_press_remains_tap_until_hold_threshold);
     RUN_TEST(test_missing_sample_does_not_interrupt_active_touch);
+    RUN_TEST(test_touch_reset_cancels_active_gesture);
     RUN_TEST(test_queued_touch_uses_sample_time_instead_of_ui_time);
     RUN_TEST(test_stepper_taps_and_repeats);
     RUN_TEST(test_disabled_button_ignores_touch);
     RUN_TEST(test_tap_target_handles_touch_without_drawing);
     RUN_TEST(test_layout_cursors_are_deterministic);
+    RUN_TEST(test_rect_intersection_clips_each_edge);
     RUN_TEST(test_portrait_rects_map_to_the_landscape_framebuffer);
     RUN_TEST(test_page_reader_reselects_typeface_after_seek_or_invalidation);
     RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
