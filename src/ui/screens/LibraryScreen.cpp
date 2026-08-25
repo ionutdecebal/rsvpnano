@@ -159,7 +159,7 @@ namespace screens {
                 const int16_t height = spineHeight(items[index], index);
                 const int16_t x = static_cast<int16_t>(viewport.x + left + offset_);
                 left = static_cast<int16_t>(left + width + kGap);
-                if (x + width < viewport.x || x > viewport.x + viewport.w)
+                if (x < viewport.x || x + width > viewport.x + viewport.w)
                     continue;
                 const bool active = index == selectedIndex_;
                 const int16_t y = static_cast<int16_t>(viewport.y + viewport.h - height - (active ? 8 : 0));
