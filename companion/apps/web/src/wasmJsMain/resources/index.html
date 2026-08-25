@@ -57,11 +57,7 @@
       <p id="startup-message">Reload the page. If the problem continues, try the latest version of your browser.</p>
       <pre id="startup-details" hidden></pre>
     </div>
-    <esp-web-install-button id="rsvp-installer">
-      <button id="rsvp-installer-trigger" slot="activate" type="button" tabindex="-1" aria-hidden="true">Install</button>
-    </esp-web-install-button>
-    <style>#rsvp-installer { position: fixed; left: -10000px; top: 0; }</style>
-    <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+    <script src="./flasher.js"></script>
     <script type="module">
       const development = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || location.hostname.endsWith(".localhost");
       waitForComposeCanvas();
