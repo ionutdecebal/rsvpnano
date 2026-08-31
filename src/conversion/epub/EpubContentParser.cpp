@@ -284,7 +284,6 @@ namespace EpubContent {
     }
 
     bool Parser::flushWordAlignedPrefix() {
-        line_ = std::string{AsciiText::trim(line_)};
         int split = static_cast<int>(line_.length()) - 1;
         while (split >= 0 && !AsciiText::isWhitespace(line_[split])) {
             --split;

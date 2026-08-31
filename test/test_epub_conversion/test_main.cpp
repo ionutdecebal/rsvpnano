@@ -3,6 +3,7 @@
 #include <unity.h>
 
 #include <span>
+#include <string>
 #include <vector>
 
 #include "conversion/epub/EpubContentParser.h"
@@ -156,6 +157,38 @@ namespace {
         TEST_ASSERT_EQUAL(std::string::npos, output.contents().find("@writing-mode vertical-rl", first + 1));
     }
 
+    // Buffered text is flushed once it grows past 220 bytes. When the byte that crosses the
+    // threshold is the word boundary itself, that boundary has to survive the flush, otherwise the
+    // next word is glued onto the buffered remainder.
+    //
+    // "Dear Reader " is 12 bytes, so 18 of them fill the buffer to 216; the following "Dear" ends
+    // it at exactly 220 and the separator after it is the byte that triggers the flush.
+    void test_parser_keeps_word_boundary_across_buffered_text_flush() {
+        const std::string padding = [] {
+            std::string filled;
+            for (int i = 0; i < 18; ++i)
+                filled += "Dear Reader ";
+            return filled;
+        }();
+
+        // A literal space and a "&nbsp;" entity are the same boundary: the entity decodes to a
+        // plain space before it ever reaches the buffer.
+        for (const std::string_view separator : {" ", "&nbsp;"}) {
+            File output;
+            const std::string markup =
+                "<body><p>" + padding + "Dear" + std::string{separator} + "Reader follows</p></body>";
+
+            RsvpWriter writer(output, {.source = "fixture.epub", .title = "Fixture"});
+            EpubContent::Parser parser(writer, {}, false, "Fixture", "Fixture");
+            TEST_ASSERT_TRUE(parser.write(reinterpret_cast<const uint8_t*>(markup.data()), markup.length()));
+            TEST_ASSERT_TRUE(parser.finish());
+            TEST_ASSERT_TRUE(writer.finish());
+
+            TEST_ASSERT_EQUAL(std::string::npos, output.contents().find("DearReader"));
+            TEST_ASSERT_TRUE(output.contents().contains("Dear\nReader follows\n"));
+        }
+    }
+
 } // namespace
 
 int main(int, char**) {
@@ -168,5 +201,6 @@ int main(int, char**) {
     RUN_TEST(test_parser_preserves_punctuation_only_inline_fragments_without_counting_them_as_words);
     RUN_TEST(test_parser_preserves_nested_language_and_direction_changes);
     RUN_TEST(test_parser_emits_explicit_vertical_writing_mode_once);
+    RUN_TEST(test_parser_keeps_word_boundary_across_buffered_text_flush);
     return UNITY_END();
 }
