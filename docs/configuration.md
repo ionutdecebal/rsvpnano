@@ -28,6 +28,7 @@ successful load expands it to the full canonical document. For example:
 wpm = 350
 batteryLabel = "percentage"
 batteryIconVisible = true
+pauseAtChapterStart = false
 
 [reading.typography]
 fontId = "literata"
@@ -36,10 +37,16 @@ focusHighlight = true
 [interface]
 brightnessPercent = 70
 selectedThemeId = "default"
+libraryLayout = "shelf"
 
 [network]
 wifiSsid = "Home"
 ```
+
+`reading.pauseAtChapterStart` stops RSVP playback on the first word of each new chapter and shows
+the chapter title until the reader taps to continue. `interface.libraryLayout` selects the library
+browser: `shelf` shows book spines on wide displays, `list` shows a scrollable list with full titles,
+authors, chapters, and progress. Boards without a wide display always use the list.
 
 Runtime code reads settings from `SettingsStore` in RAM. Accepted changes are saved after a short
 debounce rather than writing flash for every UI step. NVS stores the same canonical TOML as one

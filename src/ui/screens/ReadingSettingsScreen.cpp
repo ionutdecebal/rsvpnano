@@ -39,9 +39,11 @@ namespace screens {
         }
 
         const int16_t toggleY = static_cast<int16_t>(rowY + rowHeight + gap);
-        changed |= ui.toggle({content.x, toggleY, content.w,
-                              static_cast<int16_t>(content.y + content.h - toggleY)},
-                             ui.text(UiText::PhantomWords), config.phantomWords);
+        const int16_t toggleHeight = static_cast<int16_t>(content.y + content.h - toggleY);
+        changed |= ui.toggle({content.x, toggleY, halfWidth, toggleHeight}, ui.text(UiText::PhantomWords),
+                             config.phantomWords);
+        changed |= ui.toggle({static_cast<int16_t>(content.x + halfWidth + gap), toggleY, halfWidth, toggleHeight},
+                             ui.text(UiText::ChapterPause), config.pauseAtChapterStart);
         return changed;
     }
 

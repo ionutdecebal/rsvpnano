@@ -45,8 +45,13 @@ namespace screens {
                          settings::SettingsStore& settingsStore);
         void toggle(Preferences& preferences, uint32_t nowMs);
         void update(Preferences& preferences, uint32_t nowMs);
+        // True once after playback paused on a chapter card, so the app can treat the
+        // card like user activity and restart its standby timer.
+        bool takeChapterCueRaised();
 
     private:
+        void dismissChapterCue(uint32_t nowMs);
+        void drawChapterCue(ui::Context& ui);
         int focusOffset(std::string_view word) const;
         int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
         void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft, int16_t baseline,
@@ -84,6 +89,12 @@ namespace screens {
         FontCatalog::Face pageTypeface(size_t wordIndex);
 
         Arduino_GFX& gfx_;
+        // Playback crossed a chapter marker: the reader pauses on a full-screen
+        // chapter card until the reader taps to continue.
+        bool chapterCue_ = false;
+        bool chapterCuePainted_ = false;
+        bool chapterCueRaised_ = false;
+        size_t chapterCueWordIndex_ = SIZE_MAX;
         mutable ui::fonts::AlphaTextRenderer<640> text_;
         settings::ReadingSettings& settings_;
         FontCatalog::Face face_;

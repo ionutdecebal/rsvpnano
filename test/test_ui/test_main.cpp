@@ -17,6 +17,7 @@
 #include "text/Utf8Text.h"
 #include "ui/Localization.h"
 #include "ui/Ui.h"
+#include "ui/screens/LibraryList.h"
 #include "ui/screens/PageReaderScreen.h"
 #include "ui/screens/Screens.h"
 
@@ -1530,6 +1531,89 @@ void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
     TEST_ASSERT_GREATER_THAN(gfx.lastVerticalHeight, gfx.firstVerticalHeight);
 }
 
+void test_library_list_geometry_scrolls_reveals_and_hit_tests() {
+    using namespace screens::librarylist;
+    constexpr int16_t viewport = 156;
+    TEST_ASSERT_EQUAL(46, rowHeight(1));
+    TEST_ASSERT_EQUAL(64, rowHeight(2));
+
+    // Twelve rows; every fourth title wraps onto a second line.
+    std::vector<int16_t> heights;
+    for (size_t index = 0; index < 12; ++index)
+        heights.push_back(rowHeight(index % 4 == 1 ? 2 : 1));
+    std::vector<int32_t> tops;
+    layout(heights, tops);
+    const Rows rows{tops, heights};
+    TEST_ASSERT_EQUAL(0, tops[0]);
+    TEST_ASSERT_EQUAL(50, tops[1]);
+    TEST_ASSERT_EQUAL(118, tops[2]);
+    const int32_t content = 12 * 46 + 3 * 18 + 11 * kRowGap;
+    TEST_ASSERT_EQUAL(content, contentHeight(rows));
+    TEST_ASSERT_EQUAL(0, contentHeight(Rows{}));
+    TEST_ASSERT_EQUAL(content - viewport, maximumOffset(rows, viewport));
+    TEST_ASSERT_EQUAL(0, clampOffset(rows, -30, viewport));
+    TEST_ASSERT_EQUAL(content - viewport, clampOffset(rows, 100000, viewport));
+
+    // Revealing keeps a visible row in place and otherwise scrolls the minimum distance.
+    TEST_ASSERT_EQUAL(0, offsetToReveal(rows, 1, 0, viewport));
+    TEST_ASSERT_EQUAL(rows.bottom(5) - viewport, offsetToReveal(rows, 5, 0, viewport));
+    TEST_ASSERT_EQUAL(tops[2], offsetToReveal(rows, 2, tops[6], viewport));
+    TEST_ASSERT_EQUAL(0, offsetToReveal(Rows{}, 4, 90, viewport));
+
+    // Rows 0 and 1 fit, row 2 starts at 118 and is cut by the viewport bottom.
+    TEST_ASSERT_EQUAL(0, firstVisible(rows, 0));
+    TEST_ASSERT_EQUAL(3, pastLastVisible(rows, 0, viewport));
+    TEST_ASSERT_EQUAL(0, firstVisible(rows, 45));
+    TEST_ASSERT_EQUAL(1, firstVisible(rows, 46));
+    TEST_ASSERT_EQUAL(12, pastLastVisible(rows, maximumOffset(rows, viewport), viewport));
+    TEST_ASSERT_EQUAL(12, firstVisible(rows, content));
+
+    // Hit testing distinguishes rows, gaps, and the space past the last row.
+    TEST_ASSERT_EQUAL(0, rowAt(rows, 0, 0));
+    TEST_ASSERT_EQUAL(0, rowAt(rows, 0, 45));
+    TEST_ASSERT_EQUAL(12, rowAt(rows, 0, 46));
+    TEST_ASSERT_EQUAL(1, rowAt(rows, 0, 50));
+    TEST_ASSERT_EQUAL(1, rowAt(rows, 0, 113));
+    TEST_ASSERT_EQUAL(2, rowAt(rows, 60, 58));
+    TEST_ASSERT_EQUAL(12, rowAt(rows, 0, content));
+    TEST_ASSERT_EQUAL(12, rowAt(rows, 0, -1));
+    TEST_ASSERT_EQUAL(0, rowAt(Rows{}, 0, 10));
+
+    // The scrollbar thumb fills the track when everything fits and follows the offset otherwise.
+    std::vector<int16_t> fewHeights{46, 46};
+    std::vector<int32_t> fewTops;
+    layout(fewHeights, fewTops);
+    TEST_ASSERT_EQUAL(156, scrollThumb(Rows{fewTops, fewHeights}, 0, viewport, 156).h);
+    const Thumb top = scrollThumb(rows, 0, viewport, 156);
+    const Thumb bottom = scrollThumb(rows, maximumOffset(rows, viewport), viewport, 156);
+    TEST_ASSERT_EQUAL(0, top.y);
+    TEST_ASSERT_EQUAL(156, bottom.y + bottom.h);
+    TEST_ASSERT_EQUAL(top.h, bottom.h);
+}
+
+void test_library_list_wraps_titles_without_cutting_them() {
+    using namespace screens::librarylist;
+    std::vector<std::string_view> lines;
+    TEST_ASSERT_EQUAL(1, wrapLines("Dune", 10, &lines));
+    TEST_ASSERT_EQUAL_STRING("Dune", std::string{lines[0]}.c_str());
+    TEST_ASSERT_EQUAL(1, wrapLines("", 10, &lines));
+    TEST_ASSERT_EQUAL(1, lines.size());
+
+    TEST_ASSERT_EQUAL(4, wrapLines("The Hitchhiker's Guide to the Galaxy", 14, &lines));
+    TEST_ASSERT_EQUAL_STRING("The", std::string{lines[0]}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Hitchhiker's", std::string{lines[1]}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Guide to the", std::string{lines[2]}.c_str());
+    TEST_ASSERT_EQUAL_STRING("Galaxy", std::string{lines[3]}.c_str());
+    TEST_ASSERT_EQUAL(4, wrapLines("The Hitchhiker's Guide to the Galaxy", 14, nullptr));
+
+    // Over-long words are split, and multi-byte text counts codepoints, not bytes.
+    TEST_ASSERT_EQUAL(2, wrapLines("Donaudampfschiff", 10, &lines));
+    TEST_ASSERT_EQUAL_STRING("Donaudampf", std::string{lines[0]}.c_str());
+    TEST_ASSERT_EQUAL_STRING("schiff", std::string{lines[1]}.c_str());
+    TEST_ASSERT_EQUAL(1, wrapLines("Größenwahn", 10, &lines));
+    TEST_ASSERT_EQUAL(46 + 2 * 18, rowHeight(3));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
@@ -1579,6 +1663,8 @@ int main(int, char**) {
     RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);
     RUN_TEST(test_steps_follow_the_long_axis);
     RUN_TEST(test_compact_settings_screens_stay_inside_the_content_area);
+    RUN_TEST(test_library_list_geometry_scrolls_reveals_and_hit_tests);
+    RUN_TEST(test_library_list_wraps_titles_without_cutting_them);
     RUN_TEST(test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base);
     return UNITY_END();
 }

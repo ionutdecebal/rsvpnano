@@ -45,8 +45,12 @@ void test_enum_names_are_human_readable() {
     value.reading.mode = settings::ReadingMode::page;
     value.reading.pauseMode = settings::PauseMode::instant;
     value.interface.screensaver = standby::Kind::reaction;
+    value.interface.libraryLayout = settings::LibraryLayout::list;
+    value.reading.pauseAtChapterStart = true;
     auto toml = settings::codec::encodeToml(value, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE(toml.has_value());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("libraryLayout = \"list\""));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("pauseAtChapterStart = true"));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("mode = \"page\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("pauseMode = \"instant\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("screensaver = \"reaction\""));
@@ -57,6 +61,8 @@ void test_missing_fields_retain_defaults() {
     TEST_ASSERT_TRUE_MESSAGE(value.has_value(), value ? "" : value.error().message.c_str());
     TEST_ASSERT_EQUAL_UINT16(300, value->reading.wpm);
     TEST_ASSERT_TRUE(value->reading.batteryIconVisible);
+    TEST_ASSERT_FALSE(value->reading.pauseAtChapterStart);
+    TEST_ASSERT_TRUE(value->interface.libraryLayout == settings::LibraryLayout::shelf);
     TEST_ASSERT_EQUAL_STRING("literata", value->reading.typography.fontId.c_str());
     auto canonical = settings::codec::encodeToml(*value, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE(canonical.has_value());
