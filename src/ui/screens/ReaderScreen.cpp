@@ -401,6 +401,7 @@ namespace screens {
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,
                                 uint32_t nowMs) {
+        chapterCue_ = false;
         if (!storage.mounted() || index >= storage.books().size())
             return false;
         const BookLibrary::Entry& book = storage.books()[index];
@@ -459,6 +460,28 @@ namespace screens {
     void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                             uint32_t nowMs) {
         const std::string_view bookTitle = ReadingProgress::title(session, storage);
+        if (!chapterCue_ && chapterCuePainted_) {
+            // The card was dismissed; repaint the reader from a clean frame.
+            chapterCuePainted_ = false;
+            ui.invalidate();
+            return;
+        }
+        if (chapterCue_) {
+            if (session.state.wordIndex != chapterCueWordIndex_) {
+                // The position moved elsewhere (chapter list, companion); drop the card.
+                chapterCue_ = false;
+                chapterCuePainted_ = false;
+                ui.invalidate();
+                return;
+            }
+            if (!chapterCuePainted_) {
+                chapterCuePainted_ = true;
+                ui.invalidate();
+                return;
+            }
+            drawChapterCue(ui);
+            return;
+        }
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
         const bool pageView = settings.mode == settings::ReadingMode::page || pagePreview_;
@@ -844,6 +867,15 @@ namespace screens {
         if (event == nullptr)
             return;
         const ui::Touch& touch = *event;
+        if (chapterCue_) {
+            if (ui::hasTouch(touch, ui::TouchRelease)) {
+                resetTouch();
+                lastTapValid_ = false;
+                if (ui::hasTouch(touch, ui::TouchTap))
+                    dismissChapterCue(nowMs);
+            }
+            return;
+        }
         const bool ended = ui::hasTouch(touch, ui::TouchRelease);
         const bool held = ui::hasTouch(touch, ui::TouchHold);
 
@@ -1013,6 +1045,10 @@ namespace screens {
     }
 
     void ReaderScreen::toggle(Preferences& preferences, uint32_t nowMs) {
+        if (chapterCue_) {
+            dismissChapterCue(nowMs);
+            return;
+        }
         if (session.playing)
             requestPause(preferences, nowMs);
         else
@@ -1036,11 +1072,71 @@ namespace screens {
         ReadingLoop::update(session, settings_, nowMs);
 #else
         const size_t previousIndex = session.state.wordIndex;
-        if (ReadingLoop::update(session, settings_, nowMs)) {
-            ReadingProgress::saveChapterTransition(session, preferences, store, previousIndex, session.state.wordIndex,
-                                                   nowMs);
+        if (ReadingLoop::update(session, settings_, nowMs)
+            && ReadingProgress::saveChapterTransition(session, preferences, store, previousIndex,
+                                                      session.state.wordIndex, nowMs)
+            && settings_.pauseAtChapterStart) {
+            // Playback just entered a new chapter: stop on its first word and announce it.
+            ReadingLoop::pause(session);
+            pauseAtSentenceEndRequested_ = false;
+            playLocked_ = false;
+            chapterCue_ = true;
+            chapterCuePainted_ = false;
+            chapterCueRaised_ = true;
+            chapterCueWordIndex_ = session.state.wordIndex;
         }
 #endif
+    }
+
+    bool ReaderScreen::takeChapterCueRaised() {
+        const bool raised = chapterCueRaised_;
+        chapterCueRaised_ = false;
+        return raised;
+    }
+
+    void ReaderScreen::dismissChapterCue(uint32_t nowMs) {
+        chapterCue_ = false;
+        start(nowMs, true);
+    }
+
+    void ReaderScreen::drawChapterCue(ui::Context& ui) {
+        const auto& chapters = session.metadata.chapters;
+        const auto next = std::ranges::upper_bound(chapters, session.state.wordIndex, {}, &ChapterMarker::wordIndex);
+        const size_t number = static_cast<size_t>(next - chapters.begin());
+        const ChapterMarker* chapter = number == 0 ? nullptr : &chapters[number - 1];
+        const std::string_view chapterWord = ui.text(UiText::Chapter);
+        char heading[48];
+        std::snprintf(heading, sizeof(heading), "%.*s %u / %u", static_cast<int>(chapterWord.size()),
+                      chapterWord.data(), static_cast<unsigned>(number), static_cast<unsigned>(chapters.size()));
+        const std::string_view title =
+            chapter != nullptr && !chapter->title.empty() ? std::string_view{chapter->title} : std::string_view{heading};
+        const std::string_view hint = ui.text(UiText::TapToContinue);
+        const std::string_view locale =
+            chapter == nullptr ? session.metadata.locale : session.metadata.localeAt(chapter->wordIndex);
+
+        const ui::Rect full{0, 0, ui.width(), ui.height()};
+        uint32_t state = ui::Context::signature(title);
+        state = ui::Context::signature(heading, state);
+        state = ui::Context::signature(hint, state);
+        if (!ui.redraw(full, state))
+            return;
+
+        constexpr int16_t kMargin = 8;
+        constexpr int16_t kHeadingHeight = 22;
+        constexpr int16_t kRuleWidth = 60;
+        constexpr int16_t kHintHeight = 18;
+        const int16_t width = static_cast<int16_t>(full.w - 2 * kMargin);
+        const int16_t headingBottom = static_cast<int16_t>(kMargin + kHeadingHeight);
+        const int16_t hintTop = static_cast<int16_t>(full.h - kMargin - kHintHeight);
+        ui.drawText({kMargin, kMargin, width, kHeadingHeight}, heading, 2, ui.color(ui::themes::ColorRole::Muted),
+                    ui::TextAlign::Center);
+        ui.gfx().fillRect(static_cast<int16_t>((full.w - kRuleWidth) / 2), static_cast<int16_t>(headingBottom + 1),
+                          kRuleWidth, 2, ui.color(ui::themes::ColorRole::Accent));
+        ui.drawText({static_cast<int16_t>(kMargin + 16), static_cast<int16_t>(headingBottom + 4),
+                     static_cast<int16_t>(width - 32), static_cast<int16_t>(hintTop - headingBottom - 8)},
+                    title, 3, ui.color(ui::themes::ColorRole::Foreground), ui::TextAlign::Center, 2, locale);
+        ui.drawText({kMargin, hintTop, width, kHintHeight}, hint, 1, ui.color(ui::themes::ColorRole::Muted),
+                    ui::TextAlign::Center);
     }
 
     void ReaderScreen::start(uint32_t nowMs, bool locked) {
