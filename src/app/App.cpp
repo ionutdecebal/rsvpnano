@@ -274,11 +274,22 @@ void App::renderScreen(uint32_t nowMs) {
         }
         break;
     }
-    case screens::Screen::ReaderSettings:
+    case screens::Screen::ReaderSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::readerSettings(immediateUi_, settingsStore_.settings().reading, screen_))
+        const bool leftHanded = settingsStore_.settings().reading.leftHanded;
+        if (screens::readerSettings(immediateUi_, settingsStore_.settings().reading, screen_)) {
             settingsStore_.acceptChanges();
+            if (leftHanded != settingsStore_.settings().reading.leftHanded) {
+                immediateUi_.endFrame();
+                immediateUi_.setOrientation(settingsStore_.settings().reading.leftHanded
+                                                ? Board::Display::rotatedUiOrientation()
+                                                : Board::Display::defaultUiOrientation());
+                renderScreen(nowMs);
+                return;
+            }
+        }
         break;
+    }
     case screens::Screen::NetworkSettings:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = networkScreen_.draw(immediateUi_, settingsStore_, screen_);
@@ -837,6 +848,8 @@ void App::applySettings() {
 void App::loadAppearanceSettings() {
     auto& current = settingsStore_.settings();
     bool corrected = false;
+    immediateUi_.setOrientation(current.reading.leftHanded ? Board::Display::rotatedUiOrientation()
+                                                           : Board::Display::defaultUiOrientation());
     immediateUi_.setLanguageCatalog(storage_.mounted() ? &Board::Storage::filesystem() : nullptr, &localeCatalog_,
                                     &locales::loadUiFont);
     if (!readerScreen_.fonts.find(current.reading.typography.fontId)) {

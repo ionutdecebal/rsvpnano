@@ -41,9 +41,15 @@ api::Result<> CompanionApi::patchReadingSettings(httpd_req_t& request) {
                     settingsStore_.settings().reading)
         .transform([this](settings::ReadingSettings reading) {
             reading.typography.fontId = settingsStore_.settings().reading.typography.fontId;
+            const bool leftHanded = settingsStore_.settings().reading.leftHanded;
             settingsStore_.settings().reading = std::move(reading);
             settingsStore_.acceptChanges();
             readerScreen_.releaseRuntimeCaches();
+            if (leftHanded != settingsStore_.settings().reading.leftHanded) {
+                ui_.setOrientation(settingsStore_.settings().reading.leftHanded
+                                       ? Board::Display::rotatedUiOrientation()
+                                       : Board::Display::defaultUiOrientation());
+            }
         });
 }
 
