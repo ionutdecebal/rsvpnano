@@ -539,12 +539,15 @@ internal fun ColumnScope.AppearanceWorkspace(presenter: CompanionPresenter, stat
         if (file != null) scope.launch { presenter.installLocalePackFile(file.name, file.readBytes()) }
     }
 
-    LaunchedEffect(state.isConnected) {
+    LaunchedEffect(state.isConnected, state.baseUrl) {
         if (!state.isConnected) return@LaunchedEffect
         presenter.refreshSettings()
         presenter.refreshThemes()
         presenter.refreshFonts()
         presenter.refreshLocales()
+    }
+    LaunchedEffect(state.isConnected, state.baseUrl, state.settings?.updates) {
+        if (!state.isConnected || state.settings == null) return@LaunchedEffect
         presenter.refreshThemeCatalog()
         presenter.refreshFontCatalog()
         presenter.refreshLocaleCatalog()
