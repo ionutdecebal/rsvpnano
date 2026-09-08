@@ -6,49 +6,19 @@
 #include <cstdio>
 
 #include "board/BoardPower.h"
-#include "settings/SettingsRules.h"
 #include "library/StorageManager.h"
+#include "settings/SettingsRules.h"
 #include "storage/migration/Migration.h"
 #include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
+#include "ui/screens/ReaderLayout.h"
 #include "ui/screens/Screens.h"
 
 namespace screens {
     namespace {
 
-        constexpr ui::Rect batteryRect(int16_t width) {
-            return {static_cast<int16_t>(std::max<int16_t>(0, width - 126)), 0, 116, 36};
-        }
+        using namespace readerLayout;
 
-        constexpr ui::Rect portraitTopStrip(int16_t width) {
-            return {0, 0, width, 58};
-        }
-
-        constexpr ui::Rect portraitBatteryRect() {
-            return {6, 4, 92, 30};
-        }
-
-        constexpr ui::Rect portraitFooterRect(int16_t width) {
-            return {static_cast<int16_t>(width - 72), 4, 66, 30};
-        }
-
-        constexpr ui::Rect portraitChapterRect(int16_t width, int16_t height) {
-            return {static_cast<int16_t>(width - 36), 58, 30, static_cast<int16_t>(height - 106)};
-        }
-
-        constexpr ui::Rect portraitFeedbackRect() {
-            return {6, 36, 118, 20};
-        }
-
-        constexpr ui::Rect portraitBottomStrip(int16_t width, int16_t height) {
-            return {0, static_cast<int16_t>(height - 48), width, 48};
-        }
-
-        constexpr ui::Rect portraitPreviousRect(int16_t width, int16_t height, bool leftHanded) {
-            return {static_cast<int16_t>(leftHanded ? 8 : width - 48), static_cast<int16_t>(height - 40), 40, 30};
-        }
-
-        constexpr uint16_t kPreviousSentenceTapWidth = 112;
         constexpr uint16_t kTapSlop = 26;
         constexpr uint16_t kDoubleTapSlop = 92;
         constexpr uint16_t kSwipeThreshold = 40;
@@ -152,7 +122,7 @@ namespace screens {
         std::vector<uint8_t> prepared(families.size());
         std::vector<size_t> firstWords(families.size(), SIZE_MAX);
         const size_t sizeIndex = settings.mode == settings::ReadingMode::page
-                                   ? RFont4::kCompactStrikeIndex
+                                   ? readerLayout::pageStrikeIndex()
                                    : static_cast<size_t>(typography_.fontSizeIndex);
         const auto prepare = [&](size_t wordIndex, std::string_view locale, uint32_t scripts) {
             for (const UnicodeText::ScriptTag& script: UnicodeText::SupportedScripts) {
@@ -188,8 +158,7 @@ namespace screens {
             if (!face.shaper) {
                 text_.prepare(word);
                 const size_t next = wordIndex + 1;
-                if (next < ReadingLoop::wordCount(session)
-                    && fontChoice(next, settings, overrides) == family)
+                if (next < ReadingLoop::wordCount(session) && fontChoice(next, settings, overrides) == family)
                     text_.prepare(ReadingLoop::wordAt(session, next));
                 continue;
             }
@@ -213,13 +182,13 @@ namespace screens {
             const FontCatalog::Face currentFace = fonts.loadFace(family, sizeIndex);
             const auto bounds = ReadingLoop::paragraphBoundsAt(session, current);
             size_t loadedBlocks = 0;
-            for (size_t index = current;
-                 index < bounds.second && loadedBlocks < ui::fonts::RFontFileCache::kBlockCount; ++index) {
+            for (size_t index = current; index < bounds.second && loadedBlocks < ui::fonts::RFontFileCache::kBlockCount;
+                 ++index) {
                 if (fontChoice(index, settings, overrides) != family)
                     break;
-                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
-                    currentFace.raster.get(), ReadingLoop::wordAt(session, index),
-                    ui::fonts::RFontFileCache::kBlockCount - loadedBlocks, true);
+                loadedBlocks +=
+                    ui::fonts::prefetchGlyphBitmaps(currentFace.raster.get(), ReadingLoop::wordAt(session, index),
+                                                    ui::fonts::RFontFileCache::kBlockCount - loadedBlocks, true);
             }
             activateFace(currentFace);
         }
@@ -302,9 +271,9 @@ namespace screens {
                  index < end && readAheadBlockCount_ < kFontReadAheadTargetBlocks && hasSlack(millis()); ++index) {
                 if (fontChoice(index) != family)
                     break;
-                readAheadBlockCount_ += ui::fonts::prefetchGlyphBitmaps(
-                    upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1,
-                    session.metadata.writingMode == WritingMode::verticalRl);
+                readAheadBlockCount_ +=
+                    ui::fonts::prefetchGlyphBitmaps(upcoming.raster.get(), ReadingLoop::wordAt(session, index), 1,
+                                                    session.metadata.writingMode == WritingMode::verticalRl);
             }
             return;
         }
@@ -332,9 +301,10 @@ namespace screens {
             for (size_t index = next; index < bounds.second && loadedBlocks < blockBudget; ++index) {
                 if (fontChoice(index) != nextFamily)
                     break;
-                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
-                    nextFace.raster.get(), ReadingLoop::wordAt(session, index), blockBudget - loadedBlocks,
-                    session.metadata.writingMode == WritingMode::verticalRl);
+                loadedBlocks +=
+                    ui::fonts::prefetchGlyphBitmaps(nextFace.raster.get(), ReadingLoop::wordAt(session, index),
+                                                    blockBudget - loadedBlocks,
+                                                    session.metadata.writingMode == WritingMode::verticalRl);
             }
             return;
         }
@@ -360,8 +330,8 @@ namespace screens {
 
                 const size_t after = next + 1;
                 const size_t localAfter = localWord + 1;
-                if (settings_.phantomWords && after < paragraph.lastWord
-                    && localAfter < paragraph.wordOffsets.size() && fontChoice(after) == nextFamily
+                if (settings_.phantomWords && after < paragraph.lastWord && localAfter < paragraph.wordOffsets.size()
+                    && fontChoice(after) == nextFamily
                     && session.metadata.directionAt(after) == session.metadata.directionAt(next)) {
                     const std::string_view afterWord = ReadingLoop::wordAt(session, after);
                     const size_t afterOffset = paragraph.wordOffsets[localAfter];
@@ -385,8 +355,8 @@ namespace screens {
             for (size_t index = next; index < bounds.second && loadedBlocks < blockBudget; ++index) {
                 if (fontChoice(index) != nextFamily)
                     break;
-                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(
-                    face_.raster.get(), ReadingLoop::wordAt(session, index), blockBudget - loadedBlocks, true);
+                loadedBlocks += ui::fonts::prefetchGlyphBitmaps(face_.raster.get(), ReadingLoop::wordAt(session, index),
+                                                                blockBudget - loadedBlocks, true);
             }
 #endif
             text_.prepareVertical(ReadingLoop::wordAt(session, next));
@@ -396,7 +366,7 @@ namespace screens {
     }
 
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
-        return fonts.loadFace(fontChoice(wordIndex), RFont4::kCompactStrikeIndex);
+        return fonts.loadFace(fontChoice(wordIndex), readerLayout::pageStrikeIndex());
     }
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,
@@ -465,8 +435,8 @@ namespace screens {
         const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
         if (!pageView)
             refreshTypeface();
-        const auto nextChapter = std::ranges::upper_bound(session.metadata.chapters, session.state.wordIndex, {},
-                                                          &ChapterMarker::wordIndex);
+        const auto nextChapter =
+            std::ranges::upper_bound(session.metadata.chapters, session.state.wordIndex, {}, &ChapterMarker::wordIndex);
         const ChapterMarker* chapter =
             nextChapter == session.metadata.chapters.begin() ? nullptr : &*std::prev(nextChapter);
         if (chapter != nullptr && session.state.wordIndex == chapter->wordIndex + 1
@@ -498,15 +468,10 @@ namespace screens {
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
         const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
 
-        const int16_t readingLeft = vertical && pageView ? portraitTopStrip(ui.height()).h : 0;
-        const int16_t readingRight = vertical && pageView ? portraitBottomStrip(ui.height(), ui.width()).h : 0;
-        const ui::Rect readingArea{
-            readingLeft, 36, static_cast<int16_t>(std::max<int16_t>(0, ui.width() - readingLeft - readingRight)),
-            static_cast<int16_t>(std::max<int16_t>(0, ui.height() - 72))};
+        const ui::Rect readingArea = readerLayout::readingArea(ui.width(), ui.height(), vertical && pageView);
         if (pageView) {
-            const std::string overlay = vertical || !overlayVisible
-                                          ? ""
-                                          : std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM");
+            const std::string overlay =
+                vertical || !overlayVisible ? "" : std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM");
             const auto typeface = [this](size_t wordIndex) -> FontCatalog::Face {
                 return pageTypeface(wordIndex);
             };
@@ -686,15 +651,17 @@ namespace screens {
                     if (vertical) {
                         for (size_t index = first; index < last; ++index) {
                             const auto& glyph = rsvpGlyphs_[index];
-                            cursor = static_cast<int16_t>(
-                                cursor + text_.drawVerticalGlyph(glyph,
-                                                                 codepointAt(rsvpParagraph_.text, glyph.cluster),
-                                                                 cursor, ui.height() / 2));
+                            cursor = static_cast<int16_t>(cursor
+                                                          + text_.drawVerticalGlyph(glyph,
+                                                                                    codepointAt(rsvpParagraph_.text,
+                                                                                                glyph.cluster),
+                                                                                    cursor, ui.height() / 2));
                         }
                     } else {
-                        cursor = static_cast<int16_t>(
-                            cursor + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first), cursor,
-                                                      baseline));
+                        cursor =
+                            static_cast<int16_t>(cursor
+                                                 + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first),
+                                                                    cursor, baseline));
                     }
                     first = last;
                 }
@@ -733,7 +700,6 @@ namespace screens {
         const bool showChapter = !reading || settings.chapterVisibleWhileReading;
         const bool showProgress = !reading || settings.progressVisibleWhileReading;
         const bool showBattery = !reading || settings.batteryVisibleWhileReading;
-        const bool showBatteryIcon = settings.batteryIconVisible && showBattery;
         char batteryText[12];
         if (settings.batteryLabel == settings::BatteryLabel::voltage && battery.status.voltage > 0)
             std::snprintf(batteryText, sizeof(batteryText), "%.2fV", battery.status.voltage);
@@ -748,66 +714,27 @@ namespace screens {
         } else
             std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(battery.status.percent));
         const std::string_view batteryLabel{batteryText};
-        if (vertical) {
-            const int16_t portraitWidth = ui.height();
-            const int16_t portraitHeight = ui.width();
-            const std::string overlay =
-                overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
-            uint32_t topState = pageView ? ui::Context::signature(overlay)
-                                         : frameSignature(session.currentWord, overlayVisible, cjkPacing, settings);
-            topState = ui::Context::signature(footer, topState);
-            topState = ui::Context::signature(batteryLabel, topState);
-            topState = ui::Context::combine(topState, battery.status.percent);
-            topState = ui::Context::combine(topState, battery.charging);
-            topState = ui::Context::combine(topState, showBattery);
-            topState = ui::Context::combine(topState, showBatteryIcon);
-            topState = ui::Context::combine(topState, showProgress);
-            if (ui.redraw(ui::rotateClockwise(portraitTopStrip(portraitWidth), portraitWidth), topState)) {
-                if (showBattery)
-                    ui.portraitBattery(portraitBatteryRect(), battery.status.percent, battery.charging, batteryLabel,
-                                       showBatteryIcon);
-                if (showProgress)
-                    ui.portraitText(portraitFooterRect(portraitWidth), footer, 2,
-                                    ui.color(ui::themes::ColorRole::Muted), ui::TextAlign::Right);
-                if (!overlay.empty())
-                    ui.portraitText(portraitFeedbackRect(), overlay, 1,
-                                    ui.color(ui::themes::ColorRole::Accent), ui::TextAlign::Center);
-            }
-
-            const std::string_view visibleChapter =
-                showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{};
-            uint32_t chapterState = ui::Context::signature(visibleChapter);
-            chapterState = ui::Context::combine(chapterState, showChapter);
-            const ui::Rect chapterArea = portraitChapterRect(portraitWidth, portraitHeight);
-            if (ui.redraw(ui::rotateClockwise(chapterArea, portraitWidth), chapterState))
-                ui.portraitVerticalText(chapterArea, visibleChapter, 1,
-                                        ui.color(ui::themes::ColorRole::Muted),
-                                        chapter == nullptr ? session.metadata.locale
-                                                           : session.metadata.localeAt(chapter->wordIndex));
-
-            uint32_t bottomState = pageView ? ui::Context::combine(0, settings.leftHanded)
-                                            : frameSignature(session.currentWord, overlayVisible, cjkPacing, settings);
-            if (ui.redraw(ui::rotateClockwise(portraitBottomStrip(portraitWidth, portraitHeight), portraitWidth),
-                          bottomState)) {
-                ui.portraitText(portraitPreviousRect(portraitWidth, portraitHeight, settings.leftHanded), "<<", 2,
-                                ui.color(ui::themes::ColorRole::Muted), ui::TextAlign::Center);
-            }
-        } else {
-            const int16_t footerWidth = showProgress ? static_cast<int16_t>(footer.size() * 12) : 0;
-            const int16_t footerX = settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 18 - footerWidth);
-            const int16_t chapterX =
-                settings.leftHanded && showProgress ? static_cast<int16_t>(footerX + footerWidth + 24) : 18;
-            const int16_t chapterWidth = showProgress ? static_cast<int16_t>(ui.width() - 60 - footerWidth)
-                                                      : static_cast<int16_t>(ui.width() - 36);
-            ui.label({chapterX, static_cast<int16_t>(ui.height() - 26), chapterWidth, 26},
-                     showChapter ? chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel : std::string_view{}, 2,
-                     ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left, 1,
-                     chapter == nullptr ? session.metadata.locale : session.metadata.localeAt(chapter->wordIndex));
-            ui.label({footerX, static_cast<int16_t>(ui.height() - 26), footerWidth, 26}, footer, 2,
-                     ui::themes::ColorRole::Muted, settings.leftHanded ? ui::TextAlign::Left : ui::TextAlign::Right);
-            ui.battery(batteryRect(ui.width()), battery.status.percent, battery.charging, batteryLabel,
-                       showBatteryIcon);
-        }
+        const std::string overlay = overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
+        readerLayout::chrome(ui,
+                             {
+                                 .vertical = vertical,
+                                 .chapter = chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel,
+                                 .locale = chapter == nullptr ? session.metadata.locale
+                                                              : session.metadata.localeAt(chapter->wordIndex),
+                                 .footer = footer,
+                                 .batteryLabel = batteryLabel,
+                                 .overlay = overlay,
+                                 .showChapter = showChapter,
+                                 .showProgress = showProgress,
+                                 .showBattery = showBattery,
+                                 .topState = pageView ? ui::Context::signature(overlay)
+                                                      : frameSignature(session.currentWord, overlayVisible, cjkPacing,
+                                                                       settings),
+                                 .bottomState = pageView ? ui::Context::combine(0, settings.leftHanded)
+                                                         : frameSignature(session.currentWord, overlayVisible,
+                                                                          cjkPacing, settings),
+                             },
+                             settings, battery);
     }
 
     bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
@@ -827,15 +754,16 @@ namespace screens {
 
     bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
         if (session.metadata.writingMode == WritingMode::verticalRl) {
-            const ui::Rect previous = ui::rotateClockwise(
-                portraitPreviousRect(gfx_.height(), gfx_.width(), settings_.leftHanded), gfx_.height());
+            const ui::Rect previous =
+                ui::rotateClockwise(portraitPreviousRect(gfx_.height(), gfx_.width(), settings_.leftHanded),
+                                    gfx_.height());
             return ui::contains(previous, x, y);
         }
         if (ui::contains(batteryRect(gfx_.width()), x, y))
             return false;
         return settings_.leftHanded
-                 ? x <= kPreviousSentenceTapWidth
-                 : x >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.width() - kPreviousSentenceTapWidth));
+                 ? x <= previousSentenceTapWidth()
+                 : x >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.width() - previousSentenceTapWidth()));
     }
 
     void ReaderScreen::handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
@@ -982,18 +910,15 @@ namespace screens {
             pagePreview_ = false;
             return;
         }
-        const bool footerTapped = session.metadata.writingMode == WritingMode::verticalRl
-                                    ? ui::contains(ui::rotateClockwise(portraitFooterRect(gfx_.height()), gfx_.height()),
-                                                   touch.x, touch.y)
-                                    : [&] {
-                                          const uint16_t width =
-                                              std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
-                                          return touch.y >= static_cast<uint16_t>(
-                                                                      std::max<int16_t>(0, gfx_.height() - 40))
-                                              && (settings_.leftHanded
-                                                      ? touch.x <= width
-                                                      : touch.x >= static_cast<uint16_t>(gfx_.width() - width));
-                                      }();
+        const bool footerTapped =
+            session.metadata.writingMode == WritingMode::verticalRl
+                ? ui::contains(ui::rotateClockwise(portraitFooterRect(gfx_.height()), gfx_.height()), touch.x, touch.y)
+                : [&] {
+                      const uint16_t width = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
+                      return touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
+                          && (settings_.leftHanded ? touch.x <= width
+                                                   : touch.x >= static_cast<uint16_t>(gfx_.width() - width));
+                  }();
         if (footerTapped) {
             settings_.footerMetric = settings::cycleEnum(settings_.footerMetric);
             settingsStore.acceptChanges();
@@ -1262,8 +1187,9 @@ namespace screens {
         if (shaped) {
             if (vertical) {
                 for (const auto& glyph: phantomGlyphs_)
-                    x = static_cast<int16_t>(x + text_.drawVerticalGlyph(glyph, codepointAt(value, glyph.cluster), x,
-                                                                        ui.height() / 2));
+                    x = static_cast<int16_t>(x
+                                             + text_.drawVerticalGlyph(glyph, codepointAt(value, glyph.cluster), x,
+                                                                       ui.height() / 2));
             } else
                 text_.drawGlyphs(phantomGlyphs_, x, baseline);
         } else if (bidi) {
@@ -1272,10 +1198,10 @@ namespace screens {
             for (const BidiText::Codepoint& codepoint: phantomVisual_) {
                 if (previousValid && !codepoint.rightToLeft)
                     x = static_cast<int16_t>(x + text_.kerningAdjust(previous, codepoint.value));
-                x = static_cast<int16_t>(
-                    x + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
-                                  : text_.drawCodepoint(codepoint.value, x, baseline))
-                    + typography_.tracking);
+                x = static_cast<int16_t>(x
+                                         + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
+                                                     : text_.drawCodepoint(codepoint.value, x, baseline))
+                                         + typography_.tracking);
                 previous = codepoint.value;
                 previousValid = true;
             }
@@ -1297,8 +1223,9 @@ namespace screens {
                                    ? ui.color(ui::themes::ColorRole::Accent)
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
-            x = static_cast<int16_t>(x + (vertical ? text_.drawVerticalCodepoint(codepoint, x, ui.height() / 2)
-                                                   : text_.drawCodepoint(codepoint, x, baseline))
+            x = static_cast<int16_t>(x
+                                     + (vertical ? text_.drawVerticalCodepoint(codepoint, x, ui.height() / 2)
+                                                 : text_.drawCodepoint(codepoint, x, baseline))
                                      + typography_.tracking);
             offset += bytes - word.size();
         }
@@ -1317,8 +1244,9 @@ namespace screens {
                                    ? ui.color(ui::themes::ColorRole::Accent)
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
-            x = static_cast<int16_t>(x + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
-                                                   : text_.drawCodepoint(codepoint.value, x, baseline))
+            x = static_cast<int16_t>(x
+                                     + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
+                                                 : text_.drawCodepoint(codepoint.value, x, baseline))
                                      + (index + 1 < word.size() ? typography_.tracking : 0));
             previous = codepoint.value;
             previousValid = true;

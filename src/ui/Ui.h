@@ -21,6 +21,8 @@
 
 namespace ui {
 
+    struct PagedGrid;
+
     struct Rect {
         int16_t x = 0;
         int16_t y = 0;
@@ -169,6 +171,16 @@ namespace ui {
         bool button(Rect rect, std::string_view text, bool enabled = true, Icon icon = Icon::None,
                     uint8_t textLines = 1, std::string_view detailLeft = {}, std::string_view detailRight = {});
         bool iconButton(Rect rect, Icon icon);
+        bool card(Rect rect, std::string_view title, std::string_view detail = {}, uint8_t textSize = 3,
+                  ui::themes::ColorRole role = ui::themes::ColorRole::Accent, Icon icon = Icon::None,
+                  bool enabled = true, uint8_t alpha = 255);
+        bool dockItem(Rect rect, std::string_view label, Icon icon, uint16_t accent);
+        size_t fixedText(Rect rect, std::string_view text, uint8_t textSize, uint16_t ink,
+                         TextAlign align = TextAlign::Center, uint8_t maxLines = 2, bool ellipsis = true);
+        void progressRing(Rect rect, int value, int maximum = 100,
+                          ui::themes::ColorRole role = ui::themes::ColorRole::Accent);
+        bool rotary(Rect rect, int& value, int minimum, int maximum, int step, std::string_view label = {});
+        PagedGrid pagedGrid(Rect rect, size_t count, uint8_t columns = 1, int16_t minimumHeight = 54);
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon = true);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
@@ -337,6 +349,10 @@ namespace ui {
         int capturedScalarInitialValue_ = 0;
         int8_t capturedStepperDirection_ = 0;
         uint8_t screen_ = 0xFF;
+        size_t gridPage_ = 0;
+        bool rotaryDragging_ = false;
+        int16_t rotaryStartX_ = 0;
+        int rotaryStartValue_ = 0;
         bool invalid_ = true;
         bool drew_ = false;
     };

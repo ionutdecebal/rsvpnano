@@ -10,6 +10,7 @@
 #include "library/IndexedBookStore.h"
 #include "library/ReadingProgress.h"
 #include "ui/screens/Screens.h"
+#include "ui/Layouts.h"
 
 namespace screens {
 
@@ -48,6 +49,7 @@ namespace screens {
         size_t selectedIndex_ = 0;
         std::vector<LibraryItem> items_;
         bool itemsValid_ = false;
+        ui::CarouselGesture carouselGesture_;
     };
 
 } // namespace screens

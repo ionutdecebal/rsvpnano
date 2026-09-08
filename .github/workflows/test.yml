@@ -60,4 +60,4 @@ jobs:
           python -m unittest discover -s fonts -p "test_*.py"
 
       - name: Run native firmware tests
-        run: pio test -e native_test
+        run: pio test -e native_test -e native_watch_test

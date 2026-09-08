@@ -198,6 +198,8 @@ namespace ui {
         drew_ = false;
         if (screen_ != screen) {
             screen_ = screen;
+            gridPage_ = 0;
+            rotaryDragging_ = false;
             contentFonts_.clear();
             invalid_ = true;
             capturedSlot_ = kSlotCapacity;
@@ -1161,6 +1163,7 @@ namespace ui {
     }
 
     void Context::resetTouchGesture() {
+        rotaryDragging_ = false;
         touchActive_ = false;
         touchHoldEmitted_ = false;
         touchOutsideSamples_ = 0;

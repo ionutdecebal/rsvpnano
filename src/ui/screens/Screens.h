@@ -21,6 +21,7 @@
 #include "focus/FocusSession.h"
 #include "focus/FocusTimers.h"
 #include "ui/Ui.h"
+#include "ui/Layouts.h"
 
 namespace screens {
 
@@ -119,6 +120,7 @@ namespace screens {
         };
 
         void saveNetwork(settings::SettingsStore& store, std::string_view ssid);
+        void updateWifiScan();
 
         std::array<WifiNetwork, 8> networks_;
         size_t networkCount_ = 0;
@@ -165,6 +167,8 @@ namespace screens {
         bool creating_ = false;
         bool deleteConfirm_ = false;
         bool writable_ = false;
+        size_t selectedIndex_ = 0;
+        ui::CarouselGesture carouselGesture_;
     };
     void status(ui::Context& ui, std::string_view title, std::string_view line1 = {}, std::string_view line2 = {},
                 int progress = -1);

@@ -7,6 +7,7 @@
 #include "reader/ReadingLoop.h"
 #include "settings/SettingsModel.h"
 #include "ui/Ui.h"
+#include "ui/Layouts.h"
 #include "ui/screens/Screens.h"
 
 namespace screens {
@@ -27,6 +28,7 @@ namespace screens {
         int32_t velocity_ = 0;
         int32_t scrollRemainder_ = 0;
         bool dragging_ = false;
+        ui::CarouselGesture carouselGesture_;
     };
 
 } // namespace screens
