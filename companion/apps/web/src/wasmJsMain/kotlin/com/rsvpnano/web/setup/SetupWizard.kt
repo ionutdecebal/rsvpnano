@@ -1004,13 +1004,3 @@ internal external fun restartNanoInBootloader(ok: () -> Unit, fail: (String) -> 
 
 @JsFun("(ok, fail) => fetch(new URL('firmware/release.json', document.baseURI), { cache: 'no-store' }).then(response => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.text(); }).then(ok).catch(error => fail(error?.message || String(error)))")
 private external fun fetchDeployedReleaseJson(ok: (String) -> Unit, fail: (String) -> Unit)
-
-@JsFun("(manifestJson, firmwareUrl, eraseFirst, onState, onFinished, onError) => globalThis.rsvpNanoInstallFirmware(manifestJson, firmwareUrl, eraseFirst, onState, onFinished, onError)")
-private external fun launchInlineEspInstaller(
-    manifestJson: String,
-    firmwareUrl: String,
-    eraseFirst: Boolean,
-    onState: (String, Int) -> Unit,
-    onFinished: () -> Unit,
-    onError: (String) -> Unit,
-)

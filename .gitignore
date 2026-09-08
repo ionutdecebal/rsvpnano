@@ -1,7 +1,6 @@
 .pio
 .gradle/
 .kotlin/
-kotlin-js-store/
 .local/
 build/
 **/build/

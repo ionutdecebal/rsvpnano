@@ -1,3 +1,6 @@
+import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin
+import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnRootExtension
+
 plugins {
 	alias(libs.plugins.kotlin.multiplatform) apply false
 	alias(libs.plugins.kotlin.serialization) apply false
@@ -6,6 +9,10 @@ plugins {
 	alias(libs.plugins.jetbrains.compose) apply false
 	alias(libs.plugins.android.library) apply false
 	alias(libs.plugins.android.application) apply false
+}
+
+plugins.withType<WasmYarnPlugin> {
+	the<WasmYarnRootExtension>().reportNewYarnLock = true
 }
 
 tasks.register("checkAndroid") {

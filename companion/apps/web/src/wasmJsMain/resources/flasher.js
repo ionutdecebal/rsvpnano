@@ -1,12 +1,11 @@
-globalThis.rsvpNanoInstallFirmware = async (manifestJson, firmwareUrl, eraseFirst, onState, onFinished, onError) => {
+import { flash } from "esp-web-tools/dist/flash.js";
+
+export const launchInlineEspInstaller = async (manifestJson, firmwareUrl, eraseFirst, onState, onFinished, onError) => {
   const objectUrls = [];
   let failed = false;
 
   try {
-    const [{ flash }, response] = await Promise.all([
-      import("https://unpkg.com/esp-web-tools@10.2.1/dist/flash.js?module"),
-      fetch(firmwareUrl),
-    ]);
+    const response = await fetch(firmwareUrl);
     if (!response.ok) throw new Error("Could not load the firmware file.");
 
     const firmware = await response.blob();

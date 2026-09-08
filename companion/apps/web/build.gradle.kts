@@ -28,6 +28,7 @@ kotlin {
 
     sourceSets {
         wasmJsMain.dependencies {
+            implementation(npm("esp-web-tools", "10.2.1"))
             implementation(project(":shared"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktor.client.core)
