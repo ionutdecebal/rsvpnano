@@ -1,6 +1,22 @@
 name: Pages
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'companion/apps/web/**'
+      - 'companion/shared/**'
+      - 'companion/conversion/**'
+      - 'companion/build-logic/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradle/**'
+      - 'kotlin-js-store/wasm/**'
+      - 'tools/fetch_release_firmware.py'
+      - 'tools/export_web_firmware.py'
+      - '.github/workflows/pages.yml'
   workflow_run:
     workflows: [Release firmware]
     types: [completed]
