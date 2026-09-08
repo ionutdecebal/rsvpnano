@@ -505,7 +505,7 @@ namespace IndexedBook {
     }
 
     bool Builder::pushWord(std::string token) {
-        if (token.empty() || (!RsvpText::hasReadableText(token) && token != "-"))
+        if (token.empty() || (!RsvpText::hasReadableText(token) && token != "-" && token != "\u2014"))
             return true;
         if (token.size() > UINT16_MAX || dataSize_ > UINT32_MAX - static_cast<uint32_t>(token.size())) {
             fail(std::make_error_code(std::errc::value_too_large), "Index limit reached");

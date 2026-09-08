@@ -778,6 +778,7 @@ namespace {
         case ',':
             return kCommaPausePercent;
         case '-':
+        case 0x2014U:
             return kDashPausePercent;
         case ';':
         case ':':

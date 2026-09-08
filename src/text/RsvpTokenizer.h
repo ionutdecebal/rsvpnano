@@ -75,11 +75,11 @@ namespace RsvpText {
                 return true;
             }
 
-            if (token == "-") {
+            if (token == "-" || token == "\u2014") {
                 if (!flushPending()) {
                     return false;
                 }
-                if (!consumeToken("-")) {
+                if (!consumeToken(std::string{token})) {
                     return false;
                 }
                 return withinWordLimit();
@@ -144,6 +144,14 @@ namespace RsvpText {
                 if (!flushCurrent()) {
                     return false;
                 }
+                continue;
+            }
+
+            if (normalizedLine.substr(i).starts_with("\u2014")) {
+                if (!flushCurrent() || !finishToken("\u2014")) {
+                    return false;
+                }
+                i += 2; // The em dash occupies three UTF-8 bytes.
                 continue;
             }
 

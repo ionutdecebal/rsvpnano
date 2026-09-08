@@ -52,7 +52,7 @@ public:
     };
 
     static constexpr uint32_t kMagic = 0x58444952UL; // RIDX
-    static constexpr uint32_t kVersion = 12;
+    static constexpr uint32_t kVersion = 13; // Reindex existing books with em-dash word boundaries.
     static constexpr size_t kWordCacheSize = 256;
 
     IndexedBookStore() = default;

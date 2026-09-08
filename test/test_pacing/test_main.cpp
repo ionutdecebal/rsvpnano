@@ -144,6 +144,25 @@ void test_dash_pause(void) {
 void test_standalone_dash_pause(void) {
     // Parser-level hyphen splitting can produce "-" as its own displayed token.
     TEST_ASSERT_EQUAL(320u, duration(300, "-", "the"));
+    TEST_ASSERT_EQUAL(320u, duration(300, "\u2014", "the"));
+}
+
+void test_em_dash_splits_words_and_preserves_hyphenated_compounds(void) {
+    for (const auto line: {"competence\u2014enough well-known", "competence \u2014 enough well-known",
+                           "competence&mdash;enough well-known"}) {
+        std::vector<std::string> tokens;
+        size_t count = 0;
+        TEST_ASSERT_TRUE(RsvpText::appendLineWords(
+            RsvpText::decodeMarkupEntities(line),
+            [&](const std::string& token) {
+                tokens.push_back(token);
+                ++count;
+                return true;
+            },
+            count, nullptr));
+        const std::vector<std::string> expected{"competence", "\u2014", "enough", "well-known"};
+        TEST_ASSERT_TRUE(tokens == expected);
+    }
 }
 
 void test_ellipsis_pause(void) {
@@ -502,6 +521,7 @@ int main(void) {
     RUN_TEST(test_clause_pause_semicolon);
     RUN_TEST(test_dash_pause);
     RUN_TEST(test_standalone_dash_pause);
+    RUN_TEST(test_em_dash_splits_words_and_preserves_hyphenated_compounds);
     RUN_TEST(test_ellipsis_pause);
 
     RUN_TEST(test_known_abbreviation_no_pause);
