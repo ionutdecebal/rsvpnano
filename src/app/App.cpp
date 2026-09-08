@@ -151,8 +151,11 @@ void App::update(uint32_t nowMs) {
         settingsStore_.update(nowMs);
 
     Board::Power::updateBattery(battery_, nowMs);
-    if (!preparingTypography)
+    if (!preparingTypography) {
         readerScreen_.update(prefs_, nowMs);
+        if (readerScreen_.takeChapterCueRaised())
+            lastActivityMs_ = nowMs;
+    }
     if (screen_ == screens::Screen::FocusSession) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
@@ -191,7 +194,8 @@ void App::renderScreen(uint32_t nowMs) {
     case screens::Screen::Library: {
         const auto& items = libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.session);
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        const screens::Action result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
+        const screens::Action result = libraryScreen_.draw(
+            immediateUi_, items, settingsStore_.settings().interface.libraryLayout, nowMs, screen_);
         immediateUi_.endFrame();
         if (result == screens::Action::OpenBook) {
             runBookOpen(libraryScreen_.selectedIndex(), nowMs);

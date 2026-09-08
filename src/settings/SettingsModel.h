@@ -35,6 +35,12 @@ namespace settings {
         Count,
     };
 
+    enum class LibraryLayout : uint8_t {
+        shelf,
+        list,
+        Count,
+    };
+
     enum class BatteryLabel : uint8_t {
         percentage,
         timeRemaining,
@@ -94,6 +100,7 @@ namespace settings {
         ReadingMode mode = ReadingMode::rsvp;
         PauseMode pauseMode = PauseMode::sentenceEnd;
         bool phantomWords = true;
+        bool pauseAtChapterStart = false;
         bool chapterScrollReversed = false;
         FooterMetric footerMetric = FooterMetric::percentage;
         BatteryLabel batteryLabel = BatteryLabel::percentage;
@@ -114,6 +121,7 @@ namespace settings {
         BoundedValue<uint8_t, 0, 4> standbyTimerIndex{1};
         standby::Kind screensaver = standby::Kind::life;
         std::string selectedThemeId = "default";
+        LibraryLayout libraryLayout = LibraryLayout::shelf;
 
         bool operator==(const InterfaceSettings&) const = default;
     };

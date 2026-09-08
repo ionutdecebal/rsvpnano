@@ -1,6 +1,7 @@
 #include "ui/screens/ScreenCommon.h"
 
 #include "localization/LocaleCatalog.h"
+#include "settings/SettingsRules.h"
 
 namespace screens {
     namespace {
@@ -39,7 +40,7 @@ namespace screens {
         const ui::Rect content = detail::content(ui);
         constexpr int16_t gap = 6;
         constexpr int16_t backWidth = 56;
-        constexpr int16_t topHeight = 42;
+        constexpr int16_t topHeight = 38;
         if (ui.button({content.x, content.y, backWidth, topHeight}, "<<"))
             screen = Screen::Settings;
         if (ui.slider({static_cast<int16_t>(content.x + backWidth + gap), content.y,
@@ -57,8 +58,9 @@ namespace screens {
                      ui.text(UiText::StandbySection));
 
         const int16_t firstRowY = static_cast<int16_t>(sectionsY + 14);
-        constexpr int16_t rowHeight = 40;
+        constexpr int16_t rowHeight = 30;
         const int16_t secondRowY = static_cast<int16_t>(firstRowY + rowHeight + 4);
+        const int16_t thirdRowY = static_cast<int16_t>(secondRowY + rowHeight + 4);
         const ui::themes::Theme& selectedTheme = themes.resolve(config.selectedThemeId);
         if (ui.setting({content.x, firstRowY, halfWidth, rowHeight}, ui.text(UiText::Theme),
                        selectedTheme.definition.name, ui::SettingLayout::Inline)) {
@@ -74,6 +76,13 @@ namespace screens {
             config.locale = !languages_ ? std::string{Localization::kDefaultLocale}
                                         : std::string{nextLocale(*languages_, config.locale)};
             ui.setLocale(config.locale);
+            changed = true;
+        }
+
+        if (ui.setting({content.x, thirdRowY, halfWidth, rowHeight}, ui.text(UiText::Library),
+                       ui.text(config.libraryLayout == settings::LibraryLayout::list ? UiText::List : UiText::Shelf),
+                       ui::SettingLayout::Inline)) {
+            config.libraryLayout = settings::cycleEnum(config.libraryLayout);
             changed = true;
         }
 

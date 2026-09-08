@@ -11,11 +11,14 @@
 #include "storage/fs/StoragePaths.h"
 #include "library/IndexedBook.h"
 #include "text/AsciiText.h"
+#include "text/Utf8Text.h"
+#include "ui/screens/LibraryList.h"
 #include "ui/screens/ScreenCommon.h"
 
 namespace screens {
     namespace {
 
+        // Shelf layout.
         constexpr int16_t kDetailHeight = 43;
         constexpr int16_t kDetailGap = 2;
         constexpr int16_t kGap = 5;
@@ -26,6 +29,17 @@ namespace screens {
         constexpr int32_t kSpineCycleWidth =
             kSpineWidthPeriod * (kSpineBaseWidth + kGap)
             + kSpineWidthStep * kSpineWidthPeriod * (kSpineWidthPeriod - 1) / 2;
+
+        // List layout.
+        constexpr int16_t kScrollbarWidth = 4;
+        constexpr int16_t kScrollbarGap = 6;
+        constexpr int16_t kRowInset = 12;
+        constexpr int16_t kAccentBarWidth = 3;
+        constexpr int16_t kTitleTop = 5;
+        constexpr int16_t kDetailLineHeight = 11;
+        constexpr int16_t kProgressWidth = 52;
+        constexpr int16_t kProgressBarHeight = 2;
+        constexpr uint8_t kTitleTextSize = 2;
 
         constexpr int16_t spineWidth(size_t index) {
             return static_cast<int16_t>(kSpineBaseWidth + kSpineWidthStep * (index % kSpineWidthPeriod));
@@ -75,6 +89,15 @@ namespace screens {
 
         std::string_view title(const LibraryItem& item) {
             return item.book == nullptr ? std::string_view{} : BookLibrary::displayName(*item.book);
+        }
+
+        std::string_view author(const LibraryItem& item) {
+            return item.book == nullptr ? std::string_view{} : std::string_view{item.book->author};
+        }
+
+        constexpr bool inside(ui::Rect rect, ui::Rect clip) {
+            return rect.x >= clip.x && rect.y >= clip.y && rect.x + rect.w <= clip.x + clip.w
+                && rect.y + rect.h <= clip.y + clip.h;
         }
 
         void fillClipped(Arduino_GFX& gfx, ui::Rect rect, ui::Rect clip, uint16_t color) {
@@ -132,30 +155,106 @@ namespace screens {
             }
         }
 
+        std::string_view percentText(std::array<char, 5>& buffer, uint8_t percent) {
+            const auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size() - 1, percent);
+            const size_t digits = error == std::errc{} ? static_cast<size_t>(end - buffer.data()) : 1;
+            buffer[digits] = '%';
+            return {buffer.data(), digits + 1};
+        }
+
+        // Codepoints per title line at the list's title size.
+        size_t titleCapacity(int16_t width) {
+            const int16_t cell = std::max<int16_t>(1, ui::Context::textWidth("M", kTitleTextSize));
+            return static_cast<size_t>(std::max<int16_t>(0, width) / cell);
+        }
+
+        void drawRow(ui::Context& ui, const LibraryItem& item, ui::Rect row, ui::Rect clip, bool active,
+                     size_t capacity) {
+            Arduino_GFX& gfx = ui.gfx();
+            const uint16_t surface =
+                ui.color(active ? ui::themes::ColorRole::SurfaceActive : ui::themes::ColorRole::SurfaceMuted);
+            fillClipped(gfx, row, clip, surface);
+            drawRectClipped(gfx, row, clip, ui.color(ui::themes::ColorRole::Outline));
+            if (active)
+                fillClipped(gfx,
+                            {static_cast<int16_t>(row.x + 3), static_cast<int16_t>(row.y + 4), kAccentBarWidth,
+                             static_cast<int16_t>(row.h - 8)},
+                            clip, ui.color(ui::themes::ColorRole::Accent));
+
+            const int16_t left = static_cast<int16_t>(row.x + kRowInset);
+            const int16_t innerWidth = static_cast<int16_t>(row.w - kRowInset * 2);
+            std::vector<std::string_view> lines;
+            librarylist::wrapLines(title(item), capacity, &lines);
+            const int16_t titleHeight = static_cast<int16_t>(librarylist::kTitleLineHeight * lines.size());
+            const ui::Rect titleRect{left, static_cast<int16_t>(row.y + kTitleTop),
+                                     static_cast<int16_t>(std::max<int16_t>(0, innerWidth - kProgressWidth - 8)),
+                                     titleHeight};
+            const ui::Rect progressRect{static_cast<int16_t>(left + innerWidth - kProgressWidth),
+                                        static_cast<int16_t>(row.y + kTitleTop), kProgressWidth,
+                                        librarylist::kTitleLineHeight};
+            const int16_t detailTop = static_cast<int16_t>(titleRect.y + titleHeight + 4);
+            const int16_t detailWidth = static_cast<int16_t>(std::max<int16_t>(0, (innerWidth - 8) / 2));
+            const ui::Rect authorRect{left, detailTop, detailWidth, kDetailLineHeight};
+            const ui::Rect chapterRect{static_cast<int16_t>(left + innerWidth - detailWidth), detailTop, detailWidth,
+                                       kDetailLineHeight};
+            const ui::Rect barRect{left, static_cast<int16_t>(row.y + row.h - kProgressBarHeight - 3), innerWidth,
+                                   kProgressBarHeight};
+
+            // Text has no clipping, so rows sliding in at the viewport edges draw
+            // each text block only once it fits completely.
+            for (size_t line = 0; line < lines.size(); ++line) {
+                const ui::Rect lineRect{titleRect.x,
+                                        static_cast<int16_t>(titleRect.y + librarylist::kTitleLineHeight * line),
+                                        titleRect.w, librarylist::kTitleLineHeight};
+                if (inside(lineRect, clip))
+                    ui.drawText(lineRect, lines[line], kTitleTextSize, ui.color(ui::themes::ColorRole::Foreground));
+            }
+            if (inside(progressRect, clip)) {
+                std::array<char, 5> buffer{};
+                ui.drawText(progressRect, percentText(buffer, item.progress), 2,
+                            ui.color(ui::themes::ColorRole::Accent), ui::TextAlign::Right);
+            }
+            if (inside(authorRect, clip)) {
+                const std::string_view name = author(item);
+                ui.drawText(authorRect, name.empty() ? ui.text(UiText::Unknown) : name, 1,
+                            ui.color(ui::themes::ColorRole::Muted));
+            }
+            if (inside(chapterRect, clip) && !item.chapter.empty())
+                ui.drawText(chapterRect, item.chapter, 1, ui.color(ui::themes::ColorRole::Muted),
+                            ui::TextAlign::Right);
+            fillClipped(gfx, barRect, clip, ui.color(ui::themes::ColorRole::ProgressTrack));
+            if (item.progress > 0)
+                fillClipped(gfx,
+                            {barRect.x, barRect.y,
+                             static_cast<int16_t>(std::max<int32_t>(2, barRect.w * item.progress / 100)), barRect.h},
+                            clip, ui.color(ui::themes::ColorRole::Accent));
+        }
+
     } // namespace
 
-    Action LibraryScreen::draw(ui::Context& ui, const std::vector<LibraryItem>& items, uint32_t nowMs, Screen& screen) {
+    Action LibraryScreen::draw(ui::Context& ui, const std::vector<LibraryItem>& items, settings::LibraryLayout layout,
+                               uint32_t nowMs, Screen& screen) {
         (void)nowMs;
         Action result = Action::None;
-        const ui::Touch* touch = ui.touch();
-        selectedIndex_ = items.empty() ? 0 : std::min(selectedIndex_, items.size() - 1);
         if (const Action action = detail::navigation(ui, Screen::Library, screen); action != Action::None) {
             result = action;
         }
-
-        if (ui.width() < 620 || ui.height() < 150 || ui.height() > 240) {
-            ui::Column column{detail::tabContent(ui), 4};
-            const size_t visible = std::min<size_t>(items.size(), std::max<int16_t>(1, column.bounds.h / 36));
-            for (size_t index = 0; index < visible; ++index) {
-                if (ui.button(column.next(32), title(items[index]))) {
-                    result = Action::OpenBook;
-                    selectedIndex_ = index;
-                }
-            }
-            return result;
-        }
+        selectedIndex_ = items.empty() ? 0 : std::min(selectedIndex_, items.size() - 1);
+        if (revealSelected_ && activeIndex_ < items.size())
+            selectedIndex_ = activeIndex_;
 
         const ui::Rect content = detail::tabContent(ui);
+        // The shelf needs the wide strip display; every other board gets the list.
+        const bool wide = ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240;
+        const Action action = layout == settings::LibraryLayout::shelf && wide ? drawShelf(ui, items, content)
+                                                                                : drawList(ui, items, content);
+        revealSelected_ = false;
+        return action != Action::None ? action : result;
+    }
+
+    Action LibraryScreen::drawShelf(ui::Context& ui, const std::vector<LibraryItem>& items, const ui::Rect& content) {
+        Action result = Action::None;
+        const ui::Touch* touch = ui.touch();
         const int16_t detailY = static_cast<int16_t>(content.y + content.h - kDetailHeight);
         const ui::Rect viewport{content.x, content.y, content.w,
                                 std::max<int16_t>(0, static_cast<int16_t>(detailY - kDetailGap - content.y))};
@@ -178,7 +277,7 @@ namespace screens {
             const int32_t dy = static_cast<int32_t>(touch->y) - startY_;
             moved_ = moved_ || std::abs(dx) > kDragThreshold || std::abs(dy) > kDragThreshold;
             if (moved_) {
-                offset_ = clampOffset(items, startOffset_ + dx, viewport.w);
+                offset_ = clampShelfOffset(items, startOffset_ + dx, viewport.w);
                 selectedIndex_ = nearest(items, offset_, marker, viewport.x);
             }
         }
@@ -187,7 +286,7 @@ namespace screens {
             const int32_t dy = static_cast<int32_t>(touch->y) - startY_;
             moved_ = moved_ || std::abs(dx) > kDragThreshold || std::abs(dy) > kDragThreshold;
             if (moved_) {
-                offset_ = clampOffset(items, startOffset_ + dx, viewport.w);
+                offset_ = clampShelfOffset(items, startOffset_ + dx, viewport.w);
                 selectedIndex_ = nearest(items, offset_, marker, viewport.x);
                 offset_ = centeredOffset(items, selectedIndex_, viewport.w);
             } else if (!items.empty() && ui::hasTouch(*touch, ui::TouchTap)
@@ -215,7 +314,7 @@ namespace screens {
         const int32_t contentLeft = -offset_;
         const size_t first = firstVisibleSpine(contentLeft, items.size());
         const size_t pastLast = pastLastVisibleSpine(contentLeft + viewport.w, items.size());
-        const bool redrawShelf = ui.redraw(shelfRect, signature(items, selectedIndex_, first, pastLast));
+        const bool redrawShelf = ui.redraw(shelfRect, shelfSignature(items, selectedIndex_, first, pastLast));
         if (redrawShelf) {
             Arduino_GFX& gfx = ui.gfx();
             const uint16_t foreground = ui.color(ui::themes::ColorRole::Foreground);
@@ -264,28 +363,99 @@ namespace screens {
         const int16_t textWidth = static_cast<int16_t>(detailRect.w - progressWidth - detailGap);
         const LibraryItem& item = items[selectedIndex_];
         const std::string_view itemTitle = title(item);
-        const std::string_view author = item.book == nullptr || item.book->author.empty()
-                                          ? ui.text(UiText::Unknown)
-                                          : std::string_view{item.book->author};
+        const std::string_view itemAuthor = author(item).empty() ? ui.text(UiText::Unknown) : author(item);
         std::array<char, 5> progress{};
-        const auto [end, error] = std::to_chars(progress.data(), progress.data() + progress.size() - 1, item.progress);
-        const size_t digits = error == std::errc{} ? static_cast<size_t>(end - progress.data()) : 1;
-        progress[digits] = '%';
+        const std::string_view progressLabel = percentText(progress, item.progress);
         uint32_t detailState = ui::Context::signature(itemTitle);
-        detailState = ui::Context::signature(author, detailState);
+        detailState = ui::Context::signature(itemAuthor, detailState);
         detailState = ui::Context::signature(item.chapter, detailState);
         detailState = ui::Context::combine(detailState, item.progress);
         if (ui.redraw(detailRect, detailState)) {
             ui.drawText({detailRect.x, detailRect.y, textWidth, 18}, itemTitle, 2,
                         ui.color(ui::themes::ColorRole::Foreground));
-            ui.drawText({detailRect.x, static_cast<int16_t>(detailRect.y + 20), textWidth, 10}, author, 1,
+            ui.drawText({detailRect.x, static_cast<int16_t>(detailRect.y + 20), textWidth, 10}, itemAuthor, 1,
                         ui.color(ui::themes::ColorRole::Muted));
             ui.drawText({detailRect.x, static_cast<int16_t>(detailRect.y + 33), textWidth, 10}, item.chapter, 1,
                         ui.color(ui::themes::ColorRole::Muted));
             ui.drawText({static_cast<int16_t>(detailRect.x + detailRect.w - progressWidth), detailRect.y,
                          progressWidth, detailRect.h},
-                        std::string_view{progress.data(), digits + 1}, 3,
-                        ui.color(ui::themes::ColorRole::Accent), ui::TextAlign::Right);
+                        progressLabel, 3, ui.color(ui::themes::ColorRole::Accent), ui::TextAlign::Right);
+        }
+        return result;
+    }
+
+    Action LibraryScreen::drawList(ui::Context& ui, const std::vector<LibraryItem>& items, const ui::Rect& content) {
+        using namespace librarylist;
+        Action result = Action::None;
+        const ui::Touch* touch = ui.touch();
+        const ui::Rect viewport{content.x, content.y,
+                                static_cast<int16_t>(std::max<int16_t>(0, content.w - kScrollbarWidth - kScrollbarGap)),
+                                content.h};
+        const ui::Rect track{static_cast<int16_t>(content.x + content.w - kScrollbarWidth), content.y, kScrollbarWidth,
+                             content.h};
+        const size_t count = items.size();
+        const size_t capacity = titleCapacity(static_cast<int16_t>(viewport.w - kRowInset * 2 - kProgressWidth - 8));
+        rowHeights_.resize(count);
+        for (size_t index = 0; index < count; ++index)
+            rowHeights_[index] = rowHeight(wrapLines(title(items[index]), capacity, nullptr));
+        layout(rowHeights_, rowTops_);
+        const Rows rows{rowTops_, rowHeights_};
+
+        if (revealSelected_)
+            offset_ = offsetToReveal(rows, selectedIndex_, offset_, viewport.h);
+        offset_ = clampOffset(rows, offset_, viewport.h);
+
+        if (touch != nullptr && ui::hasTouch(*touch, ui::TouchStart) && ui::contains(content, touch->x, touch->y)) {
+            dragging_ = true;
+            moved_ = false;
+            startX_ = touch->x;
+            startY_ = touch->y;
+            startOffset_ = offset_;
+        }
+        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchMove)) {
+            const int32_t dx = static_cast<int32_t>(touch->x) - startX_;
+            const int32_t dy = static_cast<int32_t>(touch->y) - startY_;
+            moved_ = moved_ || std::abs(dx) > kDragThreshold || std::abs(dy) > kDragThreshold;
+            if (moved_)
+                offset_ = clampOffset(rows, startOffset_ - dy, viewport.h);
+        }
+        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)) {
+            const int32_t dx = static_cast<int32_t>(touch->x) - startX_;
+            const int32_t dy = static_cast<int32_t>(touch->y) - startY_;
+            moved_ = moved_ || std::abs(dx) > kDragThreshold || std::abs(dy) > kDragThreshold;
+            if (moved_) {
+                offset_ = clampOffset(rows, startOffset_ - dy, viewport.h);
+            } else if (ui::hasTouch(*touch, ui::TouchTap) && ui::contains(viewport, touch->x, touch->y)) {
+                const size_t tapped = rowAt(rows, offset_, static_cast<int32_t>(touch->y) - viewport.y);
+                if (tapped < count) {
+                    selectedIndex_ = tapped;
+                    result = Action::OpenBook;
+                }
+            }
+            dragging_ = false;
+        }
+
+        if (count == 0) {
+            ui.label(content, ui.text(UiText::NoLibraryItems), 2, ui::themes::ColorRole::Muted,
+                     ui::TextAlign::Center);
+            return result;
+        }
+
+        const size_t first = firstVisible(rows, offset_);
+        const size_t pastLast = pastLastVisible(rows, offset_, viewport.h);
+        if (ui.redraw(content, listSignature(items, first, pastLast))) {
+            Arduino_GFX& gfx = ui.gfx();
+            for (size_t index = first; index < pastLast; ++index) {
+                const ui::Rect row{viewport.x, static_cast<int16_t>(viewport.y + rows.tops[index] - offset_),
+                                   viewport.w, rows.heights[index]};
+                drawRow(ui, items[index], row, viewport, index == selectedIndex_, capacity);
+            }
+            if (contentHeight(rows) > viewport.h) {
+                const Thumb thumb = scrollThumb(rows, offset_, viewport.h, track.h);
+                gfx.fillRect(track.x, track.y, track.w, track.h, ui.color(ui::themes::ColorRole::ProgressTrack));
+                gfx.fillRect(track.x, static_cast<int16_t>(track.y + thumb.y), track.w, thumb.h,
+                             ui.color(ui::themes::ColorRole::Muted));
+            }
         }
         return result;
     }
@@ -294,20 +464,24 @@ namespace screens {
         dragging_ = false;
         moved_ = false;
         offset_ = 0;
+        revealSelected_ = true;
     }
 
     void LibraryScreen::invalidate() {
         items_.clear();
         itemsValid_ = false;
+        activeIndex_ = SIZE_MAX;
     }
 
     const std::vector<LibraryItem>& LibraryScreen::items(StorageManager& storage, const IndexedBookStore& bookStore,
                                                          const ReadingSession& session) {
+        (void)bookStore;
         const size_t bookCount = storage.books().size();
         if (itemsValid_ && items_.size() == bookCount) {
             const int activeIndex = storage.findBook(session.sourcePath());
             if (activeIndex >= 0 && static_cast<size_t>(activeIndex) < items_.size()) {
-                LibraryItem& current = items_[static_cast<size_t>(activeIndex)];
+                activeIndex_ = static_cast<size_t>(activeIndex);
+                LibraryItem& current = items_[activeIndex_];
                 current.progress = ReadingProgress::percent(session.state.wordIndex, ReadingLoop::wordCount(session));
                 if (const ChapterMarker* chapter = session.metadata.chapterAt(session.state.wordIndex)) {
                     current.chapter = chapter->title;
@@ -318,6 +492,7 @@ namespace screens {
 
         items_.clear();
         items_.reserve(bookCount);
+        activeIndex_ = SIZE_MAX;
         for (size_t index = 0; index < bookCount; ++index) {
             const BookLibrary::Entry& book = storage.books()[index];
             LibraryItem item{.book = &book};
@@ -328,6 +503,7 @@ namespace screens {
             bool hasPosition = false;
 
             if (session.sourcePath() == book.path) {
+                activeIndex_ = index;
                 wordIndex = static_cast<uint32_t>(session.state.wordIndex);
                 item.progress = ReadingProgress::percent(wordIndex, ReadingLoop::wordCount(session));
                 if (const ChapterMarker* chapter = session.metadata.chapterAt(wordIndex))
@@ -361,11 +537,11 @@ namespace screens {
         if (items.empty())
             return 0;
         index = std::min(index, items.size() - 1);
-        return clampOffset(items, viewportWidth / 2 - spineLeft(index) - spineWidth(index) / 2, viewportWidth);
+        return clampShelfOffset(items, viewportWidth / 2 - spineLeft(index) - spineWidth(index) / 2, viewportWidth);
     }
 
-    int32_t LibraryScreen::clampOffset(const std::vector<LibraryItem>& items, int32_t offset,
-                                       int16_t viewportWidth) const {
+    int32_t LibraryScreen::clampShelfOffset(const std::vector<LibraryItem>& items, int32_t offset,
+                                            int16_t viewportWidth) const {
         if (items.empty())
             return 0;
         const size_t last = items.size() - 1;
@@ -417,14 +593,28 @@ namespace screens {
                                                            + (index * 5) % 17));
     }
 
-    uint32_t LibraryScreen::signature(const std::vector<LibraryItem>& items, size_t current, size_t first,
-                                      size_t pastLast) const {
+    uint32_t LibraryScreen::shelfSignature(const std::vector<LibraryItem>& items, size_t current, size_t first,
+                                           size_t pastLast) const {
         uint32_t value = ui::Context::combine(Fnv1a::kOffsetBasis, static_cast<uint32_t>(offset_));
         value = ui::Context::combine(value, static_cast<uint32_t>(current));
         value = ui::Context::combine(value, items.size());
         for (size_t index = first; index < pastLast; ++index) {
             const LibraryItem& item = items[index];
             value = ui::Context::signature(title(item), value);
+            value = ui::Context::combine(value, item.progress);
+        }
+        return value;
+    }
+
+    uint32_t LibraryScreen::listSignature(const std::vector<LibraryItem>& items, size_t first, size_t pastLast) const {
+        uint32_t value = ui::Context::combine(Fnv1a::kOffsetBasis, static_cast<uint32_t>(offset_));
+        value = ui::Context::combine(value, static_cast<uint32_t>(selectedIndex_));
+        value = ui::Context::combine(value, items.size());
+        for (size_t index = first; index < pastLast; ++index) {
+            const LibraryItem& item = items[index];
+            value = ui::Context::signature(title(item), value);
+            value = ui::Context::signature(author(item), value);
+            value = ui::Context::signature(item.chapter, value);
             value = ui::Context::combine(value, item.progress);
         }
         return value;

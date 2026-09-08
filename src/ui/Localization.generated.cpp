@@ -9,7 +9,7 @@
 namespace {
 
     constexpr size_t kTextCount = static_cast<size_t>(UiText::Count);
-    static_assert(kTextCount == 166, "UiText count mismatch");
+    static_assert(kTextCount == 169, "UiText count mismatch");
 
     using TextRow = std::array<std::string_view, kTextCount>;
 
@@ -38,6 +38,9 @@ namespace {
         /* FontSize                 */ "Font size",
         /* Typeface                 */ "Typeface",
         /* PhantomWords             */ "Phantom words",
+        /* ChapterPause             */ "Chapter pause",
+        /* Shelf                    */ "Shelf",
+        /* List                     */ "List",
         /* RedHighlight             */ "Red highlight",
         /* Tracking                 */ "Tracking",
         /* Anchor                   */ "Anchor",
