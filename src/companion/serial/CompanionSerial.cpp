@@ -20,7 +20,6 @@
 namespace {
 
     constexpr std::string_view kHandshake = "RSVPNANO/COMPANION/1\n";
-    constexpr uint32_t kSessionTimeoutMs = 15'000;
     constexpr size_t kMaximumJsonRequestBytes = 8 * 1024;
     constexpr uint64_t kMaximumRequestBytes = 256ULL * 1024ULL * 1024ULL;
     constexpr std::string_view kSpoolPath = "/.companion-usb-request.tmp";
@@ -75,11 +74,11 @@ void CompanionSerial::update(uint32_t nowMs) {
         return;
     }
 
-    readFrames(nowMs);
-    if (nowMs - lastTrafficMs_ >= kSessionTimeoutMs) {
-        sendFrame({.type = companion::serial::FrameType::Close});
+    if (!Serial) {
         close();
+        return;
     }
+    readFrames();
 }
 
 void CompanionSerial::close() {
@@ -119,13 +118,12 @@ void CompanionSerial::readHandshake(uint32_t nowMs) {
         if (Serial.setRxBufferSize(2 * companion::serial::kChunkBytes) == 0)
             return;
         Serial.setDebugOutput(false);
-        Serial.print("RSVPNANO/COMPANION/1 READY\n");
+        Serial.print("RSVPNANO/COMPANION/1 READY persistent\n");
         Serial.flush();
         decoder_.clear();
         resetRequest();
         active_ = true;
         writeFailed_ = false;
-        lastTrafficMs_ = nowMs;
         return;
     }
 }
@@ -252,17 +250,16 @@ void CompanionSerial::sendImprovResponse(improv::Command command, const std::vec
     sendImprov(improv::TYPE_RPC_RESPONSE, data);
 }
 
-void CompanionSerial::readFrames(uint32_t nowMs) {
+void CompanionSerial::readFrames() {
     std::array<uint8_t, 512> bytes{};
     while (Serial.available() > 0) {
         const size_t count = Serial.readBytes(bytes.data(), std::min<size_t>(Serial.available(), bytes.size()));
         if (count == 0)
             break;
-        lastTrafficMs_ = nowMs;
         decoder_.append(std::span{bytes}.first(count));
     }
     for (auto& frame: decoder_.takeFrames()) {
-        handleFrame(std::move(frame), nowMs);
+        handleFrame(std::move(frame));
         if (writeFailed_)
             close();
         if (!active_)
@@ -270,9 +267,8 @@ void CompanionSerial::readFrames(uint32_t nowMs) {
     }
 }
 
-void CompanionSerial::handleFrame(companion::serial::Frame frame, uint32_t nowMs) {
+void CompanionSerial::handleFrame(companion::serial::Frame frame) {
     using companion::serial::FrameType;
-    lastTrafficMs_ = nowMs;
     switch (frame.type) {
     case FrameType::Ping:
         sendFrame({.type = FrameType::Pong});

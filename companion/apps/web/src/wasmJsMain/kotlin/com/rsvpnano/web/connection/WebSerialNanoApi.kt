@@ -28,7 +28,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -104,7 +103,6 @@ internal class WebSerialNanoApi(
     private val writeMutex = Mutex()
     private var frames = Channel<SerialFrame>(Channel.UNLIMITED)
     private var readerJob: Job? = null
-    private var heartbeatJob: Job? = null
     private var nextRequestId = 1u
     private var opened = false
     private var onDisconnect: (String) -> Unit = {}
@@ -123,31 +121,22 @@ internal class WebSerialNanoApi(
                 while (true) {
                     text = (text + bridgeRead().decodeToString()).takeLast(4096)
                     when {
-                        "RSVPNANO/COMPANION/1 READY" in text -> return@withTimeout text
+                        "RSVPNANO/COMPANION/1 READY" in text && '\n' in text.substringAfter("RSVPNANO/COMPANION/1 READY") -> return@withTimeout text
                         "BUSY MSC" in text -> throw NanoClientError("Exit USB Sync on the Nano before connecting the web companion.")
                         "UNSUPPORTED" in text -> throw NanoClientError("This firmware does not support USB companion protocol 1.")
                     }
                 }
                 @Suppress("UNREACHABLE_CODE") text
             }
-            check("READY" in greeting)
+            if ("RSVPNANO/COMPANION/1 READY persistent" !in greeting) {
+                throw NanoClientError("Update the Nano firmware to use persistent USB connections.")
+            }
             opened = true
             this.onDisconnect = onDisconnect
             frames = Channel(Channel.UNLIMITED)
             val session = frames
             readerJob = scope.launch { readFrames(session) }
-            heartbeatJob = scope.launch {
-                try {
-                    while (isActive) {
-                        delay(5_000)
-                        sendFrame(SerialFrame(SerialFrameType.Ping), session)
-                    }
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: Throwable) {
-                    failSession(error, session)
-                }
-            }
+
             true
         } catch (error: Throwable) {
             withContext(NonCancellable) { bridgeCloseIgnoringErrors() }
@@ -347,7 +336,6 @@ internal class WebSerialNanoApi(
     private suspend fun closeSession(error: Throwable? = null) {
         if (opened && error == null) runCatching { sendFrame(SerialFrame(SerialFrameType.Close)) }
         opened = false
-        heartbeatJob?.cancel()
         readerJob?.cancel()
         frames.close(error)
         bridgeCloseIgnoringErrors()
@@ -419,10 +407,10 @@ private suspend fun bridgeCloseIgnoringErrors() = suspendCancellableCoroutine { 
     serialClose { if (continuation.isActive) continuation.resume(Unit) }
 }
 
-@JsFun("""(ok, fail) => { (async () => { try { const key = 'rsvpnano.web.usbDevice'; let saved = null; try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { localStorage.removeItem(key); } const authorized = await navigator.serial.getPorts(); const matches = saved ? authorized.filter(port => { const info = port.getInfo(); return info.usbVendorId === saved.usbVendorId && info.usbProductId === saved.usbProductId; }) : []; const port = matches.length === 1 ? matches[0] : authorized.length === 1 ? authorized[0] : await navigator.serial.requestPort(); await port.open({ baudRate: 115200 }); const info = port.getInfo(); if (info.usbVendorId || info.usbProductId) localStorage.setItem(key, JSON.stringify({ usbVendorId: info.usbVendorId || 0, usbProductId: info.usbProductId || 0 })); globalThis.rsvpNanoSerial = { port, reader: port.readable.getReader(), writer: port.writable.getWriter() }; ok('ok'); } catch (error) { fail(error?.message || String(error)); } })(); }""")
+@JsFun("""(ok, fail) => { (async () => { try { const key = 'rsvpnano.web.usbDevice'; let saved = null; try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { localStorage.removeItem(key); } const authorized = await navigator.serial.getPorts(); const matches = saved ? authorized.filter(port => { const info = port.getInfo(); return info.usbVendorId === saved.usbVendorId && info.usbProductId === saved.usbProductId; }) : []; const port = matches.length === 1 ? matches[0] : authorized.length === 1 ? authorized[0] : await navigator.serial.requestPort(); await port.open({ baudRate: 115200 }); await port.setSignals({ dataTerminalReady: true, requestToSend: true }).catch(async error => { await port.close(); throw error; }); const info = port.getInfo(); if (info.usbVendorId || info.usbProductId) localStorage.setItem(key, JSON.stringify({ usbVendorId: info.usbVendorId || 0, usbProductId: info.usbProductId || 0 })); globalThis.rsvpNanoSerial = { port, reader: port.readable.getReader(), writer: port.writable.getWriter() }; ok('ok'); } catch (error) { fail(error?.message || String(error)); } })(); }""")
 private external fun serialOpen(ok: (String) -> Unit, fail: (String) -> Unit)
 
-@JsFun("""(ok, fail) => { (async () => { try { const key = 'rsvpnano.web.usbDevice'; let saved = null; try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { localStorage.removeItem(key); } const authorized = await navigator.serial.getPorts(); const matches = saved ? authorized.filter(port => { const info = port.getInfo(); return info.usbVendorId === saved.usbVendorId && info.usbProductId === saved.usbProductId; }) : authorized; if (matches.length !== 1) { ok(false); return; } const port = matches[0]; await port.open({ baudRate: 115200 }); const info = port.getInfo(); if (info.usbVendorId || info.usbProductId) localStorage.setItem(key, JSON.stringify({ usbVendorId: info.usbVendorId || 0, usbProductId: info.usbProductId || 0 })); globalThis.rsvpNanoSerial = { port, reader: port.readable.getReader(), writer: port.writable.getWriter() }; ok(true); } catch (error) { fail(error?.message || String(error)); } })(); }""")
+@JsFun("""(ok, fail) => { (async () => { try { const key = 'rsvpnano.web.usbDevice'; let saved = null; try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { localStorage.removeItem(key); } const authorized = await navigator.serial.getPorts(); const matches = saved ? authorized.filter(port => { const info = port.getInfo(); return info.usbVendorId === saved.usbVendorId && info.usbProductId === saved.usbProductId; }) : authorized; if (matches.length !== 1) { ok(false); return; } const port = matches[0]; await port.open({ baudRate: 115200 }); await port.setSignals({ dataTerminalReady: true, requestToSend: true }).catch(async error => { await port.close(); throw error; }); const info = port.getInfo(); if (info.usbVendorId || info.usbProductId) localStorage.setItem(key, JSON.stringify({ usbVendorId: info.usbVendorId || 0, usbProductId: info.usbProductId || 0 })); globalThis.rsvpNanoSerial = { port, reader: port.readable.getReader(), writer: port.writable.getWriter() }; ok(true); } catch (error) { fail(error?.message || String(error)); } })(); }""")
 private external fun serialOpenAuthorized(ok: (Boolean) -> Unit, fail: (String) -> Unit)
 
 @JsFun("""(ok, fail) => { const serial = globalThis.rsvpNanoSerial; if (!serial) { fail('No USB port is open.'); return; } serial.reader.read().then(({ value, done }) => { if (done || !value) { ok(''); return; } let text = ''; for (let i = 0; i < value.length; i++) text += String.fromCharCode(value[i]); ok(btoa(text)); }).catch(error => fail(error?.message || String(error))); }""")

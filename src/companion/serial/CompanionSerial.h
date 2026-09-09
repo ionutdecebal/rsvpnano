@@ -55,8 +55,8 @@ private:
     void sendImprovState(improv::State state);
     void sendImprovError(improv::Error error);
     void sendImprovResponse(improv::Command command, const std::vector<std::string>& values);
-    void readFrames(uint32_t nowMs);
-    void handleFrame(companion::serial::Frame frame, uint32_t nowMs);
+    void readFrames();
+    void handleFrame(companion::serial::Frame frame);
     void handleRequestEnd(const companion::serial::Frame& frame);
     void dispatchRequest(companion::BufferedRequest& buffered);
     void sendResponse(uint32_t requestId, int status, std::string body);
@@ -85,7 +85,6 @@ private:
     uint32_t responseRequestId_ = 0;
     uint32_t responseSequence_ = 0;
     size_t responseOffset_ = 0;
-    uint32_t lastTrafficMs_ = 0;
     uint32_t improvLastByteMs_ = 0;
     uint32_t provisioningDeadlineMs_ = 0;
     improv::State improvState_ = improv::STATE_AUTHORIZED;

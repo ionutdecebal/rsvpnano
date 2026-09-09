@@ -79,3 +79,9 @@ The default run performs three complete read passes and reports request latency.
 Use `--no-upload --base-url http://DEVICE_IP` to rerun against API-test firmware already installed. The hardware test is skipped during ordinary Gradle checks unless `RSVPNANO_DEVICE_URL` is set.
 
 The implementation is organized by domain under `src/companion`; the main app contains no benchmark or API-test branches.
+
+### USB connection lifetime
+
+USB companion sessions remain open until the host closes the port, the cable disconnects, or a transport error ends the session. There is no idle timeout and the browser sends no periodic keepalive probes. The browser asserts DTR and RTS when opening the serial port; firmware uses the native CDC connection state to release abandoned sessions.
+
+Firmware advertises this behavior with `RSVPNANO/COMPANION/1 READY persistent\n`. The browser requires this capability and requests a firmware update for older devices with timed sessions. Existing clients can still send Ping frames and receive Pong responses.
