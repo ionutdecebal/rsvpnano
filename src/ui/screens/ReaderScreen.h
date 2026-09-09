@@ -16,6 +16,7 @@
 #include "text/BidiText.h"
 #include "ui/Ui.h"
 #include "ui/screens/PageReaderScreen.h"
+#include "ui/screens/Screens.h"
 
 namespace screens {
 
@@ -30,6 +31,7 @@ namespace screens {
         void applyTheme(const ui::themes::Theme& theme);
         void releaseRuntimeCaches();
         void refreshTypography();
+        bool appearance(ui::Context& ui, Screen& screen);
         void refreshTypography(const settings::ReadingSettings& settings, const settings::ReadingOverrides& overrides);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
         void prepareBookOpen(Preferences& preferences, uint32_t nowMs);
@@ -48,6 +50,7 @@ namespace screens {
 
     private:
         int focusOffset(std::string_view word) const;
+        void drawGuides(ui::Context& ui, int16_t anchor, int16_t baseline);
         int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
         void drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft, int16_t baseline,
                          bool vertical, ui::Context& ui);
@@ -100,6 +103,8 @@ namespace screens {
         settings::TypographySettings typography_;
         uint16_t background_ = 0;
         bool touching_ = false;
+        uint8_t appearancePage_ = 0;
+        uint8_t appearanceDialPage_ = 0;
         uint16_t touchStartX_ = 0;
         uint16_t touchStartY_ = 0;
         size_t touchStartWord_ = 0;

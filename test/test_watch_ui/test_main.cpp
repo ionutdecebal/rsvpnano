@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "AppearanceChecks.h"
 #include "ui/Layouts.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/ReaderLayout.h"
@@ -42,9 +43,8 @@ namespace {
             ui.setTheme(theme);
             settings::ReadingSettings reading;
             settings::PacingSettings pacing;
-            constexpr std::array screens{screens::Screen::Read,           screens::Screen::Settings,
-                                         screens::Screen::Device,         screens::Screen::ReadingSettings,
-                                         screens::Screen::PacingSettings, screens::Screen::ReaderSettings};
+            constexpr std::array screens{screens::Screen::Read, screens::Screen::Settings, screens::Screen::Device,
+                                         screens::Screen::ReadingSettings, screens::Screen::PacingSettings};
             for (auto screen: screens) {
                 ui.beginFrame(static_cast<uint8_t>(screen));
                 switch (screen) {
@@ -62,9 +62,6 @@ namespace {
                     break;
                 case screens::Screen::PacingSettings:
                     screens::pacingSettings(ui, pacing, screen);
-                    break;
-                case screens::Screen::ReaderSettings:
-                    screens::readerSettings(ui, reading, screen);
                     break;
                 default:
                     break;
@@ -180,9 +177,7 @@ namespace {
                                                    .footer = "64%",
                                                    .batteryLabel = "64%",
                                                    .overlay = "300 WPM",
-                                                   .showChapter = true,
-                                                   .showProgress = true,
-                                                   .showBattery = true,
+
                                                    .topState = 1,
                                                    .bottomState = 1},
                                                   settings, battery);
@@ -261,9 +256,17 @@ namespace {
 
 void setUp() {}
 void tearDown() {}
+void test_appearance_controls_fit_watch_displays() {
+    for (const auto size: std::array<ui::TouchSurface, 5>{{{600, 450}, {480, 480}, {502, 410}, {448, 368}, {320, 172}}})
+        appearanceChecks::layout(size.width, size.height);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_screens_fit_every_watch_resolution);
+    RUN_TEST(test_appearance_controls_fit_watch_displays);
+    RUN_TEST(appearanceChecks::fourRotaries);
+    RUN_TEST(appearanceChecks::wordTargets);
     RUN_TEST(test_carousel_swipes_are_directional_and_wrap);
     RUN_TEST(test_rotary_uses_relative_delta_and_clamps);
     RUN_TEST(test_paging_never_exposes_offscreen_hit_targets_and_resets);

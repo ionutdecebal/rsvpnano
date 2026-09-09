@@ -27,7 +27,7 @@ successful load expands it to the full canonical document. For example:
 [reading]
 wpm = 350
 batteryLabel = "percentage"
-batteryIconVisible = true
+batteryIconVisibility = "always"
 
 [reading.typography]
 fontId = "literata"
@@ -40,6 +40,11 @@ selectedThemeId = "default"
 [network]
 wifiSsid = "Home"
 ```
+
+Reader elements use `batteryIconVisibility`, `batteryLabelVisibility`, `chapterVisibility`,
+`progressVisibility`, and `arrowsVisibility`. Each accepts `"always"`, `"reading"`, `"paused"`,
+or `"never"`. The on-device editor toggles the selected Reading or Paused state without
+changing visibility in the other state. Typography is shared between both states.
 
 Runtime code reads settings from `SettingsStore` in RAM. Accepted changes are saved after a short
 debounce rather than writing flash for every UI step. NVS stores the same canonical TOML as one

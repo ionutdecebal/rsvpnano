@@ -162,7 +162,7 @@ namespace ui {
 
         void label(Rect rect, std::string_view text, uint8_t textSize = 2,
                    ui::themes::ColorRole role = ui::themes::ColorRole::Foreground, TextAlign align = TextAlign::Start,
-                   uint8_t textLines = 1, std::string_view textLocale = {});
+                   uint8_t textLines = 1, std::string_view textLocale = {}, uint8_t alpha = 255);
         void separator(Rect rect, std::string_view text);
         bool setting(Rect rect, std::string_view label, std::string_view value,
                      SettingLayout layout = SettingLayout::Stacked);
@@ -182,7 +182,8 @@ namespace ui {
         bool rotary(Rect rect, int& value, int minimum, int maximum, int step, std::string_view label = {});
         PagedGrid pagedGrid(Rect rect, size_t count, uint8_t columns = 1, int16_t minimumHeight = 54);
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
-        void battery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon = true);
+        void battery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon = true,
+                     uint8_t alpha = 255);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);
@@ -351,6 +352,7 @@ namespace ui {
         uint8_t screen_ = 0xFF;
         size_t gridPage_ = 0;
         bool rotaryDragging_ = false;
+        Rect rotaryRect_{};
         int16_t rotaryStartX_ = 0;
         int rotaryStartValue_ = 0;
         bool invalid_ = true;

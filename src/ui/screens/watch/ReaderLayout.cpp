@@ -11,9 +11,6 @@ namespace screens::readerLayout {
         return {left, 42, static_cast<int16_t>(std::max<int>(0, width - left - right)),
                 static_cast<int16_t>(std::max<int>(0, height - 84))};
     }
-    ui::Rect batteryRect(int16_t width) {
-        return {static_cast<int16_t>(width - 112), 0, 104, 42};
-    }
     ui::Rect portraitTopStrip(int16_t width) {
         return {0, 0, width, 64};
     }
@@ -39,13 +36,32 @@ namespace screens::readerLayout {
         return 48;
     }
 
+    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded) {
+        const int16_t footerWidth = width / 3;
+        const int16_t y = height - 40;
+        return {
+            .chapter = {static_cast<int16_t>(leftHanded ? footerWidth + 60 : 8), y,
+                        static_cast<int16_t>(width - footerWidth - 76), 40},
+            .progress = {static_cast<int16_t>(leftHanded ? 8 : width - footerWidth - 8), y, footerWidth, 40},
+            .batteryIcon = {static_cast<int16_t>(width - 124), 2, 36, 36},
+            .batteryLabel = {static_cast<int16_t>(width - 82), 2, 72, 36},
+            .arrows = {static_cast<int16_t>(leftHanded ? 4 : width - 48), static_cast<int16_t>(height / 2 - 22), 44,
+                       44},
+            .textSize = static_cast<uint8_t>(height < 240 ? 2 : 3),
+        };
+    }
+
     void chrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,
                 const Board::Power::BatteryState& battery) {
-        const bool vertical = view.vertical, showChapter = view.showChapter, showProgress = view.showProgress;
-        const bool showBattery = view.showBattery, leftHanded = settings.leftHanded;
+        const bool vertical = view.vertical;
+        const bool showChapter = settings::visible(settings.chapterVisibility, view.reading);
+        const bool showProgress = settings::visible(settings.progressVisibility, view.reading);
+        const bool showArrows = settings::visible(settings.arrowsVisibility, view.reading);
+        const bool showBattery = settings::visible(settings.batteryLabelVisibility, view.reading),
+                   leftHanded = settings.leftHanded;
         const auto chapter = view.chapter, footer = view.footer;
         const auto batteryLabel = view.batteryLabel;
-        const bool showBatteryIcon = settings.batteryIconVisible && showBattery;
+        const bool showBatteryIcon = settings::visible(settings.batteryIconVisibility, view.reading);
         const auto muted = ui.color(ui::themes::Muted);
         if (vertical) {
             const int16_t width = ui.height(), height = ui.width();
@@ -56,9 +72,9 @@ namespace screens::readerLayout {
             state = ui::Context::combine(state, battery.charging);
             state = ui::Context::combine(state, battery.status.percent);
             if (ui.redraw(ui::rotateClockwise(portraitTopStrip(width), width), state)) {
-                if (showBattery)
-                    ui.portraitBattery(portraitBatteryRect(), battery.status.percent, battery.charging, batteryLabel,
-                                       showBatteryIcon);
+                if (showBattery || showBatteryIcon)
+                    ui.portraitBattery(portraitBatteryRect(), battery.status.percent, battery.charging,
+                                       showBattery ? batteryLabel : std::string_view{}, showBatteryIcon);
                 if (!view.overlay.empty())
                     ui.portraitText(portraitFeedbackRect(), view.overlay, 2, ui.color(ui::themes::Accent),
                                     ui::TextAlign::Center);
@@ -71,20 +87,12 @@ namespace screens::readerLayout {
                 if (showChapter)
                     ui.portraitVerticalText(chapterRect, chapter, 2, muted);
             if (ui.redraw(ui::rotateClockwise(portraitBottomStrip(width, height), width),
-                          ui::Context::combine(Fnv1a::kOffsetBasis, leftHanded)))
-                ui.portraitText(portraitPreviousRect(width, height, leftHanded), "<<", 2, muted,
-                                ui::TextAlign::Center);
+                          ui::Context::combine(ui::Context::combine(Fnv1a::kOffsetBasis, leftHanded), showArrows)))
+                if (showArrows)
+                    ui.portraitText(portraitPreviousRect(width, height, leftHanded), "<<", 2, muted,
+                                    ui::TextAlign::Center);
         } else {
-            const uint8_t size = ui.height() < 240 ? 2 : 3;
-            ui.battery(batteryRect(ui.width()), battery.status.percent, battery.charging,
-                       showBattery ? batteryLabel : std::string_view{}, showBatteryIcon);
-            const int16_t footerWidth = ui.width() / 3;
-            const int16_t y = ui.height() - 42;
-            ui.label({static_cast<int16_t>(leftHanded ? footerWidth + 12 : 8), y,
-                      static_cast<int16_t>(ui.width() - footerWidth - 20), 40},
-                     showChapter ? chapter : std::string_view{}, size, ui::themes::Muted, ui::TextAlign::Start);
-            ui.label({static_cast<int16_t>(leftHanded ? 8 : ui.width() - footerWidth - 8), y, footerWidth, 40},
-                     showProgress ? footer : std::string_view{}, size, ui::themes::Muted, ui::TextAlign::Right);
+            horizontalChrome(ui, view, settings, battery);
         }
     }
 } // namespace screens::readerLayout

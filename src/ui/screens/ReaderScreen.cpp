@@ -448,7 +448,7 @@ namespace screens {
         const uint8_t progress = ReadingProgress::percent(session.state.wordIndex, ReadingLoop::wordCount(session));
         std::string footer;
         if (reading || settings.footerMetric == settings::FooterMetric::percentage) {
-            footer = std::to_string(progress) + "%";
+            footer = readerLayout::progressText(ui, settings::FooterMetric::percentage, progress, 0);
         } else {
             size_t remainingWords = ReadingLoop::wordCount(session) > session.state.wordIndex
                                       ? ReadingLoop::wordCount(session) - session.state.wordIndex
@@ -460,10 +460,7 @@ namespace screens {
                     remainingWords = next->wordIndex - session.state.wordIndex;
             }
             const uint32_t minutes = static_cast<uint32_t>((remainingWords + settings.wpm - 1) / settings.wpm);
-            footer = ui.text(settings.footerMetric == settings::FooterMetric::chapterTime ? UiText::ChapterShort
-                                                                                          : UiText::BookShort);
-            footer += ' ';
-            footer += minutes >= 60 ? std::to_string(minutes / 60) + "h" : std::to_string(minutes) + "m";
+            footer = readerLayout::progressText(ui, settings.footerMetric, progress, minutes);
         }
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
         const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
@@ -612,20 +609,7 @@ namespace screens {
             const int16_t inkTop = face_.raster.get().wordInkTop;
             const int16_t inkBottom = face_.raster.get().wordInkBottom;
             const int16_t baseline = static_cast<int16_t>(((ui.height() - (inkBottom - inkTop + 1)) / 2) - inkTop);
-            const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
-            const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
-            const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);
-            gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideTop,
-                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-            gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideTop,
-                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-            gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideBottom,
-                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-            gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideBottom,
-                              static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-            const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
-            gfx.drawFastVLine(anchor, guideTop, 5, marker);
-            gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
+            drawGuides(ui, anchor, baseline);
 
             if (vertical) {
                 if (shaped)
@@ -684,9 +668,6 @@ namespace screens {
                 gfx.setTextWrap(false);
                 gfx.setTextSize(2);
                 gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-                gfx.setCursor(settings.leftHanded ? 18 : static_cast<int16_t>(ui.width() - 42),
-                              static_cast<int16_t>(ui.height() / 2 - 8));
-                gfx.print("<<");
                 if (!overlay.empty()) {
                     gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
                     gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2),
@@ -697,23 +678,8 @@ namespace screens {
         }
 
         renderedWordIndex_ = pageView ? SIZE_MAX : session.state.wordIndex;
-        const bool showChapter = !reading || settings.chapterVisibleWhileReading;
-        const bool showProgress = !reading || settings.progressVisibleWhileReading;
-        const bool showBattery = !reading || settings.batteryVisibleWhileReading;
-        char batteryText[12];
-        if (settings.batteryLabel == settings::BatteryLabel::voltage && battery.status.voltage > 0)
-            std::snprintf(batteryText, sizeof(batteryText), "%.2fV", battery.status.voltage);
-        else if (settings.batteryLabel == settings::BatteryLabel::timeRemaining) {
-            constexpr uint32_t kNominalRuntimeMinutes = 600;
-            const uint32_t minutes = static_cast<uint32_t>(battery.status.percent) * kNominalRuntimeMinutes / 100;
-            if (minutes >= 60)
-                std::snprintf(batteryText, sizeof(batteryText), "%lu.%luh", static_cast<unsigned long>(minutes / 60),
-                              static_cast<unsigned long>(minutes % 60 / 6));
-            else
-                std::snprintf(batteryText, sizeof(batteryText), "%lum", static_cast<unsigned long>(minutes));
-        } else
-            std::snprintf(batteryText, sizeof(batteryText), "%u%%", static_cast<unsigned int>(battery.status.percent));
-        const std::string_view batteryLabel{batteryText};
+
+        const std::string batteryLabel = readerLayout::batteryText(settings.batteryLabel, battery);
         const std::string overlay = overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
         readerLayout::chrome(ui,
                              {
@@ -724,9 +690,8 @@ namespace screens {
                                  .footer = footer,
                                  .batteryLabel = batteryLabel,
                                  .overlay = overlay,
-                                 .showChapter = showChapter,
-                                 .showProgress = showProgress,
-                                 .showBattery = showBattery,
+                                 .reading = reading,
+
                                  .topState = pageView ? ui::Context::signature(overlay)
                                                       : frameSignature(session.currentWord, overlayVisible, cjkPacing,
                                                                        settings),
@@ -740,7 +705,7 @@ namespace screens {
     bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
         const ui::Rect rect = session.metadata.writingMode == WritingMode::verticalRl
                                 ? ui::rotateClockwise(portraitBatteryRect(), gfx_.height())
-                                : batteryRect(gfx_.width());
+                                : batteryRect(gfx_.width(), gfx_.height());
         return ui::contains(rect, touch.x, touch.y);
     }
 
@@ -759,7 +724,7 @@ namespace screens {
                                     gfx_.height());
             return ui::contains(previous, x, y);
         }
-        if (ui::contains(batteryRect(gfx_.width()), x, y))
+        if (ui::contains(batteryRect(gfx_.width(), gfx_.height()), x, y))
             return false;
         return settings_.leftHanded
                  ? x <= previousSentenceTapWidth()
@@ -799,7 +764,7 @@ namespace screens {
         const bool tapLike = absX <= kTapSlop && absY <= kTapSlop;
 
         if (touchIntent_ == TouchIntent::None && tapLike && batteryLongPressed(touch)) {
-            settings_.batteryIconVisible = !settings_.batteryIconVisible;
+            settings::toggleVisibility(settings_.batteryIconVisibility, session.playing);
             settingsStore.acceptChanges();
             lastTapValid_ = false;
             resetTouch();
@@ -1253,6 +1218,26 @@ namespace screens {
         }
     }
 
+    void ReaderScreen::drawGuides(ui::Context& ui, int16_t anchor, int16_t baseline) {
+        const int16_t inkTop = face_.raster.get().wordInkTop;
+        const int16_t inkBottom = face_.raster.get().wordInkBottom;
+        auto& gfx = ui.gfx();
+        const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
+        const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
+        const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);
+        gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideTop,
+                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+        gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideTop,
+                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+        gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideBottom,
+                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+        gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideBottom,
+                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
+        const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
+        gfx.drawFastVLine(anchor, guideTop, 5, marker);
+        gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
+    }
+
     uint32_t ReaderScreen::frameSignature(std::string_view word, bool overlayVisible, bool cjkPacing,
                                           const settings::ReadingSettings& settings) const {
         uint32_t value = ui::Context::signature(word);
@@ -1267,6 +1252,7 @@ namespace screens {
         value = ui::Context::combine(value, typography_.guideGap);
         value = ui::Context::combine(value, typography_.focusHighlight);
         value = ui::Context::combine(value, settings.leftHanded);
+        value = ui::Context::combine(value, settings::visible(settings.arrowsVisibility, session.playing));
         value = ui::Context::combine(value, static_cast<uint8_t>(session.metadata.writingMode));
         value = ui::Context::combine(value, fontRevision_);
         return value;

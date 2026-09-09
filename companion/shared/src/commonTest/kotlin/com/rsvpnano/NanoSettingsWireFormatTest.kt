@@ -38,10 +38,11 @@ class NanoSettingsWireFormatTest {
                 "chapterScrollReversed",
                 "footerMetric",
                 "batteryLabel",
-                "batteryIconVisible",
-                "batteryVisibleWhileReading",
-                "chapterVisibleWhileReading",
-                "progressVisibleWhileReading",
+                "batteryIconVisibility",
+                "batteryLabelVisibility",
+                "chapterVisibility",
+                "progressVisibility",
+                "arrowsVisibility",
                 "leftHanded",
                 "typography",
                 "pacing",
@@ -80,7 +81,7 @@ class NanoSettingsWireFormatTest {
         assertEquals("page", settings.reading.mode)
         assertEquals("bookTime", settings.reading.footerMetric)
         assertEquals("timeRemaining", settings.reading.batteryLabel)
-        assertTrue(settings.reading.batteryIconVisible)
+        assertEquals("always", settings.reading.batteryIconVisibility)
         assertTrue(settings.updates.checkOnStartup)
     }
 

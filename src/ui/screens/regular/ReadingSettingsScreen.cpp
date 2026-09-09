@@ -39,9 +39,19 @@ namespace screens {
         }
 
         const int16_t toggleY = static_cast<int16_t>(rowY + rowHeight + gap);
-        changed |= ui.toggle({content.x, toggleY, content.w,
-                              static_cast<int16_t>(content.y + content.h - toggleY)},
-                             ui.text(UiText::PhantomWords), config.phantomWords);
+        const int16_t height = content.y + content.h - toggleY;
+        if (ui.setting({content.x, toggleY, halfWidth, height}, ui.text(UiText::ReaderHand),
+                       ui.text(config.leftHanded ? UiText::Left : UiText::Right), ui::SettingLayout::Inline)) {
+            config.leftHanded = !config.leftHanded;
+            changed = true;
+        }
+        if (ui.setting({static_cast<int16_t>(content.x + halfWidth + gap), toggleY, halfWidth, height},
+                       ui.text(UiText::ChapterScroll),
+                       ui.text(config.chapterScrollReversed ? UiText::Reversed : UiText::Normal),
+                       ui::SettingLayout::Inline)) {
+            config.chapterScrollReversed = !config.chapterScrollReversed;
+            changed = true;
+        }
         return changed;
     }
 

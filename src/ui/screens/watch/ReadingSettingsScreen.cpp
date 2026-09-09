@@ -3,7 +3,7 @@
 namespace screens {
     bool readingSettings(ui::Context& ui, settings::ReadingSettings& config, Screen& screen) {
         auto area = watch::header(ui, ui.text(UiText::Reading), Screen::Settings, screen);
-        const auto grid = ui.pagedGrid(area, 4, 1, 72);
+        const auto grid = ui.pagedGrid(area, 5, 1, 72);
         bool changed = false;
         const auto speed = grid.item(0);
         if (speed.w > 0) {
@@ -33,7 +33,16 @@ namespace screens {
             config.mode = settings::cycleEnum(config.mode);
             changed = true;
         }
-        changed |= watch::toggle(ui, grid.item(3), UiText::PhantomWords, config.phantomWords);
+        if (watch::setting(ui, grid.item(3), UiText::ReaderHand,
+                           ui.text(config.leftHanded ? UiText::Left : UiText::Right))) {
+            config.leftHanded = !config.leftHanded;
+            changed = true;
+        }
+        if (watch::setting(ui, grid.item(4), UiText::ChapterScroll,
+                           ui.text(config.chapterScrollReversed ? UiText::Reversed : UiText::Normal))) {
+            config.chapterScrollReversed = !config.chapterScrollReversed;
+            changed = true;
+        }
         return changed;
     }
 } // namespace screens

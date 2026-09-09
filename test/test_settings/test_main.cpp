@@ -9,10 +9,10 @@
 
 #include "companion/CompanionApiModels.h"
 #include "drivers/power/BatteryCurve.h"
+#include "library/BookLibrary.h"
 #include "reader/ReadingSession.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
-#include "library/BookLibrary.h"
 #include "text/UnicodeText.h"
 
 void setUp() {}
@@ -23,7 +23,7 @@ void test_defaults_round_trip_through_toml_and_companion_json() {
     auto toml = settings::codec::encodeToml(defaults, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE_MESSAGE(toml.has_value(), toml ? "" : toml.error().message.c_str());
     TEST_ASSERT_EQUAL(std::string::npos, toml->find("schemaVersion"));
-    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("batteryIconVisible = true"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("batteryIconVisibility = \"always\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("checkOnStartup = false"));
     auto fromToml = settings::codec::decodeToml(*toml, settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE_MESSAGE(fromToml.has_value(), fromToml ? "" : fromToml.error().message.c_str());
@@ -56,12 +56,12 @@ void test_missing_fields_retain_defaults() {
     auto value = settings::codec::decodeToml("obsolete = true\n[reading]\nwpm = 300\n", settings::SettingsSource::Sd);
     TEST_ASSERT_TRUE_MESSAGE(value.has_value(), value ? "" : value.error().message.c_str());
     TEST_ASSERT_EQUAL_UINT16(300, value->reading.wpm);
-    TEST_ASSERT_TRUE(value->reading.batteryIconVisible);
+    TEST_ASSERT_EQUAL(settings::Visibility::always, value->reading.batteryIconVisibility);
     TEST_ASSERT_EQUAL_STRING("literata", value->reading.typography.fontId.c_str());
     auto canonical = settings::codec::encodeToml(*value, settings::SettingsSource::Programmatic);
     TEST_ASSERT_TRUE(canonical.has_value());
     TEST_ASSERT_EQUAL(std::string::npos, canonical->find("obsolete"));
-    TEST_ASSERT_NOT_EQUAL(std::string::npos, canonical->find("batteryIconVisible = true"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, canonical->find("batteryIconVisibility = \"always\""));
 }
 
 void test_bounded_values_clamp_during_deserialization() {
@@ -93,7 +93,7 @@ void test_invalid_input_cannot_mutate_a_live_value() {
 void test_unknown_keys_are_ignored_and_invalid_enums_still_fail() {
     auto unknown = companion::api::decode<settings::DeviceSettings>(R"({"surprise":true})");
     TEST_ASSERT_TRUE(unknown.has_value());
-    TEST_ASSERT_TRUE(unknown->reading.batteryIconVisible);
+    TEST_ASSERT_EQUAL(settings::Visibility::always, unknown->reading.batteryIconVisibility);
 
     auto invalidEnum = companion::api::decode<settings::DeviceSettings>(R"({"reading":{"pauseMode":"later"}})");
     TEST_ASSERT_FALSE(invalidEnum.has_value());
@@ -276,10 +276,44 @@ void test_book_reading_overrides_round_trip_through_toml() {
     TEST_ASSERT_EQUAL(settings::ReadingPacing::cjkPhrase, *decoded.reading.overrides.pacing);
 }
 
+void test_visibility_toggles_only_selected_state_and_round_trips() {
+    for (const auto initial: {settings::Visibility::never, settings::Visibility::paused, settings::Visibility::reading,
+                              settings::Visibility::always}) {
+        for (const bool reading: {false, true}) {
+            auto value = initial;
+            settings::toggleVisibility(value, reading);
+            TEST_ASSERT_NOT_EQUAL(settings::visible(initial, reading), settings::visible(value, reading));
+            TEST_ASSERT_EQUAL(settings::visible(initial, !reading), settings::visible(value, !reading));
+            settings::toggleVisibility(value, reading);
+            TEST_ASSERT_EQUAL(initial, value);
+        }
+        settings::DeviceSettings value;
+        value.reading.batteryIconVisibility = initial;
+        value.reading.batteryLabelVisibility = initial;
+        value.reading.chapterVisibility = initial;
+        value.reading.progressVisibility = initial;
+        value.reading.arrowsVisibility = initial;
+        const auto encoded = settings::codec::encodeToml(value, settings::SettingsSource::Programmatic);
+        TEST_ASSERT_TRUE(encoded.has_value());
+        const auto decoded = settings::codec::decodeToml(*encoded, settings::SettingsSource::Sd);
+        TEST_ASSERT_TRUE(decoded.has_value());
+        TEST_ASSERT_TRUE(value == *decoded);
+        std::string json;
+        TEST_ASSERT_TRUE(companion::api::encode(value, json).has_value());
+        const auto fromJson = companion::api::decode<settings::DeviceSettings>(json);
+        TEST_ASSERT_TRUE(fromJson.has_value());
+        TEST_ASSERT_TRUE(value == *fromJson);
+    }
+    const auto invalid =
+        companion::api::decode<settings::DeviceSettings>(R"({"reading":{"chapterVisibility":"sometimes"}})");
+    TEST_ASSERT_FALSE(invalid.has_value());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_defaults_round_trip_through_toml_and_companion_json);
     RUN_TEST(test_battery_curve_reaches_full);
+    RUN_TEST(test_visibility_toggles_only_selected_state_and_round_trips);
     RUN_TEST(test_enum_names_are_human_readable);
     RUN_TEST(test_missing_fields_retain_defaults);
     RUN_TEST(test_companion_patch_preserves_omitted_fields);

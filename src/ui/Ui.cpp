@@ -242,16 +242,17 @@ namespace ui {
     }
 
     void Context::label(Rect rect, std::string_view text, uint8_t textSize, ui::themes::ColorRole role, TextAlign align,
-                        uint8_t textLines, std::string_view textLocale) {
+                        uint8_t textLines, std::string_view textLocale, uint8_t alpha) {
         uint32_t state = combine(signature(text), textSize);
         state = combine(state, role);
         state = combine(state, static_cast<uint8_t>(align));
         state = combine(state, textLines);
         state = signature(textLocale, state);
+        state = combine(state, alpha);
         if (!claim(Kind::Label, rect, state).changed) {
             return;
         }
-        drawText(rect, text, textSize, color(role), align, textLines, textLocale);
+        drawText(rect, text, textSize, blend(role, alpha), align, textLines, textLocale);
     }
 
     void Context::separator(Rect rect, std::string_view text) {
@@ -421,12 +422,14 @@ namespace ui {
         return tapped(widget.index, rect);
     }
 
-    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText, bool showIcon) {
+    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText, bool showIcon,
+                          uint8_t alpha) {
         percent = std::min<uint8_t>(percent, 100);
 
         uint32_t state = combine(signature(labelText), percent);
         state = combine(state, charging);
         state = combine(state, showIcon);
+        state = combine(state, alpha);
 
         if (!claim(Kind::Battery, rect, state).changed || (!showIcon && labelText.empty()))
             return;
@@ -440,7 +443,7 @@ namespace ui {
         const int16_t totalWidth = static_cast<int16_t>(iconAreaWidth + labelWidth);
         const int16_t x = std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - totalWidth));
 
-        const uint16_t ink = color(ui::themes::ColorRole::Muted);
+        const uint16_t ink = blend(ui::themes::ColorRole::Muted, alpha);
         const uint16_t surface = color(ui::themes::ColorRole::Background);
 
         if (showIcon) {

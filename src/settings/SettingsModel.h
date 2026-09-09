@@ -7,8 +7,8 @@
 #include <string_view>
 #include <vector>
 
-#include "settings/SettingsRules.h"
 #include "screensavers/ScreensaverTypes.h"
+#include "settings/SettingsRules.h"
 #include "text/UnicodeText.h"
 namespace settings {
 
@@ -89,6 +89,21 @@ namespace settings {
         bool operator==(const PacingSettings&) const = default;
     };
 
+    enum class Visibility : uint8_t {
+        never = 0,
+        paused = 1,
+        reading = 2,
+        always = 3,
+    };
+
+    constexpr bool visible(Visibility value, bool reading) {
+        return (static_cast<uint8_t>(value) & (reading ? 2 : 1)) != 0;
+    }
+
+    constexpr void toggleVisibility(Visibility& value, bool reading) {
+        value = static_cast<Visibility>(static_cast<uint8_t>(value) ^ (reading ? 2 : 1));
+    }
+
     struct ReadingSettings {
         BoundedValue<uint16_t, 10, 1000, 10> wpm{300};
         ReadingMode mode = ReadingMode::rsvp;
@@ -97,10 +112,11 @@ namespace settings {
         bool chapterScrollReversed = false;
         FooterMetric footerMetric = FooterMetric::percentage;
         BatteryLabel batteryLabel = BatteryLabel::percentage;
-        bool batteryIconVisible = true;
-        bool batteryVisibleWhileReading = true;
-        bool chapterVisibleWhileReading = false;
-        bool progressVisibleWhileReading = false;
+        Visibility batteryIconVisibility = Visibility::always;
+        Visibility batteryLabelVisibility = Visibility::always;
+        Visibility chapterVisibility = Visibility::paused;
+        Visibility progressVisibility = Visibility::paused;
+        Visibility arrowsVisibility = Visibility::always;
         bool leftHanded = false;
         TypographySettings typography;
         PacingSettings pacing;

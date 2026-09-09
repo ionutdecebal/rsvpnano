@@ -16,12 +16,12 @@ namespace screens {
             screen = Screen::ReadingSettings;
         if (ui.button(grid.next(), ui.text(UiText::WordPacing)))
             screen = Screen::PacingSettings;
-        if (ui.button(grid.next(), ui.text(UiText::Typography)))
-            screen = Screen::TypographySettings;
-        if (ui.button(grid.next(), ui.text(UiText::ReaderLayout)))
-            screen = Screen::ReaderSettings;
+        auto appearance = grid.next();
+        appearance.w = content.w;
+        if (ui.button(appearance, ui.text(UiText::ReaderLayout)))
+            screen = Screen::ReaderAppearance;
 
-        const int16_t readingRows = static_cast<int16_t>((4 + columns - 1) / columns);
+        const int16_t readingRows = static_cast<int16_t>((3 + columns - 1) / columns);
         const int16_t systemY =
             static_cast<int16_t>(content.y + 24 + readingRows * rowHeight + (readingRows - 1) * gap);
         ui.separator({content.x, systemY, content.w, 12}, ui.text(UiText::SystemSection));

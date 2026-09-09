@@ -122,12 +122,13 @@ namespace ui {
             return false;
         const int before = value;
         const Touch* event = touch();
-        if (event && hasTouch(*event, TouchStart)) {
-            rotaryDragging_ = contains(rect, event->x, event->y);
+        if (event && hasTouch(*event, TouchStart) && contains(rect, event->x, event->y)) {
+            rotaryDragging_ = true;
+            rotaryRect_ = rect;
             rotaryStartX_ = event->x;
             rotaryStartValue_ = value;
         }
-        if (rotaryDragging_ && event) {
+        if (rotaryDragging_ && rotaryRect_ == rect && event) {
             const int delta = (static_cast<int>(event->x) - rotaryStartX_) / 8;
             value = std::clamp(rotaryStartValue_ + delta * step, minimum, maximum);
             if (hasTouch(*event, TouchRelease))
@@ -138,20 +139,24 @@ namespace ui {
         state = combine(state, maximum);
         state = signature(label, state);
         if (redraw(rect, state)) {
-            const int16_t r = std::min(rect.w, rect.h) / 2 - 3;
-            const int16_t cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+            const int16_t labelHeight = label.empty() ? 0 : textHeightFor(label, 2) + 2;
+            const int16_t diameter = std::min<int16_t>(rect.w, rect.h - labelHeight);
+            const int16_t r = std::max<int16_t>(6, diameter / 2 - 3);
+            const int16_t cx = rect.x + rect.w / 2, cy = rect.y + (rect.h - labelHeight) / 2;
             const int fill = (value - minimum) * 48 / (maximum - minimum);
             for (int i = 0; i <= 48; ++i) {
                 const float a = (130 + i * 280.f / 48) * 0.01745329252f;
                 gfx_.drawLine(cx + std::cos(a) * (r - 5), cy + std::sin(a) * (r - 5), cx + std::cos(a) * r,
                               cy + std::sin(a) * r, color(i <= fill ? themes::Accent : themes::ProgressTrack));
             }
-            drawText({static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(cy - 24),
-                      static_cast<int16_t>(rect.w - 16), 27},
-                     std::to_string(value), 3, color(themes::Foreground), TextAlign::Center);
-            drawText({static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(cy + 4), static_cast<int16_t>(rect.w - 16),
-                      18},
-                     label, 2, color(themes::Muted), TextAlign::Center);
+            const auto number = std::to_string(value);
+            const uint8_t size = textWidth(number, 3) <= diameter - 16 && diameter >= 44 ? 3 : 2;
+            drawText({static_cast<int16_t>(rect.x + 4), static_cast<int16_t>(cy - textHeight(size) / 2),
+                      static_cast<int16_t>(rect.w - 8), textHeight(size)},
+                     number, size, color(themes::Foreground), TextAlign::Center);
+            if (!label.empty())
+                fixedText({rect.x, static_cast<int16_t>(rect.y + rect.h - labelHeight), rect.w, labelHeight}, label, 2,
+                          color(themes::Muted), TextAlign::Center, 1);
         }
         return before != value;
     }

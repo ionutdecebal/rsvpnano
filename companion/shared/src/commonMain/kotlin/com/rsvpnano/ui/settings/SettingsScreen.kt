@@ -674,25 +674,35 @@ private fun DisplaySettings(
                 ),
                 onSelected = { label -> onUpdateSettings { it.withBatteryLabel(label) } },
             )
-            SwitchRow(
+            ChoiceChipRow(
                 label = "Battery icon",
-                checked = settings.reading.batteryIconVisible,
-                onCheckedChange = { checked -> onUpdateSettings { it.withBatteryIconVisible(checked) } },
+                selected = settings.reading.batteryIconVisibility,
+                options = NanoSettingsSchema.visibilityOptions,
+                onSelected = { value -> onUpdateSettings { it.withBatteryIconVisibility(value) } },
             )
-            SwitchRow(
-                label = "Battery while reading",
-                checked = settings.reading.batteryVisibleWhileReading,
-                onCheckedChange = { checked -> onUpdateSettings { it.withReadingBattery(checked) } },
+            ChoiceChipRow(
+                label = "Battery label visibility",
+                selected = settings.reading.batteryLabelVisibility,
+                options = NanoSettingsSchema.visibilityOptions,
+                onSelected = { value -> onUpdateSettings { it.withBatteryLabelVisibility(value) } },
             )
-            SwitchRow(
-                label = "Chapter while reading",
-                checked = settings.reading.chapterVisibleWhileReading,
-                onCheckedChange = { checked -> onUpdateSettings { it.withReadingChapter(checked) } },
+            ChoiceChipRow(
+                label = "Chapter visibility",
+                selected = settings.reading.chapterVisibility,
+                options = NanoSettingsSchema.visibilityOptions,
+                onSelected = { value -> onUpdateSettings { it.withChapterVisibility(value) } },
             )
-            SwitchRow(
-                label = "Book progress while reading",
-                checked = settings.reading.progressVisibleWhileReading,
-                onCheckedChange = { checked -> onUpdateSettings { it.withReadingProgress(checked) } },
+            ChoiceChipRow(
+                label = "Progress visibility",
+                selected = settings.reading.progressVisibility,
+                options = NanoSettingsSchema.visibilityOptions,
+                onSelected = { value -> onUpdateSettings { it.withProgressVisibility(value) } },
+            )
+            ChoiceChipRow(
+                label = "Arrows visibility",
+                selected = settings.reading.arrowsVisibility,
+                options = NanoSettingsSchema.visibilityOptions,
+                onSelected = { value -> onUpdateSettings { it.withArrowsVisibility(value) } },
             )
         }
 

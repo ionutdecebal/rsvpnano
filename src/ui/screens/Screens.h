@@ -33,9 +33,8 @@ namespace screens {
         ReadingSettings,
         InterfaceSettings,
         PacingSettings,
-        TypographySettings,
+        ReaderAppearance,
         BookFonts,
-        ReaderSettings,
         NetworkSettings,
         WifiScan,
         WifiConnect,
@@ -84,10 +83,8 @@ namespace screens {
         const locales::Catalog* languages_ = nullptr;
     };
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
-    bool typographySettings(ui::Context& ui, settings::TypographySettings& config, FontCatalog& fonts, Screen& screen);
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
                    const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen);
-    bool readerSettings(ui::Context& ui, settings::ReadingSettings& settings, Screen& screen);
     class NetworkScreen {
     public:
         bool startupCheckPending = false;

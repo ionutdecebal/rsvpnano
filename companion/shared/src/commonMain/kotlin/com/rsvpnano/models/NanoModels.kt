@@ -197,10 +197,11 @@ data class NanoSettings(
         val chapterScrollReversed: Boolean = false,
         val footerMetric: String = NanoSettingsSchema.FOOTER_PERCENTAGE,
         val batteryLabel: String = NanoSettingsSchema.BATTERY_PERCENTAGE,
-        val batteryIconVisible: Boolean = true,
-        val batteryVisibleWhileReading: Boolean = true,
-        val chapterVisibleWhileReading: Boolean = false,
-        val progressVisibleWhileReading: Boolean = false,
+        val batteryIconVisibility: String = "always",
+        val batteryLabelVisibility: String = "always",
+        val chapterVisibility: String = "paused",
+        val progressVisibility: String = "paused",
+        val arrowsVisibility: String = "always",
         val leftHanded: Boolean = false,
         val typography: Typography = Typography(),
         val pacing: Pacing = Pacing(),
@@ -286,17 +287,20 @@ data class NanoSettings(
     fun withBatteryLabel(value: String): NanoSettings =
         copy(reading = reading.copy(batteryLabel = value))
 
-    fun withBatteryIconVisible(value: Boolean): NanoSettings =
-        copy(reading = reading.copy(batteryIconVisible = value))
+    fun withBatteryIconVisibility(value: String): NanoSettings =
+        copy(reading = reading.copy(batteryIconVisibility = value))
 
-    fun withReadingBattery(value: Boolean): NanoSettings =
-        copy(reading = reading.copy(batteryVisibleWhileReading = value))
+    fun withBatteryLabelVisibility(value: String): NanoSettings =
+        copy(reading = reading.copy(batteryLabelVisibility = value))
 
-    fun withReadingChapter(value: Boolean): NanoSettings =
-        copy(reading = reading.copy(chapterVisibleWhileReading = value))
+    fun withChapterVisibility(value: String): NanoSettings =
+        copy(reading = reading.copy(chapterVisibility = value))
 
-    fun withReadingProgress(value: Boolean): NanoSettings =
-        copy(reading = reading.copy(progressVisibleWhileReading = value))
+    fun withProgressVisibility(value: String): NanoSettings =
+        copy(reading = reading.copy(progressVisibility = value))
+
+    fun withArrowsVisibility(value: String): NanoSettings =
+        copy(reading = reading.copy(arrowsVisibility = value))
 
     fun withScreensaver(value: String): NanoSettings =
         copy(`interface` = `interface`.copy(screensaver = NanoSettingsSchema.coerceScreensaver(value)))
@@ -364,6 +368,7 @@ data class NanoSettings(
 }
 
 object NanoSettingsSchema {
+    val visibilityOptions = listOf("always" to "Always", "reading" to "Reading only", "paused" to "Paused only", "never" to "Hidden")
     const val THEME_DEFAULT = "default"
     const val READING_MODE_RSVP = "rsvp"
     const val READING_MODE_PAGE = "page"

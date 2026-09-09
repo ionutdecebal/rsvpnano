@@ -42,6 +42,12 @@ struct glz::meta<settings::BatteryLabel> {
 };
 
 template<>
+struct glz::meta<settings::Visibility> {
+    using enum settings::Visibility;
+    static constexpr auto value = glz::enumerate(never, paused, reading, always);
+};
+
+template<>
 struct glz::meta<settings::ReadingPacing> {
     using enum settings::ReadingPacing;
     static constexpr auto value = glz::enumerate("words", words, "cjk-phrase", cjkPhrase);

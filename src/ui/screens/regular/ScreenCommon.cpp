@@ -24,8 +24,7 @@ namespace screens::detail {
         if (ui.tab(tabs.next(tabHeight), ui.text(UiText::Settings),
                    active == Screen::Settings || active == Screen::ReadingSettings
                        || active == Screen::InterfaceSettings || active == Screen::PacingSettings
-                       || active == Screen::TypographySettings || active == Screen::ReaderSettings
-                       || active == Screen::NetworkSettings,
+                       || active == Screen::ReaderAppearance || active == Screen::NetworkSettings,
                    ui::Icon::Edit)) {
             screen = Screen::Settings;
         }

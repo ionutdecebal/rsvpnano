@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "AppearanceChecks.h"
 
 #include <array>
 #include <cstring>
@@ -17,8 +18,8 @@
 #include "text/Utf8Text.h"
 #include "ui/Localization.h"
 #include "ui/Ui.h"
-#include "ui/screens/PageReaderScreen.h"
 #include "ui/screens/ChaptersScreen.h"
+#include "ui/screens/PageReaderScreen.h"
 #include "ui/screens/Screens.h"
 
 namespace {
@@ -1643,6 +1644,10 @@ void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
     TEST_ASSERT_GREATER_THAN(gfx.lastVerticalHeight, gfx.firstVerticalHeight);
 }
 
+void test_appearance_controls_fit_lcd() {
+    appearanceChecks::layout(640, 172);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
@@ -1695,5 +1700,8 @@ int main(int, char**) {
     RUN_TEST(test_chapters_taps_jitter_snapping_and_visible_rows);
     RUN_TEST(test_compact_settings_screens_stay_inside_the_content_area);
     RUN_TEST(test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base);
+    RUN_TEST(test_appearance_controls_fit_lcd);
+    RUN_TEST(appearanceChecks::fourRotaries);
+    RUN_TEST(appearanceChecks::wordTargets);
     return UNITY_END();
 }
