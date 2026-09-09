@@ -11,7 +11,7 @@ namespace screens::appearanceLayout {
         out.preview = {0, static_cast<int16_t>(height / 2 - 44), width, 88};
         out.pagedDials = height < 300;
         if (out.pagedDials) {
-            out.page.w = 84;
+            out.page.w = 44;
             out.reset = {static_cast<int16_t>(width - 76), 2, 72, 40};
             out.dialPage = {140, 2, static_cast<int16_t>(width - 220), 40};
             out.preview = {0, 44, width, static_cast<int16_t>(height - 88)};

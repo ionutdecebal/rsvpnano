@@ -182,8 +182,12 @@ namespace ui {
         bool rotary(Rect rect, int& value, int minimum, int maximum, int step, std::string_view label = {});
         PagedGrid pagedGrid(Rect rect, size_t count, uint8_t columns = 1, int16_t minimumHeight = 54);
         bool tab(Rect rect, std::string_view text, bool active, Icon icon = Icon::None);
+        struct BatteryLayout {
+            Rect icon, label;
+        };
+        BatteryLayout batteryLayout(Rect rect, std::string_view label, bool showIcon = true) const;
         void battery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon = true,
-                     uint8_t alpha = 255);
+                     uint8_t iconAlpha = 255, uint8_t labelAlpha = 255);
         void progress(Rect rect, int value, int minimum = 0, int maximum = 100);
         void steps(Rect rect, uint8_t current, uint8_t total,
                    ui::themes::ColorRole activeRole = ui::themes::ColorRole::Accent);

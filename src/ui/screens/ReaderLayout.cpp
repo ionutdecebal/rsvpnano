@@ -4,10 +4,7 @@
 
 namespace screens::readerLayout {
     ui::Rect batteryRect(int16_t width, int16_t height) {
-        const auto layout = horizontalChrome(width, height, false);
-        return {layout.batteryIcon.x, layout.batteryIcon.y,
-                static_cast<int16_t>(layout.batteryLabel.x + layout.batteryLabel.w - layout.batteryIcon.x),
-                layout.batteryIcon.h};
+        return horizontalChrome(width, height, false).battery;
     }
 
     std::string batteryText(settings::BatteryLabel format, const Board::Power::BatteryState& battery) {
@@ -37,26 +34,45 @@ namespace screens::readerLayout {
         return text;
     }
 
+    void drawArrows(ui::Context& ui, const settings::ReadingSettings& settings, bool reading, int16_t wordHeight,
+                    bool ghostHidden) {
+        const bool visible = settings::visible(settings.arrowsVisibility, reading);
+        if (!visible && !ghostHidden)
+            return;
+        const auto rect = horizontalChrome(ui.width(), ui.height(), settings.leftHanded).arrows;
+        const int16_t height = std::max(rect.h, wordHeight);
+        ui.gfx().fillRect(rect.x, (ui.height() - height) / 2, rect.w, height, ui.color(ui::themes::Background));
+        ui.drawText(rect, "<<", 2, ui.blend(ui::themes::Muted, visible ? 255 : 64), ui::TextAlign::Center);
+    }
+
     void horizontalChrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,
                           const Board::Power::BatteryState& battery) {
-        const auto layout = horizontalChrome(ui.width(), ui.height(), settings.leftHanded);
-        const auto label = [&](ui::Rect rect, std::string_view text, settings::Visibility visibility, uint8_t size,
-                               ui::TextAlign align) {
-            const bool visible = settings::visible(visibility, view.reading);
-            ui.label(rect, visible || view.ghostHidden ? text : std::string_view{}, size, ui::themes::Muted, align, 1,
-                     view.locale, visible ? 255 : 64);
-        };
-        label(layout.chapter, view.chapter, settings.chapterVisibility, layout.textSize,
-              settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
-        label(layout.progress, view.footer, settings.progressVisibility, layout.textSize, ui::TextAlign::Right);
-        label(layout.batteryLabel, view.batteryLabel, settings.batteryLabelVisibility, 2, ui::TextAlign::Right);
+        const bool showProgress = settings::visible(settings.progressVisibility, view.reading);
+        const auto layout = horizontalChrome(ui.width(), ui.height(), settings.leftHanded,
+                                             showProgress || view.ghostHidden ? ui.textWidth(view.footer, 2) : 0);
+        auto footerState = ui::Context::signature(view.chapter);
+        footerState = ui::Context::signature(view.footer, footerState);
+        footerState = ui::Context::signature(view.locale, footerState);
+        footerState = ui::Context::combine(footerState, static_cast<uint8_t>(settings.chapterVisibility));
+        footerState = ui::Context::combine(footerState, static_cast<uint8_t>(settings.progressVisibility));
+        footerState = ui::Context::combine(footerState, settings.leftHanded);
+        footerState = ui::Context::combine(footerState, view.reading | (view.ghostHidden << 1));
+        if (ui.redraw({0, layout.chapter.y, ui.width(), layout.chapter.h}, footerState)) {
+            const auto label = [&](ui::Rect rect, std::string_view text, settings::Visibility visibility,
+                                   ui::TextAlign align) {
+                const bool visible = settings::visible(visibility, view.reading);
+                if (visible || view.ghostHidden)
+                    ui.drawText(rect, text, layout.textSize, ui.blend(ui::themes::Muted, visible ? 255 : 64), align, 1,
+                                view.locale);
+            };
+            label(layout.chapter, view.chapter, settings.chapterVisibility,
+                  settings.leftHanded ? ui::TextAlign::Right : ui::TextAlign::Left);
+            label(layout.progress, view.footer, settings.progressVisibility, ui::TextAlign::Right);
+        }
         const bool showBatteryIcon = settings::visible(settings.batteryIconVisibility, view.reading);
-        ui.battery(layout.batteryIcon, battery.status.percent, battery.charging, {},
-                   showBatteryIcon || view.ghostHidden, showBatteryIcon ? 255 : 64);
-        const bool showArrows = settings::visible(settings.arrowsVisibility, view.reading);
-        if (ui.redraw(layout.arrows, ui::Context::combine(view.topState, showArrows | (view.ghostHidden << 1)))
-            && (showArrows || view.ghostHidden))
-            ui.drawText(layout.arrows, "<<", 2, ui.blend(ui::themes::Muted, showArrows ? 255 : 64),
-                        ui::TextAlign::Center);
+        const bool showBatteryLabel = settings::visible(settings.batteryLabelVisibility, view.reading);
+        ui.battery(layout.battery, battery.status.percent, battery.charging,
+                   showBatteryLabel || view.ghostHidden ? view.batteryLabel : std::string_view{},
+                   showBatteryIcon || view.ghostHidden, showBatteryIcon ? 255 : 64, showBatteryLabel ? 255 : 64);
     }
 } // namespace screens::readerLayout

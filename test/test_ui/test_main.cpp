@@ -1703,5 +1703,6 @@ int main(int, char**) {
     RUN_TEST(test_appearance_controls_fit_lcd);
     RUN_TEST(appearanceChecks::fourRotaries);
     RUN_TEST(appearanceChecks::wordTargets);
+    RUN_TEST(appearanceChecks::batteryAndArrowRedraw);
     return UNITY_END();
 }

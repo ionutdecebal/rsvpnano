@@ -267,6 +267,7 @@ int main() {
     RUN_TEST(test_appearance_controls_fit_watch_displays);
     RUN_TEST(appearanceChecks::fourRotaries);
     RUN_TEST(appearanceChecks::wordTargets);
+    RUN_TEST(appearanceChecks::batteryAndArrowRedraw);
     RUN_TEST(test_carousel_swipes_are_directional_and_wrap);
     RUN_TEST(test_rotary_uses_relative_delta_and_clamps);
     RUN_TEST(test_paging_never_exposes_offscreen_hit_targets_and_resets);

@@ -428,6 +428,15 @@ namespace screens {
 
     void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                             uint32_t nowMs) {
+        if (touchIntent_ == TouchIntent::Scrub || touchIntent_ == TouchIntent::Paragraph) {
+            const auto typeface = [this](size_t index) {
+                return pageTypeface(index);
+            };
+            const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
+            PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session,
+                             readerLayout::readingArea(ui.width(), ui.height(), vertical), {});
+            return;
+        }
         const std::string_view bookTitle = ReadingProgress::title(session, storage);
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
@@ -664,6 +673,7 @@ namespace screens {
                             rightToLeft, baseline, vertical, ui);
 
             if (!vertical) {
+                readerLayout::drawArrows(ui, settings, reading, inkBottom - inkTop + 13);
                 gfx.setFont(static_cast<const GFXfont*>(nullptr));
                 gfx.setTextWrap(false);
                 gfx.setTextSize(2);
@@ -820,6 +830,7 @@ namespace screens {
             if (absX >= kSwipeThreshold && absX > absY + kAxisBias) {
                 lastTapValid_ = false;
                 touchIntent_ = TouchIntent::Scrub;
+                ui.invalidate();
                 pagePreview_ = settings_.mode != settings::ReadingMode::page;
                 if (pagePreview_)
                     pageState_.pageStart = SIZE_MAX;
@@ -827,6 +838,7 @@ namespace screens {
                 lastTapValid_ = false;
                 touchIntent_ = pagePreview_ ? TouchIntent::Paragraph : TouchIntent::Wpm;
                 if (touchIntent_ == TouchIntent::Paragraph) {
+                    ui.invalidate();
                     paragraphTickMs_ = nowMs;
                     paragraphRemainder_ = 0;
                 }
@@ -840,6 +852,7 @@ namespace screens {
                 ReadingLoop::seekRelative(session, touchStartWord_, steps);
             if (ended) {
                 resetTouch();
+                ui.invalidate();
                 ReadingProgress::save(session, preferences, true, nowMs);
             }
             return;
@@ -858,6 +871,7 @@ namespace screens {
                 browseParagraphs(touch.y, nowMs);
             else {
                 resetTouch();
+                ui.invalidate();
                 ReadingProgress::save(session, preferences, true, nowMs);
             }
             return;

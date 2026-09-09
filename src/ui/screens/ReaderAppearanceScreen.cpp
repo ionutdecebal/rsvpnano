@@ -39,19 +39,20 @@ namespace screens {
         const int16_t beforeX = wordX - 24 - beforeWidth, afterX = wordX + wordWidth + 24;
 
         auto state = ui::Context::signature(type.fontId);
-        for (int value: {int(type.fontSizeIndex), int(type.tracking), int(type.anchor), int(type.guideWidth),
-                         int(type.guideGap), int(type.focusHighlight), int(config.phantomWords), int(appearancePage_)})
+        for (int value:
+             {int(type.fontSizeIndex), int(type.tracking), int(type.anchor), int(type.guideWidth), int(type.guideGap),
+              int(type.focusHighlight), int(config.phantomWords), int(appearancePage_), int(config.arrowsVisibility)})
             state = ui::Context::combine(state, value);
         const ui::Rect preview =
-            typography ? layout.preview : readerLayout::readingArea(ui.width(), ui.height(), false);
+            typography ? layout.preview : ui::Rect{0, 44, ui.width(), static_cast<int16_t>(ui.height() - 88)};
         if (showPreview && ui.redraw(preview, state)) {
             drawGuides(ui, anchor, baseline);
             drawWord(word, wordX, baseline, focus, false, ui);
-            if (config.phantomWords || typography) {
-                text_.setTextColor(ui.blend(Foreground, config.phantomWords ? 64 : 28), ui.color(Background));
-                text_.drawString(before, beforeX, baseline, type.tracking);
-                text_.drawString(after, afterX, baseline, type.tracking);
-            }
+            text_.setTextColor(ui.blend(Foreground, config.phantomWords ? 64 : 28), ui.color(Background));
+            text_.drawString(before, beforeX, baseline, type.tracking);
+            text_.drawString(after, afterX, baseline, type.tracking);
+            if (!typography)
+                readerLayout::drawArrows(ui, config, reading, inkHeight + 12, true);
         }
 
         if (ui.button(layout.back, "<")) {
@@ -59,11 +60,28 @@ namespace screens {
             appearancePage_ = appearanceDialPage_ = 0;
         }
         const UiText page = typography ? UiText::Typography : reading ? UiText::Reading : UiText::Paused;
-        const std::string pageLabel = std::string{typography && layout.pagedDials ? "Aa" : ui.text(page)} + " >";
-        ui.label(layout.page, pageLabel, 2, Foreground, ui::TextAlign::Center);
-        if (ui.tap(layout.page)) {
+        const std::string pageLabel = layout.pagedDials ? (typography ? "Aa"
+                                                           : reading  ? ">"
+                                                                      : "II")
+                                                        : std::string{ui.text(page)};
+        if (ui.button(layout.page, pageLabel, true, ui::Icon::None, 1)) {
             appearancePage_ = (appearancePage_ + 1) % 3;
             ui.invalidate();
+        }
+
+        const auto target = [&](int16_t x, int16_t width) {
+            return appearanceLayout::wordTarget(x, width, ui.height() / 2, inkHeight, ui.width(), ui.height());
+        };
+        if (showPreview && ui.tap(target(wordX, wordWidth))) {
+            type.focusHighlight = !type.focusHighlight;
+            changed = true;
+        }
+        // Both phantom words operate the same setting, including their faint off-state placeholders.
+        const bool previousTapped = showPreview && ui.tap(target(beforeX, beforeWidth));
+        const bool nextTapped = showPreview && ui.tap(target(afterX, afterWidth));
+        if (previousTapped || nextTapped) {
+            config.phantomWords = !config.phantomWords;
+            changed = true;
         }
 
         if (typography) {
@@ -79,20 +97,6 @@ namespace screens {
             ui.label(layout.font, families.empty() ? std::string_view{} : families[family].label, 2);
             if (ui.tap(layout.font, !families.empty())) {
                 type.fontId = families[(family + 1) % families.size()].id;
-                changed = true;
-            }
-            const auto target = [&](int16_t x, int16_t width) {
-                return appearanceLayout::wordTarget(x, width, ui.height() / 2, inkHeight, ui.width(), ui.height());
-            };
-            if (showPreview && ui.tap(target(wordX, wordWidth))) {
-                type.focusHighlight = !type.focusHighlight;
-                changed = true;
-            }
-            // Both phantom words operate the same setting, including their faint off-state placeholders.
-            const bool previousTapped = showPreview && ui.tap(target(beforeX, beforeWidth));
-            const bool nextTapped = showPreview && ui.tap(target(afterX, afterWidth));
-            if (previousTapped || nextTapped) {
-                config.phantomWords = !config.phantomWords;
                 changed = true;
             }
             if (layout.pagedDials && ui.button(layout.dialPage, std::to_string(appearanceDialPage_ + 1) + "/3")) {
@@ -114,12 +118,14 @@ namespace screens {
             rotary(2, UiText::Width, type.guideWidth);
             rotary(3, UiText::Gap, type.guideGap);
         } else {
-            const auto chrome = readerLayout::horizontalChrome(ui.width(), ui.height(), config.leftHanded);
             const Board::Power::BatteryState battery{{true, 3.9f, 64}, 0, false};
             const auto batteryLabel = readerLayout::batteryText(config.batteryLabel, battery);
             const auto footer =
                 readerLayout::progressText(ui, reading ? settings::FooterMetric::percentage : config.footerMetric, 42,
                                            132);
+            const auto chrome =
+                readerLayout::horizontalChrome(ui.width(), ui.height(), config.leftHanded, ui.textWidth(footer, 2));
+            const auto batteryLayout = ui.batteryLayout(chrome.battery, batteryLabel);
             readerLayout::horizontalChrome(ui,
                                            {
                                                .vertical = false,
@@ -149,20 +155,20 @@ namespace screens {
                     changed = true;
                 }
             };
-            toggle(chrome.batteryIcon, config.batteryIconVisibility);
-            toggle(chrome.batteryLabel, config.batteryLabelVisibility);
+            toggle(batteryLayout.icon, config.batteryIconVisibility);
+            toggle(batteryLayout.label, config.batteryLabelVisibility);
             toggle(chrome.chapter, config.chapterVisibility);
             toggle(chrome.progress, config.progressVisibility);
             toggle(chrome.arrows, config.arrowsVisibility);
-            const ui::Rect batteryFormat{static_cast<int16_t>(chrome.batteryIcon.x - 48), 2, 44, 40};
-            if (ui.button(batteryFormat, "%")) {
+            const ui::Rect footerFormat{static_cast<int16_t>(layout.page.x + layout.page.w + 8), 2, 44, 40};
+            const ui::Rect batteryFormat{static_cast<int16_t>(chrome.battery.x - 48), 2, 44, 40};
+            const auto batteryType = config.batteryLabel == settings::BatteryLabel::percentage    ? "%"
+                                   : config.batteryLabel == settings::BatteryLabel::timeRemaining ? "h"
+                                                                                                  : "V";
+            if (!reading && ui.button(batteryFormat, batteryType)) {
                 config.batteryLabel = settings::cycleEnum(config.batteryLabel);
                 changed = true;
             }
-            const ui::Rect footerFormat{static_cast<int16_t>(config.leftHanded
-                                                                 ? chrome.progress.x + chrome.progress.w + 4
-                                                                 : chrome.progress.x - 48),
-                                        static_cast<int16_t>(ui.height() - 44), 44, 40};
             if (!reading && ui.button(footerFormat, "%")) {
                 config.footerMetric = settings::cycleEnum(config.footerMetric);
                 changed = true;

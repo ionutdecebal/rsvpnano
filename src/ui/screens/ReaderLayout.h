@@ -18,10 +18,10 @@ namespace screens::readerLayout {
     uint16_t previousSentenceTapWidth();
 
     struct HorizontalChrome {
-        ui::Rect chapter, progress, batteryIcon, batteryLabel, arrows;
+        ui::Rect chapter, progress, battery, arrows;
         uint8_t textSize;
     };
-    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded);
+    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t footerWidth = 36);
     std::string batteryText(settings::BatteryLabel format, const Board::Power::BatteryState& battery);
     std::string progressText(ui::Context& ui, settings::FooterMetric format, uint8_t percent, uint32_t minutes);
 
@@ -37,6 +37,8 @@ namespace screens::readerLayout {
         uint32_t bottomState;
         bool ghostHidden = false;
     };
+    void drawArrows(ui::Context& ui, const settings::ReadingSettings& settings, bool reading, int16_t wordHeight,
+                    bool ghostHidden = false);
     void horizontalChrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,
                           const Board::Power::BatteryState& battery);
     void chrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,

@@ -422,44 +422,37 @@ namespace ui {
         return tapped(widget.index, rect);
     }
 
-    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText, bool showIcon,
-                          uint8_t alpha) {
-        percent = std::min<uint8_t>(percent, 100);
-
-        uint32_t state = combine(signature(labelText), percent);
-        state = combine(state, charging);
-        state = combine(state, showIcon);
-        state = combine(state, alpha);
-
-        if (!claim(Kind::Battery, rect, state).changed || (!showIcon && labelText.empty()))
-            return;
-
+    Context::BatteryLayout Context::batteryLayout(Rect rect, std::string_view labelText, bool showIcon) const {
         constexpr int16_t iconWidth = 29;
         constexpr int16_t iconHeight = 13;
         constexpr int16_t labelGap = 7;
 
         const int16_t iconAreaWidth = showIcon ? iconWidth + labelGap : 0;
-        const int16_t labelWidth = textWidth(labelText, 2);
+        const int16_t labelWidth =
+            std::min<int16_t>(textWidth(labelText, 2), std::max<int16_t>(0, rect.w - iconAreaWidth));
         const int16_t totalWidth = static_cast<int16_t>(iconAreaWidth + labelWidth);
         const int16_t x = std::max<int16_t>(rect.x, static_cast<int16_t>(rect.x + rect.w - totalWidth));
 
-        const uint16_t ink = blend(ui::themes::ColorRole::Muted, alpha);
-        const uint16_t surface = color(ui::themes::ColorRole::Background);
+        return {{x, static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2)), iconWidth,
+                 iconHeight},
+                {static_cast<int16_t>(x + iconAreaWidth), rect.y, labelWidth, rect.h}};
+    }
 
-        if (showIcon) {
-            const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
-
-            drawBatteryIcon(gfx_, {x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
-        }
-
-        drawText(
-            {
-                static_cast<int16_t>(x + iconAreaWidth),
-                rect.y,
-                labelWidth,
-                rect.h,
-            },
-            labelText, 2, ink);
+    void Context::battery(Rect rect, uint8_t percent, bool charging, std::string_view labelText, bool showIcon,
+                          uint8_t iconAlpha, uint8_t labelAlpha) {
+        percent = std::min<uint8_t>(percent, 100);
+        uint32_t state = combine(signature(labelText), percent);
+        state = combine(state, charging);
+        state = combine(state, showIcon);
+        state = combine(state, iconAlpha);
+        state = combine(state, labelAlpha);
+        if (!claim(Kind::Battery, rect, state).changed || (!showIcon && labelText.empty()))
+            return;
+        const auto layout = batteryLayout(rect, labelText, showIcon);
+        if (showIcon)
+            drawBatteryIcon(gfx_, layout.icon, percent, charging, blend(themes::Muted, iconAlpha),
+                            color(themes::Background));
+        drawText(layout.label, labelText, 2, blend(themes::Muted, labelAlpha));
     }
 
     void Context::progress(Rect rect, int value, int minimum, int maximum) {
