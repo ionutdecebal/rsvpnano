@@ -79,6 +79,9 @@ public:
     virtual void drawLine(int16_t, int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
     }
+    virtual void fillTriangle(int16_t, int16_t, int16_t, int16_t, int16_t, int16_t, uint16_t) {
+        ++writes;
+    }
     virtual void setFont(const GFXfont*) {}
     virtual void setFont(const uint8_t*) {}
     virtual void setUTF8Print(bool) {}

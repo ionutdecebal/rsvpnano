@@ -18,6 +18,7 @@
 #include "ui/Localization.h"
 #include "ui/Ui.h"
 #include "ui/screens/PageReaderScreen.h"
+#include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/Screens.h"
 
 namespace {
@@ -1467,6 +1468,118 @@ void test_steps_follow_the_long_axis() {
     TEST_ASSERT_LESS_THAN(gfx.lastCircleY, gfx.firstCircleY);
 }
 
+// Exercise the real touch classifier and screen together: a drag may still be
+// a framework TouchTap, but must never also activate a chapter.
+void test_chapters_drag_tracks_distance_not_time_and_never_activates() {
+    const std::array<std::string, 9> words{"a", "b", "c", "d", "e", "f", "g", "h", "i"};
+    std::array<ChapterMarker, 9> markers;
+    for (size_t i = 0; i < markers.size(); ++i)
+        markers[i] = {.title = std::to_string(i), .wordIndex = i};
+
+    for (const bool reversed : {false, true}) {
+        for (const int samples : {1, 30}) {
+            Arduino_GFX gfx(320, 172);
+            ui::Context context(gfx);
+            context.setTheme(theme());
+            enableTouch(context);
+            screens::ChaptersScreen chapters;
+            ReadingSession reader;
+            reader.words = words;
+            reader.state.wordIndex = 4;
+            settings::ReadingSettings settings;
+            settings.chapterScrollReversed = reversed;
+            screens::Screen screen = screens::Screen::Chapters;
+            const auto frame = [&](bool down, int y, uint32_t time) {
+                gTouchResult = ui::TouchSampleResult::Contact;
+                gContact = {down, 160, static_cast<uint16_t>(y)};
+                context.pollTouch(time);
+                context.beginFrame(static_cast<uint8_t>(screen));
+                const auto action = chapters.draw(context, markers, reader, settings, time, screen);
+                context.endFrame();
+                return action;
+            };
+            frame(true, 104, 1);
+            for (int sample = 1; sample <= samples; ++sample)
+                TEST_ASSERT_EQUAL(screens::Action::None, frame(true, 104 - 30 * sample / samples, 1 + sample));
+            // Staying off-centre for seconds must not keep accelerating the list.
+            for (uint32_t time = 100; time <= 2000; time += 100)
+                frame(true, 74, time);
+            TEST_ASSERT_EQUAL(screens::Action::None, frame(false, 74, 2100));
+            TEST_ASSERT_EQUAL(4, reader.state.wordIndex);
+            frame(true, 104, 2200);
+            TEST_ASSERT_EQUAL(screens::Action::Resume, frame(false, 104, 2250));
+            TEST_ASSERT_EQUAL(reversed ? 3 : 5, reader.state.wordIndex);
+        }
+    }
+}
+
+void test_chapters_taps_jitter_snapping_and_visible_rows() {
+    const std::array<std::string, 9> words{"a", "b", "c", "d", "e", "f", "g", "h", "i"};
+    std::array<ChapterMarker, 9> markers;
+    for (size_t i = 0; i < markers.size(); ++i)
+        markers[i] = {.title = std::to_string(i), .wordIndex = i};
+    // The 320x172 layout has visible chapter centres at 59, 78, 104, 130, 149.
+    for (const int targetY : {59, 78, 104, 130, 149}) {
+        Arduino_GFX gfx(320, 172);
+        ui::Context context(gfx);
+        context.setTheme(theme());
+        enableTouch(context);
+        screens::ChaptersScreen chapters;
+        ReadingSession reader;
+        reader.words = words;
+        reader.state.wordIndex = 4;
+        settings::ReadingSettings settings;
+        screens::Screen screen = screens::Screen::Chapters;
+        const auto frame = [&](bool down, int y, uint32_t time) {
+            gTouchResult = ui::TouchSampleResult::Contact;
+            gContact = {down, 160, static_cast<uint16_t>(y)};
+            context.pollTouch(time);
+            context.beginFrame(static_cast<uint8_t>(screen));
+            const auto action = chapters.draw(context, markers, reader, settings, time, screen);
+            context.endFrame();
+            return action;
+        };
+        frame(true, targetY, 1);
+        // Repeated small jitter is not cumulative scrolling distance.
+        for (uint32_t time = 10; time < 100; time += 10)
+            frame(true, targetY + (time % 20 ? 2 : -2), time);
+        TEST_ASSERT_EQUAL(screens::Action::Resume, frame(false, targetY, 110));
+        const int expected = targetY == 59 ? 2 : targetY == 78 ? 3 : targetY == 104 ? 4 : targetY == 130 ? 5 : 6;
+        TEST_ASSERT_EQUAL(expected, reader.state.wordIndex);
+    }
+
+    // Snap either side of the half-row boundary; even a short movement that
+    // the framework accepts as a tap is owned exclusively by the drag.
+    for (const int distance : {14, 16, 120, -120}) {
+        Arduino_GFX gfx(320, 172);
+        ui::Context context(gfx);
+        context.setTheme(theme());
+        enableTouch(context);
+        screens::ChaptersScreen chapters;
+        ReadingSession reader;
+        reader.words = words;
+        reader.state.wordIndex = distance == -120 ? 0 : 7;
+        settings::ReadingSettings settings;
+        screens::Screen screen = screens::Screen::Chapters;
+        const auto frame = [&](bool down, int y, uint32_t time) {
+            gTouchResult = ui::TouchSampleResult::Contact;
+            gContact = {down, 160, static_cast<uint16_t>(y)};
+            context.pollTouch(time);
+            context.beginFrame(static_cast<uint8_t>(screen));
+            const auto action = chapters.draw(context, markers, reader, settings, time, screen);
+            context.endFrame();
+            return action;
+        };
+        const int start = distance < 0 ? 44 : 163;
+        frame(true, start, 1);
+        frame(true, start - distance, 10);
+        TEST_ASSERT_EQUAL(screens::Action::None, frame(false, start - distance, 20));
+        frame(true, 104, 30);
+        TEST_ASSERT_EQUAL(screens::Action::Resume, frame(false, 104, 40));
+        TEST_ASSERT_EQUAL(distance == -120 ? 0 : distance == 14 ? 7 : 8, reader.state.wordIndex);
+    }
+}
+
 void test_compact_settings_screens_stay_inside_the_content_area() {
     {
         BoundsRecordingGfx gfx(320, 172);
@@ -1578,6 +1691,8 @@ int main(int, char**) {
     RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
     RUN_TEST(test_focus_timer_text_does_not_redraw_hourglass);
     RUN_TEST(test_steps_follow_the_long_axis);
+    RUN_TEST(test_chapters_drag_tracks_distance_not_time_and_never_activates);
+    RUN_TEST(test_chapters_taps_jitter_snapping_and_visible_rows);
     RUN_TEST(test_compact_settings_screens_stay_inside_the_content_area);
     RUN_TEST(test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base);
     return UNITY_END();

@@ -1,7 +1,6 @@
 #include "ui/screens/ChaptersScreen.h"
 
 #include <algorithm>
-#include <climits>
 #include <cstdio>
 #include <cstdlib>
 
@@ -13,15 +12,27 @@ namespace screens {
 
         constexpr int16_t kHeaderHeight = 32;
         constexpr int16_t kRowStep = 30;
-        constexpr int16_t kDragThreshold = 5;
-        constexpr int32_t kMaximumVelocity = 400'000;
-        constexpr uint32_t kAccelerationMs = 450;
-        constexpr int32_t kScrollScale = 1'000'000;
+        constexpr int16_t kDragThreshold = 6;
+
+        int16_t rowCenter(ui::Rect viewport, int row, int offset) {
+            const int raw = row * kRowStep + offset;
+            const int magnitude = std::min(std::abs(raw), static_cast<int>(viewport.h));
+            return viewport.y + viewport.h / 2 + raw * (2 * viewport.h - magnitude) / (2 * viewport.h);
+        }
+
+        constexpr int16_t rowHeight(bool centered) {
+            return centered ? 28 : 18;
+        }
+
+        bool rowVisible(ui::Rect viewport, int y, int height) {
+            return y - height / 2 >= viewport.y && y + height / 2 <= viewport.y + viewport.h;
+        }
 
     } // namespace
 
     Action ChaptersScreen::draw(ui::Context& ui, std::span<const ChapterMarker> chapters, ReadingSession& reader,
                                 const settings::ReadingSettings& settings, uint32_t nowMs, Screen& screen) {
+        (void) nowMs;
         if (const Action action = detail::navigation(ui, Screen::Chapters, screen); action != Action::None)
             return action;
 
@@ -32,10 +43,9 @@ namespace screens {
             return Action::None;
         }
 
-        size_t readingIndex = 0;
-        while (readingIndex + 1 < chapters.size() && chapters[readingIndex + 1].wordIndex <= reader.state.wordIndex) {
-            ++readingIndex;
-        }
+        const auto nextChapter = std::upper_bound(chapters.begin(), chapters.end(), reader.state.wordIndex,
+            [](size_t word, const ChapterMarker& chapter) { return word < chapter.wordIndex; });
+        const size_t readingIndex = nextChapter == chapters.begin() ? 0 : static_cast<size_t>(nextChapter - chapters.begin() - 1);
 
         if (source_.data() != chapters.data() || source_.size() != chapters.size()) {
             source_ = chapters;
@@ -57,6 +67,8 @@ namespace screens {
 
         const ui::Rect viewport{content.x, static_cast<int16_t>(content.y + kHeaderHeight + 4), content.w,
                                 static_cast<int16_t>(content.h - kHeaderHeight - 4)};
+        if (viewport.h <= 0)
+            return Action::None;
         if (chapters.empty()) {
             if (ui.button(viewport, ui.text(UiText::StartReading))) {
                 ReadingLoop::seekTo(reader, 0);
@@ -68,94 +80,52 @@ namespace screens {
         const ui::Touch* touch = ui.touch();
         if (touch != nullptr && ui::hasTouch(*touch, ui::TouchStart) && ui::contains(viewport, touch->x, touch->y)) {
             dragging_ = true;
+            moved_ = false;
             dragStartIndex_ = centeredIndex_;
-            lastY_ = touch->y;
-            dragDistance_ = 0;
-            lastTickMs_ = nowMs;
-            velocity_ = 0;
-            scrollRemainder_ = 0;
+            dragStartY_ = touch->y;
         }
-        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchMove)) {
-            const int16_t delta = static_cast<int16_t>(touch->y) - static_cast<int16_t>(lastY_);
-            dragDistance_ = static_cast<uint16_t>(std::min<int>(UINT16_MAX, dragDistance_ + std::abs(delta)));
-            lastY_ = touch->y;
-        }
-
-        if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)
-            && ui::hasTouch(*touch, ui::TouchTap) && ui::contains(viewport, touch->x, touch->y)) {
-            dragging_ = false;
-            offset_ = 0;
-            velocity_ = 0;
-            scrollRemainder_ = 0;
-            centeredIndex_ = dragStartIndex_;
-
-            const size_t tapCenter = centeredIndex_;
-            const size_t tapFirst = tapCenter > 4 ? tapCenter - 4 : 0;
-            const size_t tapLast = std::min(chapters.size(), tapCenter + 5);
-            size_t tappedIndex = tapCenter;
-            int closestDistance = INT_MAX;
-            for (size_t index = tapFirst; index < tapLast; ++index) {
-                const int raw = (static_cast<int>(index) - static_cast<int>(tapCenter)) * kRowStep;
-                const int magnitude = std::min<int>(std::abs(raw), viewport.h);
-                const int curved = raw * (2 * viewport.h - magnitude) / (2 * viewport.h);
-                const int rowY = viewport.y + viewport.h / 2 + curved;
-                const int distance = std::abs(rowY - touch->y);
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    tappedIndex = index;
-                }
+        if (dragging_ && touch != nullptr
+            && (ui::hasTouch(*touch, ui::TouchMove) || ui::hasTouch(*touch, ui::TouchRelease))) {
+            const int delta = static_cast<int>(touch->y) - dragStartY_;
+            moved_ = moved_ || std::abs(delta) > kDragThreshold;
+            if (moved_) {
+                // Displacement owns the selection: holding still never advances chapters,
+                // and sample rate cannot change the distance travelled.
+                const int direction = settings.chapterScrollReversed ? -1 : 1;
+                const int64_t position = std::clamp<int64_t>(
+                    static_cast<int64_t>(dragStartIndex_) * kRowStep - direction * delta,
+                    0, static_cast<int64_t>(chapters.size() - 1) * kRowStep);
+                centeredIndex_ = static_cast<size_t>((position + kRowStep / 2) / kRowStep);
+                offset_ = static_cast<int16_t>(static_cast<int64_t>(centeredIndex_) * kRowStep - position);
             }
-
-            centeredIndex_ = tappedIndex;
-            ReadingLoop::seekTo(reader, chapters[centeredIndex_].wordIndex);
-            return Action::Resume;
-        }
-
-        if (dragging_) {
-            const uint32_t elapsed = std::min<uint32_t>(nowMs - lastTickMs_, 100);
-            lastTickMs_ = nowMs;
-            const int32_t dragRate =
-                ui::centeredDragRate(lastY_, viewport.y, viewport.h, kRowStep / 2, kMaximumVelocity);
-            if (dragDistance_ > kDragThreshold && dragRate != 0) {
-                const int32_t direction = settings.chapterScrollReversed ? 1 : -1;
-                const int32_t target = direction * dragRate;
-                velocity_ += static_cast<int32_t>(static_cast<int64_t>(target - velocity_) * elapsed / kAccelerationMs);
-                scrollRemainder_ += static_cast<int32_t>(static_cast<int64_t>(velocity_) * elapsed);
-                const int16_t pixels = static_cast<int16_t>(scrollRemainder_ / kScrollScale);
-                scrollRemainder_ %= kScrollScale;
-                offset_ = static_cast<int16_t>(offset_ + pixels);
-            } else {
-                velocity_ = 0;
-                scrollRemainder_ = 0;
-                if (dragDistance_ > kDragThreshold)
-                    offset_ = 0;
-            }
-        }
-
-        while (offset_ <= -kRowStep / 2 && centeredIndex_ + 1 < chapters.size()) {
-            ++centeredIndex_;
-            offset_ = static_cast<int16_t>(offset_ + kRowStep);
-        }
-        while (offset_ >= kRowStep / 2 && centeredIndex_ > 0) {
-            --centeredIndex_;
-            offset_ = static_cast<int16_t>(offset_ - kRowStep);
-        }
-        if (centeredIndex_ == 0) {
-            offset_ = std::min<int16_t>(offset_, 0);
-            if (velocity_ > 0)
-                velocity_ = scrollRemainder_ = 0;
-        }
-        if (centeredIndex_ + 1 == chapters.size()) {
-            offset_ = std::max<int16_t>(offset_, 0);
-            if (velocity_ < 0)
-                velocity_ = scrollRemainder_ = 0;
         }
 
         if (dragging_ && touch != nullptr && ui::hasTouch(*touch, ui::TouchRelease)) {
             dragging_ = false;
+            if (!moved_ && ui::hasTouch(*touch, ui::TouchTap) && ui::contains(viewport, touch->x, touch->y)) {
+                const size_t first = centeredIndex_ > 4 ? centeredIndex_ - 4 : 0;
+                const size_t last = std::min(chapters.size(), centeredIndex_ + 5);
+                size_t tappedIndex = chapters.size();
+                int closestDistance = kRowStep / 2 + 1;
+                for (size_t index = first; index < last; ++index) {
+                    const int y = rowCenter(viewport, static_cast<int>(index) - static_cast<int>(centeredIndex_), offset_);
+                    if (!rowVisible(viewport, y, rowHeight(index == centeredIndex_)))
+                        continue;
+                    const int distance = std::abs(y - touch->y);
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        tappedIndex = index;
+                    }
+                }
+                if (tappedIndex != chapters.size()) {
+                    centeredIndex_ = tappedIndex;
+                    offset_ = 0;
+                    ReadingLoop::seekTo(reader, chapters[centeredIndex_].wordIndex);
+                    return Action::Resume;
+                }
+            }
+            // Snap to the same nearest chapter used for highlighting during the drag.
             offset_ = 0;
-            velocity_ = 0;
-            scrollRemainder_ = 0;
         }
 
         uint32_t state = ui::Context::combine(static_cast<uint32_t>(chapters.size()), centeredIndex_);
@@ -175,21 +145,19 @@ namespace screens {
             const int16_t maximumWidth = std::max<int16_t>(40, static_cast<int16_t>(viewport.w - 20));
             const uint16_t background = ui.color(ui::themes::ColorRole::Background);
             for (size_t index = first; index < last; ++index) {
-                const int raw = (static_cast<int>(index) - static_cast<int>(centeredIndex_)) * kRowStep + offset_;
-                const int magnitude = std::min<int>(std::abs(raw), viewport.h);
-                const int curved = raw * (2 * viewport.h - magnitude) / (2 * viewport.h);
-                const int16_t y = static_cast<int16_t>(centerY + curved);
+                const int16_t y = rowCenter(viewport, static_cast<int>(index) - static_cast<int>(centeredIndex_), offset_);
+                const int curved = y - centerY;
                 const bool centered = index == centeredIndex_;
                 const uint8_t alpha =
                     centered ? 255 : static_cast<uint8_t>(std::max(48, 220 - std::abs(curved) * 172 / halfHeight));
-                const int16_t height = centered ? 28 : 18;
+                const int16_t height = rowHeight(centered);
                 const int16_t width = centered ? maximumWidth
                                                : static_cast<int16_t>(maximumWidth
                                                                       - std::min<int>(std::abs(curved), halfHeight)
                                                                             * (maximumWidth / 3) / halfHeight);
                 const int16_t x = static_cast<int16_t>(viewport.x + (viewport.w - width) / 2);
                 const int16_t top = static_cast<int16_t>(y - height / 2);
-                if (top < viewport.y || top + height > viewport.y + viewport.h)
+                if (!rowVisible(viewport, y, height))
                     continue;
                 const int16_t right = static_cast<int16_t>(x + width - 1);
                 const int16_t notch = std::min<int16_t>(10, height / 2);

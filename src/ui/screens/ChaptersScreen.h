@@ -22,11 +22,8 @@ namespace screens {
         size_t centeredIndex_ = 0;
         size_t dragStartIndex_ = 0;
         int16_t offset_ = 0;
-        uint16_t lastY_ = 0;
-        uint16_t dragDistance_ = 0;
-        uint32_t lastTickMs_ = 0;
-        int32_t velocity_ = 0;
-        int32_t scrollRemainder_ = 0;
+        uint16_t dragStartY_ = 0;
+        bool moved_ = false;
         bool dragging_ = false;
         ui::CarouselGesture carouselGesture_;
     };
