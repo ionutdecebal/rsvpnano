@@ -93,7 +93,8 @@ std::expected<void, std::error_code> StorageManager::installBook(std::string_vie
 std::expected<void, std::error_code> StorageManager::removeBook(std::string_view path) {
     if (!mounted_)
         return std::unexpected(std::make_error_code(std::errc::no_such_device));
-    if (findBook(path) < 0)
+    const int index = findBook(path);
+    if (index < 0)
         return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
 
     const std::string ownedPath{path};
@@ -102,7 +103,7 @@ std::expected<void, std::error_code> StorageManager::removeBook(std::string_view
     Board::Storage::filesystem().remove(StoragePaths::indexedIndexPathFor(path).c_str());
     Board::Storage::filesystem().remove(StoragePaths::indexedDataPathFor(path).c_str());
     Board::Storage::filesystem().remove(StoragePaths::bookStatePathFor(path).c_str());
-    refreshBookPaths(false);
+    library_.erase(library_.begin() + index);
     return {};
 }
 
