@@ -3,6 +3,9 @@
 #include <glaze/json.hpp>
 
 #include <WiFi.h>
+#if !ARDUINO_USB_MODE
+#include <tusb.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -74,7 +77,12 @@ void CompanionSerial::update(uint32_t nowMs) {
         return;
     }
 
+#if ARDUINO_USB_MODE
     if (!Serial) {
+#else
+    // Arduino's connection flag also tracks the bootloader reset sequence; use the actual CDC DTR state.
+    if (!tud_cdc_connected()) {
+#endif
         close();
         return;
     }
