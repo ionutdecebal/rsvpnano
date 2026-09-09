@@ -11,7 +11,7 @@ namespace WaveshareAmoled18::Version {
     constexpr bool kPanelMemoryRotated180 = true;
     constexpr uint16_t kPanelColumnOffset = 0;
     constexpr uint16_t kPanelRowOffset = 0;
-    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
+    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Portrait;
 
     constexpr uint8_t kTouchAddress = 0x38;
 

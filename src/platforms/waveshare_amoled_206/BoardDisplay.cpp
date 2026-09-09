@@ -16,6 +16,8 @@ namespace {
                           WaveshareAmoled206::DisplayWiring::kPanelWidth,
                           WaveshareAmoled206::DisplayWiring::kPanelHeight,
                           WaveshareAmoled206::DisplayWiring::kColumnOffset,
+                          WaveshareAmoled206::DisplayWiring::kRowOffset,
+                          WaveshareAmoled206::DisplayWiring::kColumnOffset,
                           WaveshareAmoled206::DisplayWiring::kRowOffset);
 
 } // namespace

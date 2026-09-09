@@ -17,8 +17,8 @@ namespace Board::Config {
 
     constexpr int PANEL_NATIVE_WIDTH = WaveshareC6TouchLcd147::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareC6TouchLcd147::DisplayWiring::kPanelHeight;
-    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_HEIGHT;
-    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_WIDTH;
+    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_WIDTH;
+    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_HEIGHT;
     constexpr int READER_CHROME_MARGIN_X = 28;
     constexpr int READER_CHROME_MARGIN_TOP = 14;
     constexpr int READER_CHROME_MARGIN_BOTTOM = 14;

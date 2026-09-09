@@ -5,7 +5,7 @@
 
 namespace screens::watch {
     inline uint8_t textSize(const ui::Context& ui) {
-        return ui.height() < 240 ? 2 : 3;
+        return std::min(ui.width(), ui.height()) < 240 ? 2 : 3;
     }
 
     inline ui::Rect header(ui::Context& ui, std::string_view title, Screen back, Screen& screen) {

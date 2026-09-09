@@ -31,7 +31,7 @@ namespace WaveshareAmoled241::DisplayWiring {
     constexpr uint16_t kPanelRowOffset = 0;
     constexpr size_t kTxChunkBytes = 48 * 1024;
     constexpr bool kPanelMemoryRotated180 = false;
-    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
+    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Portrait;
 } // namespace WaveshareAmoled241::DisplayWiring
 
 namespace WaveshareAmoled241::Power {

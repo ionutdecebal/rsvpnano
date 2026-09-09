@@ -16,6 +16,8 @@ namespace {
     Arduino_CO5300 gPanel(&gBus, WaveshareAmoled18::DisplayWiring::kResetPin, 0,
                           WaveshareAmoled18::DisplayWiring::kPanelWidth, WaveshareAmoled18::DisplayWiring::kPanelHeight,
                           WaveshareAmoled18::DisplayWiring::kPanelColumnOffset,
+                          WaveshareAmoled18::DisplayWiring::kPanelRowOffset,
+                          WaveshareAmoled18::DisplayWiring::kPanelColumnOffset,
                           WaveshareAmoled18::DisplayWiring::kPanelRowOffset);
 
 } // namespace

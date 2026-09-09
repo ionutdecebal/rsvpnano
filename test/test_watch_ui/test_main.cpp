@@ -6,6 +6,18 @@
 #include "ui/screens/watch/Layout.h"
 
 namespace {
+    constexpr std::array<ui::TouchSurface, 9> watchResolutions{{
+        {450, 600},
+        {480, 480},
+        {410, 502},
+        {368, 448},
+        {172, 320},
+        {600, 450},
+        {502, 410},
+        {448, 368},
+        {320, 172},
+    }};
+
     ui::TouchContact contact;
     ui::TouchSampleResult poll(ui::TouchContact& out) {
         out = contact;
@@ -35,8 +47,7 @@ namespace {
     };
 
     void test_screens_fit_every_watch_resolution() {
-        constexpr std::array<ui::TouchSurface, 5> sizes{{{600, 450}, {480, 480}, {502, 410}, {448, 368}, {320, 172}}};
-        for (const auto size: sizes) {
+        for (const auto size: watchResolutions) {
             BoundsGfx gfx(size.width, size.height);
             ui::Context ui(gfx);
             const auto theme = ui::themes::defaultTheme();
@@ -157,8 +168,7 @@ namespace {
         TEST_ASSERT_EQUAL(0, page.first);
     }
     void test_reader_layout_fits_and_preserves_handedness() {
-        constexpr std::array<ui::TouchSurface, 5> sizes{{{600, 450}, {480, 480}, {502, 410}, {448, 368}, {320, 172}}};
-        for (const auto size: sizes) {
+        for (const auto size: watchResolutions) {
             BoundsGfx gfx(size.width, size.height);
             ui::Context ui(gfx);
             const auto theme = ui::themes::defaultTheme();
@@ -257,7 +267,7 @@ namespace {
 void setUp() {}
 void tearDown() {}
 void test_appearance_controls_fit_watch_displays() {
-    for (const auto size: std::array<ui::TouchSurface, 5>{{{600, 450}, {480, 480}, {502, 410}, {448, 368}, {320, 172}}})
+    for (const auto size: watchResolutions)
         appearanceChecks::layout(size.width, size.height);
 }
 

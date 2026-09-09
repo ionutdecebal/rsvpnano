@@ -24,7 +24,7 @@ namespace WaveshareC6TouchLcd147::DisplayWiring {
     constexpr uint16_t kColumnOffset = 34;
     constexpr uint16_t kRowOffset = 0;
     constexpr size_t kTxChunkBytes = 16 * 1024;
-    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
+    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Portrait;
 } // namespace WaveshareC6TouchLcd147::DisplayWiring
 
 namespace WaveshareC6TouchLcd147::ImuWiring {

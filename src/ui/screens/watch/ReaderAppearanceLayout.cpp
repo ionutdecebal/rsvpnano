@@ -4,10 +4,12 @@ namespace screens::appearanceLayout {
     Layout make(int16_t width, int16_t height) {
         Layout out{};
         out.back = {4, 2, 44, 40};
-        out.page = {52, 2, 144, 40};
-        out.reset = {200, 2, 72, 40};
-        out.size = {4, static_cast<int16_t>(height - 44), 108, 40};
-        out.font = {120, static_cast<int16_t>(height - 44), static_cast<int16_t>(width - 124), 40};
+        out.page = {52, 2, std::clamp<int16_t>(width - 132, 44, 144), 40};
+        const int16_t resetX = out.page.x + out.page.w + 4;
+        out.reset = {resetX, 2, std::min<int16_t>(72, width - resetX - 4), 40};
+        out.size = {4, static_cast<int16_t>(height - 44), std::min<int16_t>(108, width / 2 - 8), 40};
+        const int16_t fontX = out.size.x + out.size.w + 8;
+        out.font = {fontX, static_cast<int16_t>(height - 44), static_cast<int16_t>(width - fontX - 4), 40};
         out.preview = {0, static_cast<int16_t>(height / 2 - 44), width, 88};
         out.pagedDials = height < 300;
         if (out.pagedDials) {

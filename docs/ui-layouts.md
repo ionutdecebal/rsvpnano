@@ -32,6 +32,21 @@ Chapter and timer carousels only draw three visible cards. Tap a side to select 
 tap the center to activate it. Horizontal swipes select without activating. The WPM
 ring uses relative horizontal drag and retains explicit minus/plus controls.
 
+## Native watch orientation
+
+Watch menus use the panel's natural portrait axes: 450x600 (2.41), 480x480 (2.16),
+410x502 (2.06), 368x448 (1.8 V1/V2), and 172x320 (LCD 1.47). Each board declares
+`Portrait` as its default orientation and uses native width/height in `BoardConfig`.
+LCD 3.49 keeps its existing landscape orientation and regular presentation.
+
+Draw directly to the watch panel; no additional canvas/framebuffer is required.
+SH8601 and CO5300 do not support a hardware X/Y-axis exchange, so requesting a
+landscape quarter-turn changes logical bounds without correctly rotating pixels.
+See the [CO5300 driver](https://github.com/moononournation/Arduino_GFX/blob/master/src/display/Arduino_CO5300.cpp)
+and [SH8601 driver](https://github.com/moononournation/Arduino_GFX/blob/master/src/display/Arduino_SH8601.cpp).
+The existing handedness option uses a 180-degree flip, with matching touch mapping;
+both portrait offset sets must retain the panel's column/row offsets.
+
 ## Validation
 
 Run the two test profiles separately:
@@ -44,13 +59,16 @@ uvx platformio run -e waveshare_esp32s3_touch_amoled_206
 uvx platformio run -e waveshare_esp32c6_touch_lcd_147
 ```
 
-The watch host tests cover physical bounds at 600x450, 480x480, 502x410, 448x368,
-and 320x172; paging, dock navigation, relative rotary adjustment, and directional
+The watch host tests cover native portrait bounds and the previous landscape sizes;
+paging, dock navigation, relative rotary adjustment, and directional
 carousel gestures. Host drawing checks do not prove pixel appearance or touch
 quality on hardware.
 
 Before release, check on the physical devices:
 
+- The full portrait screen is visible, text is not mirrored, all four corners and
+  dock items respond at their drawn positions, and swipes follow the finger in
+  both handedness settings. Cold boot and sleep/wake must restore the display.
 - Long/localized titles, settings labels, and chapter names remain readable.
 - All setting pages, timer creation/editing, and keyboard input remain accessible.
 - Side taps and swipes never start a chapter/timer; center taps do.

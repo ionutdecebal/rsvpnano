@@ -15,6 +15,8 @@ namespace {
                           WaveshareC6TouchLcd147::DisplayWiring::kPanelWidth,
                           WaveshareC6TouchLcd147::DisplayWiring::kPanelHeight,
                           WaveshareC6TouchLcd147::DisplayWiring::kColumnOffset,
+                          WaveshareC6TouchLcd147::DisplayWiring::kRowOffset,
+                          WaveshareC6TouchLcd147::DisplayWiring::kColumnOffset,
                           WaveshareC6TouchLcd147::DisplayWiring::kRowOffset);
 
     const uint8_t kJd9853InitOperations[] = {
