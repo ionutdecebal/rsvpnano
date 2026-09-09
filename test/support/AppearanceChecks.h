@@ -19,10 +19,26 @@ namespace appearanceChecks {
                 TEST_ASSERT_TRUE(rect.x >= layout.preview.x + layout.preview.w || rect.y + rect.h <= layout.preview.y
                                  || rect.y >= layout.preview.y + layout.preview.h);
         }
+        Arduino_GFX gfx(width, height);
+        ui::Context ui(gfx);
         for (const bool leftHanded: {false, true}) {
             const auto chrome = screens::readerLayout::horizontalChrome(width, height, leftHanded);
             for (const auto rect: {chrome.chapter, chrome.progress, chrome.battery, chrome.arrows})
                 inside(rect);
+            const auto editor = screens::appearanceLayout::chrome(ui, leftHanded, layout.page);
+            for (const auto rect:
+                 {editor.reader.chapter, editor.reader.progress, editor.reader.batteryParts.icon,
+                  editor.reader.batteryParts.label, editor.footerFormat, editor.batteryFormat, editor.preview})
+                inside(rect);
+            TEST_ASSERT_EQUAL(editor.reader.progress.y, editor.footerFormat.y);
+            for (const auto rect: {editor.reader.chapter, editor.reader.progress}) {
+                const auto overlap = ui::intersection(rect, editor.footerFormat);
+                TEST_ASSERT_TRUE(overlap.w == 0 || overlap.h == 0);
+            }
+            TEST_ASSERT_EQUAL(7, editor.reader.batteryParts.label.x - editor.reader.batteryParts.icon.x
+                                     - editor.reader.batteryParts.icon.w);
+            TEST_ASSERT_GREATER_OR_EQUAL(ui.textWidth("4.20V", 2), editor.reader.batteryParts.label.w);
+            TEST_ASSERT_GREATER_OR_EQUAL(ui.textWidth("10.0h", 2), editor.reader.batteryParts.label.w);
         }
     }
 
@@ -123,6 +139,30 @@ namespace appearanceChecks {
         gfx.cleared.clear();
         screens::readerLayout::drawArrows(ui, settings, false, 68);
         TEST_ASSERT_TRUE(gfx.cleared.empty());
+
+        const auto editor =
+            screens::appearanceLayout::chrome(ui, false, screens::appearanceLayout::make(640, 172).page);
+        ui.invalidate();
+        const auto editorFrame = [&](std::string_view footer, std::string_view label) {
+            ui.beginFrame(2);
+            screens::readerLayout::horizontalChrome(ui,
+                                                    {.vertical = false,
+                                                     .footer = footer,
+                                                     .batteryLabel = label,
+                                                     .ghostHidden = true},
+                                                    settings, battery, editor.reader);
+            ui.button(editor.footerFormat, "%");
+            ui.endFrame();
+        };
+        editorFrame("42%", "64%");
+        gfx.cleared.clear();
+        editorFrame("Bk 2h", "4.20V");
+        for (const auto rect: gfx.cleared) {
+            for (const auto unchanged: {editor.footerFormat, editor.reader.batteryParts.icon}) {
+                const auto overlap = ui::intersection(rect, unchanged);
+                TEST_ASSERT_TRUE(overlap.w == 0 || overlap.h == 0);
+            }
+        }
     }
 
     inline void wordTargets() {

@@ -43,8 +43,10 @@ namespace screens {
              {int(type.fontSizeIndex), int(type.tracking), int(type.anchor), int(type.guideWidth), int(type.guideGap),
               int(type.focusHighlight), int(config.phantomWords), int(appearancePage_), int(config.arrowsVisibility)})
             state = ui::Context::combine(state, value);
-        const ui::Rect preview =
-            typography ? layout.preview : ui::Rect{0, 44, ui.width(), static_cast<int16_t>(ui.height() - 88)};
+        const auto footer =
+            readerLayout::progressText(ui, reading ? settings::FooterMetric::percentage : config.footerMetric, 42, 132);
+        const auto chrome = appearanceLayout::chrome(ui, config.leftHanded, layout.page);
+        const ui::Rect preview = typography ? layout.preview : chrome.preview;
         if (showPreview && ui.redraw(preview, state)) {
             drawGuides(ui, anchor, baseline);
             drawWord(word, wordX, baseline, focus, false, ui);
@@ -120,12 +122,6 @@ namespace screens {
         } else {
             const Board::Power::BatteryState battery{{true, 3.9f, 64}, 0, false};
             const auto batteryLabel = readerLayout::batteryText(config.batteryLabel, battery);
-            const auto footer =
-                readerLayout::progressText(ui, reading ? settings::FooterMetric::percentage : config.footerMetric, 42,
-                                           132);
-            const auto chrome =
-                readerLayout::horizontalChrome(ui.width(), ui.height(), config.leftHanded, ui.textWidth(footer, 2));
-            const auto batteryLayout = ui.batteryLayout(chrome.battery, batteryLabel);
             readerLayout::horizontalChrome(ui,
                                            {
                                                .vertical = false,
@@ -141,7 +137,7 @@ namespace screens {
 
                                                .ghostHidden = true,
                                            },
-                                           config, battery);
+                                           config, battery, chrome.reader);
             const auto toggle = [&](ui::Rect target, settings::Visibility& visibility) {
                 // Keep each native slot independently tappable, with a 44-pixel minimum target.
                 if (target.w < 44) {
@@ -155,21 +151,19 @@ namespace screens {
                     changed = true;
                 }
             };
-            toggle(batteryLayout.icon, config.batteryIconVisibility);
-            toggle(batteryLayout.label, config.batteryLabelVisibility);
-            toggle(chrome.chapter, config.chapterVisibility);
-            toggle(chrome.progress, config.progressVisibility);
-            toggle(chrome.arrows, config.arrowsVisibility);
-            const ui::Rect footerFormat{static_cast<int16_t>(layout.page.x + layout.page.w + 8), 2, 44, 40};
-            const ui::Rect batteryFormat{static_cast<int16_t>(chrome.battery.x - 48), 2, 44, 40};
+            toggle(chrome.reader.batteryParts.icon, config.batteryIconVisibility);
+            toggle(chrome.reader.batteryParts.label, config.batteryLabelVisibility);
+            toggle(chrome.reader.chapter, config.chapterVisibility);
+            toggle(chrome.reader.progress, config.progressVisibility);
+            toggle(chrome.reader.arrows, config.arrowsVisibility);
             const auto batteryType = config.batteryLabel == settings::BatteryLabel::percentage    ? "%"
                                    : config.batteryLabel == settings::BatteryLabel::timeRemaining ? "h"
                                                                                                   : "V";
-            if (!reading && ui.button(batteryFormat, batteryType)) {
+            if (!reading && ui.button(chrome.batteryFormat, batteryType)) {
                 config.batteryLabel = settings::cycleEnum(config.batteryLabel);
                 changed = true;
             }
-            if (!reading && ui.button(footerFormat, "%")) {
+            if (!reading && ui.button(chrome.footerFormat, "%")) {
                 config.footerMetric = settings::cycleEnum(config.footerMetric);
                 changed = true;
             }
