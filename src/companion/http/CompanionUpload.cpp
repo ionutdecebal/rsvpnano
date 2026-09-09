@@ -4,8 +4,9 @@
 #include <esp_log.h>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
+#include <memory>
+#include <new>
 #include <utility>
 
 #include "logging/Logger.h"
@@ -83,15 +84,22 @@ namespace companion {
                                                   api::ConnectionPolicy::Close));
         }
 
-        std::array<std::byte, kUploadChunkBytes> buffer{};
+        // USB dispatch runs on loopTask: transfer-sized scratch storage must not consume its stack.
+        const size_t bufferBytes = std::min(request.content_len, kUploadChunkBytes);
+        const std::unique_ptr<uint8_t[]> buffer{new (std::nothrow) uint8_t[bufferBytes]};
+        if (!buffer) {
+            return std::unexpected(interruptedUpload(
+                HTTP_CODE_INTERNAL_SERVER_ERROR, "out_of_memory", "Could not allocate upload buffer"));
+        }
+        Logger::checkpoint("companion_upload_receive");
         size_t remaining = request.content_len;
         while (remaining > 0) {
-            const size_t requested = std::min(remaining, buffer.size());
+            const size_t requested = std::min(remaining, bufferBytes);
             const int received = companion::bufferedRequest(request) != nullptr
                                    ? companion::bufferedRequest(request)->read(
                                          companion::bufferedRequest(request)->readContext,
-                                         std::span{reinterpret_cast<uint8_t*>(buffer.data()), requested})
-                                   : httpd_req_recv(&request, reinterpret_cast<char*>(buffer.data()), requested);
+                                         std::span{buffer.get(), requested})
+                                   : httpd_req_recv(&request, reinterpret_cast<char*>(buffer.get()), requested);
             if (received == HTTPD_SOCK_ERR_TIMEOUT) {
                 return std::unexpected(interruptedUpload(
                     HTTP_CODE_REQUEST_TIMEOUT, "request_timeout",
@@ -105,7 +113,7 @@ namespace companion {
 
             const size_t receivedBytes = static_cast<size_t>(received);
             const size_t written =
-                file.write(reinterpret_cast<const uint8_t*>(buffer.data()), receivedBytes);
+                file.write(buffer.get(), receivedBytes);
             if (written != receivedBytes) {
                 return std::unexpected(api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
                                                       std::string{label} + " upload could not be written", "file",
@@ -113,7 +121,7 @@ namespace companion {
             }
             if (consume != nullptr) {
                 auto consumed = consume(consumeContext,
-                                        std::span{reinterpret_cast<const uint8_t*>(buffer.data()), receivedBytes});
+                                        std::span<const uint8_t>{buffer.get(), receivedBytes});
                 if (!consumed) {
                     Logger::failure("companion", "process upload", upload.path().c_str(), consumed.error());
                     return std::unexpected(api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "index_error",
@@ -126,6 +134,7 @@ namespace companion {
 
         file.flush();
         file.close();
+        Logger::checkpoint("companion_upload_install");
         return upload;
     }
 

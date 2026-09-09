@@ -76,7 +76,7 @@ private:
     std::string provisioningPassword_;
     RequestMetadata request_;
     std::vector<uint8_t> requestBody_;
-    std::vector<uint8_t> responseBody_;
+    std::string responseBody_;
     File requestFile_;
     uint32_t requestId_ = 0;
     uint32_t expectedSequence_ = 0;

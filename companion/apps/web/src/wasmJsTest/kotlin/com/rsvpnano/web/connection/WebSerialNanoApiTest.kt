@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalWasmJsInterop::class, kotlin.io.encoding.ExperimentalEncodingApi::class)
+@file:OptIn(ExperimentalWasmJsInterop::class, kotlin.io.encoding.ExperimentalEncodingApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 
 package com.rsvpnano.web.connection
 
@@ -12,14 +12,125 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
+import com.rsvpnano.api.NanoClientError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class WebSerialNanoApiTest {
+    @Test
+    fun uploadDisconnectStopsHeartbeatReleasesPortAndCanReconnect() = runTest {
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            val greeting = "RSVPNANO/COMPANION/1 READY\n".encodeToByteArray()
+            val ack = SerialFrameCodec.encode(SerialFrame(SerialFrameType.Acknowledgement, 1u))
+            installFakeSerial(listOf(greeting, ack).joinToString("|") { Base64.encode(it) })
+            val api = WebSerialNanoApi(backgroundScope)
+            var disconnects = 0
+            assertTrue(api.open(onDisconnect = { disconnects++ }))
+            disconnectFakeSerialAfterEnd()
+
+            assertFailsWith<NanoClientError> {
+                api.uploadTheme("usb://active", "nord.toml", ByteArray(371))
+            }
+            assertEquals(1, disconnects)
+            assertEquals(1, fakeSerialCloseCount())
+            val sent = fakeSerialFrames()
+            assertEquals(371, sent.single { it.type == SerialFrameType.Data }.payload.size)
+            assertEquals(SerialFrameType.End, sent.last().type)
+            testScheduler.advanceTimeBy(5_100)
+            testScheduler.runCurrent()
+            assertEquals(sent.size, fakeSerialFrames().size, "Disconnected sessions must stop their heartbeat")
+
+            queueFakeSerialRead(Base64.encode(greeting))
+            assertTrue(api.open(onDisconnect = { disconnects++ }))
+            val body = """{"ssid":"RSVP-Nano","firmwareVersion":"0.0.9","otaAsset":"nano-ota.bin"}""".encodeToByteArray()
+            val metadata = """{"status":200,"totalBytes":${body.size}}""".encodeToByteArray()
+            queueFakeSerialRead(Base64.encode(
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.Response, 2u, payload = metadata)) +
+                    SerialFrameCodec.encode(SerialFrame(SerialFrameType.Data, 2u, payload = body)) +
+                    SerialFrameCodec.encode(SerialFrame(SerialFrameType.End, 2u)),
+            ))
+            assertEquals("RSVP-Nano", api.fetchDevice("usb://active").ssid)
+            api.release()
+            assertEquals(1, disconnects, "Intentional release must not report a disconnect")
+        }
+    }
+
+    @Test
+    fun writeFailureAndRequestCancellationReleaseTheirSession() = runTest {
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            val greeting = Base64.encode("RSVPNANO/COMPANION/1 READY\n".encodeToByteArray())
+            installFakeSerial(greeting)
+            val api = WebSerialNanoApi()
+            var disconnects = 0
+            api.open(onDisconnect = { disconnects++ })
+            failFakeSerialWrites()
+            assertFailsWith<NanoClientError> { api.fetchDevice("usb://active") }
+            assertEquals(1, fakeSerialCloseCount())
+            assertEquals(1, disconnects)
+
+            queueFakeSerialRead(greeting)
+            api.open(onDisconnect = { disconnects++ })
+            assertFailsWith<CancellationException> {
+                withTimeout(50) { api.fetchDevice("usb://active") }
+            }
+            assertEquals(2, fakeSerialCloseCount())
+            assertEquals(2, disconnects)
+        }
+    }
+
+    @Test
+    fun largeUploadKeepsChunkBoundariesAndApplicationErrorsKeepSessionOpen() = runTest {
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            val body = ByteArray(2 * SerialChunkBytes + 17) { it.toByte() }
+            val errorBody = """{"code":"already_exists","message":"Theme already exists"}""".encodeToByteArray()
+            val metadata = """{"status":409,"totalBytes":${errorBody.size}}""".encodeToByteArray()
+            val response = (0u..2u).flatMap { sequence ->
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.Acknowledgement, 1u, sequence)).asList()
+            }.toByteArray() +
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.Response, 1u, payload = metadata)) +
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.Data, 1u, payload = errorBody)) +
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.End, 1u))
+            installFakeSerial(Base64.encode("RSVPNANO/COMPANION/1 READY\n".encodeToByteArray()) + "|" + Base64.encode(response))
+            val api = WebSerialNanoApi()
+            var disconnects = 0
+            api.open(onDisconnect = { disconnects++ })
+            val progress = mutableListOf<Long>()
+            val error = assertFailsWith<NanoClientError> {
+                api.uploadTheme("usb://active", "existing.toml", body) { sent, _ -> progress += sent }
+            }
+            assertEquals(409, error.status)
+            assertEquals(listOf(4096L, 8192L, body.size.toLong()), progress)
+            val chunks = fakeSerialFrames().filter { it.type == SerialFrameType.Data }
+            assertEquals(listOf(4096, 4096, 17), chunks.map { it.payload.size })
+            assertTrue(chunks.flatMap { it.payload.asList() }.toByteArray().contentEquals(body))
+            assertEquals(0, disconnects)
+            assertEquals(0, fakeSerialCloseCount())
+            api.release()
+        }
+    }
+
+    @Test
+    fun cancellingStalledWriteAbortsStreamBeforeClosingPort() = runTest {
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            installFakeSerial(Base64.encode("RSVPNANO/COMPANION/1 READY\n".encodeToByteArray()))
+            val api = WebSerialNanoApi()
+            api.open()
+            stallFakeSerialWrites()
+            assertFailsWith<CancellationException> {
+                withTimeout(50) { api.fetchDevice("usb://active") }
+            }
+            assertEquals(1, fakeSerialAbortCount())
+            assertEquals(1, fakeSerialCloseCount())
+        }
+    }
+
     @Test
     fun bootloaderRestartUsesNative1200BaudTouch() = runTest {
         installBootloaderResetSerial(openFails = false)
@@ -91,6 +202,21 @@ private external fun bootloaderResetState(): String
 
 @JsFun("""(encodedReads) => { const decode = encoded => { const text = atob(encoded); const bytes = new Uint8Array(text.length); for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i); return bytes; }; const reads = encodedReads.split('|').map(decode); const state = { opened: false, opens: 0, closes: 0, reads, writes: [], pendingRead: null }; const port = { getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 0x1001 }), open: async () => { if (state.opened) throw new Error('Port is already open'); state.opened = true; state.opens++; }, close: async () => { state.opened = false; state.closes++; }, readable: { getReader: () => ({ read: async () => state.reads.length ? { value: state.reads.shift(), done: false } : new Promise(resolve => { state.pendingRead = resolve; }), cancel: async () => { state.pendingRead?.({ done: true }); state.pendingRead = null; }, releaseLock: () => {} }) }, writable: { getWriter: () => ({ write: async data => { state.writes.push(new Uint8Array(data)); }, close: async () => {}, releaseLock: () => {} }) } }; state.port = port; globalThis.rsvpNanoFakeSerial = state; Object.defineProperty(navigator, 'serial', { configurable: true, value: { getPorts: async () => [port], requestPort: async () => port } }); localStorage.removeItem('rsvpnano.web.usbDevice'); }""")
 private external fun installFakeSerial(encodedReads: String)
+
+@JsFun("""() => { const state = globalThis.rsvpNanoFakeSerial; const write = globalThis.rsvpNanoSerial.writer.write; globalThis.rsvpNanoSerial.writer.write = async data => { await write(data); if (data[5] === 3) { state.pendingRead?.({ done: true }); state.pendingRead = null; } }; }""")
+private external fun disconnectFakeSerialAfterEnd()
+
+@JsFun("""() => { globalThis.rsvpNanoSerial.writer.write = async () => { throw new Error('Port has been closed'); }; }""")
+private external fun failFakeSerialWrites()
+
+@JsFun("""() => { const state = globalThis.rsvpNanoFakeSerial; let rejectWrite; state.aborts = 0; const stream = new WritableStream({ start: controller => { controller.signal.addEventListener('abort', () => rejectWrite?.(new Error('Write aborted'))); }, write: () => new Promise((resolve, reject) => { rejectWrite = reject; }), abort: () => { state.aborts++; } }); globalThis.rsvpNanoSerial.writer.releaseLock(); globalThis.rsvpNanoSerial.writer = stream.getWriter(); }""")
+private external fun stallFakeSerialWrites()
+
+@JsFun("""() => globalThis.rsvpNanoFakeSerial.aborts""")
+private external fun fakeSerialAbortCount(): Int
+
+@JsFun("""(encoded) => { const state = globalThis.rsvpNanoFakeSerial; const text = atob(encoded); const bytes = Uint8Array.from(text, c => c.charCodeAt(0)); if (state.pendingRead) { const resolve = state.pendingRead; state.pendingRead = null; resolve({ value: bytes, done: false }); } else state.reads.push(bytes); }""")
+private external fun queueFakeSerialRead(encoded: String)
 
 private suspend fun installerCanOpenFakeSerial(): Boolean = suspendCancellableCoroutine { continuation ->
     tryOpenFakeSerial { opened ->

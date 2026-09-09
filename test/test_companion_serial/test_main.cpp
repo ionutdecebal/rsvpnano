@@ -1,6 +1,8 @@
 #include <unity.h>
 
 #include <array>
+#include <algorithm>
+#include <string>
 #include <vector>
 
 #include "companion/serial/CompanionSerialProtocol.h"
@@ -49,9 +51,31 @@ void test_corrupt_crc_is_skipped_before_next_frame() {
                             static_cast<uint8_t>(frames[0].type));
 }
 
+void test_string_response_chunks_preserve_utf8_bytes_and_crc() {
+    std::string body(serial::kChunkBytes - 1, 'x');
+    body += "\xE2\x80\x94\xD7\x90\xE4\xB8\xAD"; // UTF-8 crosses the frame boundary.
+    std::vector<uint8_t> received;
+    serial::Decoder decoder;
+    for (size_t offset = 0; offset < body.size(); offset += serial::kChunkBytes) {
+        const size_t count = std::min(serial::kChunkBytes, body.size() - offset);
+        decoder.append(serial::encode({
+            .type = serial::FrameType::Data,
+            .requestId = 1,
+            .payload = {body.begin() + static_cast<ptrdiff_t>(offset),
+                        body.begin() + static_cast<ptrdiff_t>(offset + count)},
+        }));
+        const auto frames = decoder.takeFrames();
+        TEST_ASSERT_EQUAL_UINT32(1, frames.size());
+        received.insert(received.end(), frames[0].payload.begin(), frames[0].payload.end());
+    }
+    TEST_ASSERT_EQUAL_UINT32(body.size(), received.size());
+    TEST_ASSERT_EQUAL_MEMORY(body.data(), received.data(), body.size());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_fragmented_and_coalesced_frames_resynchronize);
     RUN_TEST(test_corrupt_crc_is_skipped_before_next_frame);
+    RUN_TEST(test_string_response_chunks_preserve_utf8_bytes_and_crc);
     return UNITY_END();
 }

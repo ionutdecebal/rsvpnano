@@ -14,6 +14,7 @@
 #include "companion/CompanionApiModels.h"
 #include "companion/serial/CompanionBufferedRequest.h"
 #include "board/BoardStorage.h"
+#include "logging/Logger.h"
 #include "usb/UsbMassStorageManager.h"
 
 namespace {
@@ -84,7 +85,7 @@ void CompanionSerial::close() {
     decoder_.clear();
     handshake_.clear();
     resetRequest();
-    responseBody_.clear();
+    std::string{}.swap(responseBody_);
     responseRequestId_ = 0;
     responseSequence_ = 0;
     responseOffset_ = 0;
@@ -368,7 +369,9 @@ void CompanionSerial::handleRequestEnd(const companion::serial::Frame& frame) {
     if (requestSpooled_)
         requestFile_ = Board::Storage::filesystem().open(kSpoolPath.data(), FILE_READ);
 
+    Logger::checkpoint("companion_usb_dispatch");
     dispatchRequest(buffered);
+    Logger::checkpoint("companion_usb_complete");
     resetRequest();
 }
 
@@ -546,6 +549,7 @@ void CompanionSerial::dispatchRequest(companion::BufferedRequest& buffered) {
 }
 
 void CompanionSerial::sendResponse(uint32_t requestId, int status, std::string body) {
+    Logger::checkpoint("companion_usb_response");
     ResponseMetadata metadata{.status = status, .totalBytes = body.size()};
     std::string responseJson;
     if (!companion::api::encode(metadata, responseJson))
@@ -556,7 +560,7 @@ void CompanionSerial::sendResponse(uint32_t requestId, int status, std::string b
     responseRequestId_ = requestId;
     responseSequence_ = 0;
     responseOffset_ = 0;
-    responseBody_.assign(body.begin(), body.end());
+    responseBody_ = std::move(body);
     sendNextResponseChunk();
 }
 
@@ -567,7 +571,7 @@ void CompanionSerial::sendNextResponseChunk() {
         sendFrame({.type = companion::serial::FrameType::End,
                    .requestId = responseRequestId_,
                    .sequence = responseSequence_});
-        responseBody_.clear();
+        std::string{}.swap(responseBody_);
         responseRequestId_ = 0;
         responseSequence_ = 0;
         responseOffset_ = 0;
