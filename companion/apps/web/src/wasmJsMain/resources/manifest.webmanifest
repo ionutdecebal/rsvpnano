@@ -8,6 +8,7 @@
   "background_color": "#faf8f2",
   "theme_color": "#35675f",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

@@ -35,9 +35,10 @@
         background: var(--startup-background);
         transition: opacity 160ms ease-out;
       }
-      #startup-surface img {
+      #startup-surface object {
         width: min(280px, 64vw);
-        height: auto;
+        aspect-ratio: 1350 / 350;
+        pointer-events: none;
       }
       #startup-surface.ready { opacity: 0; pointer-events: none; }
       #unsupported { display: none; box-sizing: border-box; max-width: 42rem; margin: 12vh auto; padding: 2rem; }
@@ -45,10 +46,17 @@
     </style>
   </head>
   <body>
-    <div id="startup-surface" aria-hidden="true"><img src="icon.svg" alt="" /></div>
+    <div id="startup-surface" aria-hidden="true"><object type="image/svg+xml" tabindex="-1"></object></div>
     <script>
-      document.querySelector("#startup-surface img").src =
-        document.documentElement.dataset.theme === "dark" ? "icon.svg" : "icon_light.svg";
+      const startupAnimationDone = new Promise(resolve => {
+        const splash = document.querySelector("#startup-surface object");
+        splash.addEventListener("load", () => {
+          const animations = splash.contentDocument?.getAnimations() ?? [];
+          Promise.allSettled(animations.map(animation => animation.finished)).then(resolve);
+        }, { once: true });
+        splash.addEventListener("error", resolve, { once: true });
+        splash.data = document.documentElement.dataset.theme === "dark" ? "splash.svg" : "splash_light.svg";
+      });
     </script>
     <div id="webApp"></div>
     <noscript>RSVP Nano requires JavaScript to install firmware and manage a reader.</noscript>
@@ -118,7 +126,7 @@
         const canvasHost = Array.from(hosts).find(host => host.shadowRoot?.querySelector("canvas"));
         if (canvasHost) {
           canvasHost.shadowRoot.addEventListener("contextmenu", event => event.stopPropagation(), { capture: true });
-          requestAnimationFrame(hideStartupSurface);
+          startupAnimationDone.then(() => requestAnimationFrame(hideStartupSurface));
         }
         else if (document.getElementById("startup-surface")) requestAnimationFrame(waitForComposeCanvas);
       }

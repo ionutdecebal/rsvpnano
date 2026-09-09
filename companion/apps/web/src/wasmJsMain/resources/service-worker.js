@@ -1,5 +1,5 @@
-const CACHE = "rsvpnano-web-v2";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon_light.svg", "./favicon.svg"];
+const CACHE = "rsvpnano-web-v3";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-maskable.svg", "./splash.svg", "./splash_light.svg", "./favicon.svg"];
 const development = ["localhost", "127.0.0.1", "[::1]"].includes(self.location.hostname) || self.location.hostname.endsWith(".localhost");
 
 if (development) {
