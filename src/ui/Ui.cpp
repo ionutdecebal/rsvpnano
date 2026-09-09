@@ -113,10 +113,9 @@ namespace ui {
     }
 
     void Context::setTheme(const ui::themes::Theme& theme) {
-        if (theme_ != &theme) {
-            theme_ = &theme;
-            invalidate();
-        }
+        // Installing/removing themes can move another theme into the same catalog address.
+        theme_ = &theme;
+        invalidate();
     }
 
     void Context::setLanguageCatalog(fs::FS* filesystem, const locales::Catalog* catalog,

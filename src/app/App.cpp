@@ -142,6 +142,7 @@ void App::update(uint32_t nowMs) {
     }
 
     if (companionApi_.active() || serialCompanion_.active()) {
+        companionApi_.renderStatus(serialCompanion_.active());
         settingsStore_.update(nowMs);
         Board::Power::updateBattery(battery_, nowMs);
         return;
@@ -170,7 +171,7 @@ void App::update(uint32_t nowMs) {
 
 void App::renderScreen(uint32_t nowMs) {
     if (serialCompanion_.active()) {
-        screens::status(immediateUi_, "USB companion", "Connected", "Keep the browser open");
+        companionApi_.renderStatus(true);
         return;
     }
     const screens::Screen renderedScreen = screen_;

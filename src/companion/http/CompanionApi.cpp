@@ -105,6 +105,14 @@ bool CompanionApi::active() const {
     return active_.load();
 }
 
+void CompanionApi::renderStatus(bool usbConnected) {
+    const std::scoped_lock lock{operationsMutex_, networkStateMutex_};
+    if (usbConnected)
+        screens::status(ui_, "USB companion", "Connected", "Keep the browser open");
+    else
+        screens::status(ui_, ui_.text(UiText::Sync), statusLine1(), statusLine2());
+}
+
 std::string_view CompanionApi::statusLine1() const {
     if (stationConnected_.load())
         return settingsStore_.settings().network.ssid;
@@ -193,7 +201,7 @@ void CompanionApi::queueNetworkState() {
 
 void CompanionApi::applyNetworkState(void* context) {
     auto& self = *static_cast<CompanionApi*>(context);
-    const std::lock_guard lock{self.networkStateMutex_};
+    const std::scoped_lock lock{self.operationsMutex_, self.networkStateMutex_};
     if (!self.active())
         return;
     const bool stationConnected = WiFi.status() == WL_CONNECTED;

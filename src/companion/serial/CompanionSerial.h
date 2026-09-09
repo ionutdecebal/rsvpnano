@@ -90,5 +90,6 @@ private:
     uint32_t provisioningDeadlineMs_ = 0;
     improv::State improvState_ = improv::STATE_AUTHORIZED;
     bool active_ = false;
+    bool writeFailed_ = false;
     bool requestSpooled_ = false;
 };

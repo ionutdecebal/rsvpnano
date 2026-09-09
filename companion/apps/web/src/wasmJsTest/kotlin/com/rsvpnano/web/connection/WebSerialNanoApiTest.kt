@@ -14,6 +14,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 import com.rsvpnano.api.NanoClientError
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -24,6 +25,28 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class WebSerialNanoApiTest {
+    @Test
+    fun deviceCloseReleasesIdleSessionAndAllowsReconnect() = runTest {
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            val greeting = Base64.encode("RSVPNANO/COMPANION/1 READY\n".encodeToByteArray())
+            installFakeSerial(greeting)
+            val api = WebSerialNanoApi()
+            val disconnected = CompletableDeferred<Unit>()
+            var disconnects = 0
+            api.open(onDisconnect = { disconnects++; disconnected.complete(Unit) })
+            queueFakeSerialRead(Base64.encode(SerialFrameCodec.encode(SerialFrame(SerialFrameType.Close))))
+            withTimeout(1_000) { disconnected.await() }
+            assertEquals(1, fakeSerialCloseCount())
+            assertEquals(1, disconnects)
+
+            queueFakeSerialRead(greeting)
+            assertTrue(api.open())
+            api.release()
+            assertEquals(2, fakeSerialCloseCount())
+            assertEquals(1, disconnects)
+        }
+    }
+
     @Test
     fun uploadDisconnectStopsHeartbeatReleasesPortAndCanReconnect() = runTest {
         withContext(Dispatchers.Default.limitedParallelism(1)) {

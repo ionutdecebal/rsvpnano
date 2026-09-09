@@ -76,8 +76,10 @@ void CompanionSerial::update(uint32_t nowMs) {
     }
 
     readFrames(nowMs);
-    if (nowMs - lastTrafficMs_ >= kSessionTimeoutMs)
+    if (nowMs - lastTrafficMs_ >= kSessionTimeoutMs) {
+        sendFrame({.type = companion::serial::FrameType::Close});
         close();
+    }
 }
 
 void CompanionSerial::close() {
@@ -113,12 +115,16 @@ void CompanionSerial::readHandshake(uint32_t nowMs) {
             return;
         }
 
+        // Keep a complete upload chunk plus metadata queued while the app is busy with SD/NVS work.
+        if (Serial.setRxBufferSize(2 * companion::serial::kChunkBytes) == 0)
+            return;
         Serial.setDebugOutput(false);
         Serial.print("RSVPNANO/COMPANION/1 READY\n");
         Serial.flush();
         decoder_.clear();
         resetRequest();
         active_ = true;
+        writeFailed_ = false;
         lastTrafficMs_ = nowMs;
         return;
     }
@@ -255,8 +261,13 @@ void CompanionSerial::readFrames(uint32_t nowMs) {
         lastTrafficMs_ = nowMs;
         decoder_.append(std::span{bytes}.first(count));
     }
-    for (auto& frame: decoder_.takeFrames())
+    for (auto& frame: decoder_.takeFrames()) {
         handleFrame(std::move(frame), nowMs);
+        if (writeFailed_)
+            close();
+        if (!active_)
+            break;
+    }
 }
 
 void CompanionSerial::handleFrame(companion::serial::Frame frame, uint32_t nowMs) {
@@ -602,9 +613,18 @@ void CompanionSerial::sendProtocolError(uint32_t requestId, std::string message)
 }
 
 void CompanionSerial::sendFrame(companion::serial::Frame frame) {
+    if (writeFailed_)
+        return;
     const auto bytes = companion::serial::encode(frame);
-    if (!bytes.empty())
-        Serial.write(bytes.data(), bytes.size());
+    for (size_t offset = 0; offset < bytes.size();) {
+        const size_t written = Serial.write(bytes.data() + offset, bytes.size() - offset);
+        if (written == 0) {
+            // Finish unwinding the active request before releasing its buffers.
+            writeFailed_ = true;
+            return;
+        }
+        offset += written;
+    }
 }
 
 void CompanionSerial::resetRequest() {

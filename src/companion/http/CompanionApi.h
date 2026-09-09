@@ -49,6 +49,7 @@ public:
     bool begin();
     void end();
     [[nodiscard]] bool active() const;
+    void renderStatus(bool usbConnected);
     [[nodiscard]] std::string_view statusLine1() const;
     [[nodiscard]] std::string_view statusLine2() const;
 

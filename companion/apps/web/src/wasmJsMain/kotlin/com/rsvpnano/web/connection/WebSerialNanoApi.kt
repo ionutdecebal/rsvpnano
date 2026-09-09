@@ -320,8 +320,12 @@ internal class WebSerialNanoApi(
         try {
             while (scope.isActive && opened) {
                 decoder.feed(bridgeRead()).forEach { frame ->
-                    if (frame.type == SerialFrameType.Ping) sendFrame(SerialFrame(SerialFrameType.Pong), session)
-                    else session.send(frame)
+                    when (frame.type) {
+                        SerialFrameType.Ping -> sendFrame(SerialFrame(SerialFrameType.Pong), session)
+                        SerialFrameType.Pong -> Unit
+                        SerialFrameType.Close -> throw NanoClientError("The Nano ended the USB session.")
+                        else -> session.send(frame)
+                    }
                 }
             }
         } catch (cancelled: CancellationException) {
