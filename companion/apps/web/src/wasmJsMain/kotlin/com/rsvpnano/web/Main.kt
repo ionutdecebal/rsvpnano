@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Timer
@@ -88,6 +89,7 @@ import com.rsvpnano.connection.NanoEndpoint
 import com.rsvpnano.models.RememberedNano
 import com.rsvpnano.presentation.CompanionPresenter
 import com.rsvpnano.presentation.CompanionUiState
+import com.rsvpnano.ui.AboutPage
 import com.rsvpnano.web.connection.BrowserSerial
 import com.rsvpnano.web.connection.requestUsbConnection
 import com.rsvpnano.web.connection.supportsWebSerial
@@ -141,6 +143,7 @@ internal enum class WebRoute(val hash: String, val label: String, val icon: Imag
     Settings("#/settings/reading", "Settings", Icons.Outlined.Settings),
     Feeds("#/feeds", "Feeds", Icons.Outlined.Link),
     Timers("#/timers", "Timers", Icons.Outlined.Timer),
+    About("#/about", "About", Icons.Outlined.Info),
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -511,6 +514,7 @@ private fun Workspace(
                 WebRoute.Settings -> SettingsWorkspace(presenter, state, routeHash)
                 WebRoute.Feeds -> FeedsWorkspace(presenter, state)
                 WebRoute.Timers -> TimersWorkspace(presenter, state)
+                WebRoute.About -> AboutPage(Modifier.align(Alignment.CenterHorizontally))
             }
         }
     }

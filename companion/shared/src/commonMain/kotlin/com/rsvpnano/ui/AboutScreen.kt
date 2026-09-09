@@ -2,6 +2,7 @@ package com.rsvpnano.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,17 +35,18 @@ import rsvpnano.shared.generated.resources.Res
 import rsvpnano.shared.generated.resources.rekylee_avatar
 
 @Composable
-internal fun AboutPage(modifier: Modifier = Modifier) {
+fun AboutPage(modifier: Modifier = Modifier) {
     val uriHandler = LocalUriHandler.current
     Column(
         modifier = modifier
-            .fillMaxSize()
             .widthIn(max = 560.dp)
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        Text("About RSVP Nano", style = MaterialTheme.typography.headlineSmall)
         FilledTonalButton(onClick = { uriHandler.openUri("https://github.com/ReKylee/rsvpnano") }) {
             Icon(
                 GitHubIcon,
@@ -66,9 +68,26 @@ internal fun AboutPage(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(112.dp)
                 .border(3.dp, MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                .clip(CircleShape),
+                .clip(CircleShape)
+                .clickable { uriHandler.openUri("https://github.com/ReKylee") },
         )
-        Text("Created by ReKylee", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Companion app and website by ReKylee",
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "ReKylee is a contributor to RSVP Nano, a project started by John Decebal (ionutdecebal).",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            "Icons, logo artwork and original splash animation by @kapeywu on Discord.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

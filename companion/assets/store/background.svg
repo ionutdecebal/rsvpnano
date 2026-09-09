@@ -1,25 +1,26 @@
-<?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024"><defs>
-    <radialGradient id="bg" cx="50%" cy="40%" r="68%">
-      <stop offset="0%" stop-color="#1e1848" />
-      <stop offset="60%" stop-color="#0d0b28" />
-      <stop offset="100%" stop-color="#050410" />
-    </radialGradient>
-    <linearGradient id="zone" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
-      <stop offset="35%" stop-color="#ffffff" stop-opacity="0.055" />
-      <stop offset="65%" stop-color="#ffffff" stop-opacity="0.055" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
-    </linearGradient>
-    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
-      <stop offset="55%" stop-color="#000000" stop-opacity="0" />
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.45" />
-    </radialGradient>
-  </defs>
-
-  
-  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)" />
-  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#vignette)" />
-
-  
-  </svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:ns1="http://www.serif.com/" width="1080" height="1080" viewBox="0 0 1080 1080" version="1.1" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g transform="matrix(1,0,0,1,0,-1930)">
+        <g id="RSVP-Companion-App-Icon1" ns1:id="RSVP-Companion-App-Icon">
+            <g transform="matrix(1,0,0,1,0,1130)">
+                <rect x="0" y="800" width="1080" height="1080" style="fill:url(#_Radial1);" />
+            </g>
+            <g transform="matrix(1,0,0,1,76.079957,200)">
+                <g transform="matrix(2.340763,0,0,2.343396,-27844.225367,496.252918)">
+                    </g>
+                <g transform="matrix(14.830654,0,0,1.721956,-177844.89606,-350.10923)">
+                    </g>
+                <g transform="matrix(14.830654,0,0,1.721956,-177844.89606,-978.736105)">
+                    </g>
+                <g transform="matrix(0,2.009928,-2.064024,0,4327.565541,-22163.826248)">
+                    </g>
+                <g transform="matrix(0,2.014126,-2.064024,0,4327.565541,-21648.490752)">
+                    </g>
+                <g transform="matrix(5.184158,0,0,5.189991,-60927.135975,-1414.47121)">
+                    </g>
+            </g>
+        </g>
+    </g>
+    <defs>
+        <radialGradient id="_Radial1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(540,-540,540,540,540,1340)"><stop offset="0" style="stop-color:rgb(31,27,68);stop-opacity:1" /><stop offset="1" style="stop-color:rgb(3,3,11);stop-opacity:1" /></radialGradient>
+    </defs>
+</svg>
