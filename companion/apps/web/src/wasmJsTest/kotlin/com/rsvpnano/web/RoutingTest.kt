@@ -11,6 +11,7 @@ class RoutingTest {
         assertEquals(WebRoute.Appearance, routeForHash("#/appearance/fonts"))
         assertEquals(WebRoute.Settings, routeForHash("#/settings/display"))
         assertEquals(WebRoute.Timers, routeForHash("#/timers"))
+        assertEquals(WebRoute.About, routeForHash("#/about"))
         assertEquals(WebRoute.Setup, routeForHash("#/unknown"))
     }
 
