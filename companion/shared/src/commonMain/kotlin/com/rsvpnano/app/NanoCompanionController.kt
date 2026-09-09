@@ -238,8 +238,8 @@ class NanoCompanionController(
     suspend fun removeLocalePack(baseUrl: String, id: String) =
         nanoApi.deleteLocalePack(baseUrl, id)
 
-    suspend fun deleteBooks(baseUrl: String, bookIds: List<String>) =
-        bookIds.forEach { bookId -> nanoApi.deleteBook(baseUrl, bookId) }
+    suspend fun deleteBooks(baseUrl: String, bookIds: List<String>, force: Boolean = false) =
+        bookIds.forEach { bookId -> nanoApi.deleteBook(baseUrl, bookId, force) }
 
     suspend fun setBookPosition(baseUrl: String, book: NanoBook, wordIndex: Int): NanoBook {
         val wordCount = book.metadata.wordCount

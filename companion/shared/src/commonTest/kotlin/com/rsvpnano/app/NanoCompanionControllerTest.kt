@@ -1,4 +1,23 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.rsvpnano.app
+
+import com.rsvpnano.presentation.CompanionPresenter
+import com.rsvpnano.presentation.CatalogAsset
+import com.rsvpnano.connection.*
+import com.rsvpnano.persistence.JsonAppSettingsStore
+import com.rsvpnano.updates.FirmwareUpdates
+import com.rsvpnano.models.RememberedNano
+import com.rsvpnano.models.NanoSettingsSchema
+import com.rsvpnano.models.NanoLocales
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlin.test.assertTrue
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 
 import com.rsvpnano.api.NanoApi
 import com.rsvpnano.api.NanoClientError
@@ -167,6 +186,97 @@ class NanoCompanionControllerTest {
         assertEquals(null, client.savedSettings)
     }
 
+    @Test
+    fun activeBookNeedsExplicitSecondConfirmationAndCancelNeverForcesDelete() = runTest {
+        val book = sampleBook("active-book")
+        val client = RecordingNanoClient(initialBooks = listOf(book)).apply { activeBookId = book.id }
+        val presenter = presenter(client)
+        presenter.deleteDeviceBook(book)
+        assertTrue(client.deleteForces.isEmpty())
+        presenter.confirmDeviceDeletion()
+        assertEquals(listOf(false), client.deleteForces)
+        assertTrue(presenter.uiState.value.deletion!!.inUse)
+        presenter.dismissDeviceDeletion()
+        presenter.confirmDeviceDeletion()
+        assertEquals(listOf(false), client.deleteForces)
+        assertEquals(listOf(book), client.books)
+        presenter.deleteDeviceBook(book)
+        presenter.confirmDeviceDeletion()
+        presenter.confirmDeviceDeletion()
+        assertEquals(listOf(false, false, true), client.deleteForces)
+        assertTrue(client.books.isEmpty())
+        assertNull(presenter.uiState.value.deletion)
+    }
+
+    @Test
+    fun selectedCatalogAssetsSwitchToFallbackOnlyAfterConfirmation() = runTest {
+        for (asset in CatalogAsset.entries) {
+            val client = RecordingNanoClient().apply {
+                deviceSettings = sampleSettings().let {
+                    it.copy(`interface` = it.`interface`.copy(selectedThemeId = "night", locale = "ja"))
+                }
+            }
+            val presenter = presenter(client)
+            presenter.refreshSettings()
+            presenter.refreshThemes()
+            presenter.refreshFonts()
+            presenter.refreshLocales()
+            val request = when (asset) {
+                CatalogAsset.Theme -> { { presenter.removeTheme("night") } }
+                CatalogAsset.Font -> { { presenter.removeFont("serif") } }
+                CatalogAsset.Locale -> { { presenter.removeLocalePack("ja-pack") } }
+            }
+            request()
+            assertTrue(presenter.uiState.value.deletion!!.inUse)
+            presenter.dismissDeviceDeletion()
+            assertTrue(client.catalogMutations.isEmpty())
+            request()
+            presenter.confirmDeviceDeletion()
+            val fallback = when (asset) {
+                CatalogAsset.Theme -> NanoSettingsSchema.THEME_DEFAULT
+                CatalogAsset.Font -> "builtin"
+                CatalogAsset.Locale -> NanoLocales.DEFAULT
+            }
+            assertEquals(listOf("select:$fallback", "delete"), client.catalogMutations)
+            assertNull(presenter.uiState.value.deletion)
+        }
+    }
+
+    @Test
+    fun staleSelectionIsWarnedAndDisconnectDiscardsConfirmation() = runTest {
+        val client = RecordingNanoClient()
+        val presenter = presenter(client)
+        presenter.refreshSettings()
+        presenter.removeTheme("night")
+        assertFalse(presenter.uiState.value.deletion!!.inUse)
+        client.deviceSettings = client.deviceSettings.let { it.copy(`interface` = it.`interface`.copy(selectedThemeId = "night")) }
+        presenter.confirmDeviceDeletion()
+        assertTrue(presenter.uiState.value.deletion!!.inUse)
+        assertTrue(client.catalogMutations.isEmpty())
+        presenter.reportConnectionFailure("Disconnected")
+        presenter.confirmDeviceDeletion()
+        assertNull(presenter.uiState.value.deletion)
+        assertTrue(client.catalogMutations.isEmpty())
+    }
+
+    private fun TestScope.presenter(client: RecordingNanoClient): CompanionPresenter {
+        val settings = JsonAppSettingsStore(InMemoryTextStorage())
+        val network = object : NanoWifiConnector {
+            override val snapshot = MutableStateFlow(NanoWifiSnapshot())
+            override val events = emptyFlow<NanoWifiEvent>()
+            override fun start() = Unit
+            override fun stop() = Unit
+            override fun refreshSnapshot() = Unit
+            override suspend fun discoverNanos() = emptyList<NanoEndpoint>()
+            override fun requestNanoNetwork(rememberedNano: RememberedNano?) = NanoWifiRequestResult.Started
+        }
+        return CompanionPresenter(controller(client), FirmwareUpdates(client, settings), network, settings,
+            CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))).also {
+            it.connectEndpoint(NanoEndpoint("http://device.local", RememberedNano("RSVP-Nano-123456")))
+            assertTrue(it.uiState.value.isConnected)
+        }
+    }
+
     private fun controller(client: RecordingNanoClient) = NanoCompanionController(
         draftService = PendingDraftService(PendingUploadJsonStore(InMemoryTextStorage())),
         nanoApi = client,
@@ -197,6 +307,10 @@ class NanoCompanionControllerTest {
         var selectedFontId: String? = null
         var selectedLocaleId: String? = null
         val deletedIds = mutableListOf<String>()
+        val deleteForces = mutableListOf<Boolean>()
+        var activeBookId: String? = null
+        var deviceSettings = sampleSettings()
+        val catalogMutations = mutableListOf<String>()
 
         override suspend fun fetchDevice(baseUrl: String): NanoInfo {
             fetchDeviceCalls++
@@ -220,10 +334,10 @@ class NanoCompanionControllerTest {
         }
 
         override suspend fun listThemes(baseUrl: String) = listOf(NanoThemeSummary("night", "Night"))
-        override suspend fun listFonts(baseUrl: String) = emptyList<NanoFontSummary>()
-        override suspend fun listLocales(baseUrl: String) = emptyList<NanoLocaleSummary>()
+        override suspend fun listFonts(baseUrl: String) = listOf(NanoFontSummary("builtin", "Built-in", builtIn = true), NanoFontSummary("serif", "Serif"))
+        override suspend fun listLocales(baseUrl: String) = listOf(NanoLocaleSummary("ja-pack", "Japanese", "ja"))
 
-        override suspend fun fetchSettings(baseUrl: String) = sampleSettings()
+        override suspend fun fetchSettings(baseUrl: String) = deviceSettings
         override suspend fun updateReadingSettings(baseUrl: String, settings: NanoSettings.Reading) {
             savedSettingsResources += NanoSettingsResource.Reading
             savedSettings = (savedSettings ?: sampleSettings()).copy(reading = settings)
@@ -236,9 +350,9 @@ class NanoCompanionControllerTest {
             savedSettingsResources += NanoSettingsResource.Updates
             savedSettings = (savedSettings ?: sampleSettings()).copy(updates = settings)
         }
-        override suspend fun selectTheme(baseUrl: String, id: String) { selectedThemeId = id }
-        override suspend fun selectFont(baseUrl: String, id: String) { selectedFontId = id }
-        override suspend fun selectLocale(baseUrl: String, id: String) { selectedLocaleId = id }
+        override suspend fun selectTheme(baseUrl: String, id: String) { selectedThemeId = id; catalogMutations += "select:$id" }
+        override suspend fun selectFont(baseUrl: String, id: String) { selectedFontId = id; catalogMutations += "select:$id" }
+        override suspend fun selectLocale(baseUrl: String, id: String) { selectedLocaleId = id; catalogMutations += "select:$id" }
         override suspend fun fetchWifiSettings(baseUrl: String) = NanoWifiSettings("")
         override suspend fun updateWifi(baseUrl: String, ssid: String, password: String) {
             savedWifi = ssid to password
@@ -263,7 +377,9 @@ class NanoCompanionControllerTest {
             return books.single()
         }
 
-        override suspend fun deleteBook(baseUrl: String, id: String) {
+        override suspend fun deleteBook(baseUrl: String, id: String, force: Boolean) {
+            deleteForces += force
+            if (id == activeBookId && !force) throw NanoClientError("Book is open", status = 409, code = "resource_in_use")
             deletedIds += id
             books = books.filterNot { it.id == id }
         }
@@ -292,13 +408,13 @@ class NanoCompanionControllerTest {
             return NanoThemeSummary("night", "Night")
         }
 
-        override suspend fun deleteTheme(baseUrl: String, id: String) = Unit
+        override suspend fun deleteTheme(baseUrl: String, id: String) { catalogMutations += "delete" }
         override suspend fun uploadFont(baseUrl: String, name: String, data: ByteArray, onProgress: ((Long, Long) -> Unit)?) =
             NanoFontSummary("font", "Font")
-        override suspend fun deleteFont(baseUrl: String, id: String) = Unit
+        override suspend fun deleteFont(baseUrl: String, id: String) { catalogMutations += "delete" }
         override suspend fun uploadLocalePack(baseUrl: String, name: String, data: ByteArray, onProgress: ((Long, Long) -> Unit)?) =
             NanoLocaleSummary("ja", "日本語", "ja")
-        override suspend fun deleteLocalePack(baseUrl: String, id: String) = Unit
+        override suspend fun deleteLocalePack(baseUrl: String, id: String) { catalogMutations += "delete" }
 
         override suspend fun fetchThemeCatalog(url: String): List<NanoThemeCatalogItem> = emptyList()
         override suspend fun fetchFirmwareRelease(owner: String, repository: String, tag: String) =

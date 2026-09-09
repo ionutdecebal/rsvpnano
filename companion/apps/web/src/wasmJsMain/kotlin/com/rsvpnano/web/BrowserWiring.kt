@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalWasmJsInterop::class)
+
 package com.rsvpnano.web
 
 import com.rsvpnano.api.ArticleFetchClient
@@ -35,7 +37,7 @@ internal const val EndpointStorageKey = "rsvpnano.web.endpoint"
 internal const val NanoNameStorageKey = "rsvpnano.web.nanoName"
 
 fun createBrowserCompanionPresenter(scope: CoroutineScope): CompanionPresenter {
-    val deviceClient = BrowserNanoApi(NanoKtorClient(browserHttpClient()), BrowserSerial.api)
+    val deviceClient = BrowserNanoApi(NanoKtorClient(browserHttpClient(localNetwork = true)), BrowserSerial.api)
     val internetHttpClient = browserHttpClient()
     val repository = NanoKtorClient(internetHttpClient)
     val settingsStore = JsonAppSettingsStore(LocalStorageTextStorage(SettingsStorageKey))
@@ -52,7 +54,12 @@ fun createBrowserCompanionPresenter(scope: CoroutineScope): CompanionPresenter {
     )
 }
 
-private fun browserHttpClient() = HttpClient(Js) {
+internal fun browserHttpClient(localNetwork: Boolean = false) = HttpClient(Js) {
+    if (localNetwork) {
+        engine {
+            configureRequest { targetLocalNetwork(this) }
+        }
+    }
     install(ContentNegotiation) {
         json(Json {
             ignoreUnknownKeys = true
@@ -61,6 +68,10 @@ private fun browserHttpClient() = HttpClient(Js) {
         })
     }
 }
+
+// Let the browser request local-network permission for HTTP device hostnames too.
+@JsFun("options => { options.targetAddressSpace = 'local'; }")
+private external fun targetLocalNetwork(options: JsAny)
 
 private class LocalStorageTextStorage(private val key: String) : TextStorage {
     override suspend fun readText(): String? = window.localStorage.getItem(key)

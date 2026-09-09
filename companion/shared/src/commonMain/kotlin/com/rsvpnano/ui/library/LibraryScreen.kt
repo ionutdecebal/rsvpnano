@@ -81,7 +81,6 @@ internal fun LibraryScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var filterName by rememberSaveable { mutableStateOf(LibraryFilter.All.name) }
     val filter = LibraryFilter.valueOf(filterName)
-    var bookToDelete by remember { mutableStateOf<NanoBook?>(null) }
     var draftToDelete by remember { mutableStateOf<PendingUpload?>(null) }
     val visibleDrafts = uiState.drafts.filter { draft ->
         val query = searchQuery.trim()
@@ -189,45 +188,11 @@ internal fun LibraryScreen(
                     LibraryBookRow(
                         book = book,
                         onOpenBook = { onOpenBook(book) },
-                        onDeleteBook = { bookToDelete = book },
+                        onDeleteBook = { onDeleteBook(book) },
                     )
                 }
             }
         }
-    }
-
-    bookToDelete?.let { book ->
-        AlertDialog(
-            onDismissRequest = { bookToDelete = null },
-            icon = {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("Delete from reader?") },
-            text = { Text(book.displayTitle) },
-            confirmButton = {
-                FilledTonalButton(
-                    onClick = {
-                        bookToDelete = null
-                        onDeleteBook(book)
-                    },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { bookToDelete = null }) {
-                    Text("Cancel")
-                }
-            },
-        )
     }
 
     draftToDelete?.let { draft ->

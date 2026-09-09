@@ -284,20 +284,22 @@ companion::api::Result<> CompanionApi::deleteLibraryItem(httpd_req_t& request) {
         return std::unexpected(companion::api::httpError(HTTP_CODE_NOT_FOUND, "book_not_found", "Book not found",
                                                          "id"));
     }
-    std::string path = storage_.books()[*index].path;
-    if (readerScreen_.session.sourcePath() == path) {
-        return std::unexpected(companion::api::httpError(HTTP_CODE_CONFLICT, "resource_in_use",
-                                                         "Close the active book before removing it", "id"));
+    const std::string bookPath = storage_.books()[*index].path;
+    if (readerScreen_.session.sourcePath() == bookPath) {
+        if (queryParameter(request, "force") != "true") {
+            return std::unexpected(companion::api::httpError(HTTP_CODE_CONFLICT, "resource_in_use",
+                                                             "This book is open. Confirm deletion to close it and remove it", "id"));
+        }
+        readerScreen_.closeBook();
     }
 
-    std::string bookPath = std::move(path);
     return storage_.removeBook(bookPath)
         .transform_error([&bookPath](std::error_code error) {
             Logger::failure("companion", "delete book", bookPath.c_str(), error);
             return companion::api::httpError(HTTP_CODE_INTERNAL_SERVER_ERROR, "storage_error",
                                              "Book could not be deleted");
         })
-        .transform([this, bookPath = std::move(bookPath)] {
+        .transform([this, &bookPath] {
             libraryScreen_.invalidate();
             ESP_LOGD("companion", "deleted %s", bookPath.c_str());
         });

@@ -264,6 +264,7 @@ fun RsvpNanoSharedApp(
                         }
                     }
                 }
+                DeviceDeletionDialog(uiState.deletion, presenter::confirmDeviceDeletion, presenter::dismissDeviceDeletion)
                 Scaffold(
                     modifier = Modifier.weight(1f),
             topBar = {

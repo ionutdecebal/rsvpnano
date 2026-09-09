@@ -7,6 +7,18 @@ demand for the active screen; they are not a bootstrap sequence and are not comb
 aggregate endpoint. A failure from one resource does not imply that the transport or device session
 was lost.
 
+## Browser connections
+
+The hosted companion uses HTTPS while the reader serves HTTP on the local network.
+Device requests set the fetch option `targetAddressSpace: "local"` through Ktor;
+internet catalog and release downloads use a separate client without that option.
+Supporting browsers can then ask for local-network permission for device hostnames
+as well as private IP addresses. The firmware also handles CORS preflights for
+`DELETE` and uploads. CORS headers alone do not remove browser mixed-content restrictions.
+See [Chrome's Local Network Access documentation](https://developer.chrome.com/blog/local-network-access).
+If the browser blocks local-network access, allow that site permission or connect
+over USB in a browser supporting Web Serial.
+
 ## Responses
 
 | Method | Path | Success response |
@@ -53,6 +65,17 @@ The device sends only data the companion cannot derive locally:
 - Wi-Fi state contains only the SSID. A stored-password flag is not useful to the companion.
 
 Uploads use an `application/octet-stream` body. Library entries and themes take the URL-encoded `name` query parameter; fonts use the validated RFont4 header, and locale packs use their manifest.
+
+Deleting an open book returns `409 resource_in_use`. After the user confirms
+"Delete anyway", retry `DELETE /api/v2/library/{id}?force=true`. The reader closes
+the book and clears its reading session before removing the files. If removal
+fails, the book remains closed and its saved progress is retained.
+
+The companion also confirms catalog removals. For a selected theme, font, or
+locale, the popup explains that deletion switches to the built-in option. After
+confirmation, the companion uses the existing appearance selection endpoint
+before deleting the asset. Firmware still rejects deletion of selected assets
+and built-in fonts/themes; clients must not silently change the selection.
 
 ## Errors
 

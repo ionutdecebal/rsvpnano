@@ -60,6 +60,7 @@ data class CompanionUiState(
     val localeCatalog: List<NanoLocaleCatalogItem> = emptyList(),
     val localeCatalogUrl: String = "",
     val catalogInstall: CatalogInstall? = null,
+    val deletion: DeviceDeletion? = null,
     val notice: CompanionNotice = CompanionNotice.Neutral("Ready"),
 ) {
     val status: String
@@ -82,6 +83,15 @@ data class CompanionUiState(
 
     val nanoSsid: String?
         get() = currentNano?.ssid
+}
+
+data class DeviceDeletion(val target: Target, val inUse: Boolean = false) {
+    sealed interface Target {
+        val id: String
+        val name: String
+        data class Book(override val id: String, override val name: String) : Target
+        data class Asset(val asset: CatalogAsset, override val id: String, override val name: String) : Target
+    }
 }
 
 data class SharedImport(

@@ -16,6 +16,7 @@ import kotlin.test.assertFailsWith
 import com.rsvpnano.api.NanoClientError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.runTest
@@ -76,6 +77,26 @@ class WebSerialNanoApiTest {
     }
 
     @Test
+<<<<<<< Updated upstream
+=======
+    fun confirmedBookDeletionSendsForceQueryOverUsb() = runTest {
+        withContext(Dispatchers.Default.limitedParallelism(1)) {
+            val response = SerialFrameCodec.encode(SerialFrame(SerialFrameType.Response, 1u,
+                payload = """{"status":204,"totalBytes":0}""".encodeToByteArray())) +
+                SerialFrameCodec.encode(SerialFrame(SerialFrameType.End, 1u))
+            installFakeSerial(Base64.encode("RSVPNANO/COMPANION/1 READY persistent\n".encodeToByteArray()) + "|" + Base64.encode(response))
+            val api = WebSerialNanoApi(backgroundScope)
+            assertTrue(api.open())
+            api.deleteBook("usb://active", "active-book", force = true)
+            val request = fakeSerialFrames().single { it.type == SerialFrameType.Request }.payload.decodeToString()
+            assertTrue(request.contains("\"force\":\"true\""))
+            assertTrue(request.contains("/api/v2/library/active-book"))
+            api.release()
+        }
+    }
+
+    @Test
+>>>>>>> Stashed changes
     fun uploadDisconnectReleasesPortAndCanReconnect() = runTest {
         withContext(Dispatchers.Default.limitedParallelism(1)) {
             val greeting = "RSVPNANO/COMPANION/1 READY persistent\n".encodeToByteArray()

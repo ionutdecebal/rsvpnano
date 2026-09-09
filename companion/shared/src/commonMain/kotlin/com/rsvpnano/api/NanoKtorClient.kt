@@ -343,8 +343,8 @@ class NanoKtorClient(
             throw NanoClientError("Device returned an invalid empty response.")
     }
 
-    override suspend fun deleteBook(baseUrl: String, id: String) {
-        val response = httpClient.delete(buildUrl(baseUrl, "api/v2/library/$id"))
+    override suspend fun deleteBook(baseUrl: String, id: String, force: Boolean) {
+        val response = httpClient.delete(buildUrl(baseUrl, "api/v2/library/$id", if (force) listOf("force" to "true") else emptyList()))
         requireNoContent(response.status, response.body())
     }
 

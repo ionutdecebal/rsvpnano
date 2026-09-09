@@ -34,6 +34,7 @@ namespace screens {
         bool appearance(ui::Context& ui, Screen& screen);
         void refreshTypography(const settings::ReadingSettings& settings, const settings::ReadingOverrides& overrides);
         bool openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index, uint32_t nowMs);
+        void closeBook();
         void prepareBookOpen(Preferences& preferences, uint32_t nowMs);
         void finishBookOpen(Preferences& preferences, uint32_t nowMs);
         void loadInitialBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, uint32_t nowMs);

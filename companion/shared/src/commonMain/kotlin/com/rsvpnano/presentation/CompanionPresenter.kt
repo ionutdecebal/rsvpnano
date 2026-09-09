@@ -1,5 +1,6 @@
 package com.rsvpnano.presentation
 
+import com.rsvpnano.api.NanoClientError
 import com.rsvpnano.app.CompanionNotice
 import com.rsvpnano.app.CompanionCatalogFile
 import com.rsvpnano.updates.FirmwareUpdates
@@ -947,23 +948,80 @@ class CompanionPresenter(
     }
 
     fun deleteDeviceBook(book: NanoBook) {
+        requestDeviceDeletion(DeviceDeletion.Target.Book(book.id, book.displayTitle))
+    }
+
+    private fun requestDeviceDeletion(target: DeviceDeletion.Target) {
+        if (!ensureReaderConnected("deleting items")) return
+        val inUse = target is DeviceDeletion.Target.Asset && catalogAssetInUse(target, current)
+        updateState { it.copy(deletion = DeviceDeletion(target, inUse)) }
+    }
+
+    fun dismissDeviceDeletion() {
+        updateState { it.copy(deletion = null) }
+    }
+
+    fun confirmDeviceDeletion() {
+        val deletion = current.deletion ?: return
+        dismissDeviceDeletion()
+        val generation = connectionGeneration
+        val state = current
+        if (!ensureReaderConnected("deleting items")) return
         scope.launch {
-            val state = current
-            if (!state.isConnected) {
-                setNotice(CompanionNotice.Error("Connect to your Nano before deleting books."))
-                return@launch
-            }
-            val title = book.displayTitle
-            setNotice(CompanionNotice.Attention("Deleting $title..."))
-            runCatching {
-                withNanoApi { companionController.deleteBooks(state.baseUrl, listOf(book.id)) }
-            }.onSuccess {
-                updateState {
-                    it.copy(books = it.books.filterNot { candidate -> candidate.id == book.id },
-                        notice = CompanionNotice.Success("Deleted $title."))
+            val target = deletion.target
+            try {
+                val removed = withNanoApi {
+                    if (generation != connectionGeneration) return@withNanoApi false
+                    when (target) {
+                        is DeviceDeletion.Target.Book -> companionController.deleteBooks(state.baseUrl, listOf(target.id), deletion.inUse)
+                        is DeviceDeletion.Target.Asset -> {
+                            val settings = companionController.refreshSettings(state.baseUrl)
+                            if (generation != connectionGeneration) return@withNanoApi false
+                            val refreshed = current.copy(settings = settings)
+                            updateState { it.copy(settings = settings) }
+                            if (!deletion.inUse && catalogAssetInUse(target, refreshed)) {
+                                updateState { it.copy(deletion = deletion.copy(inUse = true)) }
+                                return@withNanoApi false
+                            }
+                            if (!selectFallbackBeforeRemoval(target.asset, target.id, refreshed)) return@withNanoApi false
+                            if (generation != connectionGeneration) return@withNanoApi false
+                            when (target.asset) {
+                                CatalogAsset.Theme -> companionController.removeTheme(state.baseUrl, target.id)
+                                CatalogAsset.Font -> companionController.removeFont(state.baseUrl, target.id)
+                                CatalogAsset.Locale -> companionController.removeLocalePack(state.baseUrl, target.id)
+                            }
+                        }
+                    }
+                    true
                 }
-            }.onFailure { error -> handleDeviceFailure(error, "Deleting books failed") }
+                if (!removed || generation != connectionGeneration) return@launch
+                updateState {
+                    when (target) {
+                        is DeviceDeletion.Target.Book -> it.copy(books = it.books.filterNot { book -> book.id == target.id })
+                        is DeviceDeletion.Target.Asset -> when (target.asset) {
+                            CatalogAsset.Theme -> it.copy(availableThemes = it.availableThemes.filterNot { item -> item.id == target.id })
+                            CatalogAsset.Font -> it.copy(availableFonts = it.availableFonts.filterNot { item -> item.id == target.id })
+                            CatalogAsset.Locale -> it.copy(availableLocales = it.availableLocales.filterNot { item -> item.id == target.id })
+                        }
+                    }.copy(notice = CompanionNotice.Success("Deleted ${target.name}."))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (generation != connectionGeneration) return@launch
+                if (!deletion.inUse && error is NanoClientError && error.code == "resource_in_use") {
+                    updateState { it.copy(deletion = deletion.copy(inUse = true)) }
+                } else {
+                    handleDeviceFailure(error, "Deleting ${target.name} failed")
+                }
+            }
         }
+    }
+
+    private fun catalogAssetInUse(target: DeviceDeletion.Target.Asset, state: CompanionUiState): Boolean {
+        val selected = state.settings?.let { selectedCatalogAsset(target.asset, it) } ?: return false
+        val id = if (target.asset == CatalogAsset.Locale) state.availableLocales.firstOrNull { it.id == target.id }?.locale else target.id
+        return selected == id
     }
 
     fun setBookPosition(book: NanoBook, wordIndex: Int) {
@@ -1126,45 +1184,13 @@ class CompanionPresenter(
 
     fun installOnlineLocalePack(id: String) = installOnlineCatalogAsset(CatalogAsset.Locale, id)
 
-    fun removeTheme(id: String) {
-        scope.launch {
-            val state = current
-            if (!ensureReaderConnected("removing a theme")) return@launch
-            if (!selectFallbackBeforeRemoval(CatalogAsset.Theme, id, state)) return@launch
-            runCatching {
-                withNanoApi { companionController.removeTheme(state.baseUrl, id) }
-            }.onSuccess {
-                updateState {
-                    it.copy(
-                        availableThemes = it.availableThemes.filterNot { theme -> theme.id == id },
-                        notice = CompanionNotice.Success("Removed theme $id."),
-                    )
-                }
-            }.onFailure { error ->
-                handleDeviceFailure(error, "Removing theme failed")
-            }
-        }
-    }
+    fun removeTheme(id: String) = requestDeviceDeletion(
+        DeviceDeletion.Target.Asset(CatalogAsset.Theme, id, current.availableThemes.firstOrNull { it.id == id }?.name ?: id),
+    )
 
-    fun removeFont(id: String) {
-        scope.launch {
-            val state = current
-            if (!ensureReaderConnected("removing a font")) return@launch
-            if (!selectFallbackBeforeRemoval(CatalogAsset.Font, id, state)) return@launch
-            runCatching {
-                withNanoApi { companionController.removeFont(state.baseUrl, id) }
-            }.onSuccess {
-                updateState {
-                    it.copy(
-                        availableFonts = it.availableFonts.filterNot { font -> font.id == id },
-                        notice = CompanionNotice.Success("Removed font $id."),
-                    )
-                }
-            }.onFailure { error ->
-                handleDeviceFailure(error, "Removing font failed")
-            }
-        }
-    }
+    fun removeFont(id: String) = requestDeviceDeletion(
+        DeviceDeletion.Target.Asset(CatalogAsset.Font, id, current.availableFonts.firstOrNull { it.id == id }?.name ?: id),
+    )
 
     private fun uploadCatalogFile(asset: CatalogAsset, displayName: String, data: ByteArray) {
         scope.launch {
@@ -1302,25 +1328,9 @@ class CompanionPresenter(
         }
     }
 
-    fun removeLocalePack(id: String) {
-        scope.launch {
-            val state = current
-            if (!ensureReaderConnected("removing a locale pack")) return@launch
-            if (!selectFallbackBeforeRemoval(CatalogAsset.Locale, id, state)) return@launch
-            runCatching {
-                withNanoApi { companionController.removeLocalePack(state.baseUrl, id) }
-            }.onSuccess {
-                updateState {
-                    it.copy(
-                        availableLocales = it.availableLocales.filterNot { locale -> locale.id == id },
-                        notice = CompanionNotice.Success("Removed locale pack $id."),
-                    )
-                }
-            }.onFailure { error ->
-                handleDeviceFailure(error, "Removing locale pack failed")
-            }
-        }
-    }
+    fun removeLocalePack(id: String) = requestDeviceDeletion(
+        DeviceDeletion.Target.Asset(CatalogAsset.Locale, id, current.availableLocales.firstOrNull { it.id == id }?.name ?: id),
+    )
 
     private suspend fun selectFallbackBeforeRemoval(
         asset: CatalogAsset,
@@ -1349,7 +1359,7 @@ class CompanionPresenter(
         }
 
         val selected = try {
-            withNanoApi { selectCatalogAssetOnDevice(asset, state.baseUrl, fallback) }
+            selectCatalogAssetOnDevice(asset, state.baseUrl, fallback)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
@@ -1538,6 +1548,7 @@ class CompanionPresenter(
             )
             it.copy(
                 books = if (newConnection) emptyList() else it.books,
+                deletion = if (newConnection) null else it.deletion,
                 settings = if (newConnection) null else it.settings,
                 availableThemes = if (newConnection) emptyList() else it.availableThemes,
                 availableFonts = if (newConnection) emptyList() else it.availableFonts,
@@ -1572,6 +1583,7 @@ class CompanionPresenter(
         updateState {
             it.copy(
                 books = emptyList(),
+                deletion = null,
                 settings = null,
                 availableThemes = emptyList(),
                 availableFonts = emptyList(),

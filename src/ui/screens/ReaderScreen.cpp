@@ -385,6 +385,14 @@ namespace screens {
         return true;
     }
 
+    void ReaderScreen::closeBook() {
+        ReadingProgress::mirror(session, store);
+        store.close();
+        session = {};
+        pagePreview_ = false;
+        refreshTypography();
+    }
+
     void ReaderScreen::prepareBookOpen(Preferences& preferences, uint32_t nowMs) {
         ReadingProgress::save(session, preferences, true, nowMs);
         ReadingProgress::mirror(session, store);

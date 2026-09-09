@@ -188,7 +188,7 @@ internal class WebSerialNanoApi(
 
     override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?, onProgress: ((Long, Long) -> Unit)?): NanoBook =
         upload("/api/v2/library", name, data, category, onProgress, NanoBook.serializer())
-    override suspend fun deleteBook(baseUrl: String, id: String) = noContent("DELETE", "/api/v2/library/$id")
+    override suspend fun deleteBook(baseUrl: String, id: String, force: Boolean) = noContent("DELETE", "/api/v2/library/$id", query = if (force) mapOf("force" to "true") else emptyMap())
     override suspend fun setBookPosition(baseUrl: String, id: String, wordIndex: Int) =
         noContent("PUT", "/api/v2/library/$id/position", json.encodeToString(BookPositionUpdate.serializer(), BookPositionUpdate(wordIndex)).encodeToByteArray())
     override suspend fun setBookLanguageFonts(baseUrl: String, id: String, languageFonts: List<NanoLanguageFont>) =
@@ -212,8 +212,8 @@ internal class WebSerialNanoApi(
         return decode(response, serializer)
     }
 
-    private suspend fun noContent(method: String, path: String, body: ByteArray = byteArrayOf()) {
-        val response = request(method, path, body = body, contentType = if (body.isEmpty()) null else "application/json")
+    private suspend fun noContent(method: String, path: String, body: ByteArray = byteArrayOf(), query: Map<String, String> = emptyMap()) {
+        val response = request(method, path, query = query, body = body, contentType = if (body.isEmpty()) null else "application/json")
         requireSuccess(response)
         if (response.status != 204 || response.body.isNotEmpty()) throw NanoClientError("Device returned an invalid empty response.")
     }

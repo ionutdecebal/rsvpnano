@@ -44,7 +44,7 @@ interface NanoApi {
         onProgress: ((sent: Long, total: Long) -> Unit)? = null,
     ): NanoBook
 
-    suspend fun deleteBook(baseUrl: String, id: String)
+    suspend fun deleteBook(baseUrl: String, id: String, force: Boolean = false)
     suspend fun setBookPosition(baseUrl: String, id: String, wordIndex: Int)
     suspend fun setBookLanguageFonts(
         baseUrl: String,

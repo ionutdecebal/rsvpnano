@@ -51,7 +51,7 @@ internal class BrowserNanoApi(
         transport(baseUrl).updateFocusTimers(baseUrl, timers)
     override suspend fun uploadBook(baseUrl: String, name: String, data: ByteArray, category: String?, onProgress: ((Long, Long) -> Unit)?): NanoBook =
         transport(baseUrl).uploadBook(baseUrl, name, data, category, onProgress)
-    override suspend fun deleteBook(baseUrl: String, id: String) = transport(baseUrl).deleteBook(baseUrl, id)
+    override suspend fun deleteBook(baseUrl: String, id: String, force: Boolean) = transport(baseUrl).deleteBook(baseUrl, id, force)
     override suspend fun setBookPosition(baseUrl: String, id: String, wordIndex: Int) =
         transport(baseUrl).setBookPosition(baseUrl, id, wordIndex)
     override suspend fun setBookLanguageFonts(baseUrl: String, id: String, languageFonts: List<NanoLanguageFont>) =
