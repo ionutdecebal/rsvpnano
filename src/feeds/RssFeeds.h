@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Preferences.h>
+#include <cstddef>
 #include <string>
 
 #include "settings/SettingsModel.h"
@@ -13,7 +14,7 @@ namespace RssFeeds {
     struct Result {
         uint8_t feedsChecked = 0;
         uint8_t articlesSaved = 0;
-        uint8_t articlesSkipped = 0;
+        size_t articlesSkipped = 0;
         std::string summary;
         std::string detail;
     };

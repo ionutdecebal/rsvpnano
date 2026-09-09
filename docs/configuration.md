@@ -58,6 +58,12 @@ feeds = ["https://example.com/feed.xml", "https://example.org/rss"]
 
 Whitespace and duplicate URLs are removed when the configuration is saved.
 
+Each check visits up to the first eight configured feeds and saves at most 12 new articles
+in total. Already-synced articles and empty entries do not consume that allowance; run
+another check to continue through the articles still present in the feed. Downloads are
+limited to 4 MiB per feed and article text to 512 KiB. Complete entries from a partial
+download remain usable if the feed reaches the size limit or times out.
+
 ## Focus Timers
 
 `/config/focus.toml` contains up to six timers:

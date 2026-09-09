@@ -39,18 +39,35 @@ namespace feedparser {
             size_t next;
         };
 
-        bool findNextItem(std::string_view feedBody, size_t searchStart, ItemBounds& bounds) {
-            size_t itemStart = indexOfIgnoreCase(feedBody, "<item", searchStart, feedBody.size());
-            bool atom = false;
-            if (itemStart == std::string_view::npos) {
-                itemStart = indexOfIgnoreCase(feedBody, "<entry", searchStart, feedBody.size());
-                atom = itemStart != std::string_view::npos;
-            }
-            if (itemStart == std::string_view::npos) {
+        bool opensTag(std::string_view text, std::string_view name) {
+            if (text.size() <= name.size())
                 return false;
-            }
+            const char boundary = text[name.size()];
+            return (boundary == '>' || boundary == '/' || std::isspace(static_cast<unsigned char>(boundary)))
+                && std::ranges::equal(text.substr(0, name.size()), name, [](char left, char right) {
+                       return AsciiText::toLower(left) == right;
+                   });
+        }
 
-            const std::string_view closeTag = atom ? "</entry>" : "</item>";
+        bool findNextItem(std::string_view feedBody, size_t searchStart, ItemBounds& bounds) {
+            size_t itemStart = feedBody.find('<', searchStart);
+            std::string_view closeTag;
+            // Recognize either format in one forward pass; scanning for all RSS
+            // tags before trying Atom would rescan the remaining feed per entry.
+            for (; itemStart != std::string_view::npos; itemStart = feedBody.find('<', itemStart + 1)) {
+                const auto tag = feedBody.substr(itemStart + 1);
+                if (opensTag(tag, "item")) {
+                    closeTag = "</item>";
+                    break;
+                }
+                if (opensTag(tag, "entry")) {
+                    closeTag = "</entry>";
+                    break;
+                }
+            }
+            if (itemStart == std::string_view::npos)
+                return false;
+
             const size_t itemEnd = indexOfIgnoreCase(feedBody, closeTag, itemStart, feedBody.size());
             if (itemEnd == std::string_view::npos) {
                 return false;
@@ -209,46 +226,49 @@ namespace feedparser {
 
     bool parseNextItem(std::string_view feedBody, size_t& searchStart, FeedItem& item) {
         ItemBounds bounds{};
-        if (!findNextItem(feedBody, searchStart, bounds)) {
-            return false;
-        }
-        searchStart = bounds.next;
+        while (findNextItem(feedBody, searchStart, bounds)) {
+            searchStart = bounds.next;
 
-        item.title = cleanText(valueBetween(feedBody, "<title", "</title>", bounds.start, bounds.end));
-        item.link = cleanText(valueBetween(feedBody, "<link>", "</link>", bounds.start, bounds.end));
-        if (item.link.empty()) {
-            item.link = cleanText(attributeValue(feedBody, "<link", "href", bounds.start, bounds.end));
-        }
-        if (item.link.empty()) {
-            item.link = cleanText(valueBetween(feedBody, "<guid", "</guid>", bounds.start, bounds.end));
-        }
-        item.author = cleanText(valueBetween(feedBody, "<author", "</author>", bounds.start, bounds.end));
-        if (item.author.empty()) {
-            item.author = cleanText(valueBetween(feedBody, "<dc:creator", "</dc:creator>", bounds.start, bounds.end));
-        }
-        if (item.author.empty()) {
-            item.author = sourceLabelForItem(item);
-        }
+            item.title = cleanText(valueBetween(feedBody, "<title", "</title>", bounds.start, bounds.end));
+            item.link = cleanText(valueBetween(feedBody, "<link>", "</link>", bounds.start, bounds.end));
+            if (item.link.empty()) {
+                item.link = cleanText(attributeValue(feedBody, "<link", "href", bounds.start, bounds.end));
+            }
+            if (item.link.empty()) {
+                item.link = cleanText(valueBetween(feedBody, "<guid", "</guid>", bounds.start, bounds.end));
+            }
+            item.author = cleanText(valueBetween(feedBody, "<author", "</author>", bounds.start, bounds.end));
+            if (item.author.empty()) {
+                item.author =
+                    cleanText(valueBetween(feedBody, "<dc:creator", "</dc:creator>", bounds.start, bounds.end));
+            }
+            if (item.author.empty()) {
+                item.author = sourceLabelForItem(item);
+            }
 
-        item.body =
-            cleanText(valueBetween(feedBody, "<content:encoded", "</content:encoded>", bounds.start, bounds.end));
-        if (item.body.empty()) {
-            item.body = cleanText(valueBetween(feedBody, "<content", "</content>", bounds.start, bounds.end));
-        }
-        if (item.body.empty()) {
-            item.body = cleanText(valueBetween(feedBody, "<description", "</description>", bounds.start, bounds.end));
-        }
-        if (item.body.empty()) {
-            item.body = cleanText(valueBetween(feedBody, "<summary", "</summary>", bounds.start, bounds.end));
-        }
-        if (item.body.empty()) {
-            item.body = item.link;
-        }
+            item.body =
+                cleanText(valueBetween(feedBody, "<content:encoded", "</content:encoded>", bounds.start, bounds.end));
+            if (item.body.empty()) {
+                item.body = cleanText(valueBetween(feedBody, "<content", "</content>", bounds.start, bounds.end));
+            }
+            if (item.body.empty()) {
+                item.body =
+                    cleanText(valueBetween(feedBody, "<description", "</description>", bounds.start, bounds.end));
+            }
+            if (item.body.empty()) {
+                item.body = cleanText(valueBetween(feedBody, "<summary", "</summary>", bounds.start, bounds.end));
+            }
+            if (item.body.empty()) {
+                item.body = item.link;
+            }
 
-        if (item.title.empty()) {
-            item.title = item.link.empty() ? "RSS Article" : item.link;
+            if (item.title.empty()) {
+                item.title = item.link.empty() ? "RSS Article" : item.link;
+            }
+            if (!item.body.empty())
+                return true;
         }
-        return !item.body.empty();
+        return false;
     }
 
 } // namespace feedparser

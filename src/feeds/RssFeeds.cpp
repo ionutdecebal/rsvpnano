@@ -14,12 +14,13 @@
 #include "board/BoardStorage.h"
 #include "conversion/rsvp/RsvpWriter.h"
 
+#include "feeds/FeedParser.h"
+#include "feeds/FeedSync.h"
+#include "feeds/RssConfig.h"
+#include "feeds/RssConfigStorage.h"
 #include "hash/Fnv1a.h"
 #include "logging/Logger.h"
 #include "network/WifiConnection.h"
-#include "feeds/FeedParser.h"
-#include "feeds/RssConfig.h"
-#include "feeds/RssConfigStorage.h"
 #include "storage/fs/StorageFiles.h"
 #include "storage/fs/StoragePaths.h"
 #include "text/AsciiText.h"
@@ -34,8 +35,6 @@ namespace {
     constexpr uint32_t kFeedProgressIntervalMs = 1000;
     constexpr size_t kMaxFeedBytes = 4UL * 1024UL * 1024UL;
     constexpr uint8_t kMaxFeedsPerCheck = 8;
-    constexpr uint8_t kMaxItemsPerFeed = 5;
-    constexpr uint8_t kMaxArticlesPerCheck = 12;
     constexpr uint8_t kMaxFeedRedirects = 3;
 
     constexpr const char* kUserAgent = "RSVP-Nano-RSS/1.0";
@@ -236,8 +235,6 @@ namespace {
             uint8_t buffer[512];
             size_t totalRead = 0;
             size_t completeItemSearchStart = 0;
-            uint8_t completeItemsRead = 0;
-            bool stoppedAfterItems = false;
             bool acceptedPartialFeed = false;
             const int reportedSize = http.getSize();
             const size_t reserveBytes =
@@ -250,20 +247,20 @@ namespace {
             while (http.connected() || stream->available()) {
                 const uint32_t nowMs = millis();
                 if (nowMs - startedMs > kFeedTotalTimeoutMs) {
-                    if (completeItemsRead > 0) {
+                    if (feedparser::advancePastItem(body, completeItemSearchStart)) {
                         acceptedPartialFeed = true;
-                        ESP_LOGW("rss", "total timeout after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
-                                 static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
+                        ESP_LOGW("rss", "total timeout after complete item url=%s bytes=%u", currentUrl.c_str(),
+                                 static_cast<unsigned int>(totalRead));
                         break;
                     }
                     http.end();
                     return std::unexpected(std::string{"Site took too long"});
                 }
                 if (nowMs - lastByteMs > kFeedIdleTimeoutMs) {
-                    if (completeItemsRead > 0) {
+                    if (feedparser::advancePastItem(body, completeItemSearchStart)) {
                         acceptedPartialFeed = true;
-                        ESP_LOGD("rss", "idle after usable items url=%s bytes=%u items=%u", currentUrl.c_str(),
-                                 static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
+                        ESP_LOGD("rss", "idle after complete item url=%s bytes=%u", currentUrl.c_str(),
+                                 static_cast<unsigned int>(totalRead));
                         break;
                     }
                     if (totalRead > 0 && feedparser::hasCompleteFeed(body)) {
@@ -300,16 +297,6 @@ namespace {
                 const size_t previousRead = totalRead;
                 totalRead += static_cast<size_t>(bytesRead);
                 body.append(reinterpret_cast<const char*>(buffer), static_cast<size_t>(bytesRead));
-                while (completeItemsRead < kMaxItemsPerFeed
-                       && feedparser::advancePastItem(body, completeItemSearchStart)) {
-                    ++completeItemsRead;
-                }
-                if (completeItemsRead >= kMaxItemsPerFeed) {
-                    stoppedAfterItems = true;
-                    ESP_LOGI("rss", "downloaded item limit url=%s bytes=%u items=%u", currentUrl.c_str(),
-                             static_cast<unsigned int>(totalRead), static_cast<unsigned int>(completeItemsRead));
-                    break;
-                }
                 const size_t closeSearchStart = previousRead > 16 ? previousRead - 16 : 0;
                 if (feedparser::hasCompleteFeed(body, closeSearchStart)) {
                     break;
@@ -325,9 +312,6 @@ namespace {
                 const std::string capped = "Reached " + std::to_string(kMaxFeedBytes / 1024) + " KB cap";
                 report(callback, context, progressLabel.c_str(), capped.c_str(), 20 + feedIndex * 7);
                 delay(500);
-            } else if (stoppedAfterItems) {
-                const std::string downloaded = "Downloaded " + std::to_string(completeItemsRead) + " items";
-                report(callback, context, progressLabel.c_str(), downloaded.c_str(), 20 + feedIndex * 7);
             } else if (acceptedPartialFeed) {
                 report(callback, context, progressLabel.c_str(), "Downloaded partial feed", 20 + feedIndex * 7);
             } else {
@@ -340,8 +324,7 @@ namespace {
         return std::unexpected(std::string{"Feed redirected too often"});
     }
 
-    std::expected<void, std::error_code> saveItem(const feedparser::FeedItem& item, Preferences& preferences,
-                                                  RssFeeds::Result& result) {
+    std::expected<void, std::error_code> saveItem(const feedparser::FeedItem& item, Preferences& preferences) {
         if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kLibraryPath); !directory)
             return directory;
         if (auto directory = StorageFiles::ensureDirectory(StoragePaths::kArticleFilesPath); !directory)
@@ -391,7 +374,6 @@ namespace {
         }
 
         markItemSeen(item, preferences);
-        ++result.articlesSaved;
         ESP_LOGI("rss", "saved %s", finalPath.c_str());
         return {};
     }
@@ -399,43 +381,34 @@ namespace {
     bool processFeed(std::string_view feedUrl, std::string_view feedBody, Preferences& preferences,
                      RssFeeds::Result& result, uint8_t feedIndex, uint8_t feedCount, RssFeeds::StatusCallback callback,
                      void* context) {
-        size_t searchStart = 0;
-        uint8_t itemCount = 0;
-        uint8_t savedBefore = result.articlesSaved;
-        uint8_t skippedBefore = result.articlesSkipped;
         const std::string progressLabel = feedProgressLabel(feedIndex, feedCount);
         report(callback, context, progressLabel.c_str(), "Parsing items", 24 + feedIndex * 7);
-        while (itemCount < kMaxItemsPerFeed && result.articlesSaved < kMaxArticlesPerCheck) {
-            feedparser::FeedItem item;
-            if (!feedparser::parseNextItem(feedBody, searchStart, item)) {
-                break;
-            }
-            ++itemCount;
-            if (itemAlreadySeen(item, preferences)) {
-                ++result.articlesSkipped;
-                const std::string synced =
-                    "Already synced " + std::to_string(itemCount) + "/" + std::to_string(kMaxItemsPerFeed);
-                report(callback, context, progressLabel.c_str(), synced.c_str(), 24 + feedIndex * 7);
-                continue;
-            }
-            const std::string saving = "Saving article " + std::to_string(itemCount);
-            report(callback, context, saving.c_str(), item.title.c_str(), 24 + feedIndex * 7);
-            if (auto saved = saveItem(item, preferences, result); !saved)
-                Logger::failure("rss", "save article", StoragePaths::kArticleFilesPath, saved.error());
-        }
-        const uint8_t savedHere = result.articlesSaved - savedBefore;
-        const uint8_t skippedHere = result.articlesSkipped - skippedBefore;
-        if (itemCount == 0) {
+        const auto synced = rss::syncFeed(
+            feedBody, rss::kMaxArticlesPerCheck - result.articlesSaved,
+            [&](const feedparser::FeedItem& item) {
+                return itemAlreadySeen(item, preferences);
+            },
+            [&](const feedparser::FeedItem& item) {
+                report(callback, context, "Saving article", item.title.c_str(), 24 + feedIndex * 7);
+                const auto saved = saveItem(item, preferences);
+                if (!saved)
+                    Logger::failure("rss", "save article", StoragePaths::kArticleFilesPath, saved.error());
+                return saved.has_value();
+            });
+        result.articlesSaved += static_cast<uint8_t>(synced.saved);
+        result.articlesSkipped += synced.skipped;
+        if (synced.scanned == 0) {
             report(callback, context, progressLabel.c_str(), "No usable items", 24 + feedIndex * 7);
         } else {
-            const std::string saved = std::to_string(savedHere) + " saved, " + std::to_string(skippedHere) + " skipped";
+            const std::string saved =
+                std::to_string(synced.saved) + " saved, " + std::to_string(synced.skipped) + " skipped";
             report(callback, context, progressLabel.c_str(), saved.c_str(), 24 + feedIndex * 7);
         }
         ESP_LOGW("rss", "feed url=%.*s items=%u saved=%u skipped=%u", static_cast<int>(feedUrl.size()), feedUrl.data(),
-                 static_cast<unsigned int>(itemCount), static_cast<unsigned int>(savedHere),
-                 static_cast<unsigned int>(skippedHere));
+                 static_cast<unsigned int>(synced.scanned), static_cast<unsigned int>(synced.saved),
+                 static_cast<unsigned int>(synced.skipped));
         delay(600);
-        return itemCount > 0;
+        return synced.scanned > 0;
     }
 } // namespace
 
@@ -481,7 +454,8 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
     std::string firstFeedError;
     bool mixedFeedErrors = false;
 
-    for (uint8_t feedIndex = 0; feedIndex < feedCount && result.articlesSaved < kMaxArticlesPerCheck; ++feedIndex) {
+    for (uint8_t feedIndex = 0; feedIndex < feedCount && result.articlesSaved < rss::kMaxArticlesPerCheck;
+         ++feedIndex) {
         const std::string& line = config->feeds[feedIndex];
         const uint8_t displayIndex = feedIndex + 1;
         const uint8_t displayFeedCount = static_cast<uint8_t>(feedCount);

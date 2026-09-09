@@ -1,8 +1,10 @@
 #include <glaze/json.hpp>
 #include <unity.h>
+#include <unordered_set>
 
 #include "hash/Fnv1a.h"
 #include "feeds/FeedParser.h"
+#include "feeds/FeedSync.h"
 #include "feeds/RssConfig.h"
 #include "text/AsciiText.h"
 #include "text/TextNormalizer.h"
@@ -153,6 +155,82 @@ void test_detects_complete_feed_and_advances_over_items() {
     TEST_ASSERT_TRUE(feedparser::hasCompleteFeed(partial + "</entry></feed>"));
 }
 
+void test_sync_reaches_later_items_across_checks_and_skips_empty_entries() {
+    for (const bool atom: {false, true}) {
+        std::string feed = atom ? "<feed>" : "<rss><channel>";
+        const std::string open = atom ? "<EnTrY lang=\"en\">" : "<ItEm lang=\"en\">";
+        const std::string close = atom ? "</entry>" : "</item>";
+        std::unordered_set<std::string> seen;
+        seen.reserve(317);
+        for (size_t i = 0; i < 317; ++i) {
+            const std::string link = "https://example.com/" + std::to_string(i);
+            feed += open + "<title>Article</title>"
+                  + (atom ? "<link href=\"" + link + "\"/><summary>Text</summary>"
+                          : "<link>" + link + "</link><description>Text</description>")
+                  + close;
+            if (i < 300)
+                seen.insert(link);
+            if (i == 300)
+                feed += open + "<title>Empty entry must not end the feed</title>" + close;
+        }
+        feed += atom ? "</feed>" : "</channel></rss>";
+        const auto alreadySeen = [&](const feedparser::FeedItem& item) {
+            return seen.contains(item.link);
+        };
+        const auto save = [&](const feedparser::FeedItem& item) {
+            return seen.insert(item.link).second;
+        };
+
+        const auto first = rss::syncFeed(feed, rss::kMaxArticlesPerCheck, alreadySeen, save);
+        TEST_ASSERT_EQUAL(12, first.saved);
+        TEST_ASSERT_EQUAL(300, first.skipped);
+        TEST_ASSERT_TRUE(seen.contains("https://example.com/311"));
+        TEST_ASSERT_FALSE(seen.contains("https://example.com/312"));
+        const auto second = rss::syncFeed(feed, rss::kMaxArticlesPerCheck, alreadySeen, save);
+        TEST_ASSERT_EQUAL(5, second.saved);
+        TEST_ASSERT_EQUAL(312, second.skipped);
+        TEST_ASSERT_TRUE(seen.contains("https://example.com/316"));
+        const auto third = rss::syncFeed(feed, rss::kMaxArticlesPerCheck, alreadySeen, save);
+        TEST_ASSERT_EQUAL(0, third.saved);
+        TEST_ASSERT_EQUAL(317, third.skipped);
+    }
+}
+
+void test_item_opening_tags_require_a_name_boundary() {
+    for (const std::string tag: {"item", "entry"}) {
+        const std::string feed = "<" + tag + "Info><title>Wrong</title></" + tag + "Info>" + "<" + tag
+                               + "><title>Right</title><summary>Body</summary></" + tag + ">";
+        const auto item = firstItem(feed);
+        TEST_ASSERT_EQUAL_STRING("Right", item.title.c_str());
+    }
+}
+
+void test_sync_budget_counts_successes_and_partial_atom_feed_remains_usable() {
+    constexpr std::string_view feed = "<feed><entry><title>Empty</title></entry>"
+                                      "<entry><title>Write fails</title><summary>Body</summary></entry>"
+                                      "<entry><title>Saved</title><summary>Body</summary></entry>"
+                                      "<entry><title>Next check</title><summary>Body</summary></entry>"
+                                      "<entry><title>Incomplete";
+    size_t writes = 0;
+    const auto unseen = [](const feedparser::FeedItem&) {
+        return false;
+    };
+    const auto save = [&](const feedparser::FeedItem& item) {
+        ++writes;
+        return item.title != "Write fails";
+    };
+    // This feed gets the remaining one save in a check shared with other feeds.
+    const auto result = rss::syncFeed(feed, 1, unseen, save);
+    TEST_ASSERT_EQUAL(1, result.saved);
+    TEST_ASSERT_EQUAL(2, result.scanned);
+    TEST_ASSERT_EQUAL(2, writes);
+    TEST_ASSERT_EQUAL(0, rss::syncFeed(feed, 0, unseen, save).scanned);
+    TEST_ASSERT_EQUAL(2, writes);
+    const auto allComplete = rss::syncFeed(feed, rss::kMaxArticlesPerCheck, unseen, save);
+    TEST_ASSERT_EQUAL(2, allComplete.saved);
+    TEST_ASSERT_EQUAL(3, allComplete.scanned);
+}
+
 void test_preserves_long_full_text_content() {
     std::string longBody;
     longBody.reserve(140000);
@@ -255,6 +333,9 @@ int main(void) {
     RUN_TEST(test_iterates_multiple_items_then_stops);
     RUN_TEST(test_parses_complete_item_from_partial_feed);
     RUN_TEST(test_detects_complete_feed_and_advances_over_items);
+    RUN_TEST(test_sync_reaches_later_items_across_checks_and_skips_empty_entries);
+    RUN_TEST(test_item_opening_tags_require_a_name_boundary);
+    RUN_TEST(test_sync_budget_counts_successes_and_partial_atom_feed_remains_usable);
     RUN_TEST(test_preserves_long_full_text_content);
     RUN_TEST(test_host_label_strips_scheme_and_www);
     RUN_TEST(test_rss_config_round_trip_and_normalization);
