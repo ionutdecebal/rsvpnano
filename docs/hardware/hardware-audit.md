@@ -78,6 +78,21 @@ recompose the affected ink bounds with neighboring words; shaping, pagination an
 are not replayed for each strip. Existing font objects and caches are reused. Standby animations
 advance once per update and keep their existing dirty-cell tracking.
 
+Widget text is prepared once per changed region, before strip composition. Page layout stores
+exact ink bounds and bidi positions in its existing words/lines, so invisible words can be skipped
+before changing fonts. Unknown bounds remain conservative if font reads fail. Counter-rotated
+glyphs decode only visible source rows/columns. A clipped 2 x 2 test reads two rows instead of twelve.
+
+Opaque reader regions skip the redundant clear before composition; partial custom drawings retain
+their clear. Carousel selection uses existing card signatures instead of invalidating the screen.
+Cards and dock items share their drawing/touch slot. The hourglass computes its outline once and
+rejects invisible segments without changing their rasterization: the 120 x 80 landscape regression
+drops from 10,080 outline calls to 480 with identical pixels.
+
+Removing the redundant packed-pixel color table saves 1,024 bytes per font renderer. Cached page
+geometry adds 8 bytes per word and 4 per bidi character, plus line bounds; it is not a claim that
+total working memory always decreases. No additional font objects or pixel buffers are created.
+
 | Board | Default UI size | Two-row RGB565 allocation |
 |---|---|---|
 | AMOLED 1.8 V1/V2 | 448 x 368 | 1,472 bytes |
@@ -134,12 +149,13 @@ Build/host tests cannot replace these checks on each affected revision:
 
 ## Local verification
 
-- All 252 native cases passed across the regular UI, watch UI, aligned-rendering, board-wiring,
+- All 267 native cases passed across the regular UI, watch UI, aligned-rendering, board-wiring,
   light-sleep and existing firmware suites. The final rendering recheck includes exact transfer
   counts, clipped/odd regions, touch rotation, incremental highlights, keyboard invalidation,
   screensavers and moved/removed widget ownership.
-- The native Arduino_GFX regression passes 192 pixel comparisons; the original unsigned decoder
-  fails 162 of those cases. Run `python test/native_canvas/run.py --fetch-library`.
+- The native Arduino_GFX regression passes 192 single-line and 192 newline pixel comparisons,
+  including prepared-text clipping. The original unsigned decoder fails 162 single-line cases;
+  omitting full logical text bounds fails 138. Run `python test/native_canvas/run.py --fetch-library`.
 - `checkWeb` and the production installer bundle passed. Committed conflict markers and a duplicate
   import in the USB regression test were removed without discarding its book-deletion check.
 - The firmware-export script passed its syntax check.
