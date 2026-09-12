@@ -20,19 +20,20 @@ namespace {
             });
             TEST_ASSERT_NOT_NULL(canvas);
             const int pitch = rotation & 1 ? canvas->height() : canvas->width();
+            const int rows = rotation & 1 ? canvas->width() : canvas->height();
             constexpr int windowWidth = 8;
             const ui::Rect region = rotation & 1 ? ui::Rect{4, 6, 2, windowWidth} : ui::Rect{4, 6, windowWidth, 2};
             const uint16_t background = ui.color(ui::themes::Background);
             for (int pass = 0; pass < 2; ++pass) {
-                const std::vector<uint16_t> before(canvas->getFramebuffer(), canvas->getFramebuffer() + pitch * 2);
+                const std::vector<uint16_t> before(canvas->getFramebuffer(), canvas->getFramebuffer() + pitch * rows);
                 const int transfers = panel.transfers;
                 int callbacks = 0;
                 ui.paint(region, [&](Arduino_GFX& output, ui::Rect local) {
                     ++callbacks;
-                    for (int row = 0; row < 2; ++row) {
+                    for (int row = 0; row < rows; ++row) {
                         for (int x = 0; x < pitch; ++x) {
                             const int index = row * pitch + x;
-                            TEST_ASSERT_EQUAL_UINT16(x < windowWidth ? background : before[index],
+                            TEST_ASSERT_EQUAL_UINT16(row < 2 && x < windowWidth ? background : before[index],
                                                      canvas->getFramebuffer()[index]);
                         }
                     }

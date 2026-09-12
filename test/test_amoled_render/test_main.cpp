@@ -54,9 +54,9 @@ namespace {
         }
     }
 
-    void test_two_rows_rotate_without_rotating_panel() {
+    void test_bands_rotate_without_rotating_panel() {
         for (int rotation = 0; rotation < 4; ++rotation) {
-            testgfx::Panel panel(36, 28);
+            testgfx::Panel panel(36, 98);
             ui::Context ui(panel);
             ui.setOrientation(static_cast<ui::Orientation>(rotation));
             const ui::Rect region{0, 0, ui.width(), ui.height()};
@@ -65,15 +65,16 @@ namespace {
                     for (int x = 0; x < region.w; ++x)
                         output.drawPixel(local.x + x, local.y + y, ink(x, y));
             });
-            for (int y = 0; y < 28; ++y)
+            for (int y = 0; y < panel.height(); ++y)
                 for (int x = 0; x < 36; ++x) {
-                    const auto [lx, ly] = logicalPoint(x, y, 36, 28, rotation);
+                    const auto [lx, ly] = logicalPoint(x, y, panel.width(), panel.height(), rotation);
                     TEST_ASSERT_EQUAL_UINT16(ink(lx, ly), panel.at(x, y));
                 }
             TEST_ASSERT_EQUAL(0, panel.panelRotations);
             TEST_ASSERT_EQUAL(0, panel.invalidWindows);
             TEST_ASSERT_EQUAL(0, panel.writes);
-            TEST_ASSERT_EQUAL(14, panel.transfers);
+            TEST_ASSERT_EQUAL(testgfx::transfersFor(panel.height()), panel.transfers);
+            TEST_ASSERT_EQUAL(panel.width() * panel.height(), panel.pixelsTransferred);
         }
     }
 
@@ -81,8 +82,9 @@ namespace {
         constexpr uint16_t sentinel = 0xDEAD;
         for (int rotation = 0; rotation < 4; ++rotation) {
             for (const ui::Rect requested:
-                 {ui::Rect{3, 5, 11, 9}, ui::Rect{-3, -5, 15, 17}, ui::Rect{23, 23, 25, 21}}) {
-                testgfx::Panel panel(36, 28, sentinel);
+                 {ui::Rect{3, 5, 11, 9}, ui::Rect{-3, -5, 15, 17}, ui::Rect{23, 23, 25, 21}, ui::Rect{7, 9, 79, 91},
+                  ui::Rect{-5, -7, 81, 111}, ui::Rect{85, 81, 41, 41}}) {
+                testgfx::Panel panel(92, 106, sentinel);
                 ui::Context ui(panel);
                 ui.setOrientation(static_cast<ui::Orientation>(rotation));
                 const ui::Rect region = ui.paintBounds(requested);
@@ -91,9 +93,9 @@ namespace {
                         for (int x = 0; x < region.w; ++x)
                             output.drawPixel(local.x + x, local.y + y, ink(x, y));
                 });
-                for (int y = 0; y < 28; ++y)
-                    for (int x = 0; x < 36; ++x) {
-                        const auto [lx, ly] = logicalPoint(x, y, 36, 28, rotation);
+                for (int y = 0; y < panel.height(); ++y)
+                    for (int x = 0; x < panel.width(); ++x) {
+                        const auto [lx, ly] = logicalPoint(x, y, panel.width(), panel.height(), rotation);
                         const bool inside =
                             lx >= region.x && ly >= region.y && lx < region.x + region.w && ly < region.y + region.h;
                         TEST_ASSERT_EQUAL_UINT16(inside ? ink(lx - region.x, ly - region.y) : sentinel, panel.at(x, y));
@@ -137,7 +139,7 @@ namespace {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_rotated_touch_matches_the_painted_pixel);
-    RUN_TEST(test_two_rows_rotate_without_rotating_panel);
+    RUN_TEST(test_bands_rotate_without_rotating_panel);
     RUN_TEST(test_partial_odd_and_clipped_regions_preserve_neighbours);
     RUN_TEST(test_widget_updates_use_aligned_payloads_and_keep_siblings);
     runAmoledReaderTests();

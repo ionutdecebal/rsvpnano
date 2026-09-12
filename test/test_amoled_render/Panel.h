@@ -2,8 +2,12 @@
 
 #include <Arduino_GFX_Library.h>
 #include <vector>
+#include "board/BoardConfig.h"
 
 namespace testgfx {
+    constexpr int transfersFor(int rows) {
+        return (rows + Board::Config::DISPLAY_BUFFER_ROWS - 1) / Board::Config::DISPLAY_BUFFER_ROWS;
+    }
     class Panel final : public Arduino_GFX {
     public:
         Panel(int16_t w = 368, int16_t h = 448, uint16_t initial = 0) :
@@ -11,11 +15,13 @@ namespace testgfx {
                 pixels(static_cast<size_t>(w) * h, initial) {}
 
         void draw16bitRGBBitmap(int16_t x, int16_t y, uint16_t* data, int16_t w, int16_t h) override {
-            if (x < 0 || y < 0 || w <= 0 || h != 2 || ((x | y | w | h) & 1) || x + w > width() || y + h > height()) {
+            if (x < 0 || y < 0 || w <= 0 || h <= 0 || h > Board::Config::DISPLAY_BUFFER_ROWS || ((x | y | w | h) & 1)
+                || x + w > width() || y + h > height()) {
                 ++invalidWindows;
                 return;
             }
             ++transfers;
+            pixelsTransferred += w * h;
             for (int row = 0; row < h; ++row)
                 std::copy_n(data + row * w, w, pixels.data() + (y + row) * width() + x);
         }
@@ -29,6 +35,7 @@ namespace testgfx {
 
         std::vector<uint16_t> pixels;
         int transfers = 0;
+        int pixelsTransferred = 0;
         int invalidWindows = 0;
         int panelRotations = 0;
     };

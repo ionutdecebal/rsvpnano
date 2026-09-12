@@ -1,4 +1,4 @@
-"""Compare the installed native Arduino_GFX u8g2 decoder on full and two-row canvases.
+"""Compare the installed native Arduino_GFX u8g2 decoder on full and partial canvases.
 
 Run from any directory after installing firmware dependencies:
     python test/native_canvas/run.py

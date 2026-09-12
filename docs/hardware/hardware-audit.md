@@ -32,7 +32,7 @@ framework disables hardware read-modify-write atomics, even though word loads/st
 ## Aligned rendering and orientation
 
 The existing UI primitives compose complete opaque regions into one reusable native Arduino_GFX
-two-row canvas before sending aligned rectangles. There is no full-screen framebuffer, panel
+32-row canvas before sending aligned rectangles. There is no full-screen framebuffer, panel
 readback, retained draw-command list, or second UI model. The existing LCD 3.49 AXS15231B
 canvas/row-prefix implementation and C6 direct drawing path do not compile this strip buffer.
 
@@ -93,12 +93,12 @@ Removing the redundant packed-pixel color table saves 1,024 bytes per font rende
 geometry adds 8 bytes per word and 4 per bidi character, plus line bounds; it is not a claim that
 total working memory always decreases. No additional font objects or pixel buffers are created.
 
-| Board | Default UI size | Two-row RGB565 allocation |
+| Board | Default UI size | 32-row RGB565 allocation |
 |---|---|---|
-| AMOLED 1.8 V1/V2 | 448 x 368 | 1,472 bytes |
-| AMOLED 2.06 | 502 x 410 | 1,648 bytes |
-| AMOLED 2.16 | 480 x 480 | 1,920 bytes |
-| AMOLED 2.41 V1 | 600 x 450 | 1,808 bytes |
+| AMOLED 1.8 V1/V2 | 448 x 368 | 23,552 bytes |
+| AMOLED 2.06 | 502 x 410 | 26,368 bytes |
+| AMOLED 2.16 | 480 x 480 | 30,720 bytes |
+| AMOLED 2.41 V1 | 600 x 450 | 28,928 bytes |
 | C6 LCD 1.47 | 320 x 172 | None |
 
 The row pitch rounds up to four pixels for Arduino_Canvas's allocation alignment. Transfer payloads
@@ -106,6 +106,12 @@ are packed to the actual window width. AMOLED panels remain at native rotation z
 canvas rotates each strip and the existing touch transform follows the same orientation. The
 left-handed setting selects the opposite landscape orientation. Board configuration selects the
 path at compile time; the regular LCD 3.49 layout is unchanged.
+
+The 32-row setting replaces the two-row allocation in that same canvas. On the 1.8 a full-screen
+paint needs 14 callbacks/transfers instead of 224, with the same total pixel payload. The final
+band sends only the remaining even rows. This reduces repeated drawing and window setup without
+adding asynchronous buffer ownership or a second allocation. It is not a measured frame-rate claim.
+RSVP region bounds remain unchanged: centering metrics do not bound every shaped glyph or phantom.
 
 Arduino_GFX is pinned to the audited revision. Its u8g2 decoder used unsigned temporary coordinates,
 which dropped glyph fragments crossing the strip edge. `tools/pio_gfx.py` builds a generated copy
@@ -153,9 +159,10 @@ Build/host tests cannot replace these checks on each affected revision:
   light-sleep and existing firmware suites. The final rendering recheck includes exact transfer
   counts, clipped/odd regions, touch rotation, incremental highlights, keyboard invalidation,
   screensavers and moved/removed widget ownership.
-- The native Arduino_GFX regression passes 192 single-line and 192 newline pixel comparisons,
-  including prepared-text clipping. The original unsigned decoder fails 162 single-line cases;
-  omitting full logical text bounds fails 138. Run `python test/native_canvas/run.py --fetch-library`.
+- The native Arduino_GFX regression passes 1,536 cases at 2/16/32/64 rows across the four AMOLED
+  panel sizes and two smaller, padded/short-tail surfaces. Each case compares single-line and
+  newline output, with and without prepared-text clipping. Omitting full logical text bounds
+  fails 838 cases. Run `python test/native_canvas/run.py --fetch-library`.
 - `checkWeb` and the production installer bundle passed. Committed conflict markers and a duplicate
   import in the USB regression test were removed without discarding its book-deletion check.
 - The firmware-export script passed its syntax check.

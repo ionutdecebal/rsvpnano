@@ -105,8 +105,8 @@ namespace {
                 screen.draw(ui);
                 const int transfers = panel.transfers - before;
                 // A seeded maze adds only its tiny starting cell to the one full-panel clear.
-                TEST_ASSERT_GREATER_OR_EQUAL(panel.height() / 2, transfers);
-                TEST_ASSERT_LESS_THAN(panel.height(), transfers);
+                TEST_ASSERT_GREATER_OR_EQUAL(testgfx::transfersFor(panel.height()), transfers);
+                TEST_ASSERT_LESS_OR_EQUAL(testgfx::transfersFor(panel.height()) + 2, transfers);
                 for (const uint16_t pixel: panel.pixels)
                     TEST_ASSERT_NOT_EQUAL(stale, pixel);
             }

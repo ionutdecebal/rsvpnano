@@ -38,7 +38,7 @@ The board implementation binds its private wiring to the stable `Board::*` API:
 ## Display Notes
 
 - The controller requires even starts and even dimensions. The shared UI composes aligned
-  two-row updates; see the [hardware audit](hardware-audit.md).
+  32-row updates; see the [hardware audit](hardware-audit.md).
 - The square panel stays at native rotation zero while the UI and touch rotate together.
 - The board uses safe reader chrome margins for the rounded screen mask.
 

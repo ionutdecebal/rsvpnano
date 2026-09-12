@@ -14,7 +14,7 @@
 
 - MCU: `ESP32-S3R8`
 - Display: `CO5300`, `410x502`, QSPI
-- App/UI geometry: `502x410` landscape, using rotated two-row updates at native panel rotation zero.
+- App/UI geometry: `502x410` landscape, using rotated 32-row updates at native panel rotation zero.
 - Touch: `FT3168` routed through the FT6336-compatible driver at I2C `0x38`
 - PMU: `AXP2101`
 - IMU: `QMI8658`

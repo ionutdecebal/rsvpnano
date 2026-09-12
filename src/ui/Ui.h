@@ -189,6 +189,7 @@ namespace ui {
                 buffer->setRotation(rotation);
                 const int16_t panelW = gfx_.width(), panelH = gfx_.height();
                 const int16_t pitch = (rotation & 1U) ? buffer->height() : buffer->width();
+                const int16_t rows = (rotation & 1U) ? buffer->width() : buffer->height();
                 Rect window = rect;
                 switch (rotation) {
                 case 1:
@@ -207,7 +208,8 @@ namespace ui {
                 window = intersection(window, {0, 0, panelW, panelH});
                 if (window.w <= 0 || window.h <= 0)
                     return;
-                for (int16_t y = window.y; y < window.y + window.h; y += 2) {
+                for (int16_t y = window.y; y < window.y + window.h; y += rows) {
+                    const int16_t count = std::min<int16_t>(rows, window.y + window.h - y);
                     int16_t dx = -window.x, dy = -y;
                     switch (rotation) {
                     case 1:
@@ -216,10 +218,10 @@ namespace ui {
                         break;
                     case 2:
                         dx = pitch - panelW + window.x;
-                        dy = y - panelH + 2;
+                        dy = y - panelH + rows;
                         break;
                     case 3:
-                        dx = y - panelH + 2;
+                        dx = y - panelH + rows;
                         dy = -window.x;
                         break;
                     default:
@@ -229,13 +231,16 @@ namespace ui {
                     buffer->setTextBound(dx, dy, width(), height());
                     uint16_t* pixels = buffer->getFramebuffer();
                     const uint16_t background = color(themes::Background);
-                    std::fill_n(pixels, window.w, background);
-                    std::fill_n(pixels + pitch, window.w, background);
+                    for (int16_t row = 0; row < count; ++row)
+                        std::fill_n(pixels + row * pitch, window.w, background);
                     draw(*buffer,
                          Rect{static_cast<int16_t>(rect.x + dx), static_cast<int16_t>(rect.y + dy), rect.w, rect.h});
                     // Canvas rows retain their full pitch; the panel takes a tightly packed rectangle.
-                    std::memmove(pixels + window.w, pixels + pitch, static_cast<size_t>(window.w) * sizeof(*pixels));
-                    gfx_.draw16bitRGBBitmap(window.x, y, pixels, window.w, 2);
+                    if (window.w != pitch)
+                        for (int16_t row = 1; row < count; ++row)
+                            std::memmove(pixels + row * window.w, pixels + row * pitch,
+                                         static_cast<size_t>(window.w) * sizeof(*pixels));
+                    gfx_.draw16bitRGBBitmap(window.x, y, pixels, window.w, count);
                 }
                 markDrawn();
             }

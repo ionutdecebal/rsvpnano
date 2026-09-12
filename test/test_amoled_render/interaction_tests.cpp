@@ -98,7 +98,7 @@ namespace {
         const auto cards = screens::watch::carousel(screens::detail::tabContent(ui));
         int cardTransfers = 0;
         for (const auto rect: cards)
-            cardTransfers += ui.paintBounds(rect).w / 2;
+            cardTransfers += testgfx::transfersFor(ui.paintBounds(rect).w);
         draw();
         TEST_ASSERT_EQUAL(screens::Action::None, touch(true, 280, 100));
         TEST_ASSERT_EQUAL(screens::Action::None, touch(true, 160, 100));

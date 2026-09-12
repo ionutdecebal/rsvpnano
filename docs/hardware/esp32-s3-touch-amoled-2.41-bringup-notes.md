@@ -60,7 +60,7 @@ The shared app does not include platform or chip-driver headers directly.
 
 ### Rotation
 
-Keep panel addressing at native rotation zero. The shared UI composes rotated two-row strips
+Keep panel addressing at native rotation zero. The shared UI composes rotated 32-row strips
 for the landscape layout, and touch uses the matching logical transform.
 
 ### Color Format

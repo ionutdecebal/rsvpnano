@@ -101,7 +101,9 @@ namespace ui {
         if constexpr (displayWriteAlignment() > 1) {
             // aligned_alloc used by Arduino_Canvas requires a multiple-of-16 allocation size.
             constexpr int16_t pitch = (Board::Config::PANEL_NATIVE_WIDTH + 3) & ~3;
-            static Arduino_Canvas buffer(pitch, 2, nullptr);
+            constexpr int16_t rows = Board::Config::DISPLAY_BUFFER_ROWS;
+            static_assert(displayWriteAlignment() == 1 || (rows > 0 && rows % displayWriteAlignment() == 0));
+            static Arduino_Canvas buffer(pitch, rows, nullptr);
             if (gfx_.width() <= pitch && buffer.begin(GFX_SKIP_OUTPUT_BEGIN))
                 return &buffer;
         }

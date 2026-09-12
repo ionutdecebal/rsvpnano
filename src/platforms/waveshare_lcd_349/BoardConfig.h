@@ -4,6 +4,7 @@
 
 namespace Board::Config {
     constexpr int DISPLAY_WRITE_ALIGNMENT = 1;
+    constexpr int DISPLAY_BUFFER_ROWS = 0;
 
     constexpr const char* BOARD_ID = WaveshareLcd349::Revision::kBoardId;
     constexpr const char* BOARD_LABEL = WaveshareLcd349::Revision::kBoardLabel;

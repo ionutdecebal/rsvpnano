@@ -21,7 +21,7 @@ namespace {
             output.write(value);
     }
 
-    size_t differences(int panelWidth, int panelHeight, int rotation, int size, int textX, int baseline,
+    size_t differences(int panelWidth, int panelHeight, int rows, int rotation, int size, int textX, int baseline,
                        bool fullTextBounds, bool preparedBounds = false, std::string_view text = sample) {
         Arduino_Canvas reference(panelWidth, panelHeight, nullptr);
         reference.begin(GFX_SKIP_OUTPUT_BEGIN);
@@ -34,12 +34,12 @@ namespace {
         const bool reliableInk = text.find('\n') == std::string_view::npos;
 
         const int pitch = (panelWidth + 3) & ~3;
-        Arduino_Canvas strip(pitch, 2, nullptr);
+        Arduino_Canvas strip(pitch, rows, nullptr);
         strip.begin(GFX_SKIP_OUTPUT_BEGIN);
         strip.setRotation(rotation);
         std::vector<uint16_t> assembled(panelWidth * panelHeight, background);
         const int logicalWidth = reference.width(), logicalHeight = reference.height();
-        for (int y = 0; y < panelHeight; y += 2) {
+        for (int y = 0; y < panelHeight; y += rows) {
             int dx = 0, dy = -y;
             switch (rotation) {
             case 1:
@@ -48,10 +48,10 @@ namespace {
                 break;
             case 2:
                 dx = pitch - panelWidth;
-                dy = y - panelHeight + 2;
+                dy = y - panelHeight + rows;
                 break;
             case 3:
-                dx = y - panelHeight + 2;
+                dx = y - panelHeight + rows;
                 dy = 0;
                 break;
             default:
@@ -65,7 +65,7 @@ namespace {
                 || (x1 < strip.width() && y1 < strip.height() && x1 + inkW > 0 && y1 + inkH > 0))
                 drawText(strip, textX + dx, baseline + dy, size, text);
             const uint16_t* pixels = strip.getFramebuffer();
-            for (int row = 0; row < 2; ++row)
+            for (int row = 0; row < std::min(rows, panelHeight - y); ++row)
                 for (int x = 0; x < panelWidth; ++x)
                     assembled[(y + row) * panelWidth + x] = pixels[row * pitch + x];
         }
@@ -79,38 +79,46 @@ namespace {
 
 int main() {
     size_t cases = 0, failed = 0, withoutFix = 0, preparedFailures = 0, newlineFailures = 0, newlineCullingFailures = 0;
-    for (const auto dimensions: std::array<std::array<int, 2>, 3>{{{96, 74}, {98, 76}, {368, 448}}}) {
-        for (int rotation = 0; rotation < 4; ++rotation) {
-            for (int size = 1; size <= 4; ++size) {
-                for (const auto position: std::array<std::array<int, 2>, 4>{{{3, 31}, {4, 32}, {-2, 17}, {17, 55}}}) {
-                    const auto mismatches =
-                        differences(dimensions[0], dimensions[1], rotation, size, position[0], position[1], true);
-                    ++cases;
-                    if (mismatches) {
-                        ++failed;
-                        if (failed <= 8)
-                            std::printf("FAIL %dx%d rotation=%d size=%d x=%d baseline=%d pixels=%zu\n", dimensions[0],
-                                        dimensions[1], rotation, size, position[0], position[1], mismatches);
+    for (const int rows: {2, 16, 32, 64}) {
+        for (const auto dimensions:
+             std::array<std::array<int, 2>, 6>{{{96, 74}, {98, 76}, {368, 448}, {410, 502}, {480, 480}, {450, 600}}}) {
+            for (int rotation = 0; rotation < 4; ++rotation) {
+                for (int size = 1; size <= 4; ++size) {
+                    for (const auto position:
+                         std::array<std::array<int, 2>, 4>{{{3, 31}, {4, 32}, {-2, 17}, {17, 55}}}) {
+                        const auto mismatches = differences(dimensions[0], dimensions[1], rows, rotation, size,
+                                                            position[0], position[1], true);
+                        ++cases;
+                        if (mismatches) {
+                            ++failed;
+                            if (failed <= 8)
+                                std::printf("FAIL %dx%d rotation=%d size=%d x=%d baseline=%d pixels=%zu\n",
+                                            dimensions[0], dimensions[1], rotation, size, position[0], position[1],
+                                            mismatches);
+                        }
+                        withoutFix += differences(dimensions[0], dimensions[1], rows, rotation, size, position[0],
+                                                  position[1], false)
+                                   != 0;
+                        const auto prepared = differences(dimensions[0], dimensions[1], rows, rotation, size,
+                                                          position[0], position[1], true, true);
+                        if (prepared && ++preparedFailures <= 8)
+                            std::printf("PREPARED FAIL %dx%d rotation=%d size=%d x=%d baseline=%d pixels=%zu\n",
+                                        dimensions[0], dimensions[1], rotation, size, position[0], position[1],
+                                        prepared);
+                        constexpr std::string_view multiline = "Aa Gg\nWPM 123 \xd0\x96\xd1\x8f";
+                        newlineFailures += differences(dimensions[0], dimensions[1], rows, rotation, size, position[0],
+                                                       position[1], true, false, multiline)
+                                        != 0;
+                        newlineCullingFailures += differences(dimensions[0], dimensions[1], rows, rotation, size,
+                                                              position[0], position[1], true, true, multiline)
+                                               != 0;
                     }
-                    withoutFix +=
-                        differences(dimensions[0], dimensions[1], rotation, size, position[0], position[1], false) != 0;
-                    const auto prepared =
-                        differences(dimensions[0], dimensions[1], rotation, size, position[0], position[1], true, true);
-                    if (prepared && ++preparedFailures <= 8)
-                        std::printf("PREPARED FAIL %dx%d rotation=%d size=%d x=%d baseline=%d pixels=%zu\n",
-                                    dimensions[0], dimensions[1], rotation, size, position[0], position[1], prepared);
-                    constexpr std::string_view multiline = "Aa Gg\nWPM 123 \xd0\x96\xd1\x8f";
-                    newlineFailures += differences(dimensions[0], dimensions[1], rotation, size, position[0],
-                                                   position[1], true, false, multiline)
-                                    != 0;
-                    newlineCullingFailures += differences(dimensions[0], dimensions[1], rotation, size, position[0],
-                                                          position[1], true, true, multiline)
-                                           != 0;
                 }
             }
         }
     }
-    std::printf("Native Arduino_GFX + Canvas u8g2: %zu cases, %zu failures, %zu prepared-ink failures; "
+    std::printf("Native Arduino_GFX + Canvas u8g2 (2/16/32/64 rows): %zu cases, %zu failures, %zu prepared-ink "
+                "failures; "
                 "%zu cases fail without full text bounds\n",
                 cases, failed, preparedFailures, withoutFix);
     std::printf("Native newline: %zu failures; %zu failures with prepared-ink culling\n", newlineFailures,

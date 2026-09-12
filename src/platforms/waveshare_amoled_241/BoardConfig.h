@@ -18,6 +18,7 @@ namespace Board::Config {
     constexpr int PANEL_NATIVE_WIDTH = WaveshareAmoled241::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareAmoled241::DisplayWiring::kPanelHeight;
     constexpr int DISPLAY_WRITE_ALIGNMENT = 2;
+    constexpr int DISPLAY_BUFFER_ROWS = 32;
     constexpr int DISPLAY_WIDTH = PANEL_NATIVE_HEIGHT;
     constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_WIDTH;
     constexpr int READER_CHROME_MARGIN_X = 12;

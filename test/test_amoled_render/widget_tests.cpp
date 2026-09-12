@@ -21,14 +21,14 @@ namespace {
                     output.fillRect(local.x + 2 + state * 4, local.y + 2, 2, 2, 0xffff);
                 });
                 ui.endFrame();
-                TEST_ASSERT_EQUAL((rotation & 1 ? rect.w : rect.h) / 2, panel.transfers - transfers);
+                TEST_ASSERT_EQUAL(testgfx::transfersFor(rotation & 1 ? rect.w : rect.h), panel.transfers - transfers);
                 TEST_ASSERT_EQUAL(4, std::ranges::count(panel.pixels, uint16_t{0xffff}));
             }
             ui.beginFrame(1);
             const int transfers = panel.transfers;
             TEST_ASSERT_TRUE(ui.redraw(rect, 2));
             ui.endFrame();
-            TEST_ASSERT_EQUAL((rotation & 1 ? rect.w : rect.h) / 2, panel.transfers - transfers);
+            TEST_ASSERT_EQUAL(testgfx::transfersFor(rotation & 1 ? rect.w : rect.h), panel.transfers - transfers);
             TEST_ASSERT_EQUAL(0, std::ranges::count(panel.pixels, uint16_t{0xffff}));
             TEST_ASSERT_EQUAL(0, panel.invalidWindows);
         }
@@ -138,7 +138,7 @@ namespace {
             draw(0);
             const int transfers = panel.transfers;
             draw(1);
-            TEST_ASSERT_EQUAL(rect.h / 2, panel.transfers - transfers);
+            TEST_ASSERT_EQUAL(testgfx::transfersFor(rect.h), panel.transfers - transfers);
             TEST_ASSERT_EQUAL(0, panel.invalidWindows);
             TEST_ASSERT_EQUAL(0, panel.writes);
         }
@@ -163,7 +163,7 @@ namespace {
             const auto original = panel.pixels;
             const int transfers = panel.transfers;
             draw(false);
-            TEST_ASSERT_EQUAL(rect.h / 2, panel.transfers - transfers);
+            TEST_ASSERT_EQUAL(testgfx::transfersFor(rect.h), panel.transfers - transfers);
             TEST_ASSERT_TRUE(original != panel.pixels);
             expectBackground(panel, rect, ui.color(ui::themes::Background));
             TEST_ASSERT_EQUAL(0, panel.invalidWindows);
@@ -185,13 +185,13 @@ namespace {
         ui.beginFrame(1);
         ui.button(first, "First");
         ui.endFrame();
-        TEST_ASSERT_EQUAL(second.h / 2, panel.transfers - transfers);
+        TEST_ASSERT_EQUAL(testgfx::transfersFor(second.h), panel.transfers - transfers);
         expectBackground(panel, second, ui.color(ui::themes::Background));
         transfers = panel.transfers;
         ui.beginFrame(1);
         ui.button(moved, "First");
         ui.endFrame();
-        TEST_ASSERT_EQUAL((first.h + moved.h) / 2, panel.transfers - transfers);
+        TEST_ASSERT_EQUAL(testgfx::transfersFor(first.h) + testgfx::transfersFor(moved.h), panel.transfers - transfers);
         expectBackground(panel, first, ui.color(ui::themes::Background));
         TEST_ASSERT_EQUAL(0, panel.invalidWindows);
         TEST_ASSERT_EQUAL(0, panel.writes);
