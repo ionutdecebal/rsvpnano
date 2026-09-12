@@ -16,7 +16,6 @@ import kotlin.test.assertFailsWith
 import com.rsvpnano.api.NanoClientError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.test.runTest
@@ -77,8 +76,6 @@ class WebSerialNanoApiTest {
     }
 
     @Test
-<<<<<<< Updated upstream
-=======
     fun confirmedBookDeletionSendsForceQueryOverUsb() = runTest {
         withContext(Dispatchers.Default.limitedParallelism(1)) {
             val response = SerialFrameCodec.encode(SerialFrame(SerialFrameType.Response, 1u,
@@ -96,7 +93,6 @@ class WebSerialNanoApiTest {
     }
 
     @Test
->>>>>>> Stashed changes
     fun uploadDisconnectReleasesPortAndCanReconnect() = runTest {
         withContext(Dispatchers.Default.limitedParallelism(1)) {
             val greeting = "RSVPNANO/COMPANION/1 READY persistent\n".encodeToByteArray()
