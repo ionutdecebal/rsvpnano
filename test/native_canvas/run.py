@@ -1,7 +1,7 @@
 """Compare the installed native Arduino_GFX u8g2 decoder on full and two-row canvases.
 
 Run from any directory after installing firmware dependencies:
-    python tools/tests/native_canvas_text.py
+    python test/native_canvas/run.py
 Use --library /path/to/Arduino_GFX/src for an independent checkout.
 Use --fetch-library to fetch the exact dependency revision in platformio.ini.
 """
@@ -30,7 +30,7 @@ def main() -> int:
     args = parser.parse_args()
     if not args.compiler:
         parser.error("A native C++ compiler is required; use --compiler")
-    support = Path(__file__).resolve().parent / "native_canvas"
+    support = Path(__file__).resolve().parent
     with tempfile.TemporaryDirectory(prefix="rsvpnano-native-canvas-") as temporary:
         folder = Path(temporary)
         if args.fetch_library:

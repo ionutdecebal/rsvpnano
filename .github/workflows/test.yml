@@ -65,4 +65,4 @@ jobs:
           -e native_light_sleep_test -e native_amoled_test
 
       - name: Check native Arduino_GFX text strip rendering
-        run: python tools/tests/native_canvas_text.py --fetch-library
+        run: python test/native_canvas/run.py --fetch-library

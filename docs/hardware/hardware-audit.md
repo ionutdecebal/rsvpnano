@@ -139,7 +139,7 @@ Build/host tests cannot replace these checks on each affected revision:
   counts, clipped/odd regions, touch rotation, incremental highlights, keyboard invalidation,
   screensavers and moved/removed widget ownership.
 - The native Arduino_GFX regression passes 192 pixel comparisons; the original unsigned decoder
-  fails 162 of those cases. Run `python tools/tests/native_canvas_text.py --fetch-library`.
+  fails 162 of those cases. Run `python test/native_canvas/run.py --fetch-library`.
 - `checkWeb` and the production installer bundle passed. Committed conflict markers and a duplicate
   import in the USB regression test were removed without discarding its book-deletion check.
 - The firmware-export script passed its syntax check.
