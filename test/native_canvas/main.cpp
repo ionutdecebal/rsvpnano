@@ -1,31 +1,37 @@
 #include <array>
 #include <canvas/Arduino_Canvas.h>
 #include <cstdio>
+#include <string_view>
 #include <vector>
 #include "fonts/UiFont6x9.h"
 
 namespace {
     constexpr uint16_t background = 0x18e3;
     constexpr uint16_t foreground = 0xf7de;
+    constexpr std::string_view sample = "Aa Gg WPM 123 \xd0\x96\xd1\x8f";
 
-    void drawText(Arduino_GFX& output, int x, int baseline, int size) {
+    void drawText(Arduino_GFX& output, int x, int baseline, int size, std::string_view text = sample) {
         output.setFont(u8g2_font_rsvpnano_ui_6x9_tf);
         output.setUTF8Print(true);
         output.setTextWrap(false);
         output.setTextColor(foreground);
         output.setTextSize(size);
         output.setCursor(x, baseline);
-        for (const unsigned char value: std::string{"Aa Gg WPM 123 \xd0\x96\xd1\x8f"})
+        for (const unsigned char value: text)
             output.write(value);
     }
 
     size_t differences(int panelWidth, int panelHeight, int rotation, int size, int textX, int baseline,
-                       bool fullTextBounds) {
+                       bool fullTextBounds, bool preparedBounds = false, std::string_view text = sample) {
         Arduino_Canvas reference(panelWidth, panelHeight, nullptr);
         reference.begin(GFX_SKIP_OUTPUT_BEGIN);
         reference.setRotation(rotation);
         reference.fillScreen(background);
-        drawText(reference, textX, baseline, size);
+        drawText(reference, textX, baseline, size, text);
+        int16_t inkX = 0, inkY = 0;
+        uint16_t inkW = 0, inkH = 0;
+        reference.getTextBounds(std::string{text}.c_str(), 0, 0, &inkX, &inkY, &inkW, &inkH);
+        const bool reliableInk = text.find('\n') == std::string_view::npos;
 
         const int pitch = (panelWidth + 3) & ~3;
         Arduino_Canvas strip(pitch, 2, nullptr);
@@ -54,7 +60,10 @@ namespace {
             strip.fillScreen(background);
             if (fullTextBounds)
                 strip.setTextBound(dx, dy, logicalWidth, logicalHeight);
-            drawText(strip, textX + dx, baseline + dy, size);
+            const int x1 = textX + inkX + dx, y1 = baseline + inkY + dy;
+            if (!preparedBounds || !reliableInk
+                || (x1 < strip.width() && y1 < strip.height() && x1 + inkW > 0 && y1 + inkH > 0))
+                drawText(strip, textX + dx, baseline + dy, size, text);
             const uint16_t* pixels = strip.getFramebuffer();
             for (int row = 0; row < 2; ++row)
                 for (int x = 0; x < panelWidth; ++x)
@@ -69,7 +78,7 @@ namespace {
 } // namespace
 
 int main() {
-    size_t cases = 0, failed = 0, withoutFix = 0;
+    size_t cases = 0, failed = 0, withoutFix = 0, preparedFailures = 0, newlineFailures = 0, newlineCullingFailures = 0;
     for (const auto dimensions: std::array<std::array<int, 2>, 3>{{{96, 74}, {98, 76}, {368, 448}}}) {
         for (int rotation = 0; rotation < 4; ++rotation) {
             for (int size = 1; size <= 4; ++size) {
@@ -85,11 +94,26 @@ int main() {
                     }
                     withoutFix +=
                         differences(dimensions[0], dimensions[1], rotation, size, position[0], position[1], false) != 0;
+                    const auto prepared =
+                        differences(dimensions[0], dimensions[1], rotation, size, position[0], position[1], true, true);
+                    if (prepared && ++preparedFailures <= 8)
+                        std::printf("PREPARED FAIL %dx%d rotation=%d size=%d x=%d baseline=%d pixels=%zu\n",
+                                    dimensions[0], dimensions[1], rotation, size, position[0], position[1], prepared);
+                    constexpr std::string_view multiline = "Aa Gg\nWPM 123 \xd0\x96\xd1\x8f";
+                    newlineFailures += differences(dimensions[0], dimensions[1], rotation, size, position[0],
+                                                   position[1], true, false, multiline)
+                                    != 0;
+                    newlineCullingFailures += differences(dimensions[0], dimensions[1], rotation, size, position[0],
+                                                          position[1], true, true, multiline)
+                                           != 0;
                 }
             }
         }
     }
-    std::printf("Native Arduino_GFX + Canvas u8g2: %zu cases, %zu failures; %zu cases fail without full text bounds\n",
-                cases, failed, withoutFix);
-    return failed || !withoutFix;
+    std::printf("Native Arduino_GFX + Canvas u8g2: %zu cases, %zu failures, %zu prepared-ink failures; "
+                "%zu cases fail without full text bounds\n",
+                cases, failed, preparedFailures, withoutFix);
+    std::printf("Native newline: %zu failures; %zu failures with prepared-ink culling\n", newlineFailures,
+                newlineCullingFailures);
+    return failed || preparedFailures || newlineFailures || newlineCullingFailures || !withoutFix;
 }

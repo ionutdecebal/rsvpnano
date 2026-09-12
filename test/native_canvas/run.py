@@ -71,8 +71,9 @@ def main() -> int:
         generated = folder / "Arduino_GFX.cpp"
         generated.write_text(source if args.unpatched else corrected, encoding="utf-8")
         executable = folder / "native_canvas_text.exe"
+        # ESP Xtensa/RISC-V use unsigned plain char; Arduino_GFX's UTF-8 bounds decoder relies on it.
         command = [
-            args.compiler, "-std=c++17", "-O2", f"-I{support}", f"-I{PROJECT / 'src'}", f"-I{library}",
+            args.compiler, "-std=c++17", "-O2", "-funsigned-char", f"-I{support}", f"-I{PROJECT / 'src'}", f"-I{library}",
             str(support / "main.cpp"), str(library / "Arduino_G.cpp"), str(generated),
             str(library / "canvas/Arduino_Canvas.cpp"), "-o", str(executable),
         ]
