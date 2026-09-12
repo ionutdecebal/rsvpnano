@@ -60,4 +60,9 @@ jobs:
           python -m unittest discover -s fonts -p "test_*.py"
 
       - name: Run native firmware tests
-        run: pio test -e native_test -e native_watch_test
+        run: >-
+          pio test -e native_test -e native_watch_test -e native_board_test
+          -e native_light_sleep_test -e native_amoled_test
+
+      - name: Check native Arduino_GFX text strip rendering
+        run: python tools/tests/native_canvas_text.py --fetch-library
