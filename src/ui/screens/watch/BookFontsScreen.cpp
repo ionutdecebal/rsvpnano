@@ -28,6 +28,9 @@ namespace screens {
         bool changed = false;
         const auto chooseFont = [&](std::string_view label, std::string_view locale, uint32_t requiredScripts,
                                     std::string_view selectedId) -> std::optional<std::string> {
+            const auto rect = page.item(row++);
+            if (rect.w <= 0 || rect.h <= 0)
+                return std::nullopt;
             size_t active = families.size();
             for (size_t familyIndex = 0; familyIndex < families.size(); ++familyIndex) {
                 if (families[familyIndex].usableFor(locale, requiredScripts)
@@ -40,7 +43,7 @@ namespace screens {
             const std::string_view value = selectedId.empty() || active == families.size()
                                              ? ui.text(UiText::Default)
                                              : std::string_view{families[active].label};
-            if (!ui.card(page.item(row++), label, value, watch::textSize(ui)))
+            if (!ui.card(rect, label, value, watch::textSize(ui)))
                 return std::nullopt;
             for (size_t next = active == families.size() ? 0 : active + 1; next < families.size(); ++next)
                 if (families[next].usableFor(locale, requiredScripts))

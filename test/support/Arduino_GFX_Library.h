@@ -91,8 +91,12 @@ public:
     virtual void fillTriangle(int16_t, int16_t, int16_t, int16_t, int16_t, int16_t, uint16_t) {
         ++writes;
     }
-    virtual void setFont(const GFXfont*) {}
-    virtual void setFont(const uint8_t*) {}
+    virtual void setFont(const GFXfont*) {
+        ++allFontSelections;
+    }
+    virtual void setFont(const uint8_t*) {
+        ++allFontSelections;
+    }
     virtual void setUTF8Print(bool) {}
     virtual void setTextSize(uint8_t size) {
         lastTextSize = size;
@@ -111,6 +115,7 @@ public:
     }
     virtual void getTextBounds(const char* text, int16_t x, int16_t y, int16_t* x1, int16_t* y1, uint16_t* width,
                                uint16_t* height) {
+        ++allTextBoundsCalls;
         size_t codepoints = 0;
         for (const auto* byte = reinterpret_cast<const unsigned char*>(text); *byte != 0; ++byte)
             codepoints += (*byte & 0xC0U) != 0x80U;
@@ -124,6 +129,7 @@ public:
         ++bitmapWrites;
     }
     virtual size_t write(uint8_t) {
+        ++allTextBytes;
         ++writes;
         ++textWrites;
         return 1;
@@ -131,6 +137,12 @@ public:
     virtual void flush(bool = false) {
         ++flushes;
     }
+
+    // Aggregate across panel and temporary canvases for host-only work-count regressions.
+    static inline uint64_t allFontSelections = 0;
+    static inline uint64_t allTextBoundsCalls = 0;
+    static inline uint64_t allTextBytes = 0;
+    static inline uint64_t allDrawLines = 0;
 
     int writes = 0;
     int textWrites = 0;
@@ -234,6 +246,7 @@ public:
         drawFastVLine(x + w - 1, y, h, c);
     }
     void drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t c) override {
+        ++allDrawLines;
         const int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
         const int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
         int error = dx + dy;

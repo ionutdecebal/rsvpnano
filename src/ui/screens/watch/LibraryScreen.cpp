@@ -12,19 +12,15 @@ namespace screens {
         }
         selectedIndex_ = std::min(selectedIndex_, items.size() - 1);
         const int delta = carouselGesture_.update(ui.touch(), area);
-        if (delta) {
+        if (delta)
             selectedIndex_ = ui::rotateIndex(selectedIndex_, items.size(), delta);
-            ui.invalidate();
-        }
         const int16_t peek = ui.height() < 240 ? 28 : 48;
         const auto title = [&](size_t index) {
             return items[index].book ? BookLibrary::displayName(*items[index].book) : std::string_view{};
         };
         if (ui.card({area.x, area.y, area.w, peek}, title(ui::rotateIndex(selectedIndex_, items.size(), -1)), {}, 2,
-                    ui::themes::Accent, ui::Icon::None, items.size() > 1 && !delta, 180)) {
+                    ui::themes::Accent, ui::Icon::None, items.size() > 1 && !delta, 180))
             selectedIndex_ = ui::rotateIndex(selectedIndex_, items.size(), -1);
-            ui.invalidate();
-        }
         const ui::Rect center{area.x, static_cast<int16_t>(area.y + peek + 4), area.w,
                               static_cast<int16_t>(area.h - peek * 2 - 8)};
         const auto& item = items[selectedIndex_];
@@ -39,10 +35,8 @@ namespace screens {
             return Action::OpenBook;
         if (ui.card({area.x, static_cast<int16_t>(area.y + area.h - peek), area.w, peek},
                     title(ui::rotateIndex(selectedIndex_, items.size(), 1)), {}, 2, ui::themes::Accent, ui::Icon::None,
-                    items.size() > 1 && !delta, 180)) {
+                    items.size() > 1 && !delta, 180))
             selectedIndex_ = ui::rotateIndex(selectedIndex_, items.size(), 1);
-            ui.invalidate();
-        }
         return Action::None;
     }
 } // namespace screens

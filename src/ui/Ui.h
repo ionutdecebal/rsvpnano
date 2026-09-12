@@ -138,6 +138,20 @@ namespace ui {
         Inline,
     };
 
+    // Local to one draw: font storage can change at beginFrame or when language assets are replaced.
+    struct TextLayout {
+        struct Line {
+            std::string text;
+            const uint8_t* font = nullptr;
+            uint8_t size = 1;
+            int16_t x = 0;
+            int16_t y = 0;
+            Rect ink;
+        };
+        std::vector<Line> lines;
+        size_t consumed = 0;
+    };
+
     class Context {
     public:
         static constexpr size_t kSlotCapacity = 64;
@@ -213,10 +227,12 @@ namespace ui {
                     }
                     // Font decoding uses logical bounds; the canvas clips pixels to this strip.
                     buffer->setTextBound(dx, dy, width(), height());
-                    buffer->fillScreen(color(themes::Background));
+                    uint16_t* pixels = buffer->getFramebuffer();
+                    const uint16_t background = color(themes::Background);
+                    std::fill_n(pixels, window.w, background);
+                    std::fill_n(pixels + pitch, window.w, background);
                     draw(*buffer,
                          Rect{static_cast<int16_t>(rect.x + dx), static_cast<int16_t>(rect.y + dy), rect.w, rect.h});
-                    uint16_t* pixels = buffer->getFramebuffer();
                     // Canvas rows retain their full pitch; the panel takes a tightly packed rectangle.
                     std::memmove(pixels + window.w, pixels + pitch, static_cast<size_t>(window.w) * sizeof(*pixels));
                     gfx_.draw16bitRGBBitmap(window.x, y, pixels, window.w, 2);
@@ -260,8 +276,6 @@ namespace ui {
                   bool enabled = true, uint8_t alpha = 255);
         bool dockItem(Rect rect, std::string_view label, Icon icon, uint16_t accent);
         size_t fixedText(Rect rect, std::string_view text, uint8_t textSize, uint16_t ink,
-                         TextAlign align = TextAlign::Center, uint8_t maxLines = 2, bool ellipsis = true);
-        size_t fixedText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize, uint16_t ink,
                          TextAlign align = TextAlign::Center, uint8_t maxLines = 2, bool ellipsis = true);
         void progressRing(Rect rect, int value, int maximum = 100,
                           ui::themes::ColorRole role = ui::themes::ColorRole::Accent);
@@ -324,12 +338,16 @@ namespace ui {
         void hourglass(Rect rect, uint16_t progressPermille, bool paused = false, bool complete = false,
                        ui::themes::ColorRole sandRole = ui::themes::ColorRole::Accent, bool reversed = false,
                        std::string_view time = {});
-        bool redraw(Rect rect, uint32_t signature);
+        // Opaque regions replace their background during paint; partial custom drawing still needs a clear.
+        bool redraw(Rect rect, uint32_t signature, bool opaque = false);
         void markDrawn();
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                       TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
-        void drawText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
-                      TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
+        TextLayout prepareText(Rect rect, std::string_view text, uint8_t textSize, TextAlign align = TextAlign::Start,
+                               uint8_t maxLines = 1, std::string_view textLocale = {});
+        TextLayout prepareFixedText(Rect rect, std::string_view text, uint8_t textSize,
+                                    TextAlign align = TextAlign::Center, uint8_t maxLines = 2, bool ellipsis = true);
+        void drawText(Arduino_GFX& output, const TextLayout& layout, uint16_t color, int16_t dx = 0, int16_t dy = 0);
         void portraitText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                           TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
         void portraitVerticalText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
@@ -377,6 +395,7 @@ namespace ui {
             Hourglass,
             KeyboardInput,
             Custom,
+            Opaque,
             Touch
         };
 
@@ -406,12 +425,14 @@ namespace ui {
         void drawBatteryIcon(Arduino_GFX& output, Rect rect, uint8_t percent, bool charging, uint16_t ink,
                              uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
-        bool tapped(size_t slot, Rect rect);
+        bool tapped(size_t slot, Rect rect, bool enabled = true);
         bool sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                          std::string_view suffix, ui::themes::ColorRole activeRole);
         bool stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                           std::string_view suffix, ui::themes::ColorRole activeRole);
         void resetTouchGesture();
+        void appendText(TextLayout& layout, Rect rect, std::string_view text, uint8_t textSize, TextAlign align,
+                        uint8_t maxLines, std::string_view textLocale = {});
         const locales::UiAssets* fontAssetsFor(std::string_view text, std::string_view textLocale = {}) const;
         int16_t textWidthFor(std::string_view text, uint8_t size, std::string_view textLocale = {}) const;
         int16_t textHeightFor(std::string_view text, uint8_t size, std::string_view textLocale = {}) const;

@@ -325,6 +325,14 @@ namespace ui::fonts {
         static_assert(MaxStripRows > 0);
 
     public:
+        struct Bounds {
+            int16_t x1 = 0;
+            int16_t y1 = 0;
+            uint16_t w = 0;
+            uint16_t h = 0;
+            int16_t advance = 0;
+        };
+
         explicit AlphaTextRenderer(Arduino_GFX& output) : output_(&output) {}
 
         Arduino_GFX& setOutput(Arduino_GFX& output) {
@@ -370,7 +378,8 @@ namespace ui::fonts {
             if (!measure(text, x, baseline, bounds, tracking))
                 return drawMixedString(text, x, baseline, tracking);
 
-            if (bounds.w == 0 || bounds.h == 0) {
+            if (bounds.w == 0 || bounds.h == 0 || bounds.x1 >= output_->width() || bounds.y1 >= output_->height()
+                || bounds.x1 + bounds.w <= 0 || bounds.y1 + bounds.h <= 0) {
                 return bounds.advance;
             }
 
@@ -454,10 +463,8 @@ namespace ui::fonts {
             if (glyph == nullptr)
                 return 0;
             const AlphaGlyph metrics = readGlyph(*glyph);
-            const int16_t drawX =
-                static_cast<int16_t>(x + (advance - (sideways ? metrics.width : metrics.height)) / 2);
-            const int16_t drawY =
-                static_cast<int16_t>(centerY - (sideways ? metrics.height : metrics.width) / 2);
+            const int16_t drawX = static_cast<int16_t>(x + (advance - (sideways ? metrics.width : metrics.height)) / 2);
+            const int16_t drawY = static_cast<int16_t>(centerY - (sideways ? metrics.height : metrics.width) / 2);
             const int16_t drawW = sideways ? metrics.width : metrics.height;
             const int16_t drawH = sideways ? metrics.height : metrics.width;
             if (drawX >= output_->width() || drawX + drawW <= 0 || drawY >= output_->height() || drawY + drawH <= 0)
@@ -511,7 +518,8 @@ namespace ui::fonts {
                 return -1;
             Bounds bounds;
             measure(glyphs, x, baseline, bounds);
-            if (bounds.w == 0 || bounds.h == 0)
+            if (bounds.w == 0 || bounds.h == 0 || bounds.x1 >= output_->width() || bounds.y1 >= output_->height()
+                || bounds.x1 + bounds.w <= 0 || bounds.y1 + bounds.h <= 0)
                 return bounds.advance;
             if (!prepareVisibleBitmaps(glyphs, x, baseline) || !drawGlyphsToStrips(glyphs, x, baseline, bounds)) {
                 int16_t cursor = x;
@@ -632,14 +640,6 @@ namespace ui::fonts {
         }
 
     private:
-        struct Bounds {
-            int16_t x1 = 0;
-            int16_t y1 = 0;
-            uint16_t w = 0;
-            uint16_t h = 0;
-            int16_t advance = 0;
-        };
-
         struct FileGlyphCacheEntry {
             uint32_t index = UINT32_MAX;
             AlphaGlyph glyph;
@@ -758,6 +758,7 @@ namespace ui::fonts {
             return static_cast<int16_t>(x - start);
         }
 
+    public:
         bool measure(std::string_view text, int16_t x, int16_t baseline, Bounds& bounds, int8_t tracking = 0) const {
             if (!ready_ || font_ == nullptr) {
                 bounds = {};
@@ -828,7 +829,8 @@ namespace ui::fonts {
             return true;
         }
 
-        void measure(std::span<const PositionedGlyph> glyphs, int16_t x, int16_t baseline, Bounds& bounds) const {
+        bool measure(std::span<const PositionedGlyph> glyphs, int16_t x, int16_t baseline, Bounds& bounds) const {
+            bool complete = true;
             int16_t cursorX = x;
             int16_t minX = INT16_MAX;
             int16_t minY = INT16_MAX;
@@ -846,7 +848,8 @@ namespace ui::fonts {
                         maxX = std::max<int16_t>(maxX, static_cast<int16_t>(x1 + metrics.width - 1));
                         maxY = std::max<int16_t>(maxY, static_cast<int16_t>(y1 + metrics.height - 1));
                     }
-                }
+                } else
+                    complete = false;
                 cursorX = static_cast<int16_t>(cursorX + positioned.xAdvance);
             }
             bounds = {.x1 = minX,
@@ -854,8 +857,55 @@ namespace ui::fonts {
                       .w = maxX >= minX ? static_cast<uint16_t>(maxX - minX + 1) : uint16_t{0},
                       .h = maxY >= minY ? static_cast<uint16_t>(maxY - minY + 1) : uint16_t{0},
                       .advance = static_cast<int16_t>(cursorX - x)};
+            return complete;
         }
 
+        bool measureVertical(std::string_view text, int16_t x, int16_t centerY, Bounds& bounds) const {
+            // A failed file-backed rule lookup is indistinguishable from "no alternate".
+            bool complete = font_ != nullptr && (font_->verticalRuleCount == 0 || font_->verticalRules != nullptr);
+            const int16_t start = x;
+            int16_t minX = INT16_MAX, minY = INT16_MAX, maxX = INT16_MIN, maxY = INT16_MIN;
+            uint32_t codepoint = 0;
+            while (Utf8Text::next(text, codepoint)) {
+                uint16_t index = 0;
+                if (!findGlyphIndex(codepoint, index)) {
+                    complete = false;
+                    continue;
+                }
+                const AlphaGlyph* canonical = glyphAt(index);
+                if (canonical == nullptr) {
+                    complete = false;
+                    continue;
+                }
+                const int16_t advance = readGlyph(*canonical).xAdvance;
+                bool sideways = false;
+                const AlphaGlyph* glyph = glyphAt(verticalGlyphIndex(index, codepoint, sideways));
+                if (glyph == nullptr) {
+                    complete = false;
+                    continue;
+                }
+                const AlphaGlyph metrics = readGlyph(*glyph);
+                const int16_t w = sideways ? metrics.width : metrics.height;
+                const int16_t h = sideways ? metrics.height : metrics.width;
+                if (w > 0 && h > 0) {
+                    const int16_t left = static_cast<int16_t>(x + (advance - w) / 2);
+                    const int16_t top = static_cast<int16_t>(centerY - h / 2);
+                    minX = std::min(minX, left);
+                    minY = std::min(minY, top);
+                    maxX = std::max<int16_t>(maxX, left + w);
+                    maxY = std::max<int16_t>(maxY, top + h);
+                }
+                x = static_cast<int16_t>(x + advance);
+            }
+            bounds = {.x1 = minX,
+                      .y1 = minY,
+                      .w = maxX > minX ? static_cast<uint16_t>(maxX - minX) : uint16_t{0},
+                      .h = maxY > minY ? static_cast<uint16_t>(maxY - minY) : uint16_t{0},
+                      .advance = static_cast<int16_t>(x - start)};
+            return complete;
+        }
+
+    private:
         void drawGlyphs(std::string_view text, int16_t x, int16_t baseline, int8_t tracking) {
             if (font_ == nullptr) {
                 return;
@@ -1079,13 +1129,13 @@ namespace ui::fonts {
                     lastInk = static_cast<uint16_t>(out + 2);
                 } else if (info.hasInk) {
                     if (info.left != 0) {
-                        strip_[stripRow][out] = blendPair_[packed][0];
+                        strip_[stripRow][out] = blend_[packed >> 4U];
                         if (firstInk == UINT16_MAX)
                             firstInk = out;
                         lastInk = static_cast<uint16_t>(out + 1);
                     }
                     if (info.right != 0) {
-                        strip_[stripRow][out + 1] = blendPair_[packed][1];
+                        strip_[stripRow][out + 1] = blend_[packed & 0x0FU];
                         if (firstInk == UINT16_MAX)
                             firstInk = static_cast<uint16_t>(out + 1);
                         lastInk = static_cast<uint16_t>(out + 2);
@@ -1125,7 +1175,7 @@ namespace ui::fonts {
                 // The strip already contains the union of every overlapping glyph. Sending its
                 // opaque span once avoids a display transaction for every disconnected ink run.
                 output_->draw16bitRGBBitmap(static_cast<int16_t>(stripX + first), static_cast<int16_t>(stripY + row),
-                                           strip_[row] + first, static_cast<int16_t>(last - first), 1);
+                                            strip_[row] + first, static_cast<int16_t>(last - first), 1);
             }
         }
 
@@ -1145,22 +1195,27 @@ namespace ui::fonts {
         void drawCounterRotatedGlyph(const AlphaGlyph& glyph, int16_t x, int16_t y) {
             if (glyph.width == 0 || glyph.height == 0 || glyph.height > MaxRowWidth)
                 return;
+            const int16_t sourceY0 = std::max<int16_t>(0, -x);
+            const int16_t sourceY1 = std::min<int16_t>(glyph.height, output_->width() - x);
+            const int16_t sourceX0 = std::max<int16_t>(0, y + glyph.width - output_->height());
+            const int16_t sourceX1 = std::min<int16_t>(glyph.width, y + glyph.width);
+            if (sourceY1 <= sourceY0 || sourceX1 <= sourceX0)
+                return;
+            const int16_t width = sourceY1 - sourceY0;
             auto* rotated = strip_[0];
-            for (uint8_t sourceStart = 0; sourceStart < glyph.width;) {
-                const uint8_t sourceEnd =
-                    static_cast<uint8_t>(std::min<int>(glyph.width, sourceStart + MaxStripRows));
+            for (uint8_t sourceStart = static_cast<uint8_t>(sourceX0); sourceStart < sourceX1;) {
+                const uint8_t sourceEnd = static_cast<uint8_t>(std::min<int>(sourceX1, sourceStart + MaxStripRows));
                 const uint8_t rows = static_cast<uint8_t>(sourceEnd - sourceStart);
-                std::ranges::fill_n(rotated, static_cast<size_t>(glyph.height) * rows, bg_);
-                for (uint8_t sourceY = 0; sourceY < glyph.height; ++sourceY) {
+                for (uint8_t sourceY = static_cast<uint8_t>(sourceY0); sourceY < sourceY1; ++sourceY) {
                     const uint8_t* packedRow = nullptr;
                     if (!prepareRow(glyph, sourceY, packedRow))
                         return;
                     for (uint8_t sourceX = sourceStart; sourceX < sourceEnd; ++sourceX)
-                        rotated[static_cast<size_t>(sourceEnd - sourceX - 1) * glyph.height + sourceY] =
+                        rotated[static_cast<size_t>(sourceEnd - sourceX - 1) * width + sourceY - sourceY0] =
                             blend_[coverageAt(packedRow, sourceX)];
                 }
-                output_->draw16bitRGBBitmap(x, static_cast<int16_t>(y + glyph.width - sourceEnd), rotated,
-                                           glyph.height, rows);
+                output_->draw16bitRGBBitmap(static_cast<int16_t>(x + sourceY0),
+                                            static_cast<int16_t>(y + glyph.width - sourceEnd), rotated, width, rows);
                 sourceStart = sourceEnd;
             }
         }
@@ -1223,8 +1278,8 @@ namespace ui::fonts {
                     output[out] = fg_;
                     output[out + 1] = fg_;
                 } else {
-                    output[out] = blendPair_[packed][0];
-                    output[out + 1] = blendPair_[packed][1];
+                    output[out] = blend_[packed >> 4U];
+                    output[out + 1] = blend_[packed & 0x0FU];
                 }
                 src = static_cast<int16_t>(src + 2);
                 out = static_cast<int16_t>(out + 2);
@@ -1547,7 +1602,7 @@ namespace ui::fonts {
             }
 
             return codepoint > UINT16_MAX ? findSupplementaryGlyphIndex(codepoint, glyphIndex)
-                                         : findGlyphIndexBinary(codepoint, glyphIndex);
+                                          : findGlyphIndexBinary(codepoint, glyphIndex);
         }
 
         bool identityAt(uint32_t index, AlphaGlyphIdentity& identity) const {
@@ -1690,11 +1745,6 @@ namespace ui::fonts {
                     static_cast<uint16_t>((static_cast<uint16_t>(r) << 11U) | (static_cast<uint16_t>(g) << 5U) | b);
             }
 
-            for (uint16_t packed = 0; packed < 256; ++packed) {
-                blendPair_[packed][0] = blend_[packed >> 4U];
-                blendPair_[packed][1] = blend_[packed & 0x0FU];
-            }
-
             blendTableValid_ = true;
         }
 
@@ -1719,7 +1769,6 @@ namespace ui::fonts {
         std::array<uint16_t, MaxStripRows> stripFirstInk_{};
         std::array<uint16_t, MaxStripRows> stripLastInk_{};
         uint16_t blend_[16]{};
-        uint16_t blendPair_[256][2]{};
         uint16_t fg_ = 0xFFFF;
         uint16_t bg_ = 0x0000;
         bool ready_ = false;

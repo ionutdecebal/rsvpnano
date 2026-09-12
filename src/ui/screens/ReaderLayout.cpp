@@ -43,14 +43,24 @@ namespace screens::readerLayout {
         const int16_t height = std::max(rect.h, wordHeight);
         const ui::Rect area =
             ui.paintBounds({rect.x, static_cast<int16_t>((ui.height() - height) / 2), rect.w, height});
+        const auto text = prepareArrows(ui, settings, reading, ghostHidden);
         ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
-            drawArrows(ui, output, settings, reading, wordHeight, static_cast<int16_t>(target.x - area.x),
+            drawArrows(ui, output, settings, reading, text, wordHeight, static_cast<int16_t>(target.x - area.x),
                        static_cast<int16_t>(target.y - area.y), ghostHidden);
         });
     }
 
+    ui::TextLayout prepareArrows(ui::Context& ui, const settings::ReadingSettings& settings, bool reading,
+                                 bool ghostHidden) {
+        if (!settings::visible(settings.arrowsVisibility, reading) && !ghostHidden)
+            return {};
+        const auto rect = horizontalChrome(ui.width(), ui.height(), settings.leftHanded).arrows;
+        return ui.prepareText(rect, "<<", 2, ui::TextAlign::Center);
+    }
+
     void drawArrows(ui::Context& ui, Arduino_GFX& output, const settings::ReadingSettings& settings, bool reading,
-                    int16_t wordHeight, int16_t offsetX, int16_t offsetY, bool ghostHidden) {
+                    const ui::TextLayout& text, int16_t wordHeight, int16_t offsetX, int16_t offsetY,
+                    bool ghostHidden) {
         const bool visible = settings::visible(settings.arrowsVisibility, reading);
         if (!visible && !ghostHidden)
             return;
@@ -60,7 +70,7 @@ namespace screens::readerLayout {
         rect.y += offsetY;
         output.fillRect(rect.x, static_cast<int16_t>((ui.height() - height) / 2 + offsetY), rect.w, height,
                         ui.color(ui::themes::Background));
-        ui.drawText(output, rect, "<<", 2, ui.blend(ui::themes::Muted, visible ? 255 : 64), ui::TextAlign::Center);
+        ui.drawText(output, text, ui.blend(ui::themes::Muted, visible ? 255 : 64), offsetX, offsetY);
     }
 
     void horizontalChrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,

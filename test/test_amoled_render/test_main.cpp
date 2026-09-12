@@ -5,6 +5,10 @@
 void runAmoledReaderTests();
 void runAmoledStandbyTests();
 void runAmoledWidgetTests();
+void runAmoledTextWorkTests();
+void runAmoledInteractionTests();
+void runAmoledPaintSliceTests();
+void runAmoledHourglassTests();
 
 void setUp() {}
 void tearDown() {}
@@ -139,5 +143,9 @@ int main() {
     runAmoledReaderTests();
     runAmoledStandbyTests();
     runAmoledWidgetTests();
+    runAmoledTextWorkTests();
+    runAmoledInteractionTests();
+    runAmoledPaintSliceTests();
+    runAmoledHourglassTests();
     return UNITY_END();
 }

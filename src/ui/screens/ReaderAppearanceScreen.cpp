@@ -49,7 +49,8 @@ namespace screens {
             readerLayout::progressText(ui, reading ? settings::FooterMetric::percentage : config.footerMetric, 42, 132);
         const auto chrome = appearanceLayout::chrome(ui, config.leftHanded, layout.page);
         const ui::Rect preview = ui.paintBounds(typography ? layout.preview : chrome.preview);
-        if (showPreview && ui.redraw(preview, state)) {
+        if (showPreview && ui.redraw(preview, state, true)) {
+            const auto arrows = typography ? ui::TextLayout{} : readerLayout::prepareArrows(ui, config, reading, true);
             ui.paint(preview, [&](Arduino_GFX& output, ui::Rect translated) {
                 Arduino_GFX& previousOutput = text_.setOutput(output);
                 const int16_t dx = static_cast<int16_t>(translated.x - preview.x);
@@ -62,7 +63,7 @@ namespace screens {
                 text_.drawString(before, static_cast<int16_t>(beforeX + dx), wordBaseline, type.tracking);
                 text_.drawString(after, static_cast<int16_t>(afterX + dx), wordBaseline, type.tracking);
                 if (!typography)
-                    readerLayout::drawArrows(ui, output, config, reading, inkHeight + 12, dx, dy, true);
+                    readerLayout::drawArrows(ui, output, config, reading, arrows, inkHeight + 12, dx, dy, true);
                 text_.setOutput(previousOutput);
             });
         }

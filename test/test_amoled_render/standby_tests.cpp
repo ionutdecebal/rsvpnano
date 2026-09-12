@@ -87,8 +87,36 @@ namespace {
             for (const auto kind: {standby::Kind::life, standby::Kind::maze, standby::Kind::reaction})
                 checkStandby(kind, orientation);
     }
+
+    void test_standby_entry_and_reseed_clear_the_panel_once() {
+        constexpr uint16_t stale = 0xDEAD;
+        for (const auto orientation: {ui::Orientation::Portrait, ui::Orientation::Landscape}) {
+            testgfx::Panel panel(410, 502);
+            ui::Context ui(panel);
+            const auto theme = ui::themes::defaultTheme();
+            ui.setTheme(theme);
+            ui.setOrientation(orientation);
+            screens::StandbyScreen screen;
+            for (const uint32_t seedTime: {1200U, 2400U}) {
+                // The second seed is drawn on the same screen, with no external UI invalidation.
+                screen.begin(ui, seedTime, 3, 19, standby::Kind::maze);
+                std::fill(panel.pixels.begin(), panel.pixels.end(), stale);
+                const int before = panel.transfers;
+                screen.draw(ui);
+                const int transfers = panel.transfers - before;
+                // A seeded maze adds only its tiny starting cell to the one full-panel clear.
+                TEST_ASSERT_GREATER_OR_EQUAL(panel.height() / 2, transfers);
+                TEST_ASSERT_LESS_THAN(panel.height(), transfers);
+                for (const uint16_t pixel: panel.pixels)
+                    TEST_ASSERT_NOT_EQUAL(stale, pixel);
+            }
+            TEST_ASSERT_EQUAL(0, panel.invalidWindows);
+            TEST_ASSERT_EQUAL(0, panel.writes);
+        }
+    }
 } // namespace
 
 void runAmoledStandbyTests() {
     RUN_TEST(test_standby_preserves_frozen_frame_and_dirty_ownership);
+    RUN_TEST(test_standby_entry_and_reseed_clear_the_panel_once);
 }

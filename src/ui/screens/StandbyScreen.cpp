@@ -47,6 +47,9 @@ namespace screens {
         if (!screensaver_)
             return;
         const standby::Frame frame = screensaver_.frame();
+        const bool fullRedraw = frame.fullRedraw || frame.dirtyCells.empty();
+        if (fullRedraw)
+            ui.invalidate();
         ui.beginFrame(static_cast<uint8_t>(Screen::Standby));
         if (frame.cells.empty() || columns_ == 0 || rows_ == 0) {
             ui.endFrame();
@@ -74,10 +77,7 @@ namespace screens {
                 output.fillRect(area.x, area.y, area.w, area.h, color);
             });
         };
-        if (frame.fullRedraw || frame.dirtyCells.empty()) {
-            ui.paint({0, 0, ui.width(), ui.height()}, [&](Arduino_GFX& output, ui::Rect area) {
-                output.fillRect(area.x, area.y, area.w, area.h, ui.color(ui::themes::ColorRole::Background));
-            });
+        if (fullRedraw) {
             const auto drawCells = [&](standby::PackedGridView cells, uint16_t color) {
                 size_t runStart = cellCount;
                 size_t runEnd = 0;

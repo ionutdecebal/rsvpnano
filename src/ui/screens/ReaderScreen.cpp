@@ -484,8 +484,7 @@ namespace screens {
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
         const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
 
-        const ui::Rect readingArea =
-            ui.paintBounds(readerLayout::readingArea(ui.width(), ui.height(), vertical));
+        const ui::Rect readingArea = ui.paintBounds(readerLayout::readingArea(ui.width(), ui.height(), vertical));
         if (pageView) {
             const std::string overlay =
                 vertical || !overlayVisible ? "" : std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM");
@@ -494,7 +493,8 @@ namespace screens {
             };
             PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session, readingArea,
                              overlay);
-        } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings))) {
+        } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings),
+                             true)) {
             const std::string overlay =
                 overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
             background_ = ui.color(ui::themes::ColorRole::Background);
@@ -638,6 +638,7 @@ namespace screens {
             const bool rightToLeft = bidi && rsvpBidi_.rightToLeft();
             preparePhantom(phantoms_[0], before, rightToLeft);
             preparePhantom(phantoms_[1], after, rightToLeft);
+            const auto arrows = vertical ? ui::TextLayout{} : readerLayout::prepareArrows(ui, settings, reading);
             ui.paint(readingArea, [&](Arduino_GFX& gfx, ui::Rect translated) {
                 Arduino_GFX& previousOutput = text_.setOutput(gfx);
                 const int16_t dx = static_cast<int16_t>(translated.x - readingArea.x);
@@ -672,7 +673,8 @@ namespace screens {
                         } else {
                             cursor =
                                 static_cast<int16_t>(cursor
-                                                     + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first),
+                                                     + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first,
+                                                                                                       last - first),
                                                                         cursor, wordBaseline));
                         }
                         first = last;
@@ -693,15 +695,15 @@ namespace screens {
                                 rightToLeft, wordBaseline, centerY, vertical, ui);
 
                 if (!vertical) {
-                    readerLayout::drawArrows(ui, gfx, settings, reading, inkBottom - inkTop + 13, dx, dy);
+                    readerLayout::drawArrows(ui, gfx, settings, reading, arrows, inkBottom - inkTop + 13, dx, dy);
                     gfx.setFont(static_cast<const GFXfont*>(nullptr));
                     gfx.setTextWrap(false);
                     gfx.setTextSize(2);
                     gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
                     if (!overlay.empty()) {
                         gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
-                        const int16_t overlayY = std::min<int16_t>(ui.height() - 56,
-                                                                  readingArea.y + readingArea.h - 16);
+                        const int16_t overlayY =
+                            std::min<int16_t>(ui.height() - 56, readingArea.y + readingArea.h - 16);
                         gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2 + dx),
                                       static_cast<int16_t>(overlayY + dy));
                         gfx.print(overlay.c_str());
@@ -754,8 +756,7 @@ namespace screens {
     bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
         if (session.metadata.writingMode == WritingMode::verticalRl) {
             const ui::Rect previous =
-                ui::rotateClockwise(portraitPreviousRect(height_, width_, settings_.leftHanded),
-                                    height_);
+                ui::rotateClockwise(portraitPreviousRect(height_, width_, settings_.leftHanded), height_);
             return ui::contains(previous, x, y);
         }
         if (ui::contains(batteryRect(width_, height_), x, y))
@@ -1152,9 +1153,8 @@ namespace screens {
             return;
 
         phantomLine_.clear();
-        phantom.bidi =
-            rightToLeft
-            || (UnicodeText::scriptsIn(value) & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
+        phantom.bidi = rightToLeft
+                    || (UnicodeText::scriptsIn(value) & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
         if (phantom.bidi) {
             const TextDirection direction = rightToLeft ? TextDirection::rtl : TextDirection::ltr;
             if (!phantomBidi_.reset(value, direction) || !phantomBidi_.resolve({0, value.size()}, phantomLine_))

@@ -11,10 +11,8 @@ namespace screens {
             return Action::None;
         selectedIndex_ = std::min(selectedIndex_, count - 1);
         const int delta = carouselGesture_.update(ui.touch(), area);
-        if (delta) {
+        if (delta)
             selectedIndex_ = ui::rotateIndex(selectedIndex_, count, delta);
-            ui.invalidate();
-        }
         const auto cards = watch::carousel(area);
         const auto name = [&](size_t index) -> std::string_view {
             return index < timers_.timers.size() ? std::string_view{timers_.timers[index].name} : ui.text(UiText::Add);
@@ -22,10 +20,8 @@ namespace screens {
         const size_t previous = ui::rotateIndex(selectedIndex_, count, -1),
                      next = ui::rotateIndex(selectedIndex_, count, 1);
         if (ui.card(cards[0], name(previous), "<", 2, ui::themes::BreakAccent, ui::Icon::None, count > 1 && !delta,
-                    170)) {
+                    170))
             selectedIndex_ = previous;
-            ui.invalidate();
-        }
         const bool adding = selectedIndex_ == timers_.timers.size();
         const int16_t editHeight = std::min<int16_t>(44, cards[1].h / 3);
         auto center = cards[1];
@@ -50,10 +46,8 @@ namespace screens {
         if (ui.card(editRect, ui.text(adding ? UiText::Add : UiText::Settings), {}, 2, ui::themes::BreakAccent,
                     ui::Icon::None, writable_ && !delta))
             edit(selectedIndex_, adding, screen);
-        if (ui.card(cards[2], name(next), ">", 2, ui::themes::BreakAccent, ui::Icon::None, count > 1 && !delta, 170)) {
+        if (ui.card(cards[2], name(next), ">", 2, ui::themes::BreakAccent, ui::Icon::None, count > 1 && !delta, 170))
             selectedIndex_ = next;
-            ui.invalidate();
-        }
         return Action::None;
     }
 

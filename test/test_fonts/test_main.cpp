@@ -109,14 +109,15 @@ namespace {
                 TEST_ASSERT_TRUE(RFont4::decompressLz4Block(encoded, decoded));
             }
             TEST_ASSERT_TRUE(static_cast<uint64_t>(glyph.kernOffset) + glyph.kernCount <= strike.kerningPairCount);
-            const std::string_view storedBitmap{
-                reinterpret_cast<const char*>(bytes.data() + strike.bitmapOffset + glyph.bitmapOffset), storedBytes};
+            const std::string_view storedBitmap{reinterpret_cast<const char*>(bytes.data() + strike.bitmapOffset
+                                                                              + glyph.bitmapOffset),
+                                                storedBytes};
             const auto [bitmap, insertedBitmap] = bitmapOffsets.try_emplace(storedBitmap, glyph.bitmapOffset);
             TEST_ASSERT_TRUE(insertedBitmap || bitmap->second == glyph.bitmapOffset);
-            const std::string_view storedKerning{
-                reinterpret_cast<const char*>(bytes.data() + strike.kerningOffset
-                                              + glyph.kernOffset * sizeof(RFont4::KerningRecord)),
-                static_cast<size_t>(glyph.kernCount) * sizeof(RFont4::KerningRecord)};
+            const std::string_view storedKerning{reinterpret_cast<const char*>(bytes.data() + strike.kerningOffset
+                                                                               + glyph.kernOffset
+                                                                                     * sizeof(RFont4::KerningRecord)),
+                                                 static_cast<size_t>(glyph.kernCount) * sizeof(RFont4::KerningRecord)};
             const auto [kerning, insertedKerning] = kerningOffsets.try_emplace(storedKerning, glyph.kernOffset);
             TEST_ASSERT_TRUE(insertedKerning || kerning->second == glyph.kernOffset);
 
@@ -157,8 +158,7 @@ namespace {
                 std::string key;
                 key.reserve(strikes.size() * sizeof(RFont4::GlyphRecord));
                 for (const auto& strike: strikes) {
-                    const auto* record = bytes.data() + strike.glyphsOffset
-                                       + glyphIndex * sizeof(RFont4::GlyphRecord);
+                    const auto* record = bytes.data() + strike.glyphsOffset + glyphIndex * sizeof(RFont4::GlyphRecord);
                     key.append(reinterpret_cast<const char*>(record), sizeof(RFont4::GlyphRecord));
                 }
                 TEST_ASSERT_TRUE_MESSAGE(renderRecords.insert(std::move(key)).second, path.string().c_str());
@@ -171,12 +171,12 @@ namespace {
         const auto strikes = readStrikes(bytes, header);
         const auto& strike = strikes[strikeIndex];
         return {
-            .name = std::string_view{reinterpret_cast<const char*>(bytes.data() + header.nameOffset),
-                                    header.nameSize - 1U},
+            .name =
+                std::string_view{reinterpret_cast<const char*>(bytes.data() + header.nameOffset), header.nameSize - 1U},
             .bitmap = bytes.data() + strike.bitmapOffset,
             .glyphs = reinterpret_cast<const ui::fonts::AlphaGlyph*>(bytes.data() + strike.glyphsOffset),
-            .supplementary = reinterpret_cast<const RFont4::SupplementaryRecord*>(
-                bytes.data() + header.supplementaryOffset),
+            .supplementary =
+                reinterpret_cast<const RFont4::SupplementaryRecord*>(bytes.data() + header.supplementaryOffset),
             .verticalRules = reinterpret_cast<const RFont4::VerticalRule*>(bytes.data() + header.verticalRulesOffset),
             .glyphCount = header.glyphCount,
             .supplementaryCount = header.supplementaryCount,
@@ -552,6 +552,16 @@ void test_vertical_glyphs_are_counter_rotated_for_the_portrait_panel() {
     renderer.setFont(font);
     renderer.setTextColor(0xFFFF, 0);
 
+    ui::fonts::AlphaTextRenderer<20>::Bounds measured;
+    TEST_ASSERT_TRUE(renderer.measureVertical("\xE6\x97\xA5", 4, 10, measured));
+    TEST_ASSERT_EQUAL_INT16(4, measured.x1);
+    TEST_ASSERT_EQUAL_INT16(9, measured.y1);
+    TEST_ASSERT_EQUAL_UINT16(3, measured.w);
+    TEST_ASSERT_EQUAL_UINT16(2, measured.h);
+    TEST_ASSERT_FALSE(renderer.measureVertical("?", 4, 10, measured));
+    const std::array missingGlyph{ui::fonts::PositionedGlyph{.glyphIndex = 2}};
+    TEST_ASSERT_FALSE(renderer.measure(missingGlyph, 4, 10, measured));
+
     TEST_ASSERT_EQUAL_INT16(4, renderer.drawVerticalCodepoint(0x65E5, 4, 10));
     TEST_ASSERT_EQUAL_UINT8(2, renderer.verticalInkHeight("\xE6\x97\xA5"));
     TEST_ASSERT_EQUAL_INT16(3, gfx.inkWidth());
@@ -562,6 +572,69 @@ void test_vertical_glyphs_are_counter_rotated_for_the_portrait_panel() {
     TEST_ASSERT_EQUAL_UINT8(3, renderer.verticalInkHeight("A"));
     TEST_ASSERT_EQUAL_INT16(2, gfx.inkWidth());
     TEST_ASSERT_EQUAL_INT16(3, gfx.inkHeight());
+}
+
+void test_rotated_glyph_clips_source_rows_before_reading_them() {
+    constexpr ui::fonts::AlphaGlyph glyphs[]{
+        {.width = 8, .height = 12, .rowStride = 1, .xAdvance = 12, .bitmapBytes = 12},
+    };
+    constexpr ui::fonts::AlphaGlyphIdentity identities[]{{0x65E5, 0}};
+    File file{std::string(12, static_cast<char>(0xFF))};
+    const ui::fonts::AlphaFont font{
+        .glyphs = glyphs,
+        .identities = identities,
+        .glyphCount = 1,
+        .yAdvance = 12,
+        .ascent = 12,
+        .pixelsPerEm = 12,
+        .file = &file,
+        .fileSize = 12,
+        .fileStrike = {.bitmapSize = 12},
+        .bitsPerPixel = 1,
+    };
+    Arduino_Canvas canvas{2, 2, nullptr};
+    ui::fonts::AlphaTextRenderer<20> renderer{canvas};
+    TEST_ASSERT_TRUE(renderer.begin());
+    renderer.setFont(font);
+    renderer.setTextColor(0xFFFF, 0);
+    TEST_ASSERT_EQUAL_INT16(12, renderer.drawVerticalCodepoint(0x65E5, -4, 4));
+    TEST_ASSERT_EQUAL_UINT32(2, file.readCount());
+    for (int pixel = 0; pixel < 4; ++pixel)
+        TEST_ASSERT_EQUAL_HEX16(0xFFFF, canvas.getFramebuffer()[pixel]);
+}
+
+void test_palette_matches_rgb565_blending_for_every_coverage() {
+    constexpr uint8_t bitmap[]{0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+    constexpr ui::fonts::AlphaGlyph glyphs[]{
+        {.width = 16, .height = 1, .rowStride = 8, .xAdvance = 16, .bitmapBytes = 8},
+    };
+    constexpr ui::fonts::AlphaGlyphIdentity identities[]{{'x', 0}};
+    const ui::fonts::AlphaFont font{
+        .bitmap = bitmap,
+        .glyphs = glyphs,
+        .identities = identities,
+        .glyphCount = 1,
+        .yAdvance = 1,
+        .ascent = 1,
+        .pixelsPerEm = 1,
+    };
+    Arduino_Canvas canvas{16, 1, nullptr};
+    ui::fonts::AlphaTextRenderer<20> renderer{canvas};
+    TEST_ASSERT_TRUE(renderer.begin());
+    renderer.setFont(font);
+    for (const auto [fg, bg]: {std::pair<uint16_t, uint16_t>{0xFFFF, 0}, {0xF800, 0x07E0}, {0x001F, 0x8410}}) {
+        canvas.fillScreen(bg);
+        renderer.setTextColor(fg, bg);
+        renderer.drawCodepoint('x', 0, 0);
+        for (int coverage = 0; coverage < 16; ++coverage) {
+            const auto channel = [&](int shift, int mask) {
+                return ((((bg >> shift) & mask) * (15 - coverage) + ((fg >> shift) & mask) * coverage + 7) / 15)
+                    << shift;
+            };
+            const uint16_t expected = channel(11, 31) | channel(5, 63) | channel(0, 31);
+            TEST_ASSERT_EQUAL_HEX16(expected, canvas.getFramebuffer()[coverage]);
+        }
+    }
 }
 
 void test_vertical_cjk_fixtures_render_from_sparse_rules() {
@@ -606,6 +679,8 @@ int main(int, char**) {
     RUN_TEST(test_shaper_reuses_rfont4_nominal_glyphs_and_advances);
     RUN_TEST(test_compact_strike_renders_one_bit_rows);
     RUN_TEST(test_vertical_glyphs_are_counter_rotated_for_the_portrait_panel);
+    RUN_TEST(test_rotated_glyph_clips_source_rows_before_reading_them);
+    RUN_TEST(test_palette_matches_rgb565_blending_for_every_coverage);
     RUN_TEST(test_vertical_cjk_fixtures_render_from_sparse_rules);
     return UNITY_END();
 }

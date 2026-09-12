@@ -26,12 +26,15 @@ namespace screens::PageReader {
             uint8_t faceIndex = 0;
             bool shaped : 1 = false;
             bool cjk : 1 = false;
+            bool inkKnown : 1 = false;
+            ui::Rect ink;
         };
-        static_assert(sizeof(Word) == 12);
+        static_assert(sizeof(Word) == 20);
 
         struct Character {
             uint32_t codepoint = 0;
             uint16_t wordOffset = 0;
+            int16_t x = 0;
             bool belongsToWord = false;
             bool rightToLeft = false;
         };
@@ -45,9 +48,12 @@ namespace screens::PageReader {
             int16_t top = 0;
             int16_t bottom = 0;
             int16_t width = 0;
+            int16_t x = 0;
             bool paragraphStart = false;
             bool bidi = false;
             bool rightToLeft = false;
+            bool inkKnown = false;
+            ui::Rect ink;
         };
 
         static constexpr size_t kMaximumLines = 24;

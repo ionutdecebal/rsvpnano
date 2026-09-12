@@ -315,10 +315,11 @@ namespace ui {
         if (!claim(Kind::Separator, rect, signature(text)).changed)
             return;
 
+        const int16_t labelWidth = std::min<int16_t>(rect.w, textWidthFor(text, 1));
+        const auto label = prepareText({0, 0, labelWidth, rect.h}, text, 1);
         paint(rect, [&](Arduino_GFX& output, Rect rect) {
             output.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::Background));
-            const int16_t labelWidth = std::min<int16_t>(rect.w, textWidthFor(text, 1));
-            drawText(output, {rect.x, rect.y, labelWidth, rect.h}, text, 1, color(ui::themes::ColorRole::Muted));
+            drawText(output, label, color(ui::themes::ColorRole::Muted), rect.x, rect.y);
             const int16_t lineX = static_cast<int16_t>(rect.x + labelWidth + 6);
             if (lineX < rect.x + rect.w)
                 output.drawFastHLine(lineX, static_cast<int16_t>(rect.y + rect.h / 2),
@@ -334,38 +335,37 @@ namespace ui {
         uint32_t state = signature(value, signature(label));
         state = combine(state, static_cast<uint8_t>(layout));
         if (claim(Kind::Setting, rect, state).changed) {
+            TextLayout labelText, valueText;
+            const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
+            if (layout == SettingLayout::Inline) {
+                const int16_t labelRequired = textWidthFor(label, 2);
+                uint8_t valueSize = 2;
+                int16_t valueRequired = textWidthFor(value, 2);
+                if (labelRequired + valueRequired + 8 > textWidth) {
+                    valueSize = 1;
+                    valueRequired = textWidthFor(value, 1);
+                }
+                const int16_t labelWidth = labelRequired + valueRequired + 8 <= textWidth
+                                             ? labelRequired
+                                             : std::min<int16_t>(labelRequired, textWidth / 2);
+                const int16_t valueWidth = std::max<int16_t>(0, static_cast<int16_t>(textWidth - labelWidth - 8));
+                labelText = prepareText({7, 0, labelWidth, rect.h}, label, 2);
+                valueText = prepareText({static_cast<int16_t>(rect.w - valueWidth - 7), 0, valueWidth, rect.h}, value,
+                                        valueSize, TextAlign::Right);
+            } else {
+                const bool largeValue = textWidthFor(value, 2) <= textWidth;
+                labelText = prepareText({7, 3, textWidth, 8}, label, 1);
+                valueText =
+                    prepareText({7, 11, textWidth, static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))}, value,
+                                largeValue ? 2 : 1, TextAlign::Start, !largeValue && rect.h >= 32 ? 2 : 1);
+            }
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
                 output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
-                const int16_t textWidth = std::max<int16_t>(0, static_cast<int16_t>(rect.w - 14));
-                if (layout == SettingLayout::Inline) {
-                    const int16_t labelRequired = textWidthFor(label, 2);
-                    uint8_t valueSize = 2;
-                    int16_t valueRequired = textWidthFor(value, 2);
-                    if (labelRequired + valueRequired + 8 > textWidth) {
-                        valueSize = 1;
-                        valueRequired = textWidthFor(value, 1);
-                    }
-                    const int16_t labelWidth = labelRequired + valueRequired + 8 <= textWidth
-                                                 ? labelRequired
-                                                 : std::min<int16_t>(labelRequired, textWidth / 2);
-                    const int16_t valueWidth = std::max<int16_t>(0, static_cast<int16_t>(textWidth - labelWidth - 8));
-                    drawText(output, {static_cast<int16_t>(rect.x + 7), rect.y, labelWidth, rect.h}, label, 2,
-                             color(ui::themes::ColorRole::Foreground));
-                    drawText(output,
-                             {static_cast<int16_t>(rect.x + rect.w - valueWidth - 7), rect.y, valueWidth, rect.h},
-                             value, valueSize, color(ui::themes::ColorRole::Accent), TextAlign::Right);
-                } else {
-                    const bool largeValue = textWidthFor(value, 2) <= textWidth;
-                    drawText(output, {static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 3), textWidth, 8},
-                             label, 1, color(ui::themes::ColorRole::Muted));
-                    drawText(output,
-                             {static_cast<int16_t>(rect.x + 7), static_cast<int16_t>(rect.y + 11), textWidth,
-                              static_cast<int16_t>(std::max<int16_t>(0, rect.h - 13))},
-                             value, largeValue ? 2 : 1, color(ui::themes::ColorRole::Accent), TextAlign::Start,
-                             !largeValue && rect.h >= 32 ? 2 : 1);
-                }
+                drawText(output, labelText, color(layout == SettingLayout::Inline ? themes::Foreground : themes::Muted),
+                         rect.x, rect.y);
+                drawText(output, valueText, color(themes::Accent), rect.x, rect.y);
             });
         }
         return tapped(slot, rect);
@@ -376,11 +376,14 @@ namespace ui {
         const size_t slot = nextSlot_;
         uint32_t state = combine(signature(label), enabled);
         if (claim(Kind::Toggle, rect, state).changed) {
+            constexpr int16_t switchWidth = 34;
+            const auto labelText =
+                prepareText({7, 0, static_cast<int16_t>(std::max<int16_t>(0, rect.w - switchWidth - 21)), rect.h},
+                            label, 2);
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
                 output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
-                constexpr int16_t switchWidth = 34;
                 const int16_t switchX = static_cast<int16_t>(rect.x + rect.w - switchWidth - 7);
                 const int16_t switchY = static_cast<int16_t>(rect.y + (rect.h - 16) / 2);
                 output.fillRoundRect(switchX, switchY, switchWidth, 16, 8,
@@ -388,10 +391,7 @@ namespace ui {
                                                    : ui::themes::ColorRole::ProgressTrack));
                 output.fillCircle(static_cast<int16_t>(switchX + (enabled ? switchWidth - 8 : 8)),
                                   static_cast<int16_t>(switchY + 8), 6, color(ui::themes::ColorRole::Foreground));
-                drawText(output,
-                         {static_cast<int16_t>(rect.x + 7), rect.y,
-                          static_cast<int16_t>(std::max<int16_t>(0, switchX - rect.x - 14)), rect.h},
-                         label, 2, color(ui::themes::ColorRole::Foreground));
+                drawText(output, labelText, color(themes::Foreground), rect.x, rect.y);
             });
         }
         if (!tapped(slot, rect))
@@ -404,14 +404,14 @@ namespace ui {
         rect = paintBounds(rect);
         const size_t slot = nextSlot_;
         claim(Kind::Touch, rect, enabled);
-        return enabled && tapped(slot, rect);
+        return tapped(slot, rect, enabled);
     }
 
     bool Context::button(Rect rect, std::string_view text, bool enabled, Icon icon, uint8_t textLines,
                          std::string_view detailLeft, std::string_view detailRight) {
         rect = paintBounds(rect);
         const size_t slot = nextSlot_;
-        const bool activated = enabled && tapped(slot, rect);
+        const bool activated = tapped(slot, rect, enabled);
         uint32_t state = combine(signature(text), enabled);
         state = combine(state, static_cast<uint8_t>(icon));
         state = combine(state, textLines);
@@ -419,6 +419,27 @@ namespace ui {
         state = signature(detailRight, state);
         const Claim widget = claim(Kind::Button, rect, state);
         if (widget.changed) {
+            const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(34, rect.w / 3);
+            const bool hasDetail = !detailLeft.empty() || !detailRight.empty();
+            const int16_t textHeight = hasDetail ? static_cast<int16_t>(rect.h - 18) : rect.h;
+            const Rect textRect{6, 0, static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)), textHeight};
+            const auto title = prepareText(textRect, text, 2, TextAlign::Center, textLines);
+            TextLayout detail;
+            if (hasDetail) {
+                const int16_t detailY = static_cast<int16_t>(rect.h - 20);
+                if (detailLeft.empty() || detailRight.empty()) {
+                    detail = prepareText({textRect.x, detailY, textRect.w, 16},
+                                         detailLeft.empty() ? detailRight : detailLeft, 2,
+                                         detailLeft.empty() ? TextAlign::Right : TextAlign::Left);
+                } else {
+                    const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
+                    detail.lines.reserve(2);
+                    appendText(detail, {textRect.x, detailY, detailWidth, 16}, detailLeft, 2, TextAlign::Start, 1, {});
+                    appendText(detail,
+                               {static_cast<int16_t>(textRect.x + textRect.w - detailWidth), detailY, detailWidth, 16},
+                               detailRight, 2, TextAlign::Right, 1, {});
+                }
+            }
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
@@ -428,31 +449,8 @@ namespace ui {
                 if (enabled && rect.w > 16 && rect.h >= 28)
                     output.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
                                     static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
-                const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(34, rect.w / 3);
-                const bool hasDetail = !detailLeft.empty() || !detailRight.empty();
-                const int16_t textHeight = hasDetail ? static_cast<int16_t>(rect.h - 18) : rect.h;
-                const ui::Rect textRect{static_cast<int16_t>(rect.x + 6), rect.y,
-                                        static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconWidth - 12)),
-                                        textHeight};
-                drawText(output, textRect, text, 2,
-                         color(enabled ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted),
-                         TextAlign::Center, textLines);
-                if (hasDetail) {
-                    const int16_t detailY = static_cast<int16_t>(rect.y + rect.h - 20);
-                    if (detailLeft.empty() || detailRight.empty()) {
-                        drawText(output, {textRect.x, detailY, textRect.w, 16},
-                                 detailLeft.empty() ? detailRight : detailLeft, 2, color(ui::themes::ColorRole::Muted),
-                                 detailLeft.empty() ? TextAlign::Right : TextAlign::Left);
-                    } else {
-                        const int16_t detailWidth = static_cast<int16_t>((textRect.w - 8) / 2);
-                        drawText(output, {textRect.x, detailY, detailWidth, 16}, detailLeft, 2,
-                                 color(ui::themes::ColorRole::Muted));
-                        drawText(output,
-                                 {static_cast<int16_t>(textRect.x + textRect.w - detailWidth), detailY, detailWidth,
-                                  16},
-                                 detailRight, 2, color(ui::themes::ColorRole::Muted), TextAlign::Right);
-                    }
-                }
+                drawText(output, title, color(enabled ? themes::Foreground : themes::Muted), rect.x, rect.y);
+                drawText(output, detail, color(themes::Muted), rect.x, rect.y);
                 if (icon != Icon::None)
                     drawIcon(output, {static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h},
                              icon, color(enabled ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted),
@@ -485,6 +483,10 @@ namespace ui {
         state = combine(state, static_cast<uint8_t>(icon));
         const Claim widget = claim(Kind::Tab, rect, state);
         if (widget.changed) {
+            const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(26, rect.w / 3);
+            const auto label = prepareText({static_cast<int16_t>(iconWidth + 8), 0,
+                                            static_cast<int16_t>(rect.w - iconWidth - 12), rect.h},
+                                           text, 2, TextAlign::Center);
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface =
                     color(active ? ui::themes::ColorRole::Surface : ui::themes::ColorRole::SurfaceMuted);
@@ -495,13 +497,9 @@ namespace ui {
                                     color(ui::themes::ColorRole::Accent));
                 }
                 const uint16_t ink = color(active ? ui::themes::ColorRole::Foreground : ui::themes::ColorRole::Muted);
-                const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(26, rect.w / 3);
                 if (icon != Icon::None)
                     drawIcon(output, {static_cast<int16_t>(rect.x + 7), rect.y, iconWidth, rect.h}, icon, ink, surface);
-                drawText(output,
-                         {static_cast<int16_t>(rect.x + iconWidth + 8), rect.y,
-                          static_cast<int16_t>(rect.w - iconWidth - 12), rect.h},
-                         text, 2, ink, TextAlign::Center);
+                drawText(output, label, ink, rect.x, rect.y);
             });
         }
         return tapped(widget.index, rect);
@@ -534,14 +532,17 @@ namespace ui {
         state = combine(state, labelAlpha);
         if (!claim(Kind::Battery, rect, state).changed)
             return;
+        const auto layout = batteryLayout({0, 0, rect.w, rect.h}, labelText, showIcon);
+        const auto label = prepareText(layout.label, labelText, 2);
         paint(rect, [&](Arduino_GFX& output, Rect rect) {
             if (!showIcon && labelText.empty())
                 return;
-            const auto layout = batteryLayout(rect, labelText, showIcon);
             if (showIcon)
-                drawBatteryIcon(output, layout.icon, percent, charging, blend(themes::Muted, iconAlpha),
-                                color(themes::Background));
-            drawText(output, layout.label, labelText, 2, blend(themes::Muted, labelAlpha));
+                drawBatteryIcon(output,
+                                {static_cast<int16_t>(layout.icon.x + rect.x),
+                                 static_cast<int16_t>(layout.icon.y + rect.y), layout.icon.w, layout.icon.h},
+                                percent, charging, blend(themes::Muted, iconAlpha), color(themes::Background));
+            drawText(output, label, blend(themes::Muted, labelAlpha), rect.x, rect.y);
         });
     }
 
@@ -635,7 +636,55 @@ namespace ui {
         state = combine(state, static_cast<uint32_t>(step));
         state = combine(state, activeRole);
         if (claim(Kind::Slider, rect, state).changed) {
+            const Rect bounds = rect;
+            TextLayout labelText, valueLayout;
+            if (labeled) {
+                char valueText[24];
+                std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue, static_cast<int>(suffix.size()),
+                              suffix.data());
+                const std::string_view valueView{valueText};
+                const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
+                const bool largeInline = visual.h >= 40 && textHeightFor(label, 3) <= visual.h - 10
+                                      && textHeightFor(valueView, 3) <= visual.h - 10
+                                      && textWidthFor(label, 3) + textWidthFor(valueView, 3) + 8 <= headerWidth;
+                if (largeInline) {
+                    const int16_t valueWidth = textWidthFor(valueView, 3);
+                    const int16_t labelWidth = static_cast<int16_t>(headerWidth - valueWidth - 8);
+                    const int16_t textHeight = static_cast<int16_t>(visual.h - 10);
+                    labelText = prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 1),
+                                             labelWidth, textHeight},
+                                            label, 3);
+                    valueLayout = prepareText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7),
+                                               static_cast<int16_t>(visual.y + 1), valueWidth, textHeight},
+                                              valueView, 3, TextAlign::Right);
+                } else if (visual.h >= 44) {
+                    labelText = prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2),
+                                             headerWidth, 16},
+                                            label, 2);
+                    valueLayout = prepareText({static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18),
+                                               headerWidth, 16},
+                                              valueView, 2, TextAlign::Right);
+                } else {
+                    uint8_t labelSize = visual.h >= 30 ? 2 : 1;
+                    uint8_t valueSize = labelSize;
+                    int16_t valueWidth = textWidthFor(valueView, valueSize);
+                    if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8) {
+                        valueSize = 1;
+                        valueWidth = textWidthFor(valueView, 1);
+                    }
+                    if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8)
+                        labelSize = 1;
+                    const int16_t labelWidth = std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
+                    const int16_t textY = static_cast<int16_t>(visual.y + 2);
+                    labelText =
+                        prepareText({static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize);
+                    valueLayout =
+                        prepareText({static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
+                                    valueView, valueSize, TextAlign::Right);
+                }
+            }
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
                 const Rect visual{rect.x, static_cast<int16_t>(rect.y + (rect.h - visualHeight) / 2), rect.w,
                                   visualHeight};
                 const Rect track{static_cast<int16_t>(visual.x + trackInset),
@@ -646,54 +695,8 @@ namespace ui {
                     output.fillRoundRect(visual.x, visual.y, visual.w, visual.h, 5, surface);
                     output.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5,
                                          color(ui::themes::ColorRole::Outline));
-                    char valueText[24];
-                    std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue,
-                                  static_cast<int>(suffix.size()), suffix.data());
-                    const std::string_view valueView{valueText};
-                    const int16_t headerWidth = static_cast<int16_t>(visual.w - 14);
-                    const bool largeInline = visual.h >= 40 && textHeightFor(label, 3) <= visual.h - 10
-                                          && textHeightFor(valueView, 3) <= visual.h - 10
-                                          && textWidthFor(label, 3) + textWidthFor(valueView, 3) + 8 <= headerWidth;
-                    if (largeInline) {
-                        const int16_t valueWidth = textWidthFor(valueView, 3);
-                        const int16_t labelWidth = static_cast<int16_t>(headerWidth - valueWidth - 8);
-                        const int16_t textHeight = static_cast<int16_t>(visual.h - 10);
-                        drawText(output,
-                                 {static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 1), labelWidth,
-                                  textHeight},
-                                 label, 3, color(ui::themes::ColorRole::Foreground));
-                        drawText(output,
-                                 {static_cast<int16_t>(visual.x + visual.w - valueWidth - 7),
-                                  static_cast<int16_t>(visual.y + 1), valueWidth, textHeight},
-                                 valueView, 3, color(activeRole), TextAlign::Right);
-                    } else if (visual.h >= 44) {
-                        drawText(output,
-                                 {static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 2), headerWidth,
-                                  16},
-                                 label, 2, color(ui::themes::ColorRole::Foreground));
-                        drawText(output,
-                                 {static_cast<int16_t>(visual.x + 7), static_cast<int16_t>(visual.y + 18), headerWidth,
-                                  16},
-                                 valueView, 2, color(activeRole), TextAlign::Right);
-                    } else {
-                        uint8_t labelSize = visual.h >= 30 ? 2 : 1;
-                        uint8_t valueSize = labelSize;
-                        int16_t valueWidth = textWidthFor(valueView, valueSize);
-                        if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8) {
-                            valueSize = 1;
-                            valueWidth = textWidthFor(valueView, 1);
-                        }
-                        if (headerWidth < textWidthFor(label, labelSize) + valueWidth + 8)
-                            labelSize = 1;
-                        const int16_t labelWidth =
-                            std::max<int16_t>(0, static_cast<int16_t>(headerWidth - valueWidth - 8));
-                        const int16_t textY = static_cast<int16_t>(visual.y + 2);
-                        drawText(output, {static_cast<int16_t>(visual.x + 7), textY, labelWidth, 16}, label, labelSize,
-                                 color(ui::themes::ColorRole::Foreground));
-                        drawText(output,
-                                 {static_cast<int16_t>(visual.x + visual.w - valueWidth - 7), textY, valueWidth, 16},
-                                 valueView, valueSize, color(activeRole), TextAlign::Right);
-                    }
+                    drawText(output, labelText, color(themes::Foreground), dx, dy);
+                    drawText(output, valueLayout, color(activeRole), dx, dy);
                 }
                 output.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
                 const int16_t knobX =
@@ -786,9 +789,31 @@ namespace ui {
         state = combine(state, static_cast<uint32_t>(maximum));
         state = combine(state, activeRole);
         if (claim(Kind::Stepper, rect, state).changed) {
+            const Rect bounds = rect;
+            const auto minusText = prepareText(decrement, "-", 2, TextAlign::Center);
+            const auto plusText = prepareText(increment, "+", 2, TextAlign::Center);
+            char valueText[24];
+            std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue, static_cast<int>(suffix.size()),
+                          suffix.data());
+            const Rect middle{static_cast<int16_t>(decrement.x + decrement.w + 6), rect.y,
+                              static_cast<int16_t>(rect.w - buttonWidth * 2 - 12), rect.h};
+            TextLayout labelText, valueLayout;
+            if (rect.h >= 44) {
+                labelText = prepareText({middle.x, static_cast<int16_t>(middle.y + 2), middle.w, 16}, label, 2,
+                                        TextAlign::Center);
+                valueLayout = prepareText({middle.x, static_cast<int16_t>(middle.y + 20), middle.w,
+                                           static_cast<int16_t>(middle.h - 20)},
+                                          valueText, 2, TextAlign::Center);
+            } else {
+                const int16_t valueWidth = std::min<int16_t>(middle.w / 2, textWidth(valueText, 2));
+                labelText = prepareText({middle.x, middle.y, static_cast<int16_t>(middle.w - valueWidth - 6), middle.h},
+                                        label, 2);
+                valueLayout = prepareText({static_cast<int16_t>(middle.x + middle.w - valueWidth), middle.y, valueWidth,
+                                           middle.h},
+                                          valueText, 2, TextAlign::Right);
+            }
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
-                const Rect decrement{rect.x, rect.y, buttonWidth, rect.h};
-                const Rect increment{static_cast<int16_t>(rect.x + rect.w - buttonWidth), rect.y, buttonWidth, rect.h};
+                const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 const uint16_t outline = color(ui::themes::ColorRole::Outline);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
@@ -799,31 +824,10 @@ namespace ui {
                                      static_cast<int16_t>(rect.y + 4), static_cast<int16_t>(rect.h - 8), outline);
 
                 const uint16_t muted = color(ui::themes::ColorRole::Muted);
-                drawText(output, decrement, "-", 2, displayedValue > minimum ? color(activeRole) : muted,
-                         TextAlign::Center);
-                drawText(output, increment, "+", 2, displayedValue < maximum ? color(activeRole) : muted,
-                         TextAlign::Center);
-
-                char valueText[24];
-                std::snprintf(valueText, sizeof(valueText), "%d%.*s", displayedValue, static_cast<int>(suffix.size()),
-                              suffix.data());
-                const Rect middle{static_cast<int16_t>(decrement.x + decrement.w + 6), rect.y,
-                                  static_cast<int16_t>(rect.w - buttonWidth * 2 - 12), rect.h};
-                if (rect.h >= 44) {
-                    drawText(output, {middle.x, static_cast<int16_t>(middle.y + 2), middle.w, 16}, label, 2,
-                             color(ui::themes::ColorRole::Foreground), TextAlign::Center);
-                    drawText(output,
-                             {middle.x, static_cast<int16_t>(middle.y + 20), middle.w,
-                              static_cast<int16_t>(middle.h - 20)},
-                             valueText, 2, color(activeRole), TextAlign::Center);
-                } else {
-                    const int16_t valueWidth = std::min<int16_t>(middle.w / 2, textWidth(valueText, 2));
-                    drawText(output, {middle.x, middle.y, static_cast<int16_t>(middle.w - valueWidth - 6), middle.h},
-                             label, 2, color(ui::themes::ColorRole::Foreground));
-                    drawText(output,
-                             {static_cast<int16_t>(middle.x + middle.w - valueWidth), middle.y, valueWidth, middle.h},
-                             valueText, 2, color(activeRole), TextAlign::Right);
-                }
+                drawText(output, minusText, displayedValue > minimum ? color(activeRole) : muted, dx, dy);
+                drawText(output, plusText, displayedValue < maximum ? color(activeRole) : muted, dx, dy);
+                drawText(output, labelText, color(themes::Foreground), dx, dy);
+                drawText(output, valueLayout, color(activeRole), dx, dy);
             });
         }
         if (changed)
@@ -850,16 +854,15 @@ namespace ui {
             needleX = static_cast<int16_t>(cx + std::cos(angle) * (radius - 4));
             needleY = static_cast<int16_t>(cy + std::sin(angle) * (radius - 4));
         }
+        const auto label = prepareText({rect.x, static_cast<int16_t>(cy + radius / 2), rect.w, textHeight(1)},
+                                       labelText, 1, TextAlign::Center);
         const Rect bounds = rect;
         paint(rect, [&](Arduino_GFX& output, Rect rect) {
             const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
             output.drawCircle(cx + dx, cy + dy, radius, color(ui::themes::ColorRole::ProgressTrack));
             if (maximum > minimum)
                 output.drawLine(cx + dx, cy + dy, needleX + dx, needleY + dy, color(ui::themes::ColorRole::Accent));
-            if (!labelText.empty()) {
-                drawText(output, {rect.x, static_cast<int16_t>(cy + dy + radius / 2), rect.w, textHeight(1)}, labelText,
-                         1, color(ui::themes::ColorRole::Muted), TextAlign::Center);
-            }
+            drawText(output, label, color(themes::Muted), dx, dy);
         });
     }
 
@@ -887,17 +890,78 @@ namespace ui {
             return;
         }
 
+        TextLayout timeText;
+        if constexpr (displayWriteAlignment() == 2)
+            timeText = prepareText({static_cast<int16_t>((rect.w - 120) / 2), 0, 120, 28}, time, 3, TextAlign::Center);
+        constexpr int16_t segments = 14;
+        const int16_t inset = std::max<int16_t>(3, std::min(rect.w, rect.h) / 12);
+        const int16_t chamberWidth = std::max<int16_t>(1, (rect.w - 2 * inset - 1) / 2);
+        const int16_t chamberHeight = std::max<int16_t>(3, (rect.h - 2 * inset - 1) / 2);
+        const int16_t waist = std::max<int16_t>(2, chamberHeight / 14);
+        const int16_t capWidth = std::max<int16_t>(8, std::min<int16_t>(16, rect.h / 8));
+        std::array<int16_t, segments + 1> profile{};
+        std::array<std::array<int16_t, 4>, segments * 4> outlineSegments{};
+        if (rect.w > rect.h) {
+            for (int16_t step = 0; step <= segments; ++step) {
+                const int16_t offset = static_cast<int16_t>(chamberWidth * step / segments);
+                int16_t curve = static_cast<int16_t>(offset * 100 / chamberWidth);
+                curve = static_cast<int16_t>(curve * curve / 100);
+                curve = static_cast<int16_t>(curve * curve / 100);
+                profile[step] = static_cast<int16_t>(chamberHeight - (chamberHeight - waist) * curve / 100);
+            }
+            const int16_t right = rect.w - inset - 1;
+            const int16_t centerY = inset + (rect.h - 2 * inset - 1) / 2;
+            for (int16_t step = 1; step <= segments; ++step) {
+                const int16_t previousOffset = chamberWidth * (step - 1) / segments;
+                const int16_t offset = chamberWidth * step / segments;
+                const int16_t previousHalf = profile[step - 1], half = profile[step];
+                outlineSegments[(step - 1) * 4] = {static_cast<int16_t>(inset + previousOffset),
+                                                   static_cast<int16_t>(centerY - previousHalf),
+                                                   static_cast<int16_t>(inset + offset),
+                                                   static_cast<int16_t>(centerY - half)};
+                outlineSegments[(step - 1) * 4 + 1] = {static_cast<int16_t>(inset + previousOffset),
+                                                       static_cast<int16_t>(centerY + previousHalf),
+                                                       static_cast<int16_t>(inset + offset),
+                                                       static_cast<int16_t>(centerY + half)};
+                outlineSegments[(step - 1) * 4 + 2] = {static_cast<int16_t>(right - previousOffset),
+                                                       static_cast<int16_t>(centerY - previousHalf),
+                                                       static_cast<int16_t>(right - offset),
+                                                       static_cast<int16_t>(centerY - half)};
+                outlineSegments[(step - 1) * 4 + 3] = {static_cast<int16_t>(right - previousOffset),
+                                                       static_cast<int16_t>(centerY + previousHalf),
+                                                       static_cast<int16_t>(right - offset),
+                                                       static_cast<int16_t>(centerY + half)};
+            }
+        }
+        const int16_t pileWidth = static_cast<int16_t>(chamberWidth * 65 / 100);
+        const uint32_t sourceTarget = static_cast<uint32_t>(1000 - progress) * pileWidth * pileWidth;
+        int16_t sourceColumns = 0;
+        if (rect.w > rect.h)
+            while (sourceColumns < pileWidth
+                   && static_cast<uint32_t>(sourceColumns + 1) * (sourceColumns + 1) * 1000U <= sourceTarget)
+                ++sourceColumns;
+        const int16_t receivedColumns =
+            static_cast<int16_t>((static_cast<uint32_t>(pileWidth) * progress + 999U) / 1000U);
+        const int16_t plateauColumns = receivedColumns == 0 ? 0 : std::max<int16_t>(1, receivedColumns / 6);
+        const int16_t slopeColumns = std::max<int16_t>(1, receivedColumns - plateauColumns);
+        const auto halfAt = [&](int16_t offsetFromBase) {
+            const int32_t scaled =
+                static_cast<int32_t>(std::clamp<int16_t>(offsetFromBase, 0, chamberWidth)) * segments;
+            const int16_t step = static_cast<int16_t>(scaled / chamberWidth);
+            if (step >= segments)
+                return profile[segments];
+            const int32_t remainder = scaled - static_cast<int32_t>(step) * chamberWidth;
+            return static_cast<int16_t>(profile[step]
+                                        + static_cast<int32_t>(profile[step + 1] - profile[step]) * remainder
+                                              / chamberWidth);
+        };
         paint(rect, [&](Arduino_GFX& output, Rect rect) {
             const auto drawStripTime = [&] {
-                if constexpr (displayWriteAlignment() == 2) {
-                    if (!time.empty())
-                        drawText(output, {static_cast<int16_t>(rect.x + (rect.w - 120) / 2), rect.y, 120, 28}, time, 3,
-                                 color(sandRole), TextAlign::Center);
-                }
+                if constexpr (displayWriteAlignment() == 2)
+                    drawText(output, timeText, color(sandRole), rect.x, rect.y);
             };
             const uint16_t ink = color(paused ? ui::themes::ColorRole::Muted : sandRole);
             const uint16_t outline = color(ui::themes::ColorRole::Foreground);
-            const int16_t inset = std::max<int16_t>(3, std::min(rect.w, rect.h) / 12);
             const int16_t left = static_cast<int16_t>(rect.x + inset);
             const int16_t right = static_cast<int16_t>(rect.x + rect.w - inset - 1);
             const int16_t top = static_cast<int16_t>(rect.y + inset);
@@ -906,11 +970,6 @@ namespace ui {
             const int16_t centerY = static_cast<int16_t>(top + (bottom - top) / 2);
 
             if (rect.w > rect.h) {
-                constexpr int16_t segments = 14;
-                const int16_t chamberWidth = std::max<int16_t>(1, static_cast<int16_t>(centerX - left));
-                const int16_t chamberHeight = std::max<int16_t>(3, static_cast<int16_t>((bottom - top) / 2));
-                const int16_t waist = std::max<int16_t>(2, chamberHeight / 14);
-                const int16_t capWidth = std::max<int16_t>(8, std::min<int16_t>(16, rect.h / 8));
                 const int16_t baseTop = static_cast<int16_t>(rect.y + 2);
                 const int16_t baseHeight = static_cast<int16_t>(rect.h - 4);
                 const uint16_t base = color(ui::themes::ColorRole::SurfaceActive);
@@ -923,85 +982,40 @@ namespace ui {
                 output.drawRoundRect(static_cast<int16_t>(right - capWidth / 2), baseTop, capWidth, baseHeight,
                                      capWidth / 2, outline);
 
-                std::array<int16_t, segments + 1> profile{};
-                for (int16_t step = 0; step <= segments; ++step) {
-                    const int16_t offsetFromBase = static_cast<int16_t>(chamberWidth * step / segments);
-                    int16_t curve = static_cast<int16_t>(offsetFromBase * 100 / chamberWidth);
-                    curve = static_cast<int16_t>(curve * curve / 100);
-                    curve = static_cast<int16_t>(curve * curve / 100);
-                    profile[step] = static_cast<int16_t>(chamberHeight - (chamberHeight - waist) * curve / 100);
-                }
-                const auto halfAt = [&](int16_t offsetFromBase) {
-                    const int32_t scaled =
-                        static_cast<int32_t>(std::clamp<int16_t>(offsetFromBase, 0, chamberWidth)) * segments;
-                    const int16_t step = static_cast<int16_t>(scaled / chamberWidth);
-                    if (step >= segments)
-                        return profile[segments];
-                    const int32_t remainder = scaled - static_cast<int32_t>(step) * chamberWidth;
-                    return static_cast<int16_t>(profile[step]
-                                                + static_cast<int32_t>(profile[step + 1] - profile[step]) * remainder
-                                                      / chamberWidth);
-                };
-
-                int16_t previousLeftX = left;
-                int16_t previousLeftHalf = chamberHeight;
-                int16_t previousRightX = right;
-                int16_t previousRightHalf = chamberHeight;
-                for (int16_t step = 1; step <= segments; ++step) {
-                    const int16_t offset = static_cast<int16_t>(chamberWidth * step / segments);
-                    const int16_t leftX = static_cast<int16_t>(left + offset);
-                    const int16_t rightX = static_cast<int16_t>(right - offset);
-                    const int16_t leftHalf = profile[step];
-                    const int16_t rightHalf = leftHalf;
+                for (const auto& segment: outlineSegments) {
+                    const int16_t x0 = rect.x + segment[0], y0 = rect.y + segment[1];
+                    const int16_t x1 = rect.x + segment[2], y1 = rect.y + segment[3];
+                    // Reject whole segments without changing Bresenham endpoints or thick-edge pixels.
+                    if (std::max(x0, x1) < 0 || std::min(x0, x1) >= output.width() || std::max(y0, y1) + 1 < 0
+                        || std::min(y0, y1) - 1 >= output.height())
+                        continue;
                     for (int16_t thickness = -1; thickness <= 1; ++thickness) {
-                        output.drawLine(previousLeftX, static_cast<int16_t>(centerY - previousLeftHalf + thickness),
-                                        leftX, static_cast<int16_t>(centerY - leftHalf + thickness), outline);
-                        output.drawLine(previousLeftX, static_cast<int16_t>(centerY + previousLeftHalf + thickness),
-                                        leftX, static_cast<int16_t>(centerY + leftHalf + thickness), outline);
-                        output.drawLine(previousRightX, static_cast<int16_t>(centerY - previousRightHalf + thickness),
-                                        rightX, static_cast<int16_t>(centerY - rightHalf + thickness), outline);
-                        output.drawLine(previousRightX, static_cast<int16_t>(centerY + previousRightHalf + thickness),
-                                        rightX, static_cast<int16_t>(centerY + rightHalf + thickness), outline);
+                        output.drawLine(x0, static_cast<int16_t>(y0 + thickness), x1,
+                                        static_cast<int16_t>(y1 + thickness), outline);
                     }
-                    previousLeftX = leftX;
-                    previousLeftHalf = leftHalf;
-                    previousRightX = rightX;
-                    previousRightHalf = rightHalf;
                 }
-
-                const int16_t pileWidth = static_cast<int16_t>(chamberWidth * 65 / 100);
-                const uint32_t sourceTarget = static_cast<uint32_t>(1000 - progress) * pileWidth * pileWidth;
-                int16_t sourceColumns = 0;
-                while (sourceColumns < pileWidth) {
-                    const uint32_t next = static_cast<uint32_t>(sourceColumns + 1);
-                    if (next * next * 1000U > sourceTarget)
-                        break;
-                    ++sourceColumns;
-                }
-                const int16_t receivedColumns =
-                    static_cast<int16_t>((static_cast<uint32_t>(pileWidth) * progress + 999U) / 1000U);
                 const int16_t leftGlassEdge = static_cast<int16_t>(left + capWidth / 2 + 2);
                 const int16_t rightGlassEdge = static_cast<int16_t>(right - capWidth / 2 - 2);
                 for (int16_t column = 1; column <= sourceColumns; ++column) {
-                    const int16_t half = halfAt(static_cast<int16_t>(chamberWidth - column));
                     const int16_t x =
                         reversed ? static_cast<int16_t>(centerX + column) : static_cast<int16_t>(centerX - column);
+                    if (x < 0 || x >= output.width())
+                        continue;
+                    const int16_t half = halfAt(static_cast<int16_t>(chamberWidth - column));
                     output.drawFastVLine(x, static_cast<int16_t>(centerY - half + 3),
                                          std::max<int16_t>(1, static_cast<int16_t>(half * 2 - 5)), ink);
                 }
                 const int16_t receivedBaseHalf = receivedColumns == 0 ? 0 : chamberHeight;
-                const int16_t plateauColumns =
-                    receivedColumns == 0 ? 0 : std::max<int16_t>(1, static_cast<int16_t>(receivedColumns / 6));
-                const int16_t slopeColumns =
-                    std::max<int16_t>(1, static_cast<int16_t>(receivedColumns - plateauColumns));
                 for (int16_t column = 1; column <= receivedColumns; ++column) {
+                    const int16_t x = reversed ? static_cast<int16_t>(leftGlassEdge + column)
+                                               : static_cast<int16_t>(rightGlassEdge - column);
+                    if (x < 0 || x >= output.width())
+                        continue;
                     const int16_t pileHalf =
                         column <= plateauColumns
                             ? receivedBaseHalf
                             : static_cast<int16_t>(receivedBaseHalf * (receivedColumns - column) / slopeColumns);
                     const int16_t half = std::min(halfAt(column), pileHalf);
-                    const int16_t x = reversed ? static_cast<int16_t>(leftGlassEdge + column)
-                                               : static_cast<int16_t>(rightGlassEdge - column);
                     output.drawFastVLine(x, static_cast<int16_t>(centerY - half + 3),
                                          std::max<int16_t>(1, static_cast<int16_t>(half * 2 - 5)), ink);
                 }
@@ -1065,8 +1079,8 @@ namespace ui {
             drawTime();
     }
 
-    bool Context::redraw(Rect rect, uint32_t state) {
-        return claim(Kind::Custom, rect, state).changed;
+    bool Context::redraw(Rect rect, uint32_t state, bool opaque) {
+        return claim(opaque ? Kind::Opaque : Kind::Custom, rect, state).changed;
     }
 
     uint16_t Context::color(ui::themes::ColorRole role) const {
@@ -1143,25 +1157,30 @@ namespace ui {
     void Context::drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align,
                            uint8_t maxLines, std::string_view textLocale) {
         rect = paintBounds(rect);
+        const auto layout = prepareText(rect, text, textSize, align, maxLines, textLocale);
         paint(rect, [&](Arduino_GFX& output, Rect translated) {
-            drawText(output, translated, text, textSize, textColor, align, maxLines, textLocale);
+            drawText(output, layout, textColor, translated.x - rect.x, translated.y - rect.y);
         });
     }
 
     void Context::portraitText(Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor, TextAlign align,
                                uint8_t maxLines, std::string_view textLocale) {
+        Rect destination{};
         if constexpr (displayWriteAlignment() == 2) {
-            const Rect destination = paintBounds(rotateClockwise(rect, height()));
+            destination = paintBounds(rotateClockwise(rect, height()));
             rect = {static_cast<int16_t>(height() - destination.y - destination.h), destination.x, destination.h,
                     destination.w};
+        }
+        const auto layout = prepareText(rect, text, textSize, align, maxLines, textLocale);
+        if constexpr (displayWriteAlignment() == 2) {
             paint(destination, [&](Arduino_GFX& output, Rect translated) {
                 PortraitGfx portrait{output, height(), width(), static_cast<int16_t>(translated.x - destination.x),
                                      static_cast<int16_t>(translated.y - destination.y)};
-                drawText(portrait, rect, text, textSize, textColor, align, maxLines, textLocale);
+                drawText(portrait, layout, textColor);
             });
         } else {
             PortraitGfx portrait{gfx_};
-            drawText(portrait, rect, text, textSize, textColor, align, maxLines, textLocale);
+            drawText(portrait, layout, textColor);
         }
     }
 
@@ -1170,30 +1189,32 @@ namespace ui {
         const int16_t lineHeight = textHeightFor(text, textSize);
         if (lineHeight <= 0)
             return;
-        const auto draw = [&](Arduino_GFX& output) {
-            std::string_view remainingText = text;
-            for (int16_t y = rect.y; !remainingText.empty() && y + lineHeight <= rect.y + rect.h;
-                 y = static_cast<int16_t>(y + lineHeight)) {
-                const char* glyph = remainingText.data();
-                const size_t remaining = remainingText.size();
-                uint32_t codepoint = 0;
-                Utf8Text::next(remainingText, codepoint);
-                drawText(output, {rect.x, y, rect.w, lineHeight}, {glyph, remaining - remainingText.size()}, textSize,
-                         textColor, TextAlign::Center, 1, textLocale);
-            }
-        };
+        Rect destination{};
         if constexpr (displayWriteAlignment() == 2) {
-            const Rect destination = paintBounds(rotateClockwise(rect, height()));
+            destination = paintBounds(rotateClockwise(rect, height()));
             rect = {static_cast<int16_t>(height() - destination.y - destination.h), destination.x, destination.h,
                     destination.w};
+        }
+        TextLayout layout;
+        layout.lines.reserve(std::min<size_t>(Utf8Text::count(text), std::max<int16_t>(0, rect.h) / lineHeight));
+        for (int16_t y = rect.y; !text.empty() && y + lineHeight <= rect.y + rect.h;
+             y = static_cast<int16_t>(y + lineHeight)) {
+            const char* glyph = text.data();
+            const size_t remaining = text.size();
+            uint32_t codepoint = 0;
+            Utf8Text::next(text, codepoint);
+            appendText(layout, {rect.x, y, rect.w, lineHeight}, {glyph, remaining - text.size()}, textSize,
+                       TextAlign::Center, 1, textLocale);
+        }
+        if constexpr (displayWriteAlignment() == 2) {
             paint(destination, [&](Arduino_GFX& output, Rect translated) {
                 PortraitGfx portrait{output, height(), width(), static_cast<int16_t>(translated.x - destination.x),
                                      static_cast<int16_t>(translated.y - destination.y)};
-                draw(portrait);
+                drawText(portrait, layout, textColor);
             });
         } else {
             PortraitGfx portrait{gfx_};
-            draw(portrait);
+            drawText(portrait, layout, textColor);
         }
     }
 
@@ -1201,26 +1222,28 @@ namespace ui {
                                   bool showIcon) {
         if (!showIcon && labelText.empty())
             return;
-        const auto draw = [&](Arduino_GFX& output) {
-            constexpr int16_t iconWidth = 29;
-            constexpr int16_t iconHeight = 13;
-            constexpr int16_t labelGap = 5;
-            const int16_t iconAreaWidth = showIcon ? iconWidth + labelGap : 0;
-            const uint16_t ink = color(ui::themes::ColorRole::Muted);
-            const uint16_t surface = color(ui::themes::ColorRole::Background);
-            if (showIcon) {
-                const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
-                drawBatteryIcon(output, {rect.x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
-            }
-            drawText(output,
-                     {static_cast<int16_t>(rect.x + iconAreaWidth), rect.y,
-                      static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconAreaWidth)), rect.h},
-                     labelText, 2, ink, TextAlign::Left, 1, {});
-        };
+        Rect destination{};
         if constexpr (displayWriteAlignment() == 2) {
-            const Rect destination = paintBounds(rotateClockwise(rect, height()));
+            destination = paintBounds(rotateClockwise(rect, height()));
             rect = {static_cast<int16_t>(height() - destination.y - destination.h), destination.x, destination.h,
                     destination.w};
+        }
+        constexpr int16_t iconWidth = 29;
+        constexpr int16_t iconHeight = 13;
+        constexpr int16_t labelGap = 5;
+        const int16_t iconAreaWidth = showIcon ? iconWidth + labelGap : 0;
+        const uint16_t ink = color(ui::themes::ColorRole::Muted);
+        const uint16_t surface = color(ui::themes::ColorRole::Background);
+        const int16_t iconY = static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - iconHeight) / 2));
+        const auto label = prepareText({static_cast<int16_t>(rect.x + iconAreaWidth), rect.y,
+                                        static_cast<int16_t>(std::max<int16_t>(0, rect.w - iconAreaWidth)), rect.h},
+                                       labelText, 2, TextAlign::Left);
+        const auto draw = [&](Arduino_GFX& output) {
+            if (showIcon)
+                drawBatteryIcon(output, {rect.x, iconY, iconWidth, iconHeight}, percent, charging, ink, surface);
+            drawText(output, label, ink);
+        };
+        if constexpr (displayWriteAlignment() == 2) {
             paint(destination, [&](Arduino_GFX& output, Rect translated) {
                 PortraitGfx portrait{output, height(), width(), static_cast<int16_t>(translated.x - destination.x),
                                      static_cast<int16_t>(translated.y - destination.y)};
@@ -1232,9 +1255,19 @@ namespace ui {
         }
     }
 
-    void Context::drawText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize, uint16_t textColor,
-                           TextAlign align, uint8_t maxLines, std::string_view textLocale) {
-        if (rect.w <= 0 || rect.h <= 0)
+    TextLayout Context::prepareText(Rect rect, std::string_view text, uint8_t textSize, TextAlign align,
+                                    uint8_t maxLines, std::string_view textLocale) {
+        TextLayout layout;
+        if (rect.w <= 0 || rect.h <= 0 || text.empty())
+            return layout;
+        layout.lines.reserve(std::min<uint8_t>(maxLines, 2));
+        appendText(layout, rect, text, textSize, align, maxLines, textLocale);
+        return layout;
+    }
+
+    void Context::appendText(TextLayout& layout, Rect rect, std::string_view text, uint8_t textSize, TextAlign align,
+                             uint8_t maxLines, std::string_view textLocale) {
+        if (rect.w <= 0 || rect.h <= 0 || text.empty())
             return;
         const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
         const bool externalFont = assets != nullptr;
@@ -1252,11 +1285,11 @@ namespace ui {
         const size_t capacity = static_cast<size_t>(std::max<int16_t>(0, rect.w) / (cellWidth * size));
         if (capacity == 0)
             return;
-        output.setFont(externalFont ? assets->font.data() : u8g2_font_rsvpnano_ui_6x9_tf);
-        output.setUTF8Print(true);
-        output.setTextSize(size);
-        output.setTextWrap(false);
-        output.setTextColor(textColor);
+        const uint8_t* font = externalFont ? assets->font.data() : u8g2_font_rsvpnano_ui_6x9_tf;
+        gfx_.setFont(font);
+        gfx_.setUTF8Print(true);
+        gfx_.setTextSize(size);
+        gfx_.setTextWrap(false);
         const bool rightToLeft = (externalFont ? assets->direction : languageAssets_.direction) == TextDirection::rtl;
         if (align == TextAlign::Start)
             align = rightToLeft ? TextAlign::Right : TextAlign::Left;
@@ -1278,7 +1311,7 @@ namespace ui {
         const int16_t lineHeight = static_cast<int16_t>(fontHeight * size);
         const int16_t firstY =
             static_cast<int16_t>(rect.y + std::max<int16_t>(0, (rect.h - lineHeight * lineCount) / 2));
-        const auto drawLine = [&](std::string_view line, size_t lineCodepoints, int16_t y) {
+        const auto appendLine = [&](std::string_view line, size_t lineCodepoints, int16_t y) {
             const bool truncated = lineCodepoints > capacity;
             const size_t length = truncated && capacity > 3 ? Utf8Text::prefixBytes(line, capacity - 3)
                                 : truncated                 ? 0
@@ -1290,10 +1323,6 @@ namespace ui {
             if (bidiReady)
                 BidiText::visualCodepoints(visible, bidiLine_, bidiCodepoints_);
 
-            const auto drawBytes = [&](std::string_view value) {
-                for (const char byte: value)
-                    output.write(static_cast<uint8_t>(byte));
-            };
             const auto appendVisual = [&](std::string& output) {
                 if (!bidiReady) {
                     output.append(visible);
@@ -1316,19 +1345,44 @@ namespace ui {
             int16_t inkY = 0;
             uint16_t inkWidth = 0;
             uint16_t inkHeight = 0;
-            output.getTextBounds(rendered.c_str(), 0, 0, &inkX, &inkY, &inkWidth, &inkHeight);
+            gfx_.getTextBounds(rendered.c_str(), 0, 0, &inkX, &inkY, &inkWidth, &inkHeight);
             const int16_t left = static_cast<int16_t>(rect.x - inkX);
             const int16_t x = align == TextAlign::Center
                                 ? std::max<int16_t>(left, static_cast<int16_t>(rect.x + (rect.w - inkWidth) / 2 - inkX))
                             : align == TextAlign::Right
                                 ? std::max<int16_t>(left, static_cast<int16_t>(rect.x + rect.w - inkWidth - inkX))
                                 : left;
-            output.setCursor(x, static_cast<int16_t>(y + lineHeight - size));
-            drawBytes(rendered);
+            const int16_t baseline = static_cast<int16_t>(y + lineHeight - size);
+            // A literal newline returns to the viewport edge, not this line's cursor origin.
+            const Rect ink = rendered.find('\n') == std::string::npos
+                               ? Rect{static_cast<int16_t>(x + inkX), static_cast<int16_t>(baseline + inkY),
+                                      static_cast<int16_t>(inkWidth), static_cast<int16_t>(inkHeight)}
+                               : Rect{};
+            layout.lines.push_back({std::move(rendered), font, size, x, baseline, ink});
         };
-        drawLine(first, second.empty() ? codepoints : Utf8Text::count(first), firstY);
+        appendLine(first, second.empty() ? codepoints : Utf8Text::count(first), firstY);
         if (!second.empty())
-            drawLine(second, Utf8Text::count(second), static_cast<int16_t>(firstY + lineHeight));
+            appendLine(second, Utf8Text::count(second), static_cast<int16_t>(firstY + lineHeight));
+    }
+
+    void Context::drawText(Arduino_GFX& output, const TextLayout& layout, uint16_t textColor, int16_t dx, int16_t dy) {
+        if (layout.lines.empty())
+            return;
+        output.setUTF8Print(true);
+        output.setTextWrap(false);
+        output.setTextColor(textColor);
+        for (const auto& line: layout.lines) {
+            const Rect ink{static_cast<int16_t>(line.ink.x + dx), static_cast<int16_t>(line.ink.y + dy), line.ink.w,
+                           line.ink.h};
+            const Rect visible = intersection(ink, {0, 0, output.width(), output.height()});
+            if (line.ink.w > 0 && line.ink.h > 0 && (visible.w <= 0 || visible.h <= 0))
+                continue;
+            output.setFont(line.font);
+            output.setTextSize(line.size);
+            output.setCursor(static_cast<int16_t>(line.x + dx), static_cast<int16_t>(line.y + dy));
+            for (const char byte: line.text)
+                output.write(static_cast<uint8_t>(byte));
+        }
         drew_ = true;
     }
 
@@ -1344,7 +1398,12 @@ namespace ui {
         return std::clamp(value, minimum, maximum);
     }
 
-    bool Context::tapped(size_t slot, Rect rect) {
+    bool Context::tapped(size_t slot, Rect rect, bool enabled) {
+        if (!enabled) {
+            if (capturedSlot_ == slot)
+                capturedSlot_ = kSlotCapacity;
+            return false;
+        }
         const Touch* event = touch();
         if (event == nullptr || slot >= kSlotCapacity)
             return false;

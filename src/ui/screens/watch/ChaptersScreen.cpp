@@ -24,23 +24,21 @@ namespace screens {
         }
         centeredIndex_ = std::min(centeredIndex_, chapters.size() - 1);
         const int delta = carouselGesture_.update(ui.touch(), area) * (settings.chapterScrollReversed ? -1 : 1);
-        if (delta) {
+        if (delta)
             centeredIndex_ = ui::rotateIndex(centeredIndex_, chapters.size(), delta);
-            ui.invalidate();
-        }
         const auto cards = watch::carousel(area);
         const auto previous = ui::rotateIndex(centeredIndex_, chapters.size(), -1);
         const auto next = ui::rotateIndex(centeredIndex_, chapters.size(), 1);
-        const auto title = [&](size_t index) {
-            return chapters[index].title.empty()
-                     ? std::string{ui.text(UiText::Chapter)} + " " + std::to_string(index + 1)
-                     : chapters[index].title;
+        std::string fallbackTitle;
+        const auto title = [&](size_t index) -> std::string_view {
+            if (!chapters[index].title.empty())
+                return chapters[index].title;
+            fallbackTitle = std::string{ui.text(UiText::Chapter)} + " " + std::to_string(index + 1);
+            return fallbackTitle;
         };
         if (ui.card(cards[0], title(previous), "<", 2, ui::themes::Accent, ui::Icon::None,
-                    chapters.size() > 1 && !delta, 165)) {
+                    chapters.size() > 1 && !delta, 165))
             centeredIndex_ = previous;
-            ui.invalidate();
-        }
         if (ui.card(cards[1], title(centeredIndex_),
                     std::to_string(centeredIndex_ + 1) + "/" + std::to_string(chapters.size()), watch::textSize(ui),
                     ui::themes::Accent, ui::Icon::None, !delta)) {
@@ -48,10 +46,8 @@ namespace screens {
             return Action::Resume;
         }
         if (ui.card(cards[2], title(next), ">", 2, ui::themes::Accent, ui::Icon::None, chapters.size() > 1 && !delta,
-                    165)) {
+                    165))
             centeredIndex_ = next;
-            ui.invalidate();
-        }
         return Action::None;
     }
 } // namespace screens
