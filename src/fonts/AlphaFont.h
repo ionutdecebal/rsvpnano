@@ -325,7 +325,13 @@ namespace ui::fonts {
         static_assert(MaxStripRows > 0);
 
     public:
-        explicit AlphaTextRenderer(Arduino_GFX& output) : output_(output) {}
+        explicit AlphaTextRenderer(Arduino_GFX& output) : output_(&output) {}
+
+        Arduino_GFX& setOutput(Arduino_GFX& output) {
+            Arduino_GFX& previous = *output_;
+            output_ = &output;
+            return previous;
+        }
 
         AlphaTextRenderer(const AlphaTextRenderer&) = delete;
         AlphaTextRenderer& operator=(const AlphaTextRenderer&) = delete;
@@ -414,7 +420,7 @@ namespace ui::fonts {
                     x = static_cast<int16_t>(x + advance + (text.empty() ? 0 : tracking));
                     continue;
                 }
-                if (x - margin >= output_.width())
+                if (x - margin >= output_->width())
                     break;
 
                 std::string_view batch = text;
@@ -425,7 +431,7 @@ namespace ui::fonts {
                     Utf8Text::next(batch, codepoint);
                     bytes += before - batch.size();
                     batchX = static_cast<int16_t>(batchX + glyphAdvance(codepoint) + (batch.empty() ? 0 : tracking));
-                    if (batchX - margin >= output_.width())
+                    if (batchX - margin >= output_->width())
                         break;
                 }
                 const std::string_view visible{text.data(), bytes};
@@ -454,7 +460,7 @@ namespace ui::fonts {
                 static_cast<int16_t>(centerY - (sideways ? metrics.height : metrics.width) / 2);
             const int16_t drawW = sideways ? metrics.width : metrics.height;
             const int16_t drawH = sideways ? metrics.height : metrics.width;
-            if (drawX >= output_.width() || drawX + drawW <= 0 || drawY >= output_.height() || drawY + drawH <= 0)
+            if (drawX >= output_->width() || drawX + drawW <= 0 || drawY >= output_->height() || drawY + drawH <= 0)
                 return advance;
             if (sideways)
                 drawGlyph(metrics, drawX, drawY);
@@ -544,6 +550,23 @@ namespace ui::fonts {
 
         uint8_t pixelsPerEm() const {
             return font_ == nullptr ? 0 : font_->pixelsPerEm;
+        }
+
+        uint8_t verticalInkHeight(std::string_view text) const {
+            uint8_t height = 0;
+            uint32_t codepoint = 0;
+            while (Utf8Text::next(text, codepoint)) {
+                uint16_t glyphIndex = 0;
+                if (!findGlyphIndex(codepoint, glyphIndex))
+                    continue;
+                bool sideways = false;
+                const AlphaGlyph* glyph = glyphAt(verticalGlyphIndex(glyphIndex, codepoint, sideways));
+                if (glyph != nullptr) {
+                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    height = std::max(height, static_cast<uint8_t>(sideways ? metrics.height : metrics.width));
+                }
+            }
+            return height;
         }
 
         bool nominalGlyph(uint32_t codepoint, uint32_t& glyphId) const {
@@ -646,14 +669,14 @@ namespace ui::fonts {
 
         int16_t drawU8g2(std::string_view text, size_t codepoints, const U8g2Style& style, int16_t x,
                          int16_t baseline) {
-            output_.setFont(style.font);
-            output_.setUTF8Print(true);
-            output_.setTextSize(style.scale);
-            output_.setTextWrap(false);
-            output_.setTextColor(fg_, bg_);
-            output_.setCursor(x, baseline);
+            output_->setFont(style.font);
+            output_->setUTF8Print(true);
+            output_->setTextSize(style.scale);
+            output_->setTextWrap(false);
+            output_->setTextColor(fg_, bg_);
+            output_->setCursor(x, baseline);
             for (const unsigned char byte: text)
-                output_.write(byte);
+                output_->write(byte);
             return static_cast<int16_t>(codepoints * style.cellWidth * style.scale);
         }
 
@@ -889,8 +912,8 @@ namespace ui::fonts {
         bool drawToStrips(const Bounds& bounds, Composite&& composite) {
             if (font_ == nullptr || bounds.w == 0 || bounds.h == 0)
                 return false;
-            const int16_t displayW = output_.width();
-            const int16_t displayH = output_.height();
+            const int16_t displayW = output_->width();
+            const int16_t displayH = output_->height();
             const int16_t boundsX2 = static_cast<int16_t>(bounds.x1 + bounds.w);
             const int16_t boundsY2 = static_cast<int16_t>(bounds.y1 + bounds.h);
             const int16_t visibleX0 = std::max<int16_t>(bounds.x1, 0);
@@ -1101,7 +1124,7 @@ namespace ui::fonts {
 
                 // The strip already contains the union of every overlapping glyph. Sending its
                 // opaque span once avoids a display transaction for every disconnected ink run.
-                output_.draw16bitRGBBitmap(static_cast<int16_t>(stripX + first), static_cast<int16_t>(stripY + row),
+                output_->draw16bitRGBBitmap(static_cast<int16_t>(stripX + first), static_cast<int16_t>(stripY + row),
                                            strip_[row] + first, static_cast<int16_t>(last - first), 1);
             }
         }
@@ -1112,8 +1135,8 @@ namespace ui::fonts {
                 return;
             }
 
-            const int16_t displayW = output_.width();
-            const int16_t displayH = output_.height();
+            const int16_t displayW = output_->width();
+            const int16_t displayH = output_->height();
             for (uint8_t row = 0; row < glyph.height; ++row) {
                 drawPackedRow(glyph, row, x, static_cast<int16_t>(y + row), displayW, displayH);
             }
@@ -1136,7 +1159,7 @@ namespace ui::fonts {
                         rotated[static_cast<size_t>(sourceEnd - sourceX - 1) * glyph.height + sourceY] =
                             blend_[coverageAt(packedRow, sourceX)];
                 }
-                output_.draw16bitRGBBitmap(x, static_cast<int16_t>(y + glyph.width - sourceEnd), rotated,
+                output_->draw16bitRGBBitmap(x, static_cast<int16_t>(y + glyph.width - sourceEnd), rotated,
                                            glyph.height, rows);
                 sourceStart = sourceEnd;
             }
@@ -1175,7 +1198,7 @@ namespace ui::fonts {
                     return;
                 }
                 renderSpan(packedRow, clippedX0, spanWidth, strip_[0]);
-                output_.draw16bitRGBBitmap(static_cast<int16_t>(dstX + clippedX0), dstY, strip_[0], spanWidth, 1);
+                output_->draw16bitRGBBitmap(static_cast<int16_t>(dstX + clippedX0), dstY, strip_[0], spanWidth, 1);
             });
         }
 
@@ -1445,7 +1468,7 @@ namespace ui::fonts {
                         const AlphaGlyph metrics = readGlyph(*glyph);
                         const int16_t glyphX = static_cast<int16_t>(cursorX + metrics.xOffset);
                         const int16_t glyphY = static_cast<int16_t>(baseline + metrics.yOffset);
-                        if (glyphX < output_.width() && glyphX + metrics.width > 0 && glyphY < output_.height()
+                        if (glyphX < output_->width() && glyphX + metrics.width > 0 && glyphY < output_->height()
                             && glyphY + metrics.height > 0 && !appendPreparedBitmap(metrics, used))
                             return false;
                         cursorX = static_cast<int16_t>(cursorX + metrics.xAdvance);
@@ -1468,7 +1491,7 @@ namespace ui::fonts {
                         const AlphaGlyph metrics = readGlyph(*glyph);
                         const int16_t glyphX = static_cast<int16_t>(cursorX + positioned.xOffset + metrics.xOffset);
                         const int16_t glyphY = static_cast<int16_t>(baseline - positioned.yOffset + metrics.yOffset);
-                        if (glyphX < output_.width() && glyphX + metrics.width > 0 && glyphY < output_.height()
+                        if (glyphX < output_->width() && glyphX + metrics.width > 0 && glyphY < output_->height()
                             && glyphY + metrics.height > 0 && !appendPreparedBitmap(metrics, used))
                             return false;
                     }
@@ -1680,7 +1703,7 @@ namespace ui::fonts {
             return static_cast<uint8_t>((bg * inv + fg * coverage + maxCoverage / 2) / maxCoverage);
         }
 
-        Arduino_GFX& output_;
+        Arduino_GFX* output_;
         const AlphaFont* font_ = nullptr;
         uint32_t fontGeneration_ = 0;
         mutable std::array<FileGlyphCacheEntry, 32> fileGlyphCache_{};

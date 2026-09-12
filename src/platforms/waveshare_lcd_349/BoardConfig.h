@@ -3,6 +3,7 @@
 #include "platforms/waveshare_lcd_349/WaveshareLcd349.h"
 
 namespace Board::Config {
+    constexpr int DISPLAY_WRITE_ALIGNMENT = 1;
 
     constexpr const char* BOARD_ID = WaveshareLcd349::Revision::kBoardId;
     constexpr const char* BOARD_LABEL = WaveshareLcd349::Revision::kBoardLabel;

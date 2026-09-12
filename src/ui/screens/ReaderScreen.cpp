@@ -61,7 +61,8 @@ namespace screens {
     } // namespace
 
     ReaderScreen::ReaderScreen(Arduino_GFX& gfx, settings::ReadingSettings& settings) :
-            gfx_(gfx),
+            width_(gfx.width()),
+            height_(gfx.height()),
             text_(gfx),
             settings_(settings),
             face_(fonts.loadFace(0, 0)) {}
@@ -91,9 +92,8 @@ namespace screens {
         BidiText::Line{}.swap(rsvpLine_);
         BidiText::Line{}.swap(phantomLine_);
         std::vector<BidiText::Codepoint>{}.swap(rsvpVisual_);
-        std::vector<BidiText::Codepoint>{}.swap(phantomVisual_);
         std::vector<ui::fonts::PositionedGlyph>{}.swap(rsvpGlyphs_);
-        std::vector<ui::fonts::PositionedGlyph>{}.swap(phantomGlyphs_);
+        phantoms_ = {};
 
         loadedWordIndex_ = SIZE_MAX;
         loadedFamilyIndex_ = SIZE_MAX;
@@ -436,6 +436,8 @@ namespace screens {
 
     void ReaderScreen::draw(ui::Context& ui, const StorageManager& storage, const Board::Power::BatteryState& battery,
                             uint32_t nowMs) {
+        width_ = ui.width();
+        height_ = ui.height();
         if (touchIntent_ == TouchIntent::Scrub || touchIntent_ == TouchIntent::Paragraph) {
             const auto typeface = [this](size_t index) {
                 return pageTypeface(index);
@@ -482,7 +484,8 @@ namespace screens {
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
         const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
 
-        const ui::Rect readingArea = readerLayout::readingArea(ui.width(), ui.height(), vertical && pageView);
+        const ui::Rect readingArea =
+            ui.paintBounds(readerLayout::readingArea(ui.width(), ui.height(), vertical));
         if (pageView) {
             const std::string overlay =
                 vertical || !overlayVisible ? "" : std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM");
@@ -494,7 +497,6 @@ namespace screens {
         } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings))) {
             const std::string overlay =
                 overlayVisible ? std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM") : "";
-            Arduino_GFX& gfx = ui.gfx();
             background_ = ui.color(ui::themes::ColorRole::Background);
             activateFace(face_);
             text_.setTextColor(ui.color(ui::themes::ColorRole::Foreground),
@@ -626,8 +628,6 @@ namespace screens {
             const int16_t inkTop = face_.raster.get().wordInkTop;
             const int16_t inkBottom = face_.raster.get().wordInkBottom;
             const int16_t baseline = static_cast<int16_t>(((ui.height() - (inkBottom - inkTop + 1)) / 2) - inkTop);
-            drawGuides(ui, anchor, baseline);
-
             if (vertical) {
                 if (shaped)
                     text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
@@ -635,64 +635,80 @@ namespace screens {
             } else if (!shaped) {
                 text_.prepare(word);
             }
-            if (shaped) {
-                int16_t cursor = x;
-                size_t first = 0;
-                while (first < rsvpGlyphs_.size()) {
-                    const bool highlighted =
-                        typography_.focusHighlight && rsvpGlyphs_[first].cluster == shapedFocusCluster;
-                    size_t last = first + 1;
-                    while (last < rsvpGlyphs_.size()
-                           && (typography_.focusHighlight && rsvpGlyphs_[last].cluster == shapedFocusCluster)
-                                  == highlighted)
-                        ++last;
-                    text_.setTextColor(ui.color(highlighted ? ui::themes::ColorRole::Accent
-                                                            : ui::themes::ColorRole::Foreground),
-                                       background_);
-                    if (vertical) {
-                        for (size_t index = first; index < last; ++index) {
-                            const auto& glyph = rsvpGlyphs_[index];
-                            cursor = static_cast<int16_t>(cursor
-                                                          + text_.drawVerticalGlyph(glyph,
-                                                                                    codepointAt(rsvpParagraph_.text,
-                                                                                                glyph.cluster),
-                                                                                    cursor, ui.height() / 2));
-                        }
-                    } else {
-                        cursor =
-                            static_cast<int16_t>(cursor
-                                                 + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first),
-                                                                    cursor, baseline));
-                    }
-                    first = last;
-                }
-            } else if (bidi)
-                drawWord(rsvpVisual_, x, baseline, wordOffset, focus, vertical, ui);
-            else
-                drawWord(word, x, baseline, focus, vertical, ui);
             const bool rightToLeft = bidi && rsvpBidi_.rightToLeft();
-            if (!before.empty())
-                drawPhantom(before, rightToLeft,
-                            rightToLeft ? static_cast<int16_t>(x + wordWidth + 24) : static_cast<int16_t>(x - 24),
-                            !rightToLeft, baseline, vertical, ui);
-            if (!after.empty())
-                drawPhantom(after, rightToLeft,
-                            rightToLeft ? static_cast<int16_t>(x - 24) : static_cast<int16_t>(x + wordWidth + 24),
-                            rightToLeft, baseline, vertical, ui);
+            preparePhantom(phantoms_[0], before, rightToLeft);
+            preparePhantom(phantoms_[1], after, rightToLeft);
+            ui.paint(readingArea, [&](Arduino_GFX& gfx, ui::Rect translated) {
+                Arduino_GFX& previousOutput = text_.setOutput(gfx);
+                const int16_t dx = static_cast<int16_t>(translated.x - readingArea.x);
+                const int16_t dy = static_cast<int16_t>(translated.y - readingArea.y);
+                const int16_t wordX = static_cast<int16_t>(x + dx);
+                const int16_t wordBaseline = static_cast<int16_t>(baseline + dy);
+                const int16_t centerY = static_cast<int16_t>(ui.height() / 2 + dy);
+                drawGuides(ui, gfx, static_cast<int16_t>(anchor + dx), wordBaseline);
+                if (shaped) {
+                    int16_t cursor = wordX;
+                    size_t first = 0;
+                    while (first < rsvpGlyphs_.size()) {
+                        const bool highlighted =
+                            typography_.focusHighlight && rsvpGlyphs_[first].cluster == shapedFocusCluster;
+                        size_t last = first + 1;
+                        while (last < rsvpGlyphs_.size()
+                               && (typography_.focusHighlight && rsvpGlyphs_[last].cluster == shapedFocusCluster)
+                                      == highlighted)
+                            ++last;
+                        text_.setTextColor(ui.color(highlighted ? ui::themes::ColorRole::Accent
+                                                                : ui::themes::ColorRole::Foreground),
+                                           background_);
+                        if (vertical) {
+                            for (size_t index = first; index < last; ++index) {
+                                const auto& glyph = rsvpGlyphs_[index];
+                                cursor = static_cast<int16_t>(cursor
+                                                              + text_.drawVerticalGlyph(glyph,
+                                                                                        codepointAt(rsvpParagraph_.text,
+                                                                                                    glyph.cluster),
+                                                                                        cursor, centerY));
+                            }
+                        } else {
+                            cursor =
+                                static_cast<int16_t>(cursor
+                                                     + text_.drawGlyphs(std::span{rsvpGlyphs_}.subspan(first, last - first),
+                                                                        cursor, wordBaseline));
+                        }
+                        first = last;
+                    }
+                } else if (bidi)
+                    drawWord(rsvpVisual_, wordX, wordBaseline, wordOffset, centerY, focus, vertical, ui);
+                else
+                    drawWord(word, wordX, wordBaseline, centerY, focus, vertical, ui);
+                if (!before.empty())
+                    drawPhantom(phantoms_[0], before,
+                                rightToLeft ? static_cast<int16_t>(wordX + wordWidth + 24)
+                                            : static_cast<int16_t>(wordX - 24),
+                                !rightToLeft, wordBaseline, centerY, vertical, ui);
+                if (!after.empty())
+                    drawPhantom(phantoms_[1], after,
+                                rightToLeft ? static_cast<int16_t>(wordX - 24)
+                                            : static_cast<int16_t>(wordX + wordWidth + 24),
+                                rightToLeft, wordBaseline, centerY, vertical, ui);
 
-            if (!vertical) {
-                readerLayout::drawArrows(ui, settings, reading, inkBottom - inkTop + 13);
-                gfx.setFont(static_cast<const GFXfont*>(nullptr));
-                gfx.setTextWrap(false);
-                gfx.setTextSize(2);
-                gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
-                if (!overlay.empty()) {
-                    gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
-                    gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2),
-                                  static_cast<int16_t>(ui.height() - 56));
-                    gfx.print(overlay.c_str());
+                if (!vertical) {
+                    readerLayout::drawArrows(ui, gfx, settings, reading, inkBottom - inkTop + 13, dx, dy);
+                    gfx.setFont(static_cast<const GFXfont*>(nullptr));
+                    gfx.setTextWrap(false);
+                    gfx.setTextSize(2);
+                    gfx.setTextColor(ui.color(ui::themes::ColorRole::Muted));
+                    if (!overlay.empty()) {
+                        gfx.setTextColor(ui.color(ui::themes::ColorRole::Accent));
+                        const int16_t overlayY = std::min<int16_t>(ui.height() - 56,
+                                                                  readingArea.y + readingArea.h - 16);
+                        gfx.setCursor(static_cast<int16_t>((ui.width() - overlay.size() * 12) / 2 + dx),
+                                      static_cast<int16_t>(overlayY + dy));
+                        gfx.print(overlay.c_str());
+                    }
                 }
-            }
+                text_.setOutput(previousOutput);
+            });
         }
 
         renderedWordIndex_ = pageView ? SIZE_MAX : session.state.wordIndex;
@@ -722,8 +738,8 @@ namespace screens {
 
     bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
         const ui::Rect rect = session.metadata.writingMode == WritingMode::verticalRl
-                                ? ui::rotateClockwise(portraitBatteryRect(), gfx_.height())
-                                : batteryRect(gfx_.width(), gfx_.height());
+                                ? ui::rotateClockwise(portraitBatteryRect(), height_)
+                                : batteryRect(width_, height_);
         return ui::contains(rect, touch.x, touch.y);
     }
 
@@ -738,19 +754,21 @@ namespace screens {
     bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
         if (session.metadata.writingMode == WritingMode::verticalRl) {
             const ui::Rect previous =
-                ui::rotateClockwise(portraitPreviousRect(gfx_.height(), gfx_.width(), settings_.leftHanded),
-                                    gfx_.height());
+                ui::rotateClockwise(portraitPreviousRect(height_, width_, settings_.leftHanded),
+                                    height_);
             return ui::contains(previous, x, y);
         }
-        if (ui::contains(batteryRect(gfx_.width(), gfx_.height()), x, y))
+        if (ui::contains(batteryRect(width_, height_), x, y))
             return false;
         return settings_.leftHanded
                  ? x <= previousSentenceTapWidth()
-                 : x >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.width() - previousSentenceTapWidth()));
+                 : x >= static_cast<uint16_t>(std::max<int16_t>(0, width_ - previousSentenceTapWidth()));
     }
 
     void ReaderScreen::handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
                                    settings::SettingsStore& settingsStore) {
+        width_ = ui.width();
+        height_ = ui.height();
         const ui::Touch* event = ui.touch();
         if (event == nullptr)
             return;
@@ -899,12 +917,12 @@ namespace screens {
         }
         const bool footerTapped =
             session.metadata.writingMode == WritingMode::verticalRl
-                ? ui::contains(ui::rotateClockwise(portraitFooterRect(gfx_.height()), gfx_.height()), touch.x, touch.y)
+                ? ui::contains(ui::rotateClockwise(portraitFooterRect(height_), height_), touch.x, touch.y)
                 : [&] {
-                      const uint16_t width = std::min<uint16_t>(220, static_cast<uint16_t>(gfx_.width() / 2));
-                      return touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, gfx_.height() - 40))
+                      const uint16_t width = std::min<uint16_t>(220, static_cast<uint16_t>(width_ / 2));
+                      return touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, height_ - 40))
                           && (settings_.leftHanded ? touch.x <= width
-                                                   : touch.x >= static_cast<uint16_t>(gfx_.width() - width));
+                                                   : touch.x >= static_cast<uint16_t>(width_ - width));
                   }();
         if (footerTapped) {
             settings_.footerMetric = settings::cycleEnum(settings_.footerMetric);
@@ -1018,7 +1036,7 @@ namespace screens {
     void ReaderScreen::browseParagraphs(uint16_t y, uint32_t nowMs) {
         const uint32_t elapsed = std::min<uint32_t>(nowMs - paragraphTickMs_, 100);
         paragraphTickMs_ = nowMs;
-        const int32_t rate = ui::centeredDragRate(y, 0, gfx_.height(), 28, kMaximumParagraphRate);
+        const int32_t rate = ui::centeredDragRate(y, 0, height_, 28, kMaximumParagraphRate);
         if (rate == 0) {
             paragraphRemainder_ = 0;
             return;
@@ -1124,18 +1142,20 @@ namespace screens {
         return advance;
     }
 
-    void ReaderScreen::drawPhantom(std::string_view value, bool rightToLeft, int16_t edge, bool extendsLeft,
-                                   int16_t baseline, bool vertical, ui::Context& ui) {
+    void ReaderScreen::preparePhantom(Phantom& phantom, std::string_view value, bool rightToLeft) {
+        phantom.visual.clear();
+        phantom.glyphs.clear();
+        phantom.width = 0;
+        phantom.shaped = false;
+        phantom.bidi = false;
         if (value.empty())
             return;
 
         phantomLine_.clear();
-        phantomVisual_.clear();
-        phantomGlyphs_.clear();
-        const bool bidi =
+        phantom.bidi =
             rightToLeft
             || (UnicodeText::scriptsIn(value) & (UnicodeText::ScriptHebrew | UnicodeText::ScriptArabic)) != 0;
-        if (bidi) {
+        if (phantom.bidi) {
             const TextDirection direction = rightToLeft ? TextDirection::rtl : TextDirection::ltr;
             if (!phantomBidi_.reset(value, direction) || !phantomBidi_.resolve({0, value.size()}, phantomLine_))
                 phantomLine_.assign(1, {0, value.size(), rightToLeft});
@@ -1143,50 +1163,55 @@ namespace screens {
             phantomLine_.assign(1, {0, value.size(), false});
         }
 
-        bool shaped = face_.shaper != nullptr;
+        phantom.shaped = face_.shaper != nullptr;
         int32_t width = 0;
-        if (shaped) {
+        if (phantom.shaped) {
             const std::string_view locale = session.metadata.localeAt(session.state.wordIndex);
             for (const BidiText::Run& run: phantomLine_) {
                 const auto result =
-                    face_.shaper->shape(value, run.offset, run.length, run.rightToLeft, locale, text_, phantomGlyphs_);
+                    face_.shaper->shape(value, run.offset, run.length, run.rightToLeft, locale, text_, phantom.glyphs);
                 if (!result) {
-                    shaped = false;
-                    phantomGlyphs_.clear();
+                    phantom.shaped = false;
+                    phantom.glyphs.clear();
                     break;
                 }
                 width += *result;
             }
         }
-        if (!shaped) {
-            if (bidi) {
-                BidiText::visualCodepoints(value, phantomLine_, phantomVisual_);
-                width = wordAdvance(phantomVisual_);
+        if (!phantom.shaped) {
+            if (phantom.bidi) {
+                BidiText::visualCodepoints(value, phantomLine_, phantom.visual);
+                width = wordAdvance(phantom.visual);
             } else {
                 width = text_.textAdvance(value, typography_.tracking);
             }
         }
 
+        phantom.width = static_cast<int16_t>(std::clamp<int32_t>(width, 0, INT16_MAX));
+    }
+
+    void ReaderScreen::drawPhantom(const Phantom& phantom, std::string_view value, int16_t edge, bool extendsLeft,
+                                   int16_t baseline, int16_t centerY, bool vertical, ui::Context& ui) {
         int16_t x = edge;
         if (extendsLeft)
-            x = static_cast<int16_t>(x - std::clamp<int32_t>(width, 0, INT16_MAX));
+            x = static_cast<int16_t>(x - phantom.width);
         text_.setTextColor(ui.blend(ui::themes::ColorRole::Foreground, 62), background_);
-        if (shaped) {
+        if (phantom.shaped) {
             if (vertical) {
-                for (const auto& glyph: phantomGlyphs_)
+                for (const auto& glyph: phantom.glyphs)
                     x = static_cast<int16_t>(x
                                              + text_.drawVerticalGlyph(glyph, codepointAt(value, glyph.cluster), x,
-                                                                       ui.height() / 2));
+                                                                       centerY));
             } else
-                text_.drawGlyphs(phantomGlyphs_, x, baseline);
-        } else if (bidi) {
+                text_.drawGlyphs(phantom.glyphs, x, baseline);
+        } else if (phantom.bidi) {
             uint32_t previous = 0;
             bool previousValid = false;
-            for (const BidiText::Codepoint& codepoint: phantomVisual_) {
+            for (const BidiText::Codepoint& codepoint: phantom.visual) {
                 if (previousValid && !codepoint.rightToLeft)
                     x = static_cast<int16_t>(x + text_.kerningAdjust(previous, codepoint.value));
                 x = static_cast<int16_t>(x
-                                         + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
+                                         + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, centerY)
                                                      : text_.drawCodepoint(codepoint.value, x, baseline))
                                          + typography_.tracking);
                 previous = codepoint.value;
@@ -1195,12 +1220,12 @@ namespace screens {
         } else if (!vertical) {
             text_.drawString(value, x, baseline, typography_.tracking);
         } else {
-            text_.drawVerticalString(value, x, ui.height() / 2, typography_.tracking);
+            text_.drawVerticalString(value, x, centerY, typography_.tracking);
         }
     }
 
-    void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int focus, bool vertical,
-                                ui::Context& ui) {
+    void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int16_t centerY, int focus,
+                                bool vertical, ui::Context& ui) {
         size_t offset = 0;
         while (!word.empty()) {
             const size_t bytes = word.size();
@@ -1211,7 +1236,7 @@ namespace screens {
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
             x = static_cast<int16_t>(x
-                                     + (vertical ? text_.drawVerticalCodepoint(codepoint, x, ui.height() / 2)
+                                     + (vertical ? text_.drawVerticalCodepoint(codepoint, x, centerY)
                                                  : text_.drawCodepoint(codepoint, x, baseline))
                                      + typography_.tracking);
             offset += bytes - word.size();
@@ -1219,7 +1244,7 @@ namespace screens {
     }
 
     void ReaderScreen::drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline,
-                                size_t wordOffset, int focus, bool vertical, ui::Context& ui) {
+                                size_t wordOffset, int16_t centerY, int focus, bool vertical, ui::Context& ui) {
         uint32_t previous = 0;
         bool previousValid = false;
         for (size_t index = 0; index < word.size(); ++index) {
@@ -1232,7 +1257,7 @@ namespace screens {
                                    : ui.color(ui::themes::ColorRole::Foreground),
                                ui.color(ui::themes::ColorRole::Background));
             x = static_cast<int16_t>(x
-                                     + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, ui.height() / 2)
+                                     + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, centerY)
                                                  : text_.drawCodepoint(codepoint.value, x, baseline))
                                      + (index + 1 < word.size() ? typography_.tracking : 0));
             previous = codepoint.value;
@@ -1240,10 +1265,9 @@ namespace screens {
         }
     }
 
-    void ReaderScreen::drawGuides(ui::Context& ui, int16_t anchor, int16_t baseline) {
+    void ReaderScreen::drawGuides(ui::Context& ui, Arduino_GFX& gfx, int16_t anchor, int16_t baseline) {
         const int16_t inkTop = face_.raster.get().wordInkTop;
         const int16_t inkBottom = face_.raster.get().wordInkBottom;
-        auto& gfx = ui.gfx();
         const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
         const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
         const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);

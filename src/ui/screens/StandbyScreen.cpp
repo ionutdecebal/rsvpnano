@@ -53,9 +53,13 @@ namespace screens {
             return;
         }
 
-        Arduino_GFX& gfx = ui.gfx();
-        const int16_t originX = static_cast<int16_t>((ui.width() - columns_ * kCellSize) / 2);
-        const int16_t originY = static_cast<int16_t>((ui.height() - rows_ * kCellSize) / 2);
+        int16_t originX = static_cast<int16_t>((ui.width() - columns_ * kCellSize) / 2);
+        int16_t originY = static_cast<int16_t>((ui.height() - rows_ * kCellSize) / 2);
+        if constexpr (ui::Context::displayWriteAlignment() > 1) {
+            // Four-pixel cells then own complete transfer pairs, including dirty runs.
+            originX = static_cast<int16_t>(originX & ~1);
+            originY = static_cast<int16_t>(originY & ~1);
+        }
         const uint16_t dim = ui.blend(ui::themes::ColorRole::Foreground, 72);
         const uint16_t bright = kind_ == standby::Kind::life ? ui.color(ui::themes::ColorRole::Foreground)
                                                              : ui.color(ui::themes::ColorRole::Accent);
@@ -63,11 +67,17 @@ namespace screens {
         const auto drawRun = [&](size_t first, size_t last, uint16_t color) {
             const uint16_t x = static_cast<uint16_t>(first % columns_);
             const uint16_t y = static_cast<uint16_t>(first / columns_);
-            gfx.fillRect(static_cast<int16_t>(originX + x * kCellSize), static_cast<int16_t>(originY + y * kCellSize),
-                         static_cast<int16_t>((last - first + 1U) * kCellSize), kCellSize, color);
+            const ui::Rect rect{static_cast<int16_t>(originX + x * kCellSize),
+                                static_cast<int16_t>(originY + y * kCellSize),
+                                static_cast<int16_t>((last - first + 1U) * kCellSize), kCellSize};
+            ui.paint(rect, [&](Arduino_GFX& output, ui::Rect area) {
+                output.fillRect(area.x, area.y, area.w, area.h, color);
+            });
         };
         if (frame.fullRedraw || frame.dirtyCells.empty()) {
-            gfx.fillScreen(ui.color(ui::themes::ColorRole::Background));
+            ui.paint({0, 0, ui.width(), ui.height()}, [&](Arduino_GFX& output, ui::Rect area) {
+                output.fillRect(area.x, area.y, area.w, area.h, ui.color(ui::themes::ColorRole::Background));
+            });
             const auto drawCells = [&](standby::PackedGridView cells, uint16_t color) {
                 size_t runStart = cellCount;
                 size_t runEnd = 0;

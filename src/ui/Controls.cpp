@@ -7,6 +7,7 @@
 namespace ui {
     bool Context::card(Rect rect, std::string_view title, std::string_view detail, uint8_t textSize,
                        themes::ColorRole role, Icon icon, bool enabled, uint8_t alpha) {
+        rect = paintBounds(rect);
         if (rect.w <= 0 || rect.h <= 0)
             return false;
         auto state = signature(title, signature(detail));
@@ -15,29 +16,43 @@ namespace ui {
         state = combine(state, static_cast<uint8_t>(icon));
         state = combine(state, enabled);
         state = combine(state, alpha);
-        if (redraw(rect, state)) {
-            const auto surface = blend(themes::SurfaceActive, alpha / 2);
-            const auto ink = blend(enabled ? themes::Foreground : themes::Muted, alpha);
-            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 8, surface);
-            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 8, blend(role, alpha));
-            const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(32, rect.w / 4);
-            if (iconWidth)
-                drawIcon({static_cast<int16_t>(rect.x + 6), rect.y, iconWidth, rect.h}, icon, blend(role, alpha),
-                         surface);
-            const int16_t x = rect.x + 6 + iconWidth;
-            const int16_t width = std::max<int16_t>(0, rect.w - 12 - iconWidth);
-            const int16_t detailHeight = detail.empty() ? 0 : std::min<int16_t>(36, rect.h / 3);
-            fixedText({x, static_cast<int16_t>(rect.y + 3), width, static_cast<int16_t>(rect.h - detailHeight - 6)},
-                      title, textSize, ink, TextAlign::Center, 8);
-            if (!detail.empty())
-                fixedText({x, static_cast<int16_t>(rect.y + rect.h - detailHeight - 3), width, detailHeight}, detail, 2,
-                          blend(role, alpha), TextAlign::Center, 1);
+        if (claim(Kind::Card, rect, state).changed) {
+            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const auto surface = blend(themes::SurfaceActive, alpha / 2);
+                const auto ink = blend(enabled ? themes::Foreground : themes::Muted, alpha);
+                output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 8, surface);
+                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 8, blend(role, alpha));
+                const int16_t iconWidth = icon == Icon::None ? 0 : std::min<int16_t>(32, rect.w / 4);
+                if (iconWidth)
+                    drawIcon(output, {static_cast<int16_t>(rect.x + 6), rect.y, iconWidth, rect.h}, icon,
+                             blend(role, alpha), surface);
+                const int16_t x = rect.x + 6 + iconWidth;
+                const int16_t width = std::max<int16_t>(0, rect.w - 12 - iconWidth);
+                const int16_t detailHeight = detail.empty() ? 0 : std::min<int16_t>(36, rect.h / 3);
+                fixedText(output,
+                          {x, static_cast<int16_t>(rect.y + 3), width, static_cast<int16_t>(rect.h - detailHeight - 6)},
+                          title, textSize, ink, TextAlign::Center, 8);
+                if (!detail.empty())
+                    fixedText(output,
+                              {x, static_cast<int16_t>(rect.y + rect.h - detailHeight - 3), width, detailHeight},
+                              detail, 2, blend(role, alpha), TextAlign::Center, 1);
+            });
         }
         return tap(rect, enabled);
     }
 
     size_t Context::fixedText(Rect rect, std::string_view text, uint8_t textSize, uint16_t ink, TextAlign align,
                               uint8_t maxLines, bool ellipsis) {
+        rect = paintBounds(rect);
+        size_t consumed = 0;
+        paint(rect, [&](Arduino_GFX& output, Rect translated) {
+            consumed = fixedText(output, translated, text, textSize, ink, align, maxLines, ellipsis);
+        });
+        return consumed;
+    }
+
+    size_t Context::fixedText(Arduino_GFX& output, Rect rect, std::string_view text, uint8_t textSize, uint16_t ink,
+                              TextAlign align, uint8_t maxLines, bool ellipsis) {
         if (rect.w <= 0 || rect.h <= 0 || text.empty())
             return 0;
         const size_t originalLength = text.size();
@@ -73,51 +88,68 @@ namespace ui {
                     std::string{line.substr(0, Utf8Text::prefixBytes(line, capacity - dots))} + std::string(dots, '.');
                 line = clipped;
             }
-            drawText({rect.x, y, rect.w, static_cast<int16_t>(height)}, line, textSize, ink, align);
+            drawText(output, {rect.x, y, rect.w, static_cast<int16_t>(height)}, line, textSize, ink, align);
             y += height;
         }
         return originalLength - text.size();
     }
 
     bool Context::dockItem(Rect rect, std::string_view label, Icon icon, uint16_t accent) {
-        if (redraw(rect, combine(signature(label), accent))) {
-            const auto surface = color(label.empty() ? themes::Surface : themes::SurfaceActive);
-            gfx_.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 7, surface);
-            gfx_.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 7, accent);
-            const int16_t iconWidth = std::min<int16_t>(30, rect.w - 8);
-            const int16_t x = label.empty() ? rect.x + (rect.w - iconWidth) / 2 : rect.x + 6;
-            drawIcon({x, static_cast<int16_t>(rect.y + 4), iconWidth, static_cast<int16_t>(rect.h - 8)}, icon, accent,
-                     surface);
-            if (!label.empty())
-                fixedText({static_cast<int16_t>(x + iconWidth + 3), rect.y,
-                           static_cast<int16_t>(rect.w - iconWidth - 15), rect.h},
-                          label, 2, color(themes::Foreground));
+        rect = paintBounds(rect);
+        if (claim(Kind::Dock, rect, combine(signature(label), accent)).changed) {
+            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const auto surface = color(label.empty() ? themes::Surface : themes::SurfaceActive);
+                output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 7, surface);
+                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 7, accent);
+                const int16_t iconWidth = std::min<int16_t>(30, rect.w - 8);
+                const int16_t x = label.empty() ? rect.x + (rect.w - iconWidth) / 2 : rect.x + 6;
+                drawIcon(output, {x, static_cast<int16_t>(rect.y + 4), iconWidth, static_cast<int16_t>(rect.h - 8)},
+                         icon, accent, surface);
+                if (!label.empty())
+                    fixedText(output,
+                              {static_cast<int16_t>(x + iconWidth + 3), rect.y,
+                               static_cast<int16_t>(rect.w - iconWidth - 15), rect.h},
+                              label, 2, color(themes::Foreground));
+            });
         }
         return tap(rect);
     }
 
     void Context::progressRing(Rect rect, int value, int maximum, themes::ColorRole role) {
+        rect = paintBounds(rect);
         if (rect.w < 8 || rect.h < 8)
             return;
         const int percent = maximum > 0 ? static_cast<int>(std::clamp<int64_t>(100LL * value / maximum, 0, 100)) : 0;
-        if (!redraw(rect, combine(combine(signature("ring"), percent), role)))
+        if (!claim(Kind::Ring, rect, combine(combine(signature("ring"), percent), role)).changed)
             return;
         const int16_t radius = std::min(rect.w, rect.h) / 2 - 2;
         const int16_t cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
         constexpr int segments = 60;
+        std::array<std::array<int16_t, 4>, segments> ticks{};
         for (int i = 0; i < segments; ++i) {
             const float angle = (i * 6 - 90) * 0.01745329252f;
-            const auto ink = color(i * 100 < percent * segments ? role : themes::ProgressTrack);
-            gfx_.drawLine(cx + std::cos(angle) * (radius - 4), cy + std::sin(angle) * (radius - 4),
-                          cx + std::cos(angle) * radius, cy + std::sin(angle) * radius, ink);
+            ticks[i] = {static_cast<int16_t>(cx + std::cos(angle) * (radius - 4)),
+                        static_cast<int16_t>(cy + std::sin(angle) * (radius - 4)),
+                        static_cast<int16_t>(cx + std::cos(angle) * radius),
+                        static_cast<int16_t>(cy + std::sin(angle) * radius)};
         }
         char label[6];
         std::snprintf(label, sizeof(label), "%d%%", percent);
-        drawText({static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), rect.h}, label, 2,
-                 color(role), TextAlign::Center);
+        const Rect bounds = rect;
+        paint(rect, [&](Arduino_GFX& output, Rect rect) {
+            const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
+            for (int i = 0; i < segments; ++i) {
+                const auto& tick = ticks[i];
+                const auto ink = color(i * 100 < percent * segments ? role : themes::ProgressTrack);
+                output.drawLine(tick[0] + dx, tick[1] + dy, tick[2] + dx, tick[3] + dy, ink);
+            }
+            drawText(output, {static_cast<int16_t>(rect.x + 7), rect.y, static_cast<int16_t>(rect.w - 14), rect.h},
+                     label, 2, color(role), TextAlign::Center);
+        });
     }
 
     bool Context::rotary(Rect rect, int& value, int minimum, int maximum, int step, std::string_view label) {
+        rect = paintBounds(rect);
         if (rect.w <= 0 || rect.h <= 0 || maximum <= minimum || step <= 0)
             return false;
         const int before = value;
@@ -138,30 +170,44 @@ namespace ui {
         state = combine(state, minimum);
         state = combine(state, maximum);
         state = signature(label, state);
-        if (redraw(rect, state)) {
+        if (claim(Kind::Rotary, rect, state).changed) {
             const int16_t labelHeight = label.empty() ? 0 : textHeightFor(label, 2) + 2;
             const int16_t diameter = std::min<int16_t>(rect.w, rect.h - labelHeight);
             const int16_t r = std::max<int16_t>(6, diameter / 2 - 3);
             const int16_t cx = rect.x + rect.w / 2, cy = rect.y + (rect.h - labelHeight) / 2;
             const int fill = (value - minimum) * 48 / (maximum - minimum);
+            std::array<std::array<int16_t, 4>, 49> ticks{};
             for (int i = 0; i <= 48; ++i) {
                 const float a = (130 + i * 280.f / 48) * 0.01745329252f;
-                gfx_.drawLine(cx + std::cos(a) * (r - 5), cy + std::sin(a) * (r - 5), cx + std::cos(a) * r,
-                              cy + std::sin(a) * r, color(i <= fill ? themes::Accent : themes::ProgressTrack));
+                ticks[i] = {static_cast<int16_t>(cx + std::cos(a) * (r - 5)),
+                            static_cast<int16_t>(cy + std::sin(a) * (r - 5)),
+                            static_cast<int16_t>(cx + std::cos(a) * r), static_cast<int16_t>(cy + std::sin(a) * r)};
             }
             const auto number = std::to_string(value);
             const uint8_t size = textWidth(number, 3) <= diameter - 16 && diameter >= 44 ? 3 : 2;
-            drawText({static_cast<int16_t>(rect.x + 4), static_cast<int16_t>(cy - textHeight(size) / 2),
-                      static_cast<int16_t>(rect.w - 8), textHeight(size)},
-                     number, size, color(themes::Foreground), TextAlign::Center);
-            if (!label.empty())
-                fixedText({rect.x, static_cast<int16_t>(rect.y + rect.h - labelHeight), rect.w, labelHeight}, label, 2,
-                          color(themes::Muted), TextAlign::Center, 1);
+            const Rect bounds = rect;
+            paint(rect, [&](Arduino_GFX& output, Rect rect) {
+                const int16_t dx = rect.x - bounds.x, dy = rect.y - bounds.y;
+                for (int i = 0; i <= 48; ++i) {
+                    const auto& tick = ticks[i];
+                    output.drawLine(tick[0] + dx, tick[1] + dy, tick[2] + dx, tick[3] + dy,
+                                    color(i <= fill ? themes::Accent : themes::ProgressTrack));
+                }
+                drawText(output,
+                         {static_cast<int16_t>(rect.x + 4), static_cast<int16_t>(cy + dy - textHeight(size) / 2),
+                          static_cast<int16_t>(rect.w - 8), textHeight(size)},
+                         number, size, color(themes::Foreground), TextAlign::Center);
+                if (!label.empty())
+                    fixedText(output,
+                              {rect.x, static_cast<int16_t>(rect.y + rect.h - labelHeight), rect.w, labelHeight}, label,
+                              2, color(themes::Muted), TextAlign::Center, 1);
+            });
         }
         return before != value;
     }
 
     PagedGrid Context::pagedGrid(Rect rect, size_t count, uint8_t columns, int16_t minimumHeight) {
+        rect = paintBounds(rect);
         columns = std::max<uint8_t>(1, columns);
         constexpr int16_t gap = 4;
         int rows = std::max(1, (rect.h + gap) / (minimumHeight + gap));

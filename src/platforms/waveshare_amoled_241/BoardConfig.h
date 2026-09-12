@@ -5,7 +5,7 @@
 namespace Board::Config {
 
     constexpr const char* BOARD_ID = "waveshare_esp32s3_touch_amoled_2_41";
-    constexpr const char* BOARD_LABEL = "Waveshare ESP32-S3-Touch-AMOLED-2.41";
+    constexpr const char* BOARD_LABEL = "Waveshare ESP32-S3-Touch-AMOLED-2.41 V1";
     constexpr const char* OTA_ASSET_NAME = "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin";
 
     constexpr bool ENABLE_TOP_EDGE_MENU_SWIPE = true;
@@ -17,8 +17,9 @@ namespace Board::Config {
 
     constexpr int PANEL_NATIVE_WIDTH = WaveshareAmoled241::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareAmoled241::DisplayWiring::kPanelHeight;
-    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_WIDTH;
-    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_HEIGHT;
+    constexpr int DISPLAY_WRITE_ALIGNMENT = 2;
+    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_HEIGHT;
+    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_WIDTH;
     constexpr int READER_CHROME_MARGIN_X = 12;
     constexpr int READER_CHROME_MARGIN_TOP = 8;
     constexpr int READER_CHROME_MARGIN_BOTTOM = 8;

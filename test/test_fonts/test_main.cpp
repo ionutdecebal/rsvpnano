@@ -288,6 +288,18 @@ namespace {
         TEST_ASSERT_EQUAL_INT16(4, renderer.drawString("x", 0, 1));
         TEST_ASSERT_EQUAL_INT16(4, renderer.drawString("x", 0, 1));
         TEST_ASSERT_EQUAL_UINT32(2, file.readCount());
+
+        Arduino_GFX strip{8, 2};
+        const size_t originalWrites = gfx.bitmapWrites;
+        TEST_ASSERT_EQUAL_PTR(&gfx, &renderer.setOutput(strip));
+        TEST_ASSERT_EQUAL_INT16(4, renderer.drawString("x", 1, 0));
+        TEST_ASSERT_GREATER_THAN(0, strip.bitmapWrites);
+        TEST_ASSERT_EQUAL(originalWrites, gfx.bitmapWrites);
+        TEST_ASSERT_EQUAL_UINT32(2, file.readCount());
+        TEST_ASSERT_EQUAL_PTR(&strip, &renderer.setOutput(gfx));
+        TEST_ASSERT_EQUAL_INT16(4, renderer.drawString("x", 1, 1));
+        TEST_ASSERT_GREATER_THAN(originalWrites, gfx.bitmapWrites);
+        TEST_ASSERT_EQUAL_UINT32(2, file.readCount());
     }
 
     void test_lz4_block_decoder_checks_bounds_and_overlap() {
@@ -541,11 +553,13 @@ void test_vertical_glyphs_are_counter_rotated_for_the_portrait_panel() {
     renderer.setTextColor(0xFFFF, 0);
 
     TEST_ASSERT_EQUAL_INT16(4, renderer.drawVerticalCodepoint(0x65E5, 4, 10));
+    TEST_ASSERT_EQUAL_UINT8(2, renderer.verticalInkHeight("\xE6\x97\xA5"));
     TEST_ASSERT_EQUAL_INT16(3, gfx.inkWidth());
     TEST_ASSERT_EQUAL_INT16(2, gfx.inkHeight());
 
     gfx.resetBounds();
     TEST_ASSERT_EQUAL_INT16(4, renderer.drawVerticalCodepoint('A', 4, 10));
+    TEST_ASSERT_EQUAL_UINT8(3, renderer.verticalInkHeight("A"));
     TEST_ASSERT_EQUAL_INT16(2, gfx.inkWidth());
     TEST_ASSERT_EQUAL_INT16(3, gfx.inkHeight());
 }

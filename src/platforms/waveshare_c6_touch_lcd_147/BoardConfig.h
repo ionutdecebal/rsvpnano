@@ -3,6 +3,7 @@
 #include "platforms/waveshare_c6_touch_lcd_147/WaveshareC6TouchLcd147.h"
 
 namespace Board::Config {
+    constexpr int DISPLAY_WRITE_ALIGNMENT = 1;
 
     constexpr const char* BOARD_ID = "waveshare_esp32c6_touch_lcd_1_47";
     constexpr const char* BOARD_LABEL = "Waveshare ESP32-C6-Touch-LCD-1.47";
@@ -17,8 +18,8 @@ namespace Board::Config {
 
     constexpr int PANEL_NATIVE_WIDTH = WaveshareC6TouchLcd147::DisplayWiring::kPanelWidth;
     constexpr int PANEL_NATIVE_HEIGHT = WaveshareC6TouchLcd147::DisplayWiring::kPanelHeight;
-    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_WIDTH;
-    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_HEIGHT;
+    constexpr int DISPLAY_WIDTH = PANEL_NATIVE_HEIGHT;
+    constexpr int DISPLAY_HEIGHT = PANEL_NATIVE_WIDTH;
     constexpr int READER_CHROME_MARGIN_X = 28;
     constexpr int READER_CHROME_MARGIN_TOP = 14;
     constexpr int READER_CHROME_MARGIN_BOTTOM = 14;

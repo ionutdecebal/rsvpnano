@@ -5,9 +5,9 @@
 - PlatformIO env: `waveshare_esp32s3_touch_amoled_216`
 - Platform folder: `src/platforms/waveshare_amoled_216`
 - Private board facts: `src/platforms/waveshare_amoled_216/WaveshareAmoled216.h`
-- Display driver: `src/drivers/display/co5300`
+- Display driver: Arduino_GFX `Arduino_CO5300`
 - Touch driver: `src/drivers/touch/cst92xx`
-- Power driver: `src/drivers/power/axp2101`
+- Power driver: XPowersLib `XPowersAXP2101`
 - IMU driver: `src/drivers/imu/qmi8658`
 
 ## Hardware Mapping
@@ -37,15 +37,16 @@ The board implementation binds its private wiring to the stable `Board::*` API:
 
 ## Display Notes
 
-- The CO5300 driver rounds flushes down to whole `480px` rows for DMA safety and to avoid fixed seam artifacts.
-- The panel is square, so the shared UI mapping layer keeps orientation handling simple.
+- The controller requires even starts and even dimensions. The shared UI composes aligned
+  two-row updates; see the [hardware audit](hardware-audit.md).
+- The square panel stays at native rotation zero while the UI and touch rotate together.
 - The board uses safe reader chrome margins for the rounded screen mask.
 
 ## Touch Notes
 
 - The CST9217 read command is `0xD000`.
 - The driver reads a 10-byte packet for one touch point and validates packet byte `6` against `0xAB`.
-- Idle packets are not treated as hard read failures; I2C failures use the shared input recovery/backoff path.
+- Valid release packets clear contact; malformed markers and I2C failures use the shared recovery/backoff path.
 - Touch reads are not gated by the interrupt pin level because the Waveshare driver treats the interrupt as an edge source.
 
 ## Input Behavior

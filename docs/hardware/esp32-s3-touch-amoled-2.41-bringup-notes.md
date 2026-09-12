@@ -2,10 +2,13 @@
 
 ## Target
 
+- Hardware revision: V1 only (no Rev2.0 PCB marking). V2 swaps the display/touch
+  reset and interrupt wiring and cannot use this firmware. See the official
+  [revision table](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.41#v1-vs-v2-differences).
 - PlatformIO env: `waveshare_esp32s3_touch_amoled_241`
 - Platform folder: `src/platforms/waveshare_amoled_241`
 - Private board facts: `src/platforms/waveshare_amoled_241/WaveshareAmoled241.h`
-- Display driver: `src/drivers/display/rm690b0`
+- Display driver: Arduino_GFX `Arduino_RM690B0`
 - Touch driver: `src/drivers/touch/ft6336`
 - IMU driver: `src/drivers/imu/qmi8658`
 
@@ -31,7 +34,7 @@ Still needs manual validation after the board/input refactor:
 ## Hardware Assumptions
 
 - Panel native geometry: `450x600`
-- App/UI geometry: `600x450`
+- App/UI geometry: `600x450` landscape, with native `450x600` panel addressing
 - Touch controller: `FT6336`
 - Display controller: `RM690B0`
 - I2C: `GPIO47/48`
@@ -57,13 +60,12 @@ The shared app does not include platform or chip-driver headers directly.
 
 ### Rotation
 
-Keep panel memory in native portrait-style geometry and let the shared display/input mapping layer
-perform the landscape presentation. Avoid rotating both in the panel driver and in app mapping.
+Keep panel addressing at native rotation zero. The shared UI composes rotated two-row strips
+for the landscape layout, and touch uses the matching logical transform.
 
 ### Color Format
 
-The app already byte-swaps RGB565 before sending pixels to the panel. The RM690B0 path must not add a
-second swap.
+Arduino_GFX's RGB565 bitmap transfer handles byte order. Do not add a second swap in the board code.
 
 ### Panel Addressing
 

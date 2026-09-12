@@ -40,6 +40,8 @@ namespace screens::readerLayout {
     };
     void drawArrows(ui::Context& ui, const settings::ReadingSettings& settings, bool reading, int16_t wordHeight,
                     bool ghostHidden = false);
+    void drawArrows(ui::Context& ui, Arduino_GFX& output, const settings::ReadingSettings& settings, bool reading,
+                    int16_t wordHeight, int16_t offsetX, int16_t offsetY, bool ghostHidden = false);
     void horizontalChrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,
                           const Board::Power::BatteryState& battery);
     void horizontalChrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,

@@ -6,6 +6,8 @@
 namespace screens {
     bool ReaderScreen::appearance(ui::Context& ui, Screen& screen) {
         using namespace ui::themes;
+        width_ = ui.width();
+        height_ = ui.height();
         const auto layout = appearanceLayout::make(ui.width(), ui.height());
         const bool typography = appearancePage_ == 0;
         const bool reading = appearancePage_ == 1;
@@ -46,15 +48,23 @@ namespace screens {
         const auto footer =
             readerLayout::progressText(ui, reading ? settings::FooterMetric::percentage : config.footerMetric, 42, 132);
         const auto chrome = appearanceLayout::chrome(ui, config.leftHanded, layout.page);
-        const ui::Rect preview = typography ? layout.preview : chrome.preview;
+        const ui::Rect preview = ui.paintBounds(typography ? layout.preview : chrome.preview);
         if (showPreview && ui.redraw(preview, state)) {
-            drawGuides(ui, anchor, baseline);
-            drawWord(word, wordX, baseline, focus, false, ui);
-            text_.setTextColor(ui.blend(Foreground, config.phantomWords ? 64 : 28), ui.color(Background));
-            text_.drawString(before, beforeX, baseline, type.tracking);
-            text_.drawString(after, afterX, baseline, type.tracking);
-            if (!typography)
-                readerLayout::drawArrows(ui, config, reading, inkHeight + 12, true);
+            ui.paint(preview, [&](Arduino_GFX& output, ui::Rect translated) {
+                Arduino_GFX& previousOutput = text_.setOutput(output);
+                const int16_t dx = static_cast<int16_t>(translated.x - preview.x);
+                const int16_t dy = static_cast<int16_t>(translated.y - preview.y);
+                const int16_t wordBaseline = static_cast<int16_t>(baseline + dy);
+                drawGuides(ui, output, static_cast<int16_t>(anchor + dx), wordBaseline);
+                drawWord(word, static_cast<int16_t>(wordX + dx), wordBaseline,
+                         static_cast<int16_t>(ui.height() / 2 + dy), focus, false, ui);
+                text_.setTextColor(ui.blend(Foreground, config.phantomWords ? 64 : 28), ui.color(Background));
+                text_.drawString(before, static_cast<int16_t>(beforeX + dx), wordBaseline, type.tracking);
+                text_.drawString(after, static_cast<int16_t>(afterX + dx), wordBaseline, type.tracking);
+                if (!typography)
+                    readerLayout::drawArrows(ui, output, config, reading, inkHeight + 12, dx, dy, true);
+                text_.setOutput(previousOutput);
+            });
         }
 
         if (ui.button(layout.back, "<")) {

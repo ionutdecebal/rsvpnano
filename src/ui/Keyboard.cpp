@@ -39,25 +39,27 @@ namespace ui {
         const int16_t valueWidth = static_cast<int16_t>(rect.w - clearWidth - gap - (masked ? revealWidth + gap : 0));
         const size_t visibleCharacters = static_cast<size_t>(std::max<int16_t>(1, (valueWidth - 12) / 12));
         shownValue = Utf8Text::suffix(shownValue, visibleCharacters);
-        const Rect input{rect.x, rect.y, valueWidth, inputHeight};
-        if (redraw(input, signature(shownValue, signature(label)))) {
-            const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
-            gfx_.fillRoundRect(input.x, input.y, input.w, input.h, 5, surface);
-            gfx_.drawRoundRect(input.x, input.y, input.w, input.h, 5, color(ui::themes::ColorRole::Outline));
-            if (label.empty()) {
-                drawText({static_cast<int16_t>(input.x + 6), input.y, static_cast<int16_t>(input.w - 12), input.h},
-                         shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
-                         color(ui::themes::ColorRole::Accent));
-            } else {
-                drawText({static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 2),
-                          static_cast<int16_t>(input.w - 12), 8},
-                         label, 1, color(ui::themes::ColorRole::Muted));
-                drawText({static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 11),
-                          static_cast<int16_t>(input.w - 12), static_cast<int16_t>(input.h - 11)},
-                         shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
-                         color(ui::themes::ColorRole::Accent));
-            }
-            markDrawn();
+        const Rect input = paintBounds({rect.x, rect.y, valueWidth, inputHeight});
+        if (claim(Kind::KeyboardInput, input, signature(shownValue, signature(label))).changed) {
+            paint(input, [&](Arduino_GFX& output, Rect input) {
+                const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
+                output.fillRoundRect(input.x, input.y, input.w, input.h, 5, surface);
+                output.drawRoundRect(input.x, input.y, input.w, input.h, 5, color(ui::themes::ColorRole::Outline));
+                if (label.empty()) {
+                    drawText(output, {static_cast<int16_t>(input.x + 6), input.y,
+                                      static_cast<int16_t>(input.w - 12), input.h},
+                             shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
+                             color(ui::themes::ColorRole::Accent));
+                } else {
+                    drawText(output, {static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 2),
+                              static_cast<int16_t>(input.w - 12), 8},
+                             label, 1, color(ui::themes::ColorRole::Muted));
+                    drawText(output, {static_cast<int16_t>(input.x + 6), static_cast<int16_t>(input.y + 11),
+                              static_cast<int16_t>(input.w - 12), static_cast<int16_t>(input.h - 11)},
+                             shownValue.empty() ? std::string_view{"_"} : shownValue, 2,
+                             color(ui::themes::ColorRole::Accent));
+                }
+            });
         }
         const int16_t clearX = static_cast<int16_t>(rect.x + valueWidth + gap);
         if (button({clearX, rect.y, clearWidth, inputHeight}, "X", !value.empty()))

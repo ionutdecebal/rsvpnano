@@ -42,6 +42,8 @@ namespace screens::PageReader {
             size_t characterStart = 0;
             size_t characterEnd = 0;
             int16_t y = 0;
+            int16_t top = 0;
+            int16_t bottom = 0;
             int16_t width = 0;
             bool paragraphStart = false;
             bool bidi = false;
@@ -65,10 +67,8 @@ namespace screens::PageReader {
         bool vertical = false;
     };
 
-    void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
-              const Typeface& typeface,
+    void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
-              const ReadingSession& session, ui::Rect area,
-              std::string_view overlay = {});
+              const ReadingSession& session, ui::Rect area, std::string_view overlay = {});
 
 } // namespace screens::PageReader

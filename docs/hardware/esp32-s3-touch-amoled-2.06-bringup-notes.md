@@ -5,15 +5,16 @@
 - PlatformIO env: `waveshare_esp32s3_touch_amoled_206`
 - Platform folder: `src/platforms/waveshare_amoled_206`
 - Private board facts: `src/platforms/waveshare_amoled_206/WaveshareAmoled206.h`
-- Display driver: `src/drivers/display/co5300`
+- Display driver: Arduino_GFX `Arduino_CO5300`
 - Touch driver: `src/drivers/touch/ft6336`
-- Power driver: `src/drivers/power/axp2101`
+- Power driver: XPowersLib `XPowersAXP2101`
 - IMU driver: `src/drivers/imu/qmi8658`
 
 ## Hardware Mapping
 
 - MCU: `ESP32-S3R8`
 - Display: `CO5300`, `410x502`, QSPI
+- App/UI geometry: `502x410` landscape, using rotated two-row updates at native panel rotation zero.
 - Touch: `FT3168` routed through the FT6336-compatible driver at I2C `0x38`
 - PMU: `AXP2101`
 - IMU: `QMI8658`

@@ -109,7 +109,7 @@ private val InstallerBoards = listOf(
     InstallerBoard("amoled18-v2", "AMOLED 1.8 / V2", "VERSION 2", "The newer revision; still being tested.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
     InstallerBoard("amoled206", "AMOLED 2.06", "AMOLED", "The 2.06-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
     InstallerBoard("amoled216", "AMOLED 2.16", "3 BUTTON", "The three-button 2.16-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
-    InstallerBoard("amoled241", "AMOLED 2.41", "AMOLED", "The 2.41-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
+    InstallerBoard("amoled241", "AMOLED 2.41 V1", "AMOLED", "V1 hardware only. V2 uses different display and touch wiring and is not supported by this firmware.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
     InstallerBoard("lcd147-c6", "LCD 1.47 / C6", "COMPACT", "The compact 1.47-inch touch board.", "https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm?&aff_id=ionutdecebal", "ESP32-C6", BootloaderWithReset),
 )
 
