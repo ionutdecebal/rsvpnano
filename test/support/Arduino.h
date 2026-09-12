@@ -38,6 +38,7 @@ inline const void* pgm_read_ptr(const void* address) {
 
 inline void yield() {}
 inline void delay(unsigned long) {}
+inline void delayMicroseconds(unsigned int) {}
 
 class String {
     std::string s_;

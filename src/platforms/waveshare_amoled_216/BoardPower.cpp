@@ -24,6 +24,13 @@ namespace {
             return false;
         }
 
+        // Board schematic: DCDC1 supplies VCC3V3; XPowers init only identifies the PMU.
+        gPmuReady = gPmu.setDC1Voltage(3300) && gPmu.enableDC1() && gPmu.getDC1Voltage() == 3300 && gPmu.isEnableDC1();
+        if (!gPmuReady) {
+            ESP_LOGE("board", "AXP2101 3.3 V system rail setup failed");
+            return false;
+        }
+
         gPmu.enableBattDetection();
         gPmu.enableBattVoltageMeasure();
 
@@ -82,6 +89,17 @@ namespace Board::Power {
 
     bool enableAudioPowerIfAvailable() {
         pinMode(WaveshareAmoled216::AudioWiring::kAudioEnablePin, OUTPUT);
+        if (ensurePmuReady() && gPmu.getALDO1Voltage() == 3300 && gPmu.isEnableALDO1()) {
+            digitalWrite(WaveshareAmoled216::AudioWiring::kAudioEnablePin, HIGH);
+            return true;
+        }
+        digitalWrite(WaveshareAmoled216::AudioWiring::kAudioEnablePin, LOW);
+        // ALDO1 supplies A3V3, including the ES8311 DAC's analog power.
+        if (!ensurePmuReady() || !gPmu.setALDO1Voltage(3300) || !gPmu.enableALDO1() || gPmu.getALDO1Voltage() != 3300
+            || !gPmu.isEnableALDO1()) {
+            ESP_LOGE("board", "AXP2101 3.3 V audio rail setup failed");
+            return false;
+        }
         digitalWrite(WaveshareAmoled216::AudioWiring::kAudioEnablePin, HIGH);
         return true;
     }

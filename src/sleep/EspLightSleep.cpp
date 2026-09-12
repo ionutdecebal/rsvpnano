@@ -30,8 +30,13 @@ namespace EspLightSleep {
         }
 
         const auto disableWakeSources = [&] {
-            for (const gpio_num_t pin: wakePins)
+            for (const gpio_num_t pin: wakePins) {
                 gpio_wakeup_disable(pin);
+                // Wake setup changes the normal GPIO trigger too. Leave it disabled until
+                // input resumes/rearms; otherwise another pinMode can enable a level ISR.
+                gpio_intr_disable(pin);
+                gpio_set_intr_type(pin, GPIO_INTR_DISABLE);
+            }
             esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
             if (timeoutMs > 0)
                 esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);

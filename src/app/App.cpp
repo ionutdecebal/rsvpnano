@@ -963,7 +963,6 @@ void App::lightSleepFromStandby() {
     }
 
     const uint32_t wokeAtMs = millis();
-    Input::resume();
     exitStandby(wokeAtMs);
 
     if (wokeByTouch) {
@@ -975,6 +974,8 @@ void App::lightSleepFromStandby() {
                 break;
         }
     }
+    // The sampler reinitializes touch on resume; finish the wake-contact reads first.
+    Input::resume();
 }
 
 void App::powerOff(uint32_t nowMs) {

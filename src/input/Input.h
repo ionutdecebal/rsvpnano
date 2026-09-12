@@ -47,6 +47,7 @@ namespace Input {
     void end();
     void cancel();
     void resume();
+    void notifyTouchFromISR();
     bool poll(ActionMask& actions);
     ui::TouchSampleResult pollTouch(ui::TouchContact& contact);
 

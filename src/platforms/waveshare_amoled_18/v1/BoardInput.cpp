@@ -1,14 +1,26 @@
 #include "board/BoardInput.h"
 
 #include <array>
+#include <atomic>
 
 #include <Wire.h>
 
 #include "drivers/gpio/tca9554/Tca9554.h"
 #include "drivers/touch/ft6336/ft6336.h"
+#include "platforms/waveshare_amoled_18/BoardDisplayPower.h"
 #include "platforms/waveshare_amoled_18/WaveshareAmoled18.h"
 
 namespace {
+
+    // Native word loads/stores only: ESP32 builds disable hardware RMW atomics (exchange/fetch/CAS).
+    std::atomic<uint32_t> gTouchPending = 0;
+    bool gTouchInterruptAttached = false;
+    static_assert(sizeof(gTouchPending) == sizeof(uint32_t) && alignof(decltype(gTouchPending)) >= sizeof(uint32_t));
+
+    void IRAM_ATTR onTouchInterrupt() {
+        gTouchPending.store(true);
+        ::Input::notifyTouchFromISR();
+    }
 
     TwoWire& touchWire() {
         return Wire;
@@ -19,16 +31,6 @@ namespace {
         return BoardDrivers::Tca9554::readInputPin(Wire, WaveshareAmoled18::Tca9554Wiring::kAddress, pin, levelHigh,
                                                    WaveshareAmoled18::Tca9554Wiring::kReleaseBusBeforeRead)
             && levelHigh;
-    }
-
-    void resetTouchHardware() {
-        if constexpr (WaveshareAmoled18::System::kTouchResetPin >= 0) {
-            pinMode(WaveshareAmoled18::System::kTouchResetPin, OUTPUT);
-            digitalWrite(WaveshareAmoled18::System::kTouchResetPin, LOW);
-            delay(12);
-            digitalWrite(WaveshareAmoled18::System::kTouchResetPin, HIGH);
-            delay(12);
-        }
     }
 
     bool primaryPressedRaw() {
@@ -57,9 +59,16 @@ namespace Board::Input {
         return true;
     }
 
-    void end() {}
+    void end() {
+        detachInterrupt(WaveshareAmoled18::System::kTouchIrqPin);
+        gTouchInterruptAttached = false;
+        gTouchPending.store(false);
+    }
 
-    void cancel() {}
+    void cancel() {
+        // Light sleep changes the GPIO interrupt to level-triggered; never leave the edge ISR installed.
+        end();
+    }
 
     ::Input::ControlTiming controlTiming() {
         return {.debounceMs = WaveshareAmoled18::Buttons::kDebounceMs};
@@ -93,29 +102,42 @@ namespace Board::Input {
     }
 
     bool beginTouch() {
-        resetTouchHardware();
+        detachInterrupt(WaveshareAmoled18::System::kTouchIrqPin);
+        gTouchInterruptAttached = false;
+        gTouchPending.store(false);
+        if (!WaveshareAmoled18::DisplayPower::resetTouchHardware())
+            return false;
         TwoWire& wire = touchWire();
-        return Ft6336Touch::probe(wire, WaveshareAmoled18::TouchWiring::kAddress)
-            && Ft6336Touch::configureMonitorMode(wire, WaveshareAmoled18::TouchWiring::kAddress);
+        if (!(Ft6336Touch::probe(wire, WaveshareAmoled18::TouchWiring::kAddress)
+              && Ft6336Touch::configureMonitorMode(wire, WaveshareAmoled18::TouchWiring::kAddress)))
+            return false;
+        pinMode(WaveshareAmoled18::System::kTouchIrqPin, INPUT_PULLUP);
+        attachInterrupt(WaveshareAmoled18::System::kTouchIrqPin, onTouchInterrupt, FALLING);
+        gTouchInterruptAttached = true;
+        if (!digitalRead(WaveshareAmoled18::System::kTouchIrqPin))
+            gTouchPending.store(true);
+        return true;
     }
 
     bool touchReady() {
-        if constexpr (!WaveshareAmoled18::System::kUseTouchIrqForReady) {
-            return true;
-        }
-        return !digitalRead(WaveshareAmoled18::System::kTouchIrqPin);
+        // While paused, a GPIO wake is enough to justify one report even after its pulse has ended.
+        return !gTouchInterruptAttached || gTouchPending.load();
     }
 
     bool readTouch(ui::TouchContact& contact) {
+        // Consume before I2C so an IRQ arriving during the read remains pending.
+        gTouchPending.store(false);
         std::array<uint8_t, Ft6336Touch::kPacketLength> data = {};
         if (!Ft6336Touch::readPacket(touchWire(), WaveshareAmoled18::TouchWiring::kAddress,
                                      WaveshareAmoled18::TouchWiring::kReleaseBusBeforeRead, data.data(), data.size())) {
+            gTouchPending.store(true);
             return false;
         }
 
         BoardDrivers::Touch::Sample decoded = {};
         if (!Ft6336Touch::decodePacket(data.data(), data.size(), WaveshareAmoled18::DisplayWiring::kPanelWidth,
                                        WaveshareAmoled18::DisplayWiring::kPanelHeight, decoded)) {
+            gTouchPending.store(true);
             return false;
         }
 

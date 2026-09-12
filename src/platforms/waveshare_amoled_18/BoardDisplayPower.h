@@ -2,6 +2,7 @@
 
 namespace WaveshareAmoled18::DisplayPower {
 
-    void releaseHardware();
+    bool releaseHardware();
+    bool resetTouchHardware();
 
 } // namespace WaveshareAmoled18::DisplayPower

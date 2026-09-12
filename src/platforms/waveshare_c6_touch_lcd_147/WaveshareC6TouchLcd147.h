@@ -6,7 +6,7 @@
 #include "ui/Touch.h"
 
 namespace WaveshareC6TouchLcd147::Buttons {
-    constexpr int kBootPin = 8;
+    constexpr int kBootPin = 9; // Schematic BOOT net; GPIO8 is a separate header pin.
     constexpr int kPowerPin = -1;
     constexpr int kKeyPin = -1;
 } // namespace WaveshareC6TouchLcd147::Buttons
@@ -24,7 +24,7 @@ namespace WaveshareC6TouchLcd147::DisplayWiring {
     constexpr uint16_t kColumnOffset = 34;
     constexpr uint16_t kRowOffset = 0;
     constexpr size_t kTxChunkBytes = 16 * 1024;
-    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Portrait;
+    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 } // namespace WaveshareC6TouchLcd147::DisplayWiring
 
 namespace WaveshareC6TouchLcd147::ImuWiring {
@@ -54,7 +54,7 @@ namespace WaveshareC6TouchLcd147::System {
     constexpr int kTouchIrqPin = 21;
     constexpr uint32_t kTouchI2cClockHz = kSystemI2cClockHz;
     constexpr uint32_t kTouchI2cTimeoutMs = kSystemI2cTimeoutMs;
-    constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_8;
+    constexpr gpio_num_t kLightSleepWakeGpio = static_cast<gpio_num_t>(Buttons::kBootPin);
 } // namespace WaveshareC6TouchLcd147::System
 
 namespace WaveshareC6TouchLcd147::TouchWiring {

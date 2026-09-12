@@ -188,6 +188,7 @@ namespace Input {
             uint32_t nextControlsMs = millis();
             uint32_t nextTouchMs = nextControlsMs;
             gTouchBackoffUntilMs = nextTouchMs;
+            bool touchNotified = false;
 
             while (true) {
                 if (gPaused.load()) {
@@ -234,7 +235,9 @@ namespace Input {
                     }
                 }
 
-                if (gTouchInitialized && deadlineReached(nowMs, nextTouchMs)) {
+                // A retained IRQ starts acquisition promptly; transport failures still honor retry backoff.
+                if (gTouchInitialized
+                    && ((touchNotified && gTouchReadFailures == 0) || deadlineReached(nowMs, nextTouchMs))) {
                     const uint32_t readyIntervalMs = std::max<uint32_t>(1, gTouchTiming.readyPollIntervalMs);
                     const uint32_t packetIntervalMs = std::max<uint32_t>(1, gTouchTiming.pollIntervalMs);
                     nextTouchMs = nowMs + readyIntervalMs;
@@ -282,7 +285,7 @@ namespace Input {
                     }
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(1));
+                touchNotified = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1)) != 0;
             }
         }
 
@@ -326,6 +329,7 @@ namespace Input {
 
     void end() {
         cancel();
+        Board::Input::end();
         if (gSamplerTask != nullptr) {
             vTaskDelete(gSamplerTask);
             gSamplerTask = nullptr;
@@ -338,8 +342,16 @@ namespace Input {
             vQueueDelete(gTouchQueue);
             gTouchQueue = nullptr;
         }
-        Board::Input::end();
         gControls.initialized = false;
+    }
+
+    void IRAM_ATTR notifyTouchFromISR() {
+        if (gSamplerTask == nullptr)
+            return;
+        BaseType_t higherPriorityTaskWoken = pdFALSE;
+        vTaskNotifyGiveFromISR(gSamplerTask, &higherPriorityTaskWoken);
+        if (higherPriorityTaskWoken)
+            portYIELD_FROM_ISR();
     }
 
     void cancel() {

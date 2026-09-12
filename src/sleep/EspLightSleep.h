@@ -14,6 +14,7 @@ namespace EspLightSleep {
         error,
     };
 
+    // Call before input starts or while its interrupts are detached. Resume input after waking.
     WakeReason wait(std::span<const gpio_num_t> wakePins, uint32_t timeoutMs);
 
     template<gpio_num_t InputPin, int TouchPin>

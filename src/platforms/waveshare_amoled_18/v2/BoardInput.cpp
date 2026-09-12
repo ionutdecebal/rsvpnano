@@ -1,14 +1,26 @@
 #include "board/BoardInput.h"
 
 #include <array>
+#include <atomic>
 
 #include <Wire.h>
 
 #include "drivers/gpio/tca9554/Tca9554.h"
 #include "drivers/touch/cst816/cst816.h"
+#include "platforms/waveshare_amoled_18/BoardDisplayPower.h"
 #include "platforms/waveshare_amoled_18/WaveshareAmoled18.h"
 
 namespace {
+
+    // Native word loads/stores only: ESP32 builds disable hardware RMW atomics (exchange/fetch/CAS).
+    std::atomic<uint32_t> gTouchPending = 0;
+    bool gTouchInterruptAttached = false;
+    static_assert(sizeof(gTouchPending) == sizeof(uint32_t) && alignof(decltype(gTouchPending)) >= sizeof(uint32_t));
+
+    void IRAM_ATTR onTouchInterrupt() {
+        gTouchPending.store(true);
+        ::Input::notifyTouchFromISR();
+    }
 
     TwoWire& touchWire() {
         return Wire;
@@ -47,9 +59,16 @@ namespace Board::Input {
         return true;
     }
 
-    void end() {}
+    void end() {
+        detachInterrupt(WaveshareAmoled18::System::kTouchIrqPin);
+        gTouchInterruptAttached = false;
+        gTouchPending.store(false);
+    }
 
-    void cancel() {}
+    void cancel() {
+        // Light sleep changes the GPIO interrupt to level-triggered; never leave the edge ISR installed.
+        end();
+    }
 
     ::Input::ControlTiming controlTiming() {
         return {.debounceMs = WaveshareAmoled18::Buttons::kDebounceMs};
@@ -83,28 +102,44 @@ namespace Board::Input {
     }
 
     bool beginTouch() {
+        detachInterrupt(WaveshareAmoled18::System::kTouchIrqPin);
+        gTouchInterruptAttached = false;
+        gTouchPending.store(false);
+        if (!WaveshareAmoled18::DisplayPower::resetTouchHardware())
+            return false;
+        // The shared reset settles for 50 ms; CST820's bundled driver waits 200 ms after reset.
+        delay(150);
         TwoWire& wire = touchWire();
-        return Cst816Touch::probe(wire, WaveshareAmoled18::TouchWiring::kAddress)
-            && Cst816Touch::configurePeriodicInterrupt(wire, WaveshareAmoled18::TouchWiring::kAddress);
+        if (!(Cst816Touch::probe(wire, WaveshareAmoled18::TouchWiring::kAddress)
+              && Cst816Touch::configurePeriodicInterrupt(wire, WaveshareAmoled18::TouchWiring::kAddress)))
+            return false;
+        pinMode(WaveshareAmoled18::System::kTouchIrqPin, INPUT_PULLUP);
+        attachInterrupt(WaveshareAmoled18::System::kTouchIrqPin, onTouchInterrupt, FALLING);
+        gTouchInterruptAttached = true;
+        if (!digitalRead(WaveshareAmoled18::System::kTouchIrqPin))
+            gTouchPending.store(true);
+        return true;
     }
 
     bool touchReady() {
-        if constexpr (!WaveshareAmoled18::System::kUseTouchIrqForReady) {
-            return true;
-        }
-        return !digitalRead(WaveshareAmoled18::System::kTouchIrqPin);
+        // While paused, a GPIO wake is enough to justify one report even after its pulse has ended.
+        return !gTouchInterruptAttached || gTouchPending.load();
     }
 
     bool readTouch(ui::TouchContact& contact) {
+        // Consume before I2C so an IRQ arriving during the read remains pending.
+        gTouchPending.store(false);
         std::array<uint8_t, Cst816Touch::kPacketLength> data = {};
         if (!Cst816Touch::readPacket(touchWire(), WaveshareAmoled18::TouchWiring::kAddress,
                                      WaveshareAmoled18::TouchWiring::kReleaseBusBeforeRead, data.data(), data.size())) {
+            gTouchPending.store(true);
             return false;
         }
 
         BoardDrivers::Touch::Sample decoded = {};
         if (!Cst816Touch::decodePacket(data.data(), data.size(), WaveshareAmoled18::DisplayWiring::kPanelWidth,
                                        WaveshareAmoled18::DisplayWiring::kPanelHeight, decoded)) {
+            gTouchPending.store(true);
             return false;
         }
 

@@ -77,7 +77,6 @@ namespace WaveshareAmoled18::System {
     constexpr int kTouchSclPin = 14;
     constexpr int kTouchResetPin = -1;
     constexpr int kTouchIrqPin = 21;
-    constexpr bool kUseTouchIrqForReady = false;
     constexpr uint32_t kTouchI2cClockHz = kSystemI2cClockHz;
     constexpr uint32_t kTouchI2cTimeoutMs = kSystemI2cTimeoutMs;
     constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_0;
@@ -88,13 +87,14 @@ namespace WaveshareAmoled18::Tca9554Wiring {
     constexpr bool kReleaseBusBeforeRead = true;
     constexpr uint8_t kPowerButtonPin = 4;
     constexpr uint8_t kPmuIrqPin = 5;
-    constexpr uint8_t kSdEnablePin = 7;
-    constexpr uint8_t kTouchResetPin = 0;
-    constexpr uint8_t kLcdResetPin = 1;
-    constexpr uint8_t kDisplayEnablePin = 2;
+    // Schematic: LCD_RESET=EXIO0, DISP_PWR_EN=EXIO1, TP_RESET=EXIO2, SD_CS=EXIO7.
+    constexpr uint8_t kSdCsPin = 7;
+    constexpr uint8_t kLcdResetPin = 0;
+    constexpr uint8_t kDisplayEnablePin = 1;
+    constexpr uint8_t kTouchResetPin = 2;
     constexpr uint8_t kDisplayMask = (1U << kTouchResetPin) | (1U << kLcdResetPin) | (1U << kDisplayEnablePin);
-    constexpr uint8_t kSdEnableMask = 1U << kSdEnablePin;
-    constexpr uint8_t kOutputMask = kDisplayMask | kSdEnableMask;
+    constexpr uint8_t kSdCsMask = 1U << kSdCsPin;
+    constexpr uint8_t kOutputMask = kDisplayMask | kSdCsMask;
     constexpr uint8_t kDisplayClearMask = 0xFFU ^ kDisplayMask;
     constexpr uint8_t kOutputClearMask = 0xFFU ^ kOutputMask;
     constexpr uint8_t kInputMask = (1U << kPowerButtonPin) | (1U << kPmuIrqPin);

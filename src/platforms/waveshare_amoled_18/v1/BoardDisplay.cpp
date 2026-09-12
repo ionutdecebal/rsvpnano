@@ -23,10 +23,10 @@ namespace {
 namespace Board::Display {
 
     bool begin() {
-        WaveshareAmoled18::DisplayPower::releaseHardware();
-        const bool ok = gPanel.begin();
+        if (!WaveshareAmoled18::DisplayPower::releaseHardware() || !gPanel.begin())
+            return false;
         gPanel.fillScreen(0x0000);
-        return ok;
+        return true;
     }
 
     Arduino_GFX& gfx() {
