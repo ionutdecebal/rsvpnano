@@ -39,10 +39,7 @@ namespace screens::readerLayout {
         const bool visible = settings::visible(settings.arrowsVisibility, reading);
         if (!visible && !ghostHidden)
             return;
-        const auto rect = horizontalChrome(ui.width(), ui.height(), settings.leftHanded).arrows;
-        const int16_t height = std::max(rect.h, wordHeight);
-        const ui::Rect area =
-            ui.paintBounds({rect.x, static_cast<int16_t>((ui.height() - height) / 2), rect.w, height});
+        const auto area = ui.paintBounds(arrowArea(ui.width(), ui.height(), settings.leftHanded, wordHeight));
         const auto text = prepareArrows(ui, settings, reading, ghostHidden);
         ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
             drawArrows(ui, output, settings, reading, text, wordHeight, static_cast<int16_t>(target.x - area.x),
@@ -64,12 +61,10 @@ namespace screens::readerLayout {
         const bool visible = settings::visible(settings.arrowsVisibility, reading);
         if (!visible && !ghostHidden)
             return;
-        auto rect = horizontalChrome(ui.width(), ui.height(), settings.leftHanded).arrows;
-        const int16_t height = std::max(rect.h, wordHeight);
+        auto rect = arrowArea(ui.width(), ui.height(), settings.leftHanded, wordHeight);
         rect.x += offsetX;
         rect.y += offsetY;
-        output.fillRect(rect.x, static_cast<int16_t>((ui.height() - height) / 2 + offsetY), rect.w, height,
-                        ui.color(ui::themes::Background));
+        output.fillRect(rect.x, rect.y, rect.w, rect.h, ui.color(ui::themes::Background));
         ui.drawText(output, text, ui.blend(ui::themes::Muted, visible ? 255 : 64), offsetX, offsetY);
     }
 

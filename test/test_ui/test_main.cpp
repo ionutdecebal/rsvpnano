@@ -1646,6 +1646,20 @@ void test_hourglass_source_follows_glass_and_fallen_sand_settles_at_base() {
 
 void test_appearance_controls_fit_lcd() {
     appearanceChecks::layout(640, 172);
+    const auto arrow = screens::readerLayout::arrowArea(640, 172, false, 68);
+    TEST_ASSERT_EQUAL(588, arrow.x);
+    TEST_ASSERT_EQUAL(52, arrow.y);
+    TEST_ASSERT_EQUAL(68, arrow.h);
+    const auto tap = screens::readerLayout::previousSentenceRect(640, 172, false, false);
+    TEST_ASSERT_EQUAL(528, tap.x);
+    TEST_ASSERT_EQUAL(0, tap.y);
+    TEST_ASSERT_EQUAL(172, tap.h);
+    Arduino_GFX gfx(640, 172);
+    ui::Context ui(gfx);
+    const auto editor = screens::appearanceLayout::chrome(ui, false, screens::appearanceLayout::make(640, 172));
+    TEST_ASSERT_EQUAL(0, editor.preview.x);
+    TEST_ASSERT_EQUAL(640, editor.preview.w);
+    TEST_ASSERT_EQUAL(128, editor.reader.chapter.y);
 }
 
 int main(int, char**) {

@@ -43,7 +43,6 @@ namespace WaveshareAmoled206::DisplayWiring {
     constexpr uint16_t kColumnOffset = 22;
     constexpr uint16_t kRowOffset = 0;
     constexpr size_t kTxChunkBytes = 32 * 1024;
-    constexpr bool kPanelMemoryRotated180 = false;
     constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 } // namespace WaveshareAmoled206::DisplayWiring
 

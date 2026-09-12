@@ -4,6 +4,11 @@
 #include "ui/screens/ScreenCommon.h"
 
 namespace screens::watch {
+    constexpr ui::Rect contentBounds(int16_t width, int16_t height) {
+        const int16_t inset = std::clamp<int16_t>(std::min(width, height) / 15, 12, 28) & ~1;
+        return {inset, inset, static_cast<int16_t>(width - 2 * inset), static_cast<int16_t>(height - 2 * inset)};
+    }
+
     inline uint8_t textSize(const ui::Context& ui) {
         return std::min(ui.width(), ui.height()) < 240 ? 2 : 3;
     }

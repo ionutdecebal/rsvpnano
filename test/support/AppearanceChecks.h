@@ -25,7 +25,7 @@ namespace appearanceChecks {
             const auto chrome = screens::readerLayout::horizontalChrome(width, height, leftHanded);
             for (const auto rect: {chrome.chapter, chrome.progress, chrome.battery, chrome.arrows})
                 inside(rect);
-            const auto editor = screens::appearanceLayout::chrome(ui, leftHanded, layout.page);
+            const auto editor = screens::appearanceLayout::chrome(ui, leftHanded, layout);
             for (const auto rect:
                  {editor.reader.chapter, editor.reader.progress, editor.reader.batteryParts.icon,
                   editor.reader.batteryParts.label, editor.footerFormat, editor.batteryFormat, editor.preview})
@@ -97,7 +97,7 @@ namespace appearanceChecks {
         settings.chapterVisibility = settings.progressVisibility = settings::Visibility::never;
         settings.batteryLabelVisibility = settings::Visibility::paused;
         const auto chrome = screens::readerLayout::horizontalChrome(640, 172, false);
-        const ui::Rect preview{0, 44, 640, 84};
+        const auto preview = screens::readerLayout::readingArea(640, 172, false);
         const Board::Power::BatteryState battery{{true, 3.9f, 64}, 0, false};
         for (const auto format: {settings::BatteryLabel::percentage, settings::BatteryLabel::voltage,
                                  settings::BatteryLabel::timeRemaining}) {
@@ -133,15 +133,15 @@ namespace appearanceChecks {
         gfx.cleared.clear();
         screens::readerLayout::drawArrows(ui, settings, false, 68);
         TEST_ASSERT_EQUAL(1, gfx.cleared.size());
-        TEST_ASSERT_EQUAL(68, gfx.cleared.back().h);
-        TEST_ASSERT_EQUAL(52, gfx.cleared.back().y);
+        const auto arrows = screens::readerLayout::arrowArea(640, 172, false, 68);
+        TEST_ASSERT_EQUAL(arrows.h, gfx.cleared.back().h);
+        TEST_ASSERT_EQUAL(arrows.y, gfx.cleared.back().y);
         settings.arrowsVisibility = settings::Visibility::never;
         gfx.cleared.clear();
         screens::readerLayout::drawArrows(ui, settings, false, 68);
         TEST_ASSERT_TRUE(gfx.cleared.empty());
 
-        const auto editor =
-            screens::appearanceLayout::chrome(ui, false, screens::appearanceLayout::make(640, 172).page);
+        const auto editor = screens::appearanceLayout::chrome(ui, false, screens::appearanceLayout::make(640, 172));
         ui.invalidate();
         const auto editorFrame = [&](std::string_view footer, std::string_view label) {
             ui.beginFrame(2);

@@ -28,6 +28,7 @@ namespace {
     public:
         using Arduino_GFX::Arduino_GFX;
         bool outside = false;
+        bool cornerClipped = false;
         void record(int x, int y, int w, int h) {
             outside |= w < 0 || h < 0 || x < 0 || y < 0 || x + w > width() || y + h > height();
         }
@@ -36,13 +37,19 @@ namespace {
         }
         void fillRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t, uint16_t) override {
             record(x, y, w, h);
+            recordControl(x, y, w, h);
         }
         void drawRoundRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t, uint16_t) override {
             record(x, y, w, h);
+            recordControl(x, y, w, h);
         }
         void drawLine(int16_t x, int16_t y, int16_t x2, int16_t y2, uint16_t) override {
             record(x, y, 1, 1);
             record(x2, y2, 1, 1);
+        }
+        void recordControl(int16_t x, int16_t y, int16_t w, int16_t h) {
+            const auto area = screens::watch::contentBounds(width(), height());
+            cornerClipped |= x < area.x || y < area.y || x + w > area.x + area.w || y + h > area.y + area.h;
         }
     };
 
@@ -79,6 +86,7 @@ namespace {
                 }
                 ui.endFrame();
                 TEST_ASSERT_FALSE_MESSAGE(gfx.outside, "watch screen painted outside the physical display");
+                TEST_ASSERT_FALSE_MESSAGE(gfx.cornerClipped, "watch control crossed the rounded-corner inset");
             }
             screens::status(ui, "Preparing book", "The Left Hand of Darkness", "Preparing typography", 64);
             TEST_ASSERT_FALSE(gfx.outside);
@@ -203,6 +211,32 @@ namespace {
         }
     }
 
+    void test_rsvp_arrow_and_touch_target_share_the_safe_lower_corner() {
+        for (const auto size: watchResolutions) {
+            const auto bounds = screens::watch::contentBounds(size.width, size.height);
+            const auto reading = screens::readerLayout::readingArea(size.width, size.height, false);
+            for (const bool left: {false, true}) {
+                const auto chrome = screens::readerLayout::horizontalChrome(size.width, size.height, left);
+                const auto arrow = screens::readerLayout::arrowArea(size.width, size.height, left, 68);
+                const auto tap = screens::readerLayout::previousSentenceRect(size.width, size.height, left, false);
+                TEST_ASSERT_EQUAL(44, arrow.w);
+                TEST_ASSERT_EQUAL(44, arrow.h);
+                TEST_ASSERT_EQUAL(left ? bounds.x : bounds.x + bounds.w - 44, arrow.x);
+                TEST_ASSERT_EQUAL(chrome.chapter.y, arrow.y + arrow.h);
+                TEST_ASSERT_GREATER_OR_EQUAL(reading.y, arrow.y);
+                TEST_ASSERT_LESS_OR_EQUAL(reading.y + reading.h, arrow.y + arrow.h);
+                TEST_ASSERT_EQUAL(arrow.x, tap.x);
+                TEST_ASSERT_EQUAL(arrow.y, tap.y);
+                TEST_ASSERT_EQUAL(arrow.w, tap.w);
+                TEST_ASSERT_EQUAL(arrow.h, tap.h);
+                TEST_ASSERT_FALSE(ui::contains(tap, arrow.x + 22, bounds.y + 42));
+                const auto pageTap = screens::readerLayout::previousSentenceRect(size.width, size.height, left, true);
+                TEST_ASSERT_EQUAL(0, pageTap.y);
+                TEST_ASSERT_EQUAL(size.height, pageTap.h);
+            }
+        }
+    }
+
     void test_dock_reaches_all_four_destinations() {
         constexpr std::array destinations{screens::Screen::Read, screens::Screen::Settings, screens::Screen::Device,
                                           screens::Screen::FocusTimers};
@@ -282,6 +316,7 @@ int main() {
     RUN_TEST(test_rotary_uses_relative_delta_and_clamps);
     RUN_TEST(test_paging_never_exposes_offscreen_hit_targets_and_resets);
     RUN_TEST(test_reader_layout_fits_and_preserves_handedness);
+    RUN_TEST(test_rsvp_arrow_and_touch_target_share_the_safe_lower_corner);
     RUN_TEST(test_dock_reaches_all_four_destinations);
     RUN_TEST(test_chapter_selection_does_not_activate_until_center_tap);
     return UNITY_END();

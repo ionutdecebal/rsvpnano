@@ -40,8 +40,15 @@ namespace screens::readerLayout {
         return {static_cast<int16_t>(leftHanded ? 8 : width - 48), static_cast<int16_t>(height - 40), 40, 30};
     }
 
-    uint16_t previousSentenceTapWidth() {
-        return 112;
+    ui::Rect previousSentenceRect(int16_t width, int16_t height, bool leftHanded, bool) {
+        return {static_cast<int16_t>(leftHanded ? 0 : std::max<int>(0, width - 112)), 0,
+                std::min<int16_t>(width, leftHanded ? 113 : 112), height};
+    }
+    ui::Rect arrowArea(int16_t width, int16_t height, bool leftHanded, int16_t wordHeight) {
+        auto rect = horizontalChrome(width, height, leftHanded).arrows;
+        rect.h = std::max(rect.h, wordHeight);
+        rect.y = (height - rect.h) / 2;
+        return rect;
     }
     HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t footerWidth) {
         const int16_t y = height - 26;

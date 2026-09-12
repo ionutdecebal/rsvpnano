@@ -10,11 +10,13 @@ namespace screens::detail {
                               : active >= Screen::FocusTimers && active <= Screen::FocusSession ? 3
                                                                                                 : 2;
         const int16_t height = ui.height() < 240 ? 36 : 48;
-        const int16_t y = ui.height() - height - 6;
-        const int16_t small = (ui.width() - 28) / 6;
-        int16_t x = 8;
+        const auto area = content(ui);
+        const int16_t y = area.y + area.h - height;
+        const int16_t available = area.w - 12;
+        const int16_t small = available / 6;
+        int16_t x = area.x;
         for (size_t i = 0; i < faces.size(); ++i) {
-            const int16_t width = i == selected ? static_cast<int16_t>(ui.width() - 28 - small * 3) : small;
+            const int16_t width = i == selected ? static_cast<int16_t>(available - small * 3) : small;
             const ui::Rect rect{x, y, width, height};
             // Dock colors are stable face identities; the text still follows the active theme.
             const std::array<uint16_t, 4> colors{ui.color(ui::themes::Accent), ui::themes::rgb565(190, 130, 32),
@@ -27,7 +29,7 @@ namespace screens::detail {
     }
 
     ui::Rect content(ui::Context& ui) {
-        return {8, 8, static_cast<int16_t>(ui.width() - 16), static_cast<int16_t>(ui.height() - 16)};
+        return watch::contentBounds(ui.width(), ui.height());
     }
 
     ui::Rect tabContent(ui::Context& ui) {

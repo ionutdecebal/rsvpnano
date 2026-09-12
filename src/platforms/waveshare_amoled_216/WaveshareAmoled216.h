@@ -41,7 +41,6 @@ namespace WaveshareAmoled216::DisplayWiring {
     constexpr uint16_t kPanelWidth = 480;
     constexpr uint16_t kPanelHeight = 480;
     constexpr size_t kTxChunkBytes = 32 * 1024;
-    constexpr bool kPanelMemoryRotated180 = false;
     constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
 } // namespace WaveshareAmoled216::DisplayWiring
 

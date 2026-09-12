@@ -761,9 +761,10 @@ namespace screens {
         }
         if (ui::contains(batteryRect(width_, height_), x, y))
             return false;
-        return settings_.leftHanded
-                 ? x <= previousSentenceTapWidth()
-                 : x >= static_cast<uint16_t>(std::max<int16_t>(0, width_ - previousSentenceTapWidth()));
+        return ui::contains(readerLayout::previousSentenceRect(width_, height_, settings_.leftHanded,
+                                                               settings_.mode == settings::ReadingMode::page
+                                                                   || pagePreview_),
+                            x, y);
     }
 
     void ReaderScreen::handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,

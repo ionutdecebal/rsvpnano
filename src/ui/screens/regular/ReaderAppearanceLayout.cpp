@@ -3,6 +3,7 @@
 namespace screens::appearanceLayout {
     Layout make(int16_t width, int16_t height) {
         Layout out{};
+        out.bounds = {0, 0, width, height};
         out.back = {4, 2, 44, 40};
         out.page = {52, 2, 144, 40};
         out.reset = {200, 2, 72, 40};

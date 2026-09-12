@@ -9,10 +9,9 @@ namespace WaveshareAmoled18::Version {
     constexpr const char* kOtaAssetName = "rsvp-nano-esp32-s3-touch-amoled-1.8-v2-ota.bin";
 
     // Transfers retain native panel axes; the UI's strip composition supplies quarter-turn rotation.
-    constexpr bool kPanelMemoryRotated180 = false;
     constexpr uint16_t kPanelColumnOffset = 16;
     constexpr uint16_t kPanelRowOffset = 0;
-    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::Landscape;
+    constexpr ui::Orientation kDefaultUiOrientation = ui::Orientation::LandscapeFlipped;
 
     constexpr uint8_t kTouchAddress = 0x15;
 

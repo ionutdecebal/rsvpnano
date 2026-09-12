@@ -48,7 +48,6 @@ namespace WaveshareAmoled18::DisplayWiring {
     constexpr uint16_t kPanelWidth = 368;
     constexpr uint16_t kPanelHeight = 448;
     constexpr size_t kTxChunkBytes = 32 * 1024;
-    constexpr bool kPanelMemoryRotated180 = Version::kPanelMemoryRotated180;
     constexpr uint16_t kPanelColumnOffset = Version::kPanelColumnOffset;
     constexpr uint16_t kPanelRowOffset = Version::kPanelRowOffset;
     constexpr ui::Orientation kDefaultUiOrientation = Version::kDefaultUiOrientation;

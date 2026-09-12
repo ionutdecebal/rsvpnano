@@ -15,7 +15,8 @@ namespace screens::readerLayout {
     ui::Rect portraitFeedbackRect();
     ui::Rect portraitBottomStrip(int16_t width, int16_t height);
     ui::Rect portraitPreviousRect(int16_t width, int16_t height, bool leftHanded);
-    uint16_t previousSentenceTapWidth();
+    ui::Rect previousSentenceRect(int16_t width, int16_t height, bool leftHanded, bool pageView);
+    ui::Rect arrowArea(int16_t width, int16_t height, bool leftHanded, int16_t wordHeight);
 
     struct HorizontalChrome {
         ui::Rect chapter, progress, battery, arrows;

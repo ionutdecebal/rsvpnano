@@ -47,7 +47,7 @@ namespace screens {
             state = ui::Context::combine(state, value);
         const auto footer =
             readerLayout::progressText(ui, reading ? settings::FooterMetric::percentage : config.footerMetric, 42, 132);
-        const auto chrome = appearanceLayout::chrome(ui, config.leftHanded, layout.page);
+        const auto chrome = appearanceLayout::chrome(ui, config.leftHanded, layout);
         const ui::Rect preview = ui.paintBounds(typography ? layout.preview : chrome.preview);
         if (showPreview && ui.redraw(preview, state, true)) {
             const auto arrows = typography ? ui::TextLayout{} : readerLayout::prepareArrows(ui, config, reading, true);
