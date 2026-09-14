@@ -1,109 +1,104 @@
 # ESP32-S3 Touch AMOLED 2.41 Bring-Up Notes
 
-## Target
+## Targets
 
-- Hardware revision: V1 only (no Rev2.0 PCB marking). V2 swaps the display/touch
-  reset and interrupt wiring and cannot use this firmware. See the official
-  [revision table](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.41#v1-vs-v2-differences).
-- PlatformIO env: `waveshare_esp32s3_touch_amoled_241`
-- Platform folder: `src/platforms/waveshare_amoled_241`
-- Private board facts: `src/platforms/waveshare_amoled_241/WaveshareAmoled241.h`
-- Display driver: Arduino_GFX `Arduino_RM690B0`
-- Touch driver: `src/drivers/touch/ft6336`
-- IMU driver: `src/drivers/imu/qmi8658`
+| Revision | PlatformIO environment | Installer ID | OTA asset |
+| --- | --- | --- | --- |
+| V1 (no Rev2.0 marking) | `waveshare_esp32s3_touch_amoled_241` | `amoled241` | `rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin` |
+| V2 (Rev2.0 PCB or V2 QC label) | `waveshare_esp32s3_touch_amoled_241_v2` | `amoled241-v2` | `rsvp-nano-esp32-s3-touch-amoled-2.41-v2-ota.bin` |
 
-## Current Hardware Status
+V1's existing environment, board ID, installer ID, and asset names remain unchanged.
+V1 and V2 firmware are not interchangeable. Version headers under
+`src/platforms/waveshare_amoled_241/v1/` and `v2/` select wiring at compile time.
+Both compile the regular UI, not the watch UI.
 
-Previously validated behavior on the 2.41 board:
+The platform folder and common board facts remain under
+`src/platforms/waveshare_amoled_241`. Drivers remain Arduino_GFX `Arduino_RM690B0`,
+`src/drivers/touch/ft6336`, and `src/drivers/imu/qmi8658`.
 
-- Display initializes and renders.
-- Touch input works and follows display orientation.
-- Colors are correct after removing the extra RGB565 byte swap.
-- Layout aligns with the visible panel area.
-- Fixed on-screen stripe artifacts were resolved by board-specific transfer chunk sizing.
-- SD card loading works on the 2.41.
-- Battery hold and ADC paths are wired for this board.
+## Revision wiring and TP_INT
 
-Still needs manual validation after the board/input refactor:
+| Signal | V1 | V2 |
+| --- | --- | --- |
+| OLED reset | GPIO21 | TCA9554 EXIO0 |
+| Touch reset | GPIO3 | TCA9554 EXIO1 |
+| TP_INT | TCA9554 EXIO2 | GPIO3, direct falling-edge interrupt |
+| Display power enable | TCA9554 EXIO1 | No corresponding enable; EXIO1 is touch reset |
+| OLED_TE | Not the V2 mapping | GPIO21; never drive as reset |
 
-- Soft-off and wake behavior on battery.
-- USB MSC behavior.
-- Long reading session stability.
-- OTA asset selection on a real release.
+**V1 cannot provide an MCU touch interrupt without a hardware modification.**
+TP_INT terminates at EXIO2, but the TCA9554 INT output is unconnected in the V1
+schematic. EXIO2 is explicitly kept as an input. Report polling remains necessary;
+polling the expander's live input would miss short pulses and is not a substitute
+for a latched interrupt. V1 does not advertise touch light-sleep wake.
 
-## Hardware Assumptions
+V2 attaches `FALLING` on GPIO3. The ISR only records a pending event and notifies the
+input sampler; all I2C stays outside the ISR. An initial sample covers contact that
+started before attachment. Pending is cleared before reading so an interrupt
+arriving during I2C is retained, and failed reads stay retryable. Cancellation/end
+removes the edge ISR for the sleep path, and touch initialization reattaches it.
+The existing light-sleep path can use GPIO3 as a level-triggered touch wake source.
+GPIO18 is V2's expander interrupt, not TP_INT.
 
-- Panel native geometry: `450x600`
-- App/UI geometry: `600x450` landscape, with native `450x600` panel addressing
-- Touch controller: `FT6336`
-- Display controller: `RM690B0`
-- I2C: `GPIO47/48`
-- Touch reset: `GPIO3`
-- Battery hold: `GPIO16`
-- Battery ADC: `GPIO17`
-- SDMMC pins: `GPIO4/5/6`
+V2 resets EXIO0/EXIO1 high for 20 ms, low for 20 ms, then high for 120 ms, matching
+the vendor example. Each edge preserves the other output latches and directions.
+Reset/expander failures propagate rather than claiming successful initialization.
+The FT6336 keeps its reset defaults; the unrelated FT3168 monitor-mode setup is not
+copied onto this board.
 
-These facts live in `WaveshareAmoled241.h` and are consumed only by the platform implementation.
+Sources:
 
-## Current Implementation Shape
+- [Official revision wiring table](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.41#v1-v2-differences).
+- [V1 schematic: EXIO2 and unconnected TCA9554 INT](https://files.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-2.41/ESP32-S3-Touch-AMOLED-2.41-sch.pdf).
+- [Official V2 Arduino example: GPIO3 interrupt and expander reset sequence](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.41-V2/blob/0eaf16cfae3440d445f2b6caa71e94065094551f/02_Example/Arduino/09_LVGL_Test/09_LVGL_Test.ino).
+- [Vendor touch driver: negative-edge GPIO configuration](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.41-V2/blob/0eaf16cfae3440d445f2b6caa71e94065094551f/02_Example/Arduino/09_LVGL_Test/esp_lcd_touch_ft5x06.c).
 
-- `BoardDisplay.cpp` owns board power/rail sequencing and calls the RM690B0 driver.
-- `BoardInput.cpp` exposes raw logical controls and FT6336 touch contacts.
-- `Input::poll` owns debounce, press duration, touch tracking, and app-facing gestures.
-- `BoardPower.cpp` owns battery hold, battery ADC, sleep, wake, and power behavior.
-- `BoardStorage.cpp` owns SD bus setup and card-frequency probing.
-- `BoardImu.cpp` binds the QMI8658 driver to the board I2C bus.
+## Common hardware
 
-The shared app does not include platform or chip-driver headers directly.
+- Panel native geometry: `450x600`; regular UI: `600x450` landscape.
+- Touch controller: FT6336; display controller: RM690B0.
+- I2C: GPIO47/48; battery hold: GPIO16; battery ADC: GPIO17.
+- SDMMC: GPIO4/5/6.
 
-## Bring-Up Lessons
+Previously recorded V1 behavior: display initialization, aligned touch, correct
+colors, visible-panel alignment, stripe-free transfer chunking, and SD loading.
+This is not evidence of a physical V2 test.
 
-### Rotation
+## Implementation and retained bring-up lessons
 
-Keep panel addressing at native rotation zero. The shared UI composes rotated 32-row strips
-for the landscape layout, and touch uses the matching logical transform.
+`BoardDisplayPower.cpp` owns revision-specific rail/reset sequencing.
+`BoardDisplay.cpp` calls the existing RM690B0 driver. `BoardInput.cpp` exposes raw
+controls and touch contacts; the shared input sampler owns debounce and gestures.
+Power, SD, and IMU stay in their existing board implementations. The shared app
+must not include chip-driver or platform headers directly.
 
-### Color Format
+Keep panel addressing at native rotation zero. The shared UI composes rotated
+32-row strips for landscape, and touch uses the matching transform. Arduino_GFX's
+RGB565 transfer already handles byte order; do not add another byte swap. The
+16-pixel column offset belongs to panel addressing. Retain the board-specific
+larger transfer chunk that fixed stripe artifacts on the rotated panel path.
 
-Arduino_GFX's RGB565 bitmap transfer handles byte order. Do not add a second swap in the board code.
+The updater rejects obvious cross-board asset overrides by name. Embedded board
+metadata would still be a stronger future guard. V2 filename matching must precede
+the generic 2.41 match in the web installer.
 
-### Panel Addressing
+## Validation
 
-The `16px` RM690B0 column offset belongs in panel addressing, not in app layout code.
-
-### Transfer Chunking
-
-The fixed black stripe artifacts were caused by visible seams between display flush bands on the
-rotated panel path. The 2.41 target uses a larger board-specific transfer buffer to avoid those seams.
-
-## Input Behavior
-
-The platform maps physical hardware to logical input controls, and the app handles the resulting
-events by state. The old board-config button-policy flags and `PWR` + `BOOT` standby combo are no
-longer used.
-
-## OTA Separation
-
-The 2.41 release asset name is:
-
-```text
-rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin
+```sh
+pio test -e native_amoled_241_v1_test -e native_amoled_241_v2_test
+pio run -e waveshare_esp32s3_touch_amoled_241
+pio run -e waveshare_esp32s3_touch_amoled_241_v2
+python -m unittest discover -s tools -p 'test_firmware_targets.py'
 ```
 
-The updater rejects obvious cross-board asset overrides by name. Embedded board metadata would still
-be a stronger future guard.
+Host regressions cover revision pins/identities, expander preservation, startup
+failures, short interrupt pulses, interrupts during I2C, read retries, and ISR
+cancellation/reattachment. They do not validate electrical timing or hardware.
 
-## Hardware Test Checklist
-
-- Display orientation, colors, brightness, sleep, and wake.
-- Touch alignment, edge gestures, and failed-read recovery.
-- SD load behavior and index creation.
-- Battery reporting.
-- Soft-off and wake on USB and battery.
-- USB transfer mode.
-- Long reading session stability.
-
-## Current Verification
-
-This target was not part of the most recent successful representative build pair. It should be
-included in the next full PlatformIO matrix run before merging.
+Before merging/releasing, run the full firmware matrix and check both revisions on
+hardware: cold boot, orientation, colors, brightness, all touch edges, dragging and
+release, failed-read recovery, SD loading, battery reporting, soft-off and wake on
+USB/battery, long reading sessions, and correct OTA asset selection. Verify V2
+GPIO3 pulses and touch sleep/wake with a logic analyzer. V1 is expected to poll and
+must not be reported as supporting touch IRQ wake. USB MSC remains disabled for
+these targets; this change does not enable it.

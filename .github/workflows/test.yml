@@ -38,6 +38,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check firmware targets and layouts
+        run: python -m unittest discover -s tools -p "test_firmware_targets.py"
+
       - name: Cache PlatformIO
         uses: actions/cache@v6
         with:
@@ -63,6 +66,7 @@ jobs:
         run: >-
           pio test -e native_test -e native_watch_test -e native_board_test
           -e native_light_sleep_test -e native_amoled_test
+          -e native_amoled_241_v1_test -e native_amoled_241_v2_test
 
       - name: Check native Arduino_GFX text strip rendering
         run: python test/native_canvas/run.py --fetch-library

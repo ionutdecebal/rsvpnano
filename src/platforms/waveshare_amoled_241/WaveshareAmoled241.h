@@ -5,6 +5,12 @@
 
 #include "ui/Touch.h"
 
+#ifndef RSVP_AMOLED_241_VERSION_HEADER
+#error "AMOLED 2.41 platform env must define RSVP_AMOLED_241_VERSION_HEADER."
+#endif
+
+#include RSVP_AMOLED_241_VERSION_HEADER
+
 namespace WaveshareAmoled241::ImuWiring {
     constexpr uint8_t kAddress = 0x6B;
     constexpr bool kReleaseBusBeforeRead = false;
@@ -23,7 +29,7 @@ namespace WaveshareAmoled241::DisplayWiring {
     constexpr int kData1Pin = 12;
     constexpr int kData2Pin = 13;
     constexpr int kData3Pin = 14;
-    constexpr int kResetPin = 21;
+    constexpr int kResetPin = Version::kDisplayResetPin;
     constexpr int kBacklightPin = -1;
     constexpr uint16_t kPanelWidth = 450;
     constexpr uint16_t kPanelHeight = 600;
@@ -54,17 +60,20 @@ namespace WaveshareAmoled241::System {
     constexpr uint32_t kSystemI2cTimeoutMs = 10;
     constexpr int kTouchSdaPin = 47;
     constexpr int kTouchSclPin = 48;
-    constexpr int kTouchResetPin = 3;
-    constexpr int kTouchIrqPin = -1;
+    constexpr int kTouchResetPin = Version::kTouchResetPin;
+    constexpr int kTouchIrqPin = Version::kTouchIrqPin;
     constexpr uint32_t kTouchI2cClockHz = 400000;
     constexpr uint32_t kTouchI2cTimeoutMs = 10;
     constexpr gpio_num_t kLightSleepWakeGpio = GPIO_NUM_15;
 } // namespace WaveshareAmoled241::System
 
 namespace WaveshareAmoled241::Tca9554Wiring {
-    constexpr uint8_t kDisplayRailAddress = 0x20;
-    constexpr uint8_t kDisplayRailEnablePin = 1;
-    constexpr bool kDisplayRailReleaseBusBeforeRead = false;
+    constexpr uint8_t kAddress = 0x20;
+    constexpr bool kReleaseBusBeforeRead = false;
+    constexpr int kDisplayRailEnablePin = Version::kDisplayRailEnablePin;
+    constexpr int kDisplayResetPin = Version::kDisplayResetExpanderPin;
+    constexpr int kTouchResetPin = Version::kTouchResetExpanderPin;
+    constexpr int kTouchIrqPin = Version::kTouchIrqExpanderPin;
 } // namespace WaveshareAmoled241::Tca9554Wiring
 
 namespace WaveshareAmoled241::TouchWiring {

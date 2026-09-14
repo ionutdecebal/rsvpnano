@@ -4,9 +4,9 @@
 
 namespace Board::Config {
 
-    constexpr const char* BOARD_ID = "waveshare_esp32s3_touch_amoled_2_41";
-    constexpr const char* BOARD_LABEL = "Waveshare ESP32-S3-Touch-AMOLED-2.41 V1";
-    constexpr const char* OTA_ASSET_NAME = "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin";
+    constexpr const char* BOARD_ID = WaveshareAmoled241::Version::kBoardId;
+    constexpr const char* BOARD_LABEL = WaveshareAmoled241::Version::kBoardLabel;
+    constexpr const char* OTA_ASSET_NAME = WaveshareAmoled241::Version::kOtaAssetName;
 
     constexpr bool ENABLE_TOP_EDGE_MENU_SWIPE = true;
     constexpr bool ENABLE_BOTTOM_EDGE_QUICK_SETTINGS_SWIPE = true;

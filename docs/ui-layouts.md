@@ -1,11 +1,33 @@
 # Device UI layouts
 
-Each board's `build_src_filter` selects exactly one presentation:
+Each board's `build_src_filter` selects exactly one presentation. Watch UI is for
+watch-like devices, not every AMOLED panel or every board below a diagonal-size
+threshold. The following audit uses physical display size and the device's form
+factor as well as pixel resolution.
 
-| Boards | Screen implementation |
-| --- | --- |
-| LCD 3.49 rev1/rev2 | `src/ui/screens/regular/` |
-| AMOLED 2.41, 2.16, 2.06, 1.8 v1/v2; LCD 1.47 | `src/ui/screens/watch/` |
+| Device | Diagonal | Native panel pixels | Presentation | Form factor / reason |
+| --- | --- | --- | --- | --- |
+| LCD 3.49 rev1 | 3.49 in | 172x640 | Regular | Long rectangular reader; active area 22.58x84 mm |
+| LCD 3.49 rev2 | 3.49 in | 172x640 | Regular | Same panel and reader form factor |
+| AMOLED 1.8 V1 | 1.8 in | 368x448 | Watch | Watch-size panel; active area 28.70x34.94 mm |
+| AMOLED 1.8 V2 | 1.8 in | 368x448 | Watch | Same watch-size form factor |
+| AMOLED 2.06 | 2.06 in | 410x502 | Watch | Vendor's watch-style enclosure with detachable strap |
+| AMOLED 2.16 | 2.16 in | 480x480 | Regular | Square desktop module; active area 38.99x38.99 mm, case 46x46x22.5 mm |
+| AMOLED 2.41 V1 | 2.41 in | 450x600 | Regular | Larger rectangular handheld panel; active area 37.22x49.65 mm |
+| AMOLED 2.41 V2 | 2.41 in | 450x600 | Regular | Same panel; reset and interrupt wiring differ, not layout |
+| ESP32-C6 LCD 1.47 | 1.47 in | 172x320 | Watch | Narrow watch-size display; active area 17.75x32.93 mm |
+
+The 2.16 and both 2.41 revisions use `src/ui/screens/regular/`. The 1.8, 2.06,
+and C6 1.47 use `src/ui/screens/watch/`. LCD 3.49 remains regular.
+
+Vendor references: [3.49 LCD parameters](https://docs.waveshare.com/ESP32-S3-Touch-LCD-3.49),
+[1.8 documentation](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-1.8),
+[2.06 watch enclosure](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.06),
+[2.16 documentation](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) and
+[dimension drawing](https://www.waveshare.com/img/devkit/ESP32-S3-Touch-AMOLED-2.16/ESP32-S3-Touch-AMOLED-2.16-details-size.jpg),
+[2.41 revision table](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.41#v1-v2-differences),
+[C6 1.47 documentation](https://docs.waveshare.com/ESP32-C6-Touch-LCD-1.47).
+Physical active-area dimensions are from each vendor page's product drawing.
 
 There is no UI-kind define or runtime boolean. The regular source filter excludes
 `watch/`; the watch source filter excludes `regular/`. Both implement the same
@@ -32,43 +54,45 @@ Chapter and timer carousels only draw three visible cards. Tap a side to select 
 tap the center to activate it. Horizontal swipes select without activating. The WPM
 ring uses relative horizontal drag and retains explicit minus/plus controls.
 
-## Native watch orientation
+## Orientation is independent of presentation
 
-Watch menus use the panel's natural portrait axes: 450x600 (2.41), 480x480 (2.16),
-410x502 (2.06), 368x448 (1.8 V1/V2), and 172x320 (LCD 1.47). Each board declares
-`Portrait` as its default orientation and uses native width/height in `BoardConfig`.
-LCD 3.49 keeps its existing landscape orientation and regular presentation.
+Selecting watch or regular sources does not change a board's orientation. Keep the
+existing board-specific default orientation, native panel addressing, offsets, and
+matching touch transform. The 2.41 remains a 600x450 landscape UI over its native
+450x600 panel; the 2.16 remains 480x480. Do not assume watch implies portrait.
 
-Draw directly to the watch panel; no additional canvas/framebuffer is required.
-SH8601 and CO5300 do not support a hardware X/Y-axis exchange, so requesting a
-landscape quarter-turn changes logical bounds without correctly rotating pixels.
-See the [CO5300 driver](https://github.com/moononournation/Arduino_GFX/blob/master/src/display/Arduino_CO5300.cpp)
-and [SH8601 driver](https://github.com/moononournation/Arduino_GFX/blob/master/src/display/Arduino_SH8601.cpp).
-The existing handedness option uses a 180-degree flip, with matching touch mapping;
-both portrait offset sets must retain the panel's column/row offsets.
+The existing handedness option uses a 180-degree flip with matching touch mapping.
+Panel offsets belong in the display driver, not in layout selection. No new
+framebuffer or display-driver replacement is needed to select a presentation.
 
 ## Validation
 
-Run the two test profiles separately:
-
 ```sh
+python -m unittest discover -s tools -p 'test_firmware_targets.py'
 uvx platformio test -e native_test -f test_ui
 uvx platformio test -e native_watch_test
-uvx platformio run -e waveshare_esp32s3_touch_lcd_349_rev1
-uvx platformio run -e waveshare_esp32s3_touch_amoled_206
-uvx platformio run -e waveshare_esp32c6_touch_lcd_147
+uvx platformio test -e native_amoled_241_v1_test -e native_amoled_241_v2_test
+uvx platformio run -e waveshare_esp32s3_touch_amoled_216
+uvx platformio run -e waveshare_esp32s3_touch_amoled_241
+uvx platformio run -e waveshare_esp32s3_touch_amoled_241_v2
 ```
 
+The target regression test covers every production environment and its benchmark
+variant, verifies that only the chosen presentation is selected, and checks that
+both installer and OTA exports cover the full CI matrix. The reusable firmware
+build workflow obtains that matrix from `tools/export_web_firmware.py --list-envs`;
+there is no second hard-coded device list to update there.
+
 The watch host tests cover native portrait bounds and the previous landscape sizes;
-paging, dock navigation, relative rotary adjustment, and directional
-carousel gestures. Host drawing checks do not prove pixel appearance or touch
-quality on hardware.
+paging, dock navigation, relative rotary adjustment, and directional carousel
+gestures. Host drawing checks do not prove pixel appearance or touch quality on
+hardware.
 
 Before release, check on the physical devices:
 
-- The full portrait screen is visible, text is not mirrored, all four corners and
-  dock items respond at their drawn positions, and swipes follow the finger in
-  both handedness settings. Cold boot and sleep/wake must restore the display.
+- The full screen is visible, text is not mirrored, all four corners and dock items
+  respond at their drawn positions, and swipes follow the finger in both handedness
+  settings. Cold boot and sleep/wake must restore the display.
 - Long/localized titles, settings labels, and chapter names remain readable.
 - All setting pages, timer creation/editing, and keyboard input remain accessible.
 - Side taps and swipes never start a chapter/timer; center taps do.

@@ -1,9 +1,8 @@
 #include "board/BoardDisplay.h"
 
-#include <Wire.h>
 #include "board/BacklightBrightness.h"
 
-#include "drivers/gpio/tca9554/Tca9554.h"
+#include "platforms/waveshare_amoled_241/BoardDisplayPower.h"
 #include "platforms/waveshare_amoled_241/WaveshareAmoled241.h"
 
 namespace {
@@ -22,19 +21,14 @@ namespace {
                            WaveshareAmoled241::DisplayWiring::kPanelColumnOffset,
                            WaveshareAmoled241::DisplayWiring::kPanelRowOffset);
 
-    void enableDisplayRail() {
-        BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareAmoled241::Tca9554Wiring::kDisplayRailAddress,
-                                                  WaveshareAmoled241::Tca9554Wiring::kDisplayRailEnablePin, true,
-                                                  WaveshareAmoled241::Tca9554Wiring::kDisplayRailReleaseBusBeforeRead);
-        delay(25);
-    }
-
 } // namespace
 
 namespace Board::Display {
 
     bool begin() {
-        enableDisplayRail();
+        if (!WaveshareAmoled241::DisplayPower::releaseHardware()) {
+            return false;
+        }
         const bool ok = gPanel.begin();
         gPanel.fillScreen(0x0000);
         return ok;

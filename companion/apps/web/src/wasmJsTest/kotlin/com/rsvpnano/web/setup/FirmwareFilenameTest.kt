@@ -25,6 +25,25 @@ class FirmwareFilenameTest {
     }
 
     @Test
+    fun distinguishesAmoled241Revisions() {
+        val v1 = "rsvp-nano-esp32-s3-touch-amoled-2.41.bin"
+        val v2 = "rsvp-nano-esp32-s3-touch-amoled-2.41-v2.bin"
+        assertEquals(FirmwareFilenameMatch.Match, firmwareFilenameMatch("amoled241", v1))
+        assertEquals(FirmwareFilenameMatch.Match, firmwareFilenameMatch("amoled241-v2", v2))
+        assertEquals(FirmwareFilenameMatch.Match, firmwareFilenameMatch("amoled241-v2", v2.uppercase()))
+        assertEquals(FirmwareFilenameMatch.DifferentBoard, firmwareFilenameMatch("amoled241", v2))
+        assertEquals(FirmwareFilenameMatch.DifferentBoard, firmwareFilenameMatch("amoled241-v2", v1))
+        assertEquals(
+            FirmwareFilenameMatch.Ota,
+            firmwareFilenameMatch("amoled241-v2", "rsvp-nano-esp32-s3-touch-amoled-2.41-v2-ota.bin"),
+        )
+        assertEquals(
+            FirmwareFilenameMatch.Ota,
+            firmwareFilenameMatch("amoled241", "rsvp-nano-esp32-s3-touch-amoled-2.41-ota.bin"),
+        )
+    }
+
+    @Test
     fun warnsAboutOtherBoardsButAllowsUnknownCustomBuilds() {
         assertEquals(
             FirmwareFilenameMatch.DifferentBoard,

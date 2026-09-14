@@ -108,8 +108,9 @@ private val InstallerBoards = listOf(
     InstallerBoard("amoled18-v1", "AMOLED 1.8 / V1", "VERSION 1", "The original 1.8-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
     InstallerBoard("amoled18-v2", "AMOLED 1.8 / V2", "VERSION 2", "The newer revision; still being tested.", "https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
     InstallerBoard("amoled206", "AMOLED 2.06", "AMOLED", "The 2.06-inch touch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.06.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
-    InstallerBoard("amoled216", "AMOLED 2.16", "3 BUTTON", "The three-button 2.16-inch board.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
-    InstallerBoard("amoled241", "AMOLED 2.41 V1", "AMOLED", "V1 hardware only. V2 uses different display and touch wiring and is not supported by this firmware.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
+    InstallerBoard("amoled216", "AMOLED 2.16", "3 BUTTON", "The square 2.16-inch board. Regular layout.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithPower),
+    InstallerBoard("amoled241", "AMOLED 2.41 / V1", "VERSION 1", "V1 hardware only (no Rev2.0 marking). Regular layout.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
+    InstallerBoard("amoled241-v2", "AMOLED 2.41 / V2", "VERSION 2", "Rev2.0 PCB or V2 QC label. Regular layout.", "https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal", "ESP32-S3", BootloaderWithReset),
     InstallerBoard("lcd147-c6", "LCD 1.47 / C6", "COMPACT", "The compact 1.47-inch touch board.", "https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm?&aff_id=ionutdecebal", "ESP32-C6", BootloaderWithReset),
 )
 
@@ -557,7 +558,6 @@ private fun InstallPage(
                 )
             }
         }
-
         InstallStepCard(2, "Install firmware", installState.complete, installState.bootloaderReady) {
             if (!installState.bootloaderReady) {
                 Text("Complete step 1 to unlock installation.", style = MaterialTheme.typography.bodySmall)
@@ -926,6 +926,7 @@ internal fun firmwareFilenameMatch(selectedBoardId: String, filename: String): F
         "touch-amoled-1.8" in normalized -> "amoled18-v1"
         "touch-amoled-2.06" in normalized -> "amoled206"
         "touch-amoled-2.16" in normalized -> "amoled216"
+        "touch-amoled-2.41-v2" in normalized -> "amoled241-v2"
         "touch-amoled-2.41" in normalized -> "amoled241"
         "esp32-c6-touch-lcd-1.47" in normalized -> "lcd147-c6"
         else -> null
