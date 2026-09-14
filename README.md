@@ -95,8 +95,6 @@ Most LCD 3.49 readers use rev1. Try rev2 when the display works but backlight co
 
 For AMOLED 2.41, choose V2 only for a Rev2.0 PCB or V2 QC label. Reset/interrupt wiring
 is different; V1 and V2 firmware are not interchangeable. Both use the regular UI.
-See the [device layout audit](docs/ui-layouts.md) and
-[2.41 wiring notes](docs/hardware/esp32-s3-touch-amoled-2.41-bringup-notes.md).
 
 The following purchase links are affiliate links. A purchase may support RSVP Nano at no extra cost
 to you:
