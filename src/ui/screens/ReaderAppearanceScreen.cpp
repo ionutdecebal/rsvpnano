@@ -19,7 +19,12 @@ namespace screens {
         const auto families = fonts.families();
         const auto selected = std::ranges::find(families, type.fontId, &FontCatalog::Family::id);
         const size_t family = selected == families.end() ? 0 : selected - families.begin();
-        face_ = fonts.loadFace(family, type.fontSizeIndex);
+        if (type.fontSizeIndex == RFont4::kExtraLargeStrikeIndex) {
+            constexpr std::array<size_t, 5> sizes{RFont4::kExtraLargeStrikeIndex, 0, 1, 2, RFont4::kCompactStrikeIndex};
+            face_ = fonts.loadFaceFittingHeight(family, sizes, layout.preview.h);
+        } else {
+            face_ = fonts.loadFace(family, type.fontSizeIndex);
+        }
         activateFace(face_);
         typography_ = type;
         // The preview uses the global face; the book must reselect its own override on return.
@@ -102,7 +107,8 @@ namespace screens {
                 changed |= type != settings::TypographySettings{};
                 type = {};
             }
-            ui.label(layout.size, RFont4::sizeLabel(type.fontSizeIndex), 2, Muted);
+            ui.label(layout.size, RFont4::sizeLabel(type.fontSizeIndex),
+                     type.fontSizeIndex == RFont4::kExtraLargeStrikeIndex ? 1 : 2, Muted);
             if (ui.tap(layout.size)) {
                 type.fontSizeIndex.cycle();
                 changed = true;

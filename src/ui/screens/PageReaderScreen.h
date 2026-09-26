@@ -64,6 +64,7 @@ namespace screens::PageReader {
         std::vector<ui::fonts::PositionedGlyph> glyphs;
         std::vector<Character> characters;
         size_t lineCount = 0;
+        uint8_t fixedLineCount = 0;
         size_t pageStart = std::numeric_limits<size_t>::max();
         size_t pageEnd = 0;
         size_t highlighted = std::numeric_limits<size_t>::max();
@@ -75,6 +76,6 @@ namespace screens::PageReader {
 
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
-              const ReadingSession& session, ui::Rect area, std::string_view overlay = {});
+              const ReadingSession& session, ui::Rect area, std::string_view overlay = {}, uint8_t fixedLineCount = 0);
 
 } // namespace screens::PageReader

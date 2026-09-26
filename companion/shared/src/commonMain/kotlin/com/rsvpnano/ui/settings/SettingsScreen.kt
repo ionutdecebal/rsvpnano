@@ -976,7 +976,7 @@ private fun TypographySizeSelector(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            listOf("0" to "Large", "1" to "Medium", "2" to "Small", "3" to "Compact").forEach { (value, label) ->
+            listOf("0" to "Large", "1" to "Medium", "2" to "Small", "3" to "Compact", "4" to "Extra Large").forEach { (value, label) ->
                 val isSelected = value == selected
                 Surface(
                     modifier = Modifier
@@ -997,7 +997,8 @@ private fun TypographySizeSelector(
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 9.dp),
                         style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        minLines = 2,
+                        maxLines = 2,
                     )
                 }
             }
@@ -1088,6 +1089,7 @@ fun TypographyPreview(
     val wordStyle = TextStyle(
         color = foreground,
         fontSize = when (typography.fontSizeIndex) {
+            4 -> 52.sp
             0 -> 42.sp
             1 -> 36.sp
             2 -> 30.sp
@@ -1305,7 +1307,7 @@ private fun SettingsIndex(
         SettingsDestination.Typography to settings?.let {
             val font = uiState.availableFonts.firstOrNull { font -> font.id == it.reading.typography.fontId }?.name
                 ?: it.reading.typography.fontId
-            val size = listOf("Large", "Medium", "Small", "Compact")
+            val size = listOf("Large", "Medium", "Small", "Compact", "Extra Large")
                 .getOrElse(it.reading.typography.fontSizeIndex) { "Default" }
             listOf(font, size, "Tracking ${it.reading.typography.tracking}").joinToString(INLINE_DIVIDER)
         }.orEmpty(),

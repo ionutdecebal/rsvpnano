@@ -228,7 +228,7 @@ namespace screens {
             loadedFontSizeIndex_ = typography_.fontSizeIndex;
             ++fontRevision_;
         }
-        face_ = fonts.loadFace(family, typography_.fontSizeIndex);
+        face_ = readerTypeface(family);
         activateFace(face_);
     }
 
@@ -257,7 +257,7 @@ namespace screens {
             const size_t family = fontChoice(first);
             if (family == currentFamily)
                 continue;
-            const FontCatalog::Face upcoming = fonts.loadFace(family, typography_.fontSizeIndex);
+            const FontCatalog::Face upcoming = readerTypeface(family);
             if (upcoming.shaper)
                 return;
             if (upcoming.raster.get().bitmap != nullptr)
@@ -294,7 +294,7 @@ namespace screens {
 #if defined(BOARD_HAS_PSRAM)
         const std::string_view nextWord = ReadingLoop::wordAt(session, next);
         if (changingFamily && UnicodeText::isCjkText(nextWord)) {
-            const FontCatalog::Face nextFace = fonts.loadFace(nextFamily, typography_.fontSizeIndex);
+            const FontCatalog::Face nextFace = readerTypeface(nextFamily);
             constexpr size_t blockBudget = kFontReadAheadTargetBlocks / 8;
             size_t loadedBlocks = 0;
             const auto bounds = ReadingLoop::paragraphBoundsAt(session, next);
@@ -311,7 +311,7 @@ namespace screens {
 
         TextShaping::Shaper* nextShaper = nullptr;
         if (changingFamily) {
-            const FontCatalog::Face nextFace = fonts.loadFace(nextFamily, typography_.fontSizeIndex);
+            const FontCatalog::Face nextFace = readerTypeface(nextFamily);
             nextShaper = nextFace.shaper;
             if (nextShaper)
                 activateFace(nextFace);
@@ -365,7 +365,24 @@ namespace screens {
         }
     }
 
+    FontCatalog::Face ReaderScreen::readerTypeface(size_t family) {
+        if (typography_.fontSizeIndex != RFont4::kExtraLargeStrikeIndex)
+            return fonts.loadFace(family, typography_.fontSizeIndex);
+        constexpr std::array<size_t, 5> sizes{RFont4::kExtraLargeStrikeIndex, 0, 1, 2, RFont4::kCompactStrikeIndex};
+        const auto area = readerLayout::readingArea(width_, height_, false);
+        return fonts.loadFaceFittingHeight(family, sizes, area.h - 12);
+    }
+
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
+        // Runtime families share one raster strike; reload the RSVP face after previewing.
+        loadedWordIndex_ = SIZE_MAX;
+        if (pagePreview_ && (typography_.fontSizeIndex == 0
+                             || typography_.fontSizeIndex == RFont4::kExtraLargeStrikeIndex)) {
+            const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
+            const auto area = readerLayout::readingArea(width_, height_, vertical);
+            constexpr std::array<size_t, 5> sizes{0, 1, 2, RFont4::kPreviewStrikeIndex, RFont4::kCompactStrikeIndex};
+            return fonts.loadFaceFittingHeight(fontChoice(wordIndex), sizes, (area.h - 8) / readerLayout::kPreviewRows - 2, vertical);
+        }
         return fonts.loadFace(fontChoice(wordIndex), readerLayout::pageStrikeIndex());
     }
 
@@ -492,7 +509,9 @@ namespace screens {
                 return pageTypeface(wordIndex);
             };
             PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session, readingArea,
-                             overlay);
+                             overlay, pagePreview_ && (typography_.fontSizeIndex == 0
+                                                      || typography_.fontSizeIndex == RFont4::kExtraLargeStrikeIndex)
+                                          ? readerLayout::kPreviewRows : 0);
         } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings),
                              true)) {
             const std::string overlay =

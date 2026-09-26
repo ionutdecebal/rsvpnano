@@ -403,7 +403,7 @@ object NanoSettingsSchema {
     const val STANDBY_TIMER_15_MIN = 3
     const val STANDBY_TIMER_30_MIN = 4
     const val FONT_SIZE_MIN = 0
-    const val FONT_SIZE_MAX = 3
+    const val FONT_SIZE_MAX = 4
     const val TRACKING_MIN = -2
     const val TRACKING_MAX = 3
     const val ANCHOR_PERCENT_MIN = 30

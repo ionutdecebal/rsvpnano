@@ -45,7 +45,7 @@ class NanoSettingsUpdateHelpersTest {
         assertEquals(600, updated.reading.pacing.longWordDelayMs)
         assertEquals(0, updated.reading.pacing.complexWordDelayMs)
         assertEquals(100, updated.`interface`.brightnessPercent)
-        assertEquals(3, updated.reading.typography.fontSizeIndex)
+        assertEquals(4, updated.reading.typography.fontSizeIndex)
         assertEquals(3, updated.reading.typography.tracking)
         assertEquals(30, updated.reading.typography.anchor)
         assertEquals(20, updated.reading.typography.guideWidth)

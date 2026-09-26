@@ -77,6 +77,8 @@ public:
     }
     const Family* find(std::string_view id) const;
     Face loadFace(size_t familyIndex, size_t sizeIndex);
+    Face loadFaceFittingHeight(size_t familyIndex, std::span<const size_t> sizes, int16_t height,
+                               bool vertical = false);
     void clearLoaded();
 #if defined(RSVP_BENCHMARK_MODE)
     void resetFileCacheStats() {
