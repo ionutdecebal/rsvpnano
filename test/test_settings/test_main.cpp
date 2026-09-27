@@ -36,6 +36,26 @@ void test_defaults_round_trip_through_toml_and_companion_json() {
     TEST_ASSERT_TRUE(defaults == *fromJson);
 }
 
+void test_extra_large_font_round_trips_and_cycles_without_changing_existing_sizes() {
+    settings::DeviceSettings settings;
+    settings.reading.typography.fontSizeIndex = 4;
+    const auto toml = settings::codec::encodeToml(settings, settings::SettingsSource::Programmatic);
+    TEST_ASSERT_TRUE(toml.has_value());
+    const auto restored = settings::codec::decodeToml(*toml, settings::SettingsSource::Sd);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_EQUAL(4, restored->reading.typography.fontSizeIndex);
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encode(settings, json).has_value());
+    const auto fromJson = companion::api::decode<settings::DeviceSettings>(json);
+    TEST_ASSERT_TRUE(fromJson.has_value());
+    TEST_ASSERT_EQUAL(4, fromJson->reading.typography.fontSizeIndex);
+    settings.reading.typography.fontSizeIndex.cycle();
+    TEST_ASSERT_EQUAL(0, settings.reading.typography.fontSizeIndex);
+    settings.reading.typography.fontSizeIndex = 3;
+    settings.reading.typography.fontSizeIndex.cycle();
+    TEST_ASSERT_EQUAL(4, settings.reading.typography.fontSizeIndex);
+}
+
 void test_battery_curve_reaches_full() {
     TEST_ASSERT_EQUAL_UINT8(100, BoardDrivers::BatteryCurve::percentForVoltage(4.15f));
 }
@@ -312,6 +332,7 @@ void test_visibility_toggles_only_selected_state_and_round_trips() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_defaults_round_trip_through_toml_and_companion_json);
+    RUN_TEST(test_extra_large_font_round_trips_and_cycles_without_changing_existing_sizes);
     RUN_TEST(test_battery_curve_reaches_full);
     RUN_TEST(test_visibility_toggles_only_selected_state_and_round_trips);
     RUN_TEST(test_enum_names_are_human_readable);

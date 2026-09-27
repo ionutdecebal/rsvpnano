@@ -29,10 +29,10 @@ namespace {
         return record;
     }
 
-    std::array<RFont4::StrikeRecord, RFont4::kSizeCount> readStrikes(const std::vector<uint8_t>& bytes,
+    std::array<RFont4::StrikeRecord, RFont4::kStrikeCount> readStrikes(const std::vector<uint8_t>& bytes,
                                                                      const RFont4::Header& header) {
-        std::array<RFont4::StrikeRecord, RFont4::kSizeCount> strikes;
-        std::memcpy(strikes.data(), bytes.data() + header.strikesOffset, sizeof(strikes));
+        std::array<RFont4::StrikeRecord, RFont4::kStrikeCount> strikes{};
+        std::memcpy(strikes.data(), bytes.data() + header.strikesOffset, header.strikeCount * sizeof(strikes.front()));
         return strikes;
     }
 
@@ -144,7 +144,7 @@ namespace {
         TEST_ASSERT_BITS_HIGH(header.scriptMask & ~UnicodeText::ScriptMath, scriptMask);
         if ((header.scriptMask & UnicodeText::ScriptMath) != 0)
             TEST_ASSERT_BITS_HIGH(UnicodeText::ScriptMath, scriptMask);
-        for (size_t index = 0; index < strikes.size(); ++index) {
+        for (size_t index = 0; index < header.strikeCount; ++index) {
             TEST_ASSERT_EQUAL_UINT8(index == RFont4::kCompactStrikeIndex ? 1 : 4, strikes[index].bitsPerPixel);
             TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(index == RFont4::kCompactStrikeIndex
                                                              ? RFont4::BitmapEncoding::raw
@@ -157,7 +157,7 @@ namespace {
             for (uint32_t glyphIndex = 0; glyphIndex < header.glyphCount; ++glyphIndex) {
                 std::string key;
                 key.reserve(strikes.size() * sizeof(RFont4::GlyphRecord));
-                for (const auto& strike: strikes) {
+                for (const auto& strike: std::span{strikes}.first(header.strikeCount)) {
                     const auto* record = bytes.data() + strike.glyphsOffset + glyphIndex * sizeof(RFont4::GlyphRecord);
                     key.append(reinterpret_cast<const char*>(record), sizeof(RFont4::GlyphRecord));
                 }
@@ -382,6 +382,40 @@ namespace {
 
 void setUp() {}
 void tearDown() {}
+
+void test_legacy_four_strike_fonts_remain_valid() {
+    RFont4::Directory directory;
+    auto& h = directory.header;
+    h.headerSize = sizeof(RFont4::Header);
+    h.strikeRecordSize = sizeof(RFont4::StrikeRecord);
+    h.glyphRecordSize = sizeof(RFont4::GlyphRecord);
+    h.kerningRecordSize = sizeof(RFont4::KerningRecord);
+    h.supplementaryRecordSize = sizeof(RFont4::SupplementaryRecord);
+    h.verticalRuleRecordSize = sizeof(RFont4::VerticalRule);
+    h.layoutTableRecordSize = sizeof(RFont4::LayoutTableRecord);
+    h.strikeCount = 4;
+    h.nameSize = 2;
+    h.glyphCount = h.pageTableCount = 1;
+    h.nameOffset = sizeof(RFont4::Header);
+    h.localeOffset = h.strikesOffset = h.nameOffset + h.nameSize;
+    h.supplementaryOffset = h.strikesOffset + h.strikeCount * sizeof(RFont4::StrikeRecord);
+    h.pageMapOffset = h.supplementaryOffset;
+    h.pageTablesOffset = h.pageMapOffset + RFont4::kPageMapBytes;
+    h.glyphIdsOffset = h.pageTablesOffset + RFont4::kPageTableEntries * sizeof(uint16_t);
+    h.glyphMapOffset = h.verticalRulesOffset = h.glyphIdsOffset;
+    uint32_t offset = h.verticalRulesOffset;
+    for (size_t i = 0; i < h.strikeCount; ++i) {
+        auto& strike = directory.strikes[i];
+        strike.yAdvance = strike.pixelsPerEm = 1;
+        strike.glyphsOffset = offset;
+        offset += sizeof(RFont4::GlyphRecord);
+        strike.kerningOffset = strike.bitmapOffset = offset;
+    }
+    h.layoutTablesOffset = h.totalSize = offset;
+    TEST_ASSERT_TRUE(RFont4::layoutValid(h, directory.strikes, {}, h.totalSize));
+    h.strikeCount = 5;
+    TEST_ASSERT_FALSE(RFont4::layoutValid(h, directory.strikes, {}, h.totalSize));
+}
 
 void test_all_rfont4_assets_are_fully_validated_off_device() {
     size_t count = 0;
@@ -675,6 +709,7 @@ int main(int, char**) {
     RUN_TEST(test_resident_metrics_avoid_file_reads_until_bitmap_rendering);
     RUN_TEST(test_lz4_block_decoder_checks_bounds_and_overlap);
     RUN_TEST(test_oversized_compressed_run_reads_each_glyph_once);
+    RUN_TEST(test_legacy_four_strike_fonts_remain_valid);
     RUN_TEST(test_all_rfont4_assets_are_fully_validated_off_device);
     RUN_TEST(test_shaper_reuses_rfont4_nominal_glyphs_and_advances);
     RUN_TEST(test_compact_strike_renders_one_bit_rows);

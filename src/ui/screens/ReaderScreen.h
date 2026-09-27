@@ -96,6 +96,7 @@ namespace screens {
         void prefetchUpcomingFont(uint32_t nowMs);
         void prefetchNextWord(uint32_t nowMs);
         FontCatalog::Face pageTypeface(size_t wordIndex);
+        FontCatalog::Face readerTypeface(size_t family);
 
         int16_t width_;
         int16_t height_;

@@ -19,9 +19,11 @@ namespace RFont4 {
     constexpr uint16_t kVersion = 8;
     constexpr size_t kPageMapBytes = 256;
     constexpr size_t kPageTableEntries = 256;
-    constexpr size_t kSizeCount = 4;
-    constexpr size_t kCompactStrikeIndex = kSizeCount - 1;
-    constexpr size_t kStrikeCount = kSizeCount;
+    constexpr size_t kSizeCount = 5;
+    constexpr size_t kCompactStrikeIndex = 3;
+    constexpr size_t kExtraLargeStrikeIndex = 4;
+    constexpr size_t kPreviewStrikeIndex = 5;
+    constexpr size_t kStrikeCount = 6;
     constexpr size_t kMaximumLayoutTableCount = 3;
     constexpr uint32_t kShapedGlyphCodepoint = UINT32_MAX;
     constexpr uint16_t kRawBitmapFlag = 0x8000U;
@@ -43,8 +45,8 @@ namespace RFont4 {
         layoutTag('G', 'S', 'U', 'B'),
         layoutTag('G', 'P', 'O', 'S'),
     };
-    constexpr std::array<const char*, kSizeCount> kSizeIds = {"large", "medium", "small", "compact"};
-    constexpr std::array<const char*, kSizeCount> kSizeLabels = {"Large", "Medium", "Small", "Compact"};
+    constexpr std::array<const char*, kSizeCount> kSizeIds = {"large", "medium", "small", "compact", "extra-large"};
+    constexpr std::array<const char*, kSizeCount> kSizeLabels = {"Large", "Medium", "Small", "Compact", "Extra Large"};
     constexpr uint32_t kKnownScriptMask = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic
                                         | UnicodeText::ScriptGreek | UnicodeText::ScriptHebrew
                                         | UnicodeText::ScriptArabic | UnicodeText::ScriptHan
@@ -158,14 +160,15 @@ namespace RFont4 {
             && header.kerningRecordSize == sizeof(KerningRecord)
             && header.supplementaryRecordSize == sizeof(SupplementaryRecord)
             && header.verticalRuleRecordSize == sizeof(VerticalRule)
-            && header.layoutTableRecordSize == sizeof(LayoutTableRecord) && header.strikeCount == kStrikeCount
+            && header.layoutTableRecordSize == sizeof(LayoutTableRecord)
+            && (header.strikeCount == 4 || header.strikeCount == kStrikeCount)
             && header.layoutTableCount <= kMaximumLayoutTableCount && header.nameSize > 1
             && header.glyphCount > 0 && header.glyphCount <= UINT16_MAX
             && header.pageTableCount > 0 && header.pageTableCount <= UINT8_MAX
             && (header.scriptMask & ~kKnownScriptMask) == 0 && header.nameOffset == sizeof(Header)
             && header.localeOffset == header.nameOffset + header.nameSize
             && header.strikesOffset == header.localeOffset + header.localeSize
-            && header.supplementaryOffset == header.strikesOffset + kStrikeCount * sizeof(StrikeRecord)
+            && header.supplementaryOffset == header.strikesOffset + header.strikeCount * sizeof(StrikeRecord)
             && header.pageMapOffset
                    == header.supplementaryOffset + header.supplementaryCount * sizeof(SupplementaryRecord)
             && header.pageTablesOffset == header.pageMapOffset + kPageMapBytes
@@ -207,7 +210,7 @@ namespace RFont4 {
             || !section(header.verticalRulesOffset,
                         static_cast<uint64_t>(header.verticalRuleCount) * sizeof(VerticalRule)))
             return false;
-        for (const StrikeRecord& strike: strikes) {
+        for (const StrikeRecord& strike: strikes.first(header.strikeCount)) {
             if (strike.yAdvance == 0 || strike.pixelsPerEm == 0
                 || (strike.bitsPerPixel != 1 && strike.bitsPerPixel != 4)
                 || (strike.bitmapEncoding != BitmapEncoding::raw

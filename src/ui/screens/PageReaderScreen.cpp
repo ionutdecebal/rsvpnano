@@ -231,7 +231,9 @@ namespace screens::PageReader {
             size_t bidiFirstLine = 0;
             state.characters.clear();
 
-            while (index < wordCount && state.lineCount < state.lines.size()) {
+            const size_t maximumLines = state.fixedLineCount ? state.fixedLineCount : state.lines.size();
+            const int16_t rowHeight = state.fixedLineCount ? (area.h - kMarginY * 2) / state.fixedLineCount : 0;
+            while (index < wordCount && state.lineCount < maximumLines) {
                 if (index < shapingParagraph.firstWord || index >= shapingParagraph.lastWord) {
                     if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                         appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady,
@@ -247,7 +249,7 @@ namespace screens::PageReader {
                                 .has_value();
                 }
                 const bool startsParagraph = paragraphStart(session, index);
-                if (state.lineCount > 0 && startsParagraph)
+                if (!state.fixedLineCount && state.lineCount > 0 && startsParagraph)
                     top = static_cast<int16_t>(top + std::max<int16_t>(4, previousLineHeight / 3));
 
                 State::Line& line = state.lines[state.lineCount];
@@ -256,6 +258,7 @@ namespace screens::PageReader {
                 uint8_t ascent = 0;
                 uint8_t descent = 0;
                 uint8_t yAdvance = 0;
+                int16_t inkTop = 0, inkBottom = -1;
                 while (index < wordCount) {
                     if (index > line.start && paragraphStart(session, index))
                         break;
@@ -280,22 +283,25 @@ namespace screens::PageReader {
                     ascent = std::max(ascent, font.ascent);
                     descent = std::max(descent, font.descent);
                     yAdvance = std::max(yAdvance, font.yAdvance);
+                    inkTop = std::min<int16_t>(inkTop, font.wordInkTop);
+                    inkBottom = std::max<int16_t>(inkBottom, font.wordInkBottom);
                     ++index;
                 }
                 if (index == line.start)
                     ++index;
                 const int16_t textHeight = static_cast<int16_t>(ascent + descent);
-                if (top + textHeight > bottom && state.lineCount > 0) {
+                if (!state.fixedLineCount && top + textHeight > bottom && state.lineCount > 0) {
                     index = line.start;
                     break;
                 }
-                line.y = static_cast<int16_t>(top + ascent);
-                line.bottom = static_cast<int16_t>(top + textHeight);
+                line.y = state.fixedLineCount ? static_cast<int16_t>(top + (rowHeight - (inkBottom - inkTop + 1)) / 2 - inkTop)
+                                              : static_cast<int16_t>(top + ascent);
+                line.bottom = static_cast<int16_t>(top + (state.fixedLineCount ? rowHeight : textHeight));
                 line.end = index;
                 for (size_t word = line.start; word < line.end; ++word)
                     state.words[word - state.pageStart].y = line.y;
                 ++state.lineCount;
-                previousLineHeight = std::max<int16_t>(yAdvance, textHeight) + kLineGap;
+                previousLineHeight = state.fixedLineCount ? rowHeight : std::max<int16_t>(yAdvance, textHeight) + kLineGap;
                 top = static_cast<int16_t>(top + previousLineHeight);
             }
             if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
@@ -340,6 +346,8 @@ namespace screens::PageReader {
             int16_t x = left;
             int16_t rowTop = static_cast<int16_t>(area.y + kMarginY);
             int16_t rowHeight = 0;
+            size_t rowIndex = 0;
+            const int16_t fixedRowHeight = state.fixedLineCount ? (area.h - kMarginY * 2) / state.fixedLineCount : 0;
             while (index < wordCount) {
                 const FontCatalog::Face face = typeface(index);
                 activateFace(text, face);
@@ -348,7 +356,9 @@ namespace screens::PageReader {
                 const int16_t glyphHeight = std::max<int16_t>(1, text.pixelsPerEm());
                 const int16_t gap = paragraphStart(session, index) && x != left ? glyphHeight / 2 : 0;
                 if (x != left && x + gap + width > right) {
-                    rowTop = static_cast<int16_t>(rowTop + rowHeight + kLineGap);
+                    rowTop = static_cast<int16_t>(rowTop + (state.fixedLineCount ? fixedRowHeight : rowHeight + kLineGap));
+                    if (state.fixedLineCount && ++rowIndex == state.fixedLineCount)
+                        break;
                     x = left;
                     rowHeight = 0;
                 }
@@ -371,7 +381,7 @@ namespace screens::PageReader {
                 const uint8_t faceIndex = rememberFace(state, face);
                 state.words.push_back({.width = width,
                                        .x = static_cast<int16_t>(x + gap),
-                                       .y = static_cast<int16_t>(rowTop + rowHeight / 2),
+                                       .y = static_cast<int16_t>(rowTop + (state.fixedLineCount ? fixedRowHeight : rowHeight) / 2),
                                        .faceIndex = faceIndex});
                 State::Word& placed = state.words.back();
                 ui::fonts::AlphaTextRenderer<640>::Bounds bounds;
@@ -646,8 +656,9 @@ namespace screens::PageReader {
 
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
-              const ReadingSession& session, ui::Rect area, std::string_view overlay) {
+              const ReadingSession& session, ui::Rect area, std::string_view overlay, uint8_t fixedLineCount) {
         area = ui.paintBounds(area);
+        fixedLineCount = std::min<uint8_t>(fixedLineCount, State::kMaximumLines);
         const size_t wordCount = ReadingLoop::wordCount(session);
         if (wordCount == 0 || area.w <= kMarginX * 2 || area.h <= kMarginY * 2) {
             ui.redraw(area, 0);
@@ -655,7 +666,9 @@ namespace screens::PageReader {
         }
 
         const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
-        if (state.layoutArea != area || state.layoutRevision != typographyRevision || state.vertical != vertical) {
+        if (state.layoutArea != area || state.layoutRevision != typographyRevision || state.vertical != vertical
+            || state.fixedLineCount != fixedLineCount) {
+            state.fixedLineCount = fixedLineCount;
             state.layoutArea = area;
             state.layoutRevision = typographyRevision;
             invalidate(state);
