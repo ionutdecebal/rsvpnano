@@ -156,5 +156,18 @@
     ],
     "translationStatus": "preview",
     "file": "zh-Hant.zip"
+  },
+  {
+    "id": "pt-BR",
+    "name": "Português (BR)",
+    "englishName": "PortugueseBrazil",
+    "version": "1.0.1",
+    "locale": "pt-BR",
+    "direction": "ltr",
+    "scripts": [
+      "Latn"
+    ],
+    "translationStatus": "preview",
+    "file": "pt-BR.zip"
   }
 ]
