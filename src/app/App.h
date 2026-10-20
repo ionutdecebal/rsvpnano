@@ -70,7 +70,10 @@ private:
     void reloadUiAssets();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
-    void runOtaCheck(bool install);
+    void runOtaCheck(bool install, bool switching = false, bool automatic = false);
+    OtaUpdater::Offer otaOffer_;
+    bool otaAutomatic_ = false;
+    OtaUpdater::Target otaTarget_ = OtaUpdater::Target::Current;
     void enterStandby(uint32_t nowMs);
     void exitStandby(uint32_t nowMs);
     void lightSleepFromStandby();

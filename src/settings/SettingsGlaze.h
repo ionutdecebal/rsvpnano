@@ -20,7 +20,9 @@ struct glz::meta<settings::BoundedValue<T, Minimum, Maximum, Step>> {
 template<>
 struct glz::meta<settings::ReadingMode> {
     using enum settings::ReadingMode;
-    static constexpr auto value = glz::enumerate(rsvp, page);
+    // A New UI card may have chunk playback selected. Classic reads it as RSVP
+    // instead of rejecting the entire settings file during a deliberate switch.
+    static constexpr auto value = glz::enumerate("rsvp", rsvp, "page", page, "chunks", rsvp);
 };
 
 template<>

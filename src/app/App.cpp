@@ -19,6 +19,7 @@
 #include "library/ReadingProgress.h"
 #include "storage/migration/Migration.h"
 #include "update/OtaUpdater.h"
+#include "update/SwitchSettings.h"
 
 namespace {
 
@@ -127,7 +128,7 @@ void App::update(uint32_t nowMs) {
         screen_ = statusDestination_;
         if (networkScreen_.startupCheckPending) {
             networkScreen_.startupCheckPending = false;
-            runOtaCheck(false);
+            runOtaCheck(false, false, true);
             return;
         }
     }
@@ -314,7 +315,7 @@ void App::renderScreen(uint32_t nowMs) {
         return;
     case screens::Screen::Ota: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_);
+        action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_, &otaOffer_);
         break;
     }
     case screens::Screen::FocusTimers:
@@ -394,6 +395,9 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         return;
     case screens::Action::OtaInstall:
         runOtaCheck(true);
+        return;
+    case screens::Action::OtaSwitchCheck:
+        runOtaCheck(false, true);
         return;
     }
 }
@@ -606,8 +610,25 @@ void App::updateBackgroundJob() {
             return;
         }
 
-        const bool reboot = completed == JobKind::OtaInstall && update.rebootRequired;
-        showTransientStatus("OTA", update.line1, update.line2, reboot ? 500 : 1400, screens::Screen::Reader);
+        if (completed == JobKind::OtaCheck) {
+            if (otaAutomatic_ && !otaOffer_.ready) {
+                otaAutomatic_ = false;
+                showTransientStatus("OTA", update.line1, update.line2, 1800, screens::Screen::Reader);
+                return;
+            }
+            otaAutomatic_ = false;
+            screen_ = screens::Screen::Ota; statusUntilMs_ = 0;
+            immediateUi_.invalidate(); renderScreen(millis()); return;
+        }
+        bool reboot = completed == JobKind::OtaInstall && update.rebootRequired;
+        if (reboot) {
+            if (auto saved = OtaUpdater::finalizeInstall(settingsStore_, otaOffer_); !saved) {
+                reboot = false;
+                copyText(update.line1, "Switch cancelled");
+                copyText(update.line2, saved.error().c_str());
+            }
+        }
+        showTransientStatus("OTA", update.line1, update.line2, reboot ? 500 : 2500, screens::Screen::Ota);
         restartAfterStatus_ = reboot;
         return;
     }
@@ -686,7 +707,7 @@ void App::runBackgroundJob() {
     case JobKind::OtaCheck: {
         Logger::checkpoint("ota_check");
         const OtaUpdater::Result result =
-            OtaUpdater::checkOnly(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this);
+            OtaUpdater::checkOnly(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this, otaTarget_, &otaOffer_);
         copyText(complete.line1, result.summary.c_str());
         copyText(complete.line2, result.detail.c_str());
         break;
@@ -695,7 +716,7 @@ void App::runBackgroundJob() {
         Logger::checkpoint("ota_install");
         const OtaUpdater::Result result =
             OtaUpdater::checkAndInstall(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus,
-                                        this);
+                                        this, &otaOffer_);
         copyText(complete.line1, result.summary.c_str());
         copyText(complete.line2, result.detail.c_str());
         complete.rebootRequired = result.rebootRequired;
@@ -875,7 +896,10 @@ void App::reloadUiAssets() {
     immediateUi_.setLanguageAssets(std::move(assets));
 }
 
-void App::runOtaCheck(bool install) {
+void App::runOtaCheck(bool install, bool switching, bool automatic) {
+    otaAutomatic_ = automatic;
+    if (install && !otaOffer_.ready) return;
+    if (!install) { otaTarget_ = switching ? OtaUpdater::Target::Other : OtaUpdater::Target::Current; otaOffer_ = {}; }
     ReadingLoop::pause(readerScreen_.session);
     if (install) {
         const uint32_t nowMs = millis();
