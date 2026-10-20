@@ -2,7 +2,7 @@
 
 ## Browser option
 
-For a graphical workflow, open **RSVP-Nano-USB-Speed-Test.html** from Downloads in desktop Chrome or Edge. The single file includes the diagnostic and a Study13 restore image. Its buttons guide you through flashing, copying the test book, running the test and saving results. No terminal or runtime downloads are needed. See [the browser instructions](../benchmark/web/README.md) for the USB drive/eject steps and troubleshooting.
+For the UI + dictionary candidate, use the source-based USB runner below and restore the normal candidate with its supplied merged image afterward. The older **RSVP-Nano-USB-Speed-Test.html** is a historical package: it contains a Study13 restore image and must not be treated as a benchmark/restore bundle for the current candidate. Repackaging that graphical tool with a matching diagnostic and candidate restore image remains a separate step. See [the browser tool documentation](../benchmark/web/README.md) for its historical scope.
 
 ## Command-line option
 

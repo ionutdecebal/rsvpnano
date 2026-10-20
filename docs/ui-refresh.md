@@ -5,8 +5,8 @@ For current scope, installation and validation, see [the UI + dictionary guide](
 
 # RSVP Nano — Preview Edition
 
-Branch: `feat/reader-first-ui`  
-Baseline: upstream `f9d2a800ed38ce9ff64c6711e8ef2eca5db699fb`  
+Branch: `feat/reader-first-ui`
+Baseline: upstream `f9d2a800ed38ce9ff64c6711e8ef2eca5db699fb`
 Target: Waveshare LCD 3.49, 640 × 172 landscape
 
 This is the fuller native UI variant of the approved `sketches/firmware-study-03` direction. The HTML sketch is not embedded in the device. The earlier reader-first flash package remains separate and unchanged.

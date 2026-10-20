@@ -198,7 +198,7 @@ const assert=require('node:assert/strict');
  await check('Speed and pacing drafts, comparison playback and explicit application',async()=>{
   await page.setViewportSize({width:1440,height:1100});
   await page.evaluate(()=>{action('fresh-install');state.word=37});
-  await page.evaluate(()=>action('try-tuning')); 
+  await page.evaluate(()=>action('try-tuning'));
   assert.equal(await get(()=>tour.step),3);
   await click('[data-action="tuning-faster"]');assert.equal(await get(()=>tour.wpm),310);
   assert.equal(await get(()=>state.wpm),300);
@@ -233,7 +233,7 @@ const assert=require('node:assert/strict');
   assert.deepEqual(await page.locator('#screen .button-legend small').allTextContents(),['Left button','Middle button','Right button']);
  });
  await check('Keeping existing settings, skipping and leaving a sample discard drafts',async()=>{
-  await page.evaluate(()=>action('try-tuning')); 
+  await page.evaluate(()=>action('try-tuning'));
   await click('[data-action="tuning-faster"]');await click('[data-action="intro-next"]');
   await page.locator('#screen [data-tuning="punctuationDelay"]').focus();await page.keyboard.press('Home');
   await click('[data-action="intro-next"]');assert.equal(await get(()=>tour.step),5);

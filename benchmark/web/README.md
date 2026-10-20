@@ -1,3 +1,10 @@
+# Historical browser benchmark package
+
+The instructions below describe the earlier Study13 bundle. It has not been
+repackaged for the current UI + dictionary candidate. Its restore button installs
+Study13, not this candidate. Use the [source-based USB runner](../../docs/usb-reader-benchmark.md)
+and restore the supplied candidate image for current release checks.
+
 # RSVP Nano USB speed test in one HTML file
 
 Open `RSVP-Nano-USB-Speed-Test.html` in desktop Chrome or Edge. Connect the **Waveshare ESP32-S3 Touch LCD 3.49 rev1** with a USB data cable and leave the SD card inserted. Everything needed to run the browser interface is embedded: scripts, logo, diagnostic firmware, verified Study13 restore image, and license notices. No Python, PlatformIO, local server, or internet connection is needed to use the built HTML file.

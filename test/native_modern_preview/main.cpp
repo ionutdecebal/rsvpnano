@@ -555,7 +555,7 @@ int main(int argc, char** argv) {
                 screens::status(ui, ui.text(UiText::Storage), ui.text(UiText::Checking));
             ui.setStartupPresentation(false);
             break;
-        case screens::Screen::Dictionary: 
+        case screens::Screen::Dictionary:
             dictionary.open(reader);dictionary.draw(ui,reader,screen,0);break;
         case screens::Screen::QuickControls:screens::modern::quickControls(ui,reading,interface,screen);break;
         case screens::Screen::Help:screens::OnboardingScreen::help(ui,reading,screen);break;
