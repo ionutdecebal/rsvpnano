@@ -64,8 +64,8 @@ def latest_release(repo: str) -> dict:
 
 def stage_ui_preview(repo: str, tag: str) -> dict:
     """Stage one explicit, immutable preview without replacing Classic files."""
-    if not re.fullmatch(r"preview-ui-dictionary-[A-Za-z0-9._-]+", tag):
-        raise SystemExit("New UI requires an explicit preview-ui-dictionary-* tag.")
+    if not re.fullmatch(r"(?:preview-ui-dictionary-[A-Za-z0-9._-]+|v0\.2\.\d+(?:-[A-Za-z0-9._-]+)?)", tag):
+        raise SystemExit("New UI requires an explicit preview or v0.2.x release tag.")
     release = fetch_json(f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
     if release.get("tag_name") != tag or not release.get("prerelease") or release.get("draft"):
         raise SystemExit("New UI must be a published prerelease at the selected tag.")
@@ -113,6 +113,51 @@ def find_asset_with_fallback(release: dict, name: str, required: bool = True) ->
     if required:
         raise SystemExit(f"Latest release is missing required asset: {name}")
     return None, None
+
+
+def stage_update_catalog(repo: str, classic: dict, preview_tag: str) -> None:
+    """Expose only releases containing a verified selector-compatible descriptor."""
+    entries = []
+    releases = [("classic", classic)]
+    if preview_tag:
+        releases.append(("new-ui", fetch_json(
+            f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(preview_tag, safe='')}")))
+    for channel, release in releases:
+        descriptor = find_asset(release, "update-channel.json", required=False)
+        if descriptor is None:
+            # Older Classic has no selector; do not make it the round-trip target.
+            continue
+        if release.get("draft") or bool(release.get("prerelease")) != (channel == "new-ui"):
+            raise SystemExit("Wrong release channel for update catalog")
+        path = FIRMWARE_DIR / f"{channel}-update-channel.json"
+        download_file(descriptor["browser_download_url"], path)
+        document = json.loads(path.read_text())
+        if document.get("schema") != 1 or len(document.get("releases", [])) != 1:
+            raise SystemExit("Invalid update descriptor")
+        entry = document["releases"][0]
+        name = "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
+        if (entry.get("channel") != channel or entry.get("tag") != release["tag_name"]
+            or entry.get("board") != "waveshare_esp32s3_touch_lcd_3_49"
+            or entry.get("asset") != name
+            or not re.fullmatch(r"[a-f0-9]{64}", entry.get("sha256", ""))
+            or not re.fullmatch(r"[a-f0-9]{40}", entry.get("commit", ""))
+            or not 65536 <= entry.get("bytes", 0) <= 8 * 1024 * 1024):
+            raise SystemExit("Invalid update entry")
+        asset = find_asset(release, name)
+        pending = FIRMWARE_DIR / f"{channel}-ota.partial"
+        try:
+            download_file(asset["browser_download_url"], pending)
+            data = pending.read_bytes()
+            version = (entry["tag"] + "+" + entry["commit"][:12]).encode()
+            if (len(data) != entry["bytes"] or hashlib.sha256(data).hexdigest() != entry["sha256"]
+                or data[0] != 0xE9 or version + b"\0" not in data):
+                raise SystemExit("OTA image does not match its update descriptor")
+        finally:
+            pending.unlink(missing_ok=True)
+        entries.append(entry)
+    pending = FIRMWARE_DIR / "channels.json.partial"
+    pending.write_text(json.dumps({"schema": 1, "releases": entries}, indent=2) + "\n")
+    pending.replace(FIRMWARE_DIR / "channels.json")
 
 
 def main() -> int:
@@ -184,6 +229,7 @@ def main() -> int:
             metadata = json.loads(metadata_path.read_text())
             metadata["newUi"] = stage_ui_preview(args.repo, args.preview_tag)
             metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+        stage_update_catalog(args.repo, release, args.preview_tag)
     print(f"Web firmware updated to release {tag_name}")
     return 0
 
