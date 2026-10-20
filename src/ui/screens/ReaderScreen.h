@@ -144,6 +144,7 @@ namespace screens {
         mutable ui::fonts::AlphaTextRenderer<640> text_;
         settings::ReadingSettings& settings_;
         FontCatalog::Face face_;
+        bool pageFontActive_ = false;
         size_t loadedWordIndex_ = SIZE_MAX;
         size_t loadedFamilyIndex_ = SIZE_MAX;
         size_t renderedWordIndex_ = SIZE_MAX;

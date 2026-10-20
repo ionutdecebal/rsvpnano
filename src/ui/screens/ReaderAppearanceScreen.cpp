@@ -20,6 +20,11 @@ namespace screens {
         const auto families = fonts.families();
         const auto selected = std::ranges::find(families, type.fontId, &FontCatalog::Family::id);
         const size_t family = selected == families.end() ? 0 : selected - families.begin();
+        if (pageFontActive_) {
+            pageState_ = {};
+            browse_.layout = {};
+            pageFontActive_ = false;
+        }
         face_ = fonts.loadFace(family, type.fontSizeIndex);
         activateFace(face_);
         typography_ = type;

@@ -278,7 +278,8 @@ enum class Copy : uint16_t {
     DictionaryOffline,
     DictionaryOfflineBody,
     DictionaryOnline,
-    DictionaryOnlineBody
+    DictionaryOnlineBody,
+    GuidesUnavailableChunks
 };
 std::string_view copy(const ui::Context& ui, Copy key);
 }

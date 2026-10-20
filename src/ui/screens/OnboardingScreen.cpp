@@ -190,10 +190,10 @@ Action OnboardingScreen::draw(ui::Context& ui,settings::DeviceSettings& settings
     else if(step_==10)books(ui);
     else if(step_==11){
         explanation(ui,C::Dictionary,C::DictionaryLesson);
-        ui.label({268,51,356,24},t(C::DictionaryOffline),16,Accent);
-        ui.label({268,78,356,43},t(C::DictionaryOfflineBody),12,Muted,ui::TextAlign::Start,3);
-        ui.label({268,121,356,20},t(C::DictionaryOnline),14,Accent);
-        ui.label({268,142,356,29},t(C::DictionaryOnlineBody),11,Muted,ui::TextAlign::Start,2);
+        ui.label({268,48,356,22},t(C::DictionaryOffline),15,Accent);
+        ui.label({268,70,356,42},t(C::DictionaryOfflineBody),11,Muted,ui::TextAlign::Start,3);
+        ui.label({268,114,356,20},t(C::DictionaryOnline),14,Accent);
+        ui.label({268,134,356,36},t(C::DictionaryOnlineBody),11,Muted,ui::TextAlign::Start,2);
     }
     return Action::None;
 }

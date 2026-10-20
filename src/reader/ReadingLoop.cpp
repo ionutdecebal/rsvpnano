@@ -683,7 +683,9 @@ namespace {
             return true;
         }
 
-        if (codepointCount(word, UnicodeText::isWordCharacter) <= 2) {
+        // Initials can be abbreviations; ordinary short words ("it.", "go.",
+        // "up.") still end sentences.
+        if (codepointCount(word, UnicodeText::isWordCharacter) == 1 && word != "I.") {
             return true;
         }
 
@@ -934,13 +936,20 @@ namespace ReadingLoop {
         session.playing = false;
     }
 
-    bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs, bool allowCatchUp) {
+    bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs,
+                bool allowCatchUp, bool stopAtSentenceEnd) {
         bool changed = false;
         const uint8_t maxCatchUpWords = allowCatchUp && settings.mode != settings::ReadingMode::chunks ? kMaxCatchUpWords : 1;
         for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
             const uint32_t durationMs = currentWordDurationMs(session, settings);
             if (durationMs == 0 || nowMs - session.lastAdvanceMs < durationMs)
                 break;
+            // Test every boundary, including catch-up steps after a delayed
+            // frame. The UI must not race a separate deadline check.
+            if (stopAtSentenceEnd && (currentWordEndsSentence(session) || atEnd(session))) {
+                pause(session);
+                break;
+            }
             if (settings.mode == settings::ReadingMode::chunks) session.lastAdvanceMs = nowMs;
             else session.lastAdvanceMs += durationMs;
             const size_t steps = settings.mode == settings::ReadingMode::chunks ? displayWordCount(session) : 1;

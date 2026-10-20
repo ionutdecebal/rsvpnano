@@ -33,7 +33,7 @@ namespace screens {
                 return true;
             }
             const bool holding=modernHolding_,moved=modernTouchMoved_;cancelModernControls();
-            if(holding){finishPause(preferences,nowMs);return true;}
+            if(holding){requestPause(preferences,nowMs);return true;}
             if(!moved && (!settings_.holdToRead || modernPressedPlaying_)
                && session.playing==modernPressedPlaying_) toggle(preferences,nowMs);
             return true;
@@ -44,7 +44,6 @@ namespace screens {
            || control!=modern::readerControlAt(touch->x,touch->y,settings_,session.playing,
                                                ReadingLoop::wordCount(session)>0,!ui.focusBadge().empty())) return true;
         switch(control){
-        case ReaderControl::Menu:finishPause(preferences,nowMs);screen=Screen::Read;ui.invalidate();break;
         case ReaderControl::Chapter:finishPause(preferences,nowMs);openLocator(screen);break;
         case ReaderControl::Focus:finishPause(preferences,nowMs);screen=Screen::FocusSession;break;
         case ReaderControl::Footer:

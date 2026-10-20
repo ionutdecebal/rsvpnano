@@ -19,7 +19,9 @@
 #include "ui/ClippedGfx.h"
 #include "fonts/LiterataFallbackAlpha4.h"
 
-extern int previewSaveCalls, previewPauseCalls, previewToggleCalls;
+extern int previewSaveCalls, previewPrefetchDelay;
+#include <freertos/task.h>
+extern size_t previewRuntimeSize;
 namespace dictionary { extern std::string previewCase; }
 
 namespace {
@@ -110,15 +112,73 @@ namespace {
         std::puts("Banner wordmark: exact artwork fits its loading region; RSVP foreground stays static, the accent pulses, and light/dark/custom colours redraw cleanly.");
     }
 
+    void verifyPageFontRestoration(Arduino_GFX& panel) {
+        ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
+        settings::SettingsStore settings;auto& config=settings.settings().reading;
+        screens::ReaderScreen reader(panel,config);StorageManager storage;Preferences preferences;
+        const std::vector<std::string> words{"Same", "word", "and", "the", "next", "sentence."};
+        ReadingLoop::setWords(reader.session,words,0);auto screen=screens::Screen::Reader;uint32_t now=0;
+        const auto frame=[&](bool down=false,int x=0,int y=0){
+            contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=25);
+            ui.beginFrame(uint8_t(screen),reader.pageBrowsing()?1:0);
+            reader.handleModernControls(ui,now,preferences,settings,screen);
+            FakeTask::now=now;reader.update(preferences,now);reader.draw(ui,storage,{},now);ui.endFrame();
+        };
+        for(auto mode:{settings::ReadingMode::rsvp,settings::ReadingMode::chunks}) {
+            config.mode=mode;
+            for(int size=0;size<4;++size) {
+                config.typography.fontSizeIndex=size;
+                for(int repeat=0;repeat<3;++repeat) {
+                    frame();assert(previewRuntimeSize==size);assert(!reader.session.playing);
+                    reader.openPage();frame();assert(previewRuntimeSize==2);
+                    frame();assert(previewRuntimeSize==2);
+                    frame(true,550,20);frame(false,550,20);
+                    assert(!reader.pageBrowsing());assert(!reader.session.playing);
+                    assert(reader.session.state.wordIndex==0);assert(previewRuntimeSize==size);
+                    frame();assert(previewRuntimeSize==size);
+                }
+            }
+        }
+        std::puts("Real font-selection methods with a mutable strike: 24 page round trips restore all RSVP/chunk sizes while paused at the same word.");
+    }
+
+    void verifyRealPlaybackPause(Arduino_GFX& panel) {
+        ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
+        settings::SettingsStore settings;auto& config=settings.settings().reading;
+        config.holdToRead=true;config.pauseMode=settings::PauseMode::sentenceEnd;config.wpm=1000;
+        config.pacing.longWordDelayMs=0;config.pacing.complexWordDelayMs=0;config.pacing.punctuationDelayMs=0;
+        screens::ReaderScreen reader(panel,config);const std::vector<std::string> words{"Wait","it.","Next","sentence."};
+        ReadingLoop::setWords(reader.session,words,0);Preferences preferences;auto screen=screens::Screen::Reader;
+        uint32_t now=1000;
+        const auto touch=[&](bool down,uint32_t delta){
+            contact={down,260,86};ui.pollTouch(now+=delta);FakeTask::now=now;
+            reader.handleModernControls(ui,now,preferences,settings,screen);
+        };
+        touch(true,25);touch(true,350);assert(reader.session.playing);
+        touch(false,25);assert(reader.session.playing); // release requests sentence end
+        const auto saved=previewSaveCalls;
+        FakeTask::now=now+250;reader.update(preferences,FakeTask::now);
+        assert(!reader.session.playing && reader.session.state.wordIndex==1 && previewSaveCalls>saved);
+        FakeTask::now+=500;reader.update(preferences,FakeTask::now);assert(!reader.session.playing);
+        // Reproduce work crossing the deadline after the UI's pre-check.
+        reader.resumeNow(3000);FakeTask::now=3059;reader.toggle(preferences,3059);
+        assert(reader.session.playing);previewPrefetchDelay=2;reader.update(preferences,3059);previewPrefetchDelay=0;
+        assert(!reader.session.playing && reader.session.state.wordIndex==1);
+        // Immediate mode still stops on hold release without advancing.
+        config.pauseMode=settings::PauseMode::instant;touch(true,100);touch(true,350);assert(reader.session.playing);
+        touch(false,25);assert(!reader.session.playing && reader.session.state.wordIndex==1);
+        std::puts("Real playback/control methods: hold release respects sentence/instant settings, delayed catch-up and prefetch deadlines pause correctly, save position and require manual resume.");
+    }
+
     void verifyReaderControlRoutes(Arduino_GFX& panel) {
         ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
-        settings::SettingsStore settings;auto& config=settings.settings().reading;screens::ReaderScreen reader(panel,config);
+        settings::SettingsStore settings;auto& config=settings.settings().reading;config.pauseMode=settings::PauseMode::instant;screens::ReaderScreen reader(panel,config);
         const std::vector<std::string> words(10,"word");ReadingLoop::setWords(reader.session,words,0);
         Preferences preferences;auto screen=screens::Screen::Reader;uint32_t now=0;
         const auto sample=[&](bool down,int x,int y,uint32_t elapsed=25){contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=elapsed);return reader.handleModernControls(ui,now,preferences,settings,screen);};
         const auto tap=[&](int x,int y){assert(sample(true,x,y));assert(sample(false,x,y));};
         tap(260,86);assert(reader.session.playing);tap(260,86);assert(!reader.session.playing);
-        tap(50,155);assert(screen==screens::Screen::Read);screen=screens::Screen::Reader;
+        tap(50,155);assert(screen==screens::Screen::Reader);assert(!reader.session.playing);
         const auto index=reader.session.state.wordIndex;const auto speed=config.wpm;
         for(auto [x,y]:{std::pair{390,86},std::pair{130,86},std::pair{260,135}}){
             sample(true,260,86);sample(true,x,y);sample(false,x,y);
@@ -130,11 +190,11 @@ namespace {
         ui.setFocusBadge("Focus 12:00");tap(370,18);assert(screen==screens::Screen::FocusSession);
         screen=screens::Screen::Reader;ui.setFocusBadge("");const auto footer=config.footerMetric;tap(600,155);assert(config.footerMetric!=footer);
         reader.session.metadata.writingMode=WritingMode::verticalRl;assert(!sample(true,260,86));assert(!sample(false,260,86));
-        std::puts("Quiet reader: text playback, Menu touch target and ignored reader swipes, clean inactive chrome, saved book/WPM during other drags, Focus and page routes verified.");
+        std::puts("Quiet reader: text playback, no reader Menu target and ignored reader swipes, clean inactive chrome, saved book/WPM during other drags, Focus and page routes verified.");
     }
     void verifyReaderTouchComfort(Arduino_GFX& panel) {
         ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
-        settings::SettingsStore settings;auto& config=settings.settings().reading;config.holdToRead=true;
+        settings::SettingsStore settings;auto& config=settings.settings().reading;config.holdToRead=true;config.pauseMode=settings::PauseMode::instant;
         screens::ReaderScreen reader(panel,config);const std::vector<std::string> words(10,"word");ReadingLoop::setWords(reader.session,words,0);
         Preferences preferences;auto screen=screens::Screen::Reader;uint32_t now=100000;
         const auto sample=[&](bool down,int x,int y,uint32_t elapsed=25){contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=elapsed);return reader.handleModernControls(ui,now,preferences,settings,screen);};
@@ -184,6 +244,9 @@ namespace {
         tap(575,150);assert(config.typography.focusHighlight!=highlight);
         tap(575,150);assert(config.typography.focusHighlight==highlight);
         config.mode=settings::ReadingMode::chunks;frame(false,0,0);
+        const auto guideSize=config.typography.guideSize;const auto guideGap=config.typography.guideTextGap;
+        tap(600,65);tap(600,100);
+        assert(config.typography.guideSize==guideSize && config.typography.guideTextGap==guideGap);
         tap(575,150);assert(config.typography.focusHighlight==highlight);
         config.mode=settings::ReadingMode::rsvp;
         tap(50,150);
@@ -366,7 +429,7 @@ namespace {
                     auto* file=std::fopen((output/(name+".ppm")).c_str(),"wb");assert(file);std::fprintf(file,"P6\n640 172\n255\n");
                     for(int i=0;i<640*172;++i) {const auto pixel=pixels[i];const unsigned char rgb[]{static_cast<unsigned char>(((pixel>>11)&31)*255/31),static_cast<unsigned char>(((pixel>>5)&63)*255/63),static_cast<unsigned char>((pixel&31)*255/31)};std::fwrite(rgb,1,3,file);}std::fclose(file);
                 }
-                config.typography.focusHighlight=false;ui.invalidate();ui.beginFrame(250);reader.draw(ui,storage,{},0);ui.endFrame();
+                config.typography.focusHighlight=false;config.typography.guideSize=0;ui.invalidate();ui.beginFrame(250);reader.draw(ui,storage,{},0);ui.endFrame();
                 assert(std::equal(reference.begin(),reference.end(),panel.getFramebuffer()));
             }
         }
@@ -455,6 +518,8 @@ int main(int argc, char** argv) {
     verifyPhysicalBottomControls();
     verifyPocketLinesMarks(panel);
     verifyBannerWordmark(panel);
+    verifyRealPlaybackPause(panel);
+    verifyPageFontRestoration(panel);
     verifyReaderControlRoutes(panel);
     verifyReaderTouchComfort(panel);
     verifyAppearanceAndFocusRoutes(panel);
@@ -505,7 +570,8 @@ int main(int argc, char** argv) {
         {screens::Screen::StorageHub, "storage"}, {screens::Screen::PowerHub, "power"},
         {screens::Screen::ReaderAppearance, "appearance-type"},
         {screens::Screen::ReaderAppearance, "appearance-type-chunks"},
-        {screens::Screen::ReaderAppearance, "appearance-guides"}, {screens::Screen::ReaderAppearance, "appearance-guides-paper"},
+        {screens::Screen::ReaderAppearance, "appearance-guides"},
+        {screens::Screen::ReaderAppearance, "appearance-guides-paper"},
         {screens::Screen::ReaderAppearance, "appearance-guides-chunks"},
         {screens::Screen::ReaderAppearance, "appearance-reading"},
         {screens::Screen::ReaderAppearance, "appearance-paused"},
@@ -535,7 +601,7 @@ int main(int argc, char** argv) {
             word.drawString("reading", 230, 112, 0);
             screens::modern::readerChrome(ui, {.vertical=false, .chapter="Chapter 4 · Martha", .footer="42%",
                 .batteryLabel="84%", .reading=playing, .topState=0, .bottomState=0, .percent=42,
-                .pressedControl=std::string_view{name} == "reader-pressed" ? static_cast<uint8_t>(screens::modern::ReaderControl::Menu) : uint8_t{0},
+                .pressedControl=std::string_view{name} == "reader-pressed" ? static_cast<uint8_t>(screens::modern::ReaderControl::Footer) : uint8_t{0},
                 .pausePending=std::string_view{name} == "reader-pausing"},
                 reading, {{true, 3.9f, 84}, 0, false});
             break;
@@ -576,7 +642,7 @@ int main(int argc, char** argv) {
         case screens::Screen::FocusTimers: case screens::Screen::FocusSession: focus.draw(ui, 0, screen); break;
         case screens::Screen::ReadingSettings: screens::readingSettings(ui, reading, screen); break;
         case screens::Screen::PacingSettings: screens::pacingSettings(ui, reading.pacing, screen); break;
-        case screens::Screen::Ota: screens::ota(ui, "f9d2a80 + reader-first UI", screen); break;
+        case screens::Screen::Ota: screens::ota(ui, "preview-ui-dictionary-20261020.3", screen); break;
         default: screens::modern::hub(ui, screen); break;
         }
         if (screen != screens::Screen::Status) ui.endFrame();

@@ -98,8 +98,11 @@ bool ReaderScreen::modernAppearance(ui::Context& ui,Screen& screen){
             }
             if(button(ui,{507,124,121,44},RFont4::sizeLabel(type.fontSizeIndex),Style::Secondary,true,{},13)){type.fontSizeIndex.cycle();changed=true;}
         }else{
-            changed|=ui.slider({378,50,250,33},t(C::GuideSize),type.guideSize," px");
-            changed|=ui.slider({378,87,250,33},t(C::TextGap),type.guideTextGap," px");
+            if(chunks)ui.label({378,50,250,70},t(C::GuidesUnavailableChunks),13,Muted,ui::TextAlign::Start,3);
+            else{
+                changed|=ui.slider({378,50,250,33},t(C::GuideSize),type.guideSize," px");
+                changed|=ui.slider({378,87,250,33},t(C::TextGap),type.guideTextGap," px");
+            }
             if(button(ui,{378,124,120,44},t(C::Phantoms),Style::Secondary,!chunks,t(chunks?C::Off:config.phantomWords?C::On:C::Off),11)){
                 config.phantomWords=!config.phantomWords;changed=true;
             }

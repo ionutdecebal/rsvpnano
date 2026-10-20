@@ -117,6 +117,7 @@ namespace screens {
     }
 
     void ReaderScreen::drawGuides(ui::Context& ui, Arduino_GFX& gfx, int16_t anchor, int16_t baseline, ui::Rect bounds) {
+        if (settings_.mode == settings::ReadingMode::chunks) return;
         const auto& raster=face_.raster.get();
         const bool highlighted=focusHighlightEnabled();
         ui::pocketlines::guides(ui,gfx,bounds,anchor,baseline+raster.wordInkTop,baseline+raster.wordInkBottom,

@@ -32,6 +32,7 @@ copy.swipeAccessible=["Press the middle button for controls", "Mittlere Taste f�
 copy.swipeHelp=["Middle button: speed, brightness and navigation. Tap Menu for all settings.", "Mittlere Taste: Tempo, Helligkeit und Navigation. Menü öffnet alle Einstellungen.", "Butonul din mijloc: viteză, luminozitate și navigare. Meniu deschide toate setările."];
 copy.powerHelp=["Open reading controls", "Lesesteuerung öffnen", "Deschide comenzile de lectură"];
 copy.dictionaryLesson=["Press the middle button, then tap Dictionary. Browse nearby words or search.", "Drücke die mittlere Taste und wähle Wörterbuch. Wörter wechseln oder suchen.", "Apasă butonul din mijloc, apoi Dicționar. Schimbă cuvântul sau caută."];
+copy.guidesUnavailableChunks=["Guides are unavailable in chunk mode. Switch to Word to use them.", "Hilfslinien sind im Gruppenmodus nicht verfügbar. Nutze dafür den Wortmodus.", "Ghidajele nu sunt disponibile în modul grup. Treci la Cuvânt pentru a le folosi."];
 // RSVP Nano branding; the Pocket Lines mark is retained only as the reading guide.
 const keys=Object.keys(copy),name=k=>k[0].toUpperCase()+k.slice(1);
 const target=path.join(root,'src/ui/screens');

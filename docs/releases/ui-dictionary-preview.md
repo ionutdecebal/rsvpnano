@@ -100,6 +100,27 @@ of English meanings. Data licences do not replace the firmware's existing licenc
   forget that network and add it again. Passwords are not mirrored to SD settings
   or returned through the public settings API.
 
+## Feedback pass — 20 October, candidate 3
+
+- The reading screen has no Menu button. Open quick controls with the middle
+  button, then Menu. Text playback and the chapter/progress targets remain.
+- Dictionary onboarding has room for both online explanation lines in English,
+  German and Romanian; navigation arrows use consistent antialiased strokes.
+- The modern page browser uses the smooth Small strike of the selected book font.
+  Returning to the same word restores the chosen RSVP size immediately while
+  paused. The page and RSVP caches are invalidated on font-role transitions;
+  paused browsing no longer runs chunk preparation against the page font.
+- Chunk mode hides guides entirely. Its Guides tab explains that they require
+  Word mode, and preserves guide size/gap for switching back.
+- Hold-to-read release now respects the selected pause mode, matching tap and
+  physical-button playback. Requested sentence-end pauses are enforced within each reading-loop catch-up
+  step. This prevents delayed frames or work crossing a word deadline from
+  skipping the requested stop. Two-letter endings such as “it.” are no longer
+  automatically classified as initials. Sentence recognition remains heuristic.
+
+Candidate 3 is delivered as a manual browser-flash BIN. The prototype development
+OTA feed still points to candidate 2; it has not been repointed for this pass.
+
 ## Test update from the full prototype
 
 The founder requested delivery through the existing private development feed.
@@ -113,7 +134,7 @@ Host HTTP/checksum verification is not evidence of a successful physical update.
 ## Preview update channel
 
 An empty update tag in this build resolves to
-`preview-ui-dictionary-20261020.2`, not GitHub's latest stable release.
+`preview-ui-dictionary-20261020.3`, not GitHub's latest stable release.
 Explicit owner/repository/tag settings remain supported. If upgrading from a
 custom development build, inspect Connections → Wi-Fi → Release tag before
 updating; saved custom values are not silently discarded.

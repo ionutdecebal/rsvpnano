@@ -23,7 +23,7 @@ namespace ReadingLoop {
     void start(ReadingSession& session, uint32_t nowMs);
     void pause(ReadingSession& session);
     bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs,
-                bool allowCatchUp = true);
+                bool allowCatchUp = true, bool stopAtSentenceEnd = false);
     void setWords(ReadingSession& session, std::span<const std::string> words, uint32_t nowMs);
     void setBookStore(ReadingSession& session, const IndexedBookStore& store, uint32_t nowMs);
     void seekTo(ReadingSession& session, size_t wordIndex);

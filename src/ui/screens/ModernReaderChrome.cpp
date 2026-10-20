@@ -9,7 +9,6 @@ namespace screens::modern {
             && ui::contains(readerControlRect(ReaderControl::Chapter),x,y)) return ReaderControl::Chapter;
         if (settings::visible(config.progressVisibility,reading)
             && ui::contains(readerControlRect(ReaderControl::Footer),x,y)) return ReaderControl::Footer;
-        if (ui::contains(readerControlRect(ReaderControl::Menu),x,y)) return ReaderControl::Menu;
         return ReaderControl::None;
     }
 
@@ -22,7 +21,6 @@ namespace screens::modern {
         ui.battery({514,0,116,36},battery.status.percent,battery.charging,
                    settings::visible(config.batteryLabelVisibility,view.reading)?view.batteryLabel:std::string_view{},
                    settings::visible(config.batteryIconVisibility,view.reading));
-        ui.label(readerControlRect(ReaderControl::Menu),copy(ui,Copy::Menu),13,Muted,ui::TextAlign::Center);
         ui.label({124,136,180,34},view.reading&&view.pausePending?std::string{ui.text(UiText::Pause)}+"…":std::string{},11,Muted);
         const bool progress=settings::visible(config.progressVisibility,view.reading);
         ui.label(readerControlRect(ReaderControl::Footer),progress?view.footer:std::string_view{},11,Muted,ui::TextAlign::Right);

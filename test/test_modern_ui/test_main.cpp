@@ -271,13 +271,13 @@ void test_reader_controls_respect_visibility_and_do_not_cover_the_word() {
             TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None), control(x, y));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(310,155));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(450,155));
-    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::Menu),control(50,155));
+    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(50,155));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(560,18));
     config.arrowsVisibility=settings::Visibility::always;
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(160,155,true));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(120,122,true));
     config.arrowsVisibility=settings::Visibility::never;
-    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::Menu),control(50,155,true));
+    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(50,155,true));
     Fixture f;
     for (bool playing : {false, true}) {
         f.ui.beginFrame(0);
@@ -551,8 +551,27 @@ void test_touch_check_reaches_edges_and_returns_to_display(){
     f.tap(draw,40,20);TEST_ASSERT_EQUAL(int(screens::Screen::InterfaceSettings),int(f.screen));
 }
 
+void test_dictionary_onboarding_and_chunk_hint_fit_all_languages() {
+    Fixture f;
+    using C = screens::modern::Copy;
+    for(const auto* locale : {"en", "de", "ro"}) {
+        f.ui.setLocale(locale);
+        for(const auto [key, rect, lines, size] : {
+            std::tuple{C::DictionaryOfflineBody,ui::Rect{268,70,356,42},3,11},
+            std::tuple{C::DictionaryOnlineBody,ui::Rect{268,134,356,36},2,11},
+            std::tuple{C::GuidesUnavailableChunks,ui::Rect{378,50,250,70},3,13}}) {
+            const auto text = screens::modern::copy(f.ui,key);
+            const auto layout = f.ui.prepareText(rect,text,size,ui::TextAlign::Start,lines);
+            std::string joined;
+            for(const auto& line : layout.lines) { if(!joined.empty())joined+=' '; joined+=line.text; }
+            TEST_ASSERT_EQUAL_STRING_MESSAGE(std::string{text}.c_str(),joined.c_str(),locale);
+        }
+    }
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_dictionary_onboarding_and_chunk_hint_fit_all_languages);
     RUN_TEST(test_bottom_margin_belongs_to_last_button_and_slider_only);
     RUN_TEST(test_touch_check_reaches_edges_and_returns_to_display);
     RUN_TEST(test_storage_check_waits_for_explicit_continue_and_blocks_completion);

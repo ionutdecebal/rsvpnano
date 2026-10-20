@@ -569,8 +569,59 @@ void test_chunk_stall_does_not_shorten_the_following_frame() {
     TEST_ASSERT_TRUE(ReadingLoop::update(reader,testSettings,5400));TEST_ASSERT_EQUAL(4,reader.state.wordIndex);
 }
 
+void test_requested_pause_stops_inside_catchup_and_waits_for_manual_resume() {
+    auto reader = makeReader(1000, {"Wait", "it.", "Next", "sentence."});
+    testSettings.pacing.longWordDelayMs = 0;
+    testSettings.pacing.complexWordDelayMs = 0;
+    testSettings.pacing.punctuationDelayMs = 0;
+    ReadingLoop::start(reader, 1000);
+    TEST_ASSERT_TRUE(ReadingLoop::update(reader, testSettings, 1250, true, true));
+    TEST_ASSERT_EQUAL(1, reader.state.wordIndex);
+    TEST_ASSERT_FALSE(reader.playing);
+    TEST_ASSERT_EQUAL_STRING("it.", std::string(reader.currentWord).c_str());
+    ReadingLoop::start(reader, 2000);
+    TEST_ASSERT_TRUE(ReadingLoop::update(reader, testSettings, 2060));
+    TEST_ASSERT_TRUE(reader.playing);
+    TEST_ASSERT_EQUAL(2, reader.state.wordIndex);
+}
+
+void test_requested_pause_owns_deadline_and_chunk_boundary() {
+    for (bool chunks : {false, true}) {
+        auto reader = makeReader(300, {"done.\"", "Next"});
+        testSettings.mode = chunks ? settings::ReadingMode::chunks : settings::ReadingMode::rsvp;
+        ReadingLoop::start(reader, 1000);
+        const auto duration = ReadingLoop::currentWordDurationMs(reader, testSettings);
+        TEST_ASSERT_FALSE(ReadingLoop::update(reader, testSettings, 1000+duration-1, true, true));
+        TEST_ASSERT_TRUE(reader.playing);
+        TEST_ASSERT_FALSE(ReadingLoop::update(reader, testSettings, 1000+duration, true, true));
+        TEST_ASSERT_FALSE(reader.playing);
+        TEST_ASSERT_EQUAL(0, reader.state.wordIndex);
+    }
+    auto reader = makeReader(300, {"the", "blue", "door.", "Next"});
+    testSettings.mode = settings::ReadingMode::chunks;
+    reader.displayWordIndex = 0; reader.displayWordCount = 3;
+    ReadingLoop::start(reader, 1000);
+    ReadingLoop::update(reader, testSettings, 1000+ReadingLoop::currentWordDurationMs(reader,testSettings), true, true);
+    TEST_ASSERT_FALSE(reader.playing);
+    TEST_ASSERT_EQUAL(0, reader.state.wordIndex);
+}
+
+void test_short_sentence_ends_and_titles() {
+    for(const auto* word : {"it.", "go.", "up.", "me.", "I.", "go.\"", "done.)", "完了。", "終わり！"}) {
+        const auto reader = makeReader(300, {word, "Next"});
+        TEST_ASSERT_TRUE_MESSAGE(ReadingLoop::currentWordEndsSentence(reader), word);
+    }
+    for(const auto* word : {"Dr.", "Mr.", "J.", "e.g."}) {
+        const auto reader = makeReader(300, {word, "Smith"});
+        TEST_ASSERT_FALSE_MESSAGE(ReadingLoop::currentWordEndsSentence(reader), word);
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
+    RUN_TEST(test_requested_pause_stops_inside_catchup_and_waits_for_manual_resume);
+    RUN_TEST(test_requested_pause_owns_deadline_and_chunk_boundary);
+    RUN_TEST(test_short_sentence_ends_and_titles);
     RUN_TEST(test_chunk_short_frames_have_minimum_time_without_losing_bonuses);
     RUN_TEST(test_chunk_stall_does_not_shorten_the_following_frame);
     RUN_TEST(test_context_chunks_keep_phrases_boundaries_and_all_tokens);

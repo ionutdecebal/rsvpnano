@@ -22,7 +22,7 @@ def main():
     sources = [
         "ui/screens/NetworkSettingsScreen.cpp", "ui/screens/regular/NetworkSettingsScreen.cpp",
         "ui/screens/StandbyScreen.cpp",
-        "dictionary/DictionaryScreen.cpp", "ui/screens/ReaderChunks.cpp", "ui/screens/ReaderText.cpp", "reader/ContextChunks.cpp", "ui/Logo.cpp", "ui/screens/StatusAnimation.cpp", "ui/Keyboard.cpp", "ui/screens/PageReaderScreen.cpp", "ui/screens/ReaderNavigation.cpp", "ui/screens/ModernFocusScreen.cpp", "ui/Ui.cpp", "ui/SansFont.cpp", "ui/Modern.cpp", "ui/Controls.cpp", "ui/Icons.cpp", "ui/Theme.cpp",
+        "dictionary/DictionaryScreen.cpp", "ui/screens/ReaderChunks.cpp", "ui/screens/ReaderTypeface.cpp", "ui/screens/ReaderPlayback.cpp", "ui/screens/ReaderText.cpp", "reader/ContextChunks.cpp", "ui/Logo.cpp", "ui/screens/StatusAnimation.cpp", "ui/Keyboard.cpp", "ui/screens/PageReaderScreen.cpp", "ui/screens/ReaderNavigation.cpp", "ui/screens/ModernFocusScreen.cpp", "ui/Ui.cpp", "ui/SansFont.cpp", "ui/Modern.cpp", "ui/Controls.cpp", "ui/Icons.cpp", "ui/Theme.cpp",
         "ui/Localization.generated.cpp", "localization/LocalePack.cpp", "text/LocaleTag.cpp", "text/BidiText.cpp",
         "text/TextShaping.cpp", "reader/ReadingLoop.cpp", "ui/screens/ModernScreens.cpp",
         "ui/screens/regular/ScreenCommon.cpp", "ui/screens/regular/SettingsScreen.cpp",

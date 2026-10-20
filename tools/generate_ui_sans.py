@@ -29,36 +29,47 @@ def main():
         for cp in points:
             if size >= 39 and cp not in set(map(ord, " 0123456789:.-?")):
                 continue
-            vector_arrow = cp in (0x2190, 0x2191, 0x2192, 0x2193, 0x2197, 0x21b6, 0x232b) and cp not in cmap
+            vector_arrow = cp in (0x2039, 0x203a, 0x2190, 0x2191, 0x2192, 0x2193, 0x2197, 0x21b6, 0x232b)
             if cp not in cmap and not vector_arrow:
                 continue
             char = chr(cp)
-            left, top, right, bottom = (0, -size + 2, size, 2) if vector_arrow else face.getbbox(char, anchor="ls")
+            left, top, right, bottom = (0, -round(size * 0.8), size, size - round(size * 0.8)) if vector_arrow else face.getbbox(char, anchor="ls")
             width, height = right-left, bottom-top
             canvas = Image.new("L", (max(1, width), max(1, height)))
             if vector_arrow:
-                # The source face lacks navigation arrows. Code-native strokes
-                # keep a single symbol from forcing the whole label to bitmap.
-                arrow = ImageDraw.Draw(canvas)
-                a, b, m = 2, size - 3, size // 2
-                if cp in (0x2191, 0x2193):
-                    tip, tail = (a, b) if cp == 0x2191 else (b, a)
-                    arrow.line([(m, tail), (m, tip)], fill=255)
-                    arrow.line([(a, m), (m, tip), (b, m)], fill=255)
+                # One coherent arrow set, aligned to the text cap height.
+                # Supersample once at generation time; no runtime cost or font
+                # fallback, and diagonal strokes have the same weight as stems.
+                scale = 4
+                hi = Image.new("L", (width * scale, height * scale))
+                arrow = ImageDraw.Draw(hi)
+                a, b, m = size * .20, size * .80, size * .50
+                head = size * .25
+                def stroke(points):
+                    arrow.line([(round(x * scale), round(y * scale)) for x, y in points],
+                               fill=255, width=max(4, round(size * .095 * scale)), joint="curve")
+                if cp in (0x2039, 0x203a):
+                    sign = -1 if cp == 0x2039 else 1
+                    stroke([(m-sign*head/2,a),(m+sign*head/2,m),(m-sign*head/2,b)])
+                elif cp in (0x2191, 0x2193):
+                    tip, tail, sign = (a,b,1) if cp == 0x2191 else (b,a,-1)
+                    stroke([(m,tail),(m,tip)])
+                    stroke([(m-head,tip+sign*head),(m,tip),(m+head,tip+sign*head)])
                 elif cp == 0x21b6:
-                    arrow.line([(b, b), (b, m), (a, m)], fill=255)
-                    arrow.line([(m, a), (a, m), (m, b)], fill=255)
+                    stroke([(b,b),(b,m),(a,m)])
+                    stroke([(a+head,m-head),(a,m),(a+head,m+head)])
                 elif cp == 0x232b:
-                    arrow.line([(a, m), (m, a), (b, a), (b, b), (m, b), (a, m)], fill=255)
-                    arrow.line([(m, m-2), (b-2, m+2)], fill=255)
-                    arrow.line([(m, m+2), (b-2, m-2)], fill=255)
+                    stroke([(a,m),(m,a),(b,a),(b,b),(m,b),(a,m)])
+                    stroke([(m,m-head/2),(b-head/2,m+head/2)])
+                    stroke([(m,m+head/2),(b-head/2,m-head/2)])
                 elif cp == 0x2197:
-                    arrow.line([(a, b), (b, a), (m, a)], fill=255)
-                    arrow.line([(b, a), (b, m)], fill=255)
+                    stroke([(a,b),(b,a)])
+                    stroke([(b-head,a),(b,a),(b,a+head)])
                 else:
-                    tip, tail = (a, b) if cp == 0x2190 else (b, a)
-                    arrow.line([(tail, m), (tip, m)], fill=255)
-                    arrow.line([(m, a), (tip, m), (m, b)], fill=255)
+                    tip, tail, sign = (a,b,1) if cp == 0x2190 else (b,a,-1)
+                    stroke([(tail,m),(tip,m)])
+                    stroke([(tip+sign*head,m-head),(tip,m),(tip+sign*head,m+head)])
+                canvas = hi.resize((width,height),Image.Resampling.LANCZOS)
             else:
                 ImageDraw.Draw(canvas).text((-left, -top), char, font=face, fill=255, anchor="ls")
             values = [(v+8)//17 for v in canvas.tobytes()] if width*height else []

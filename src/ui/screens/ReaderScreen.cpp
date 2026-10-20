@@ -74,6 +74,8 @@ namespace screens {
         activateFace(face_);
 
         pageState_ = {};
+        browse_.layout = {};
+        pageFontActive_ = false;
         rsvpParagraph_ = {};
         rsvpBidi_.clear();
         phantomBidi_.clear();
@@ -200,26 +202,6 @@ namespace screens {
         if (families.empty())
             return 0;
         return FontCatalog::selectFamily(families, requested, locale, requiredScripts);
-    }
-
-    void ReaderScreen::activateFace(const FontCatalog::Face& face) {
-        text_.setFont(face.raster.get());
-    }
-
-    void ReaderScreen::refreshTypeface() {
-        if (loadedWordIndex_ == session.state.wordIndex && loadedFontSizeIndex_ == typography_.fontSizeIndex) {
-            activateFace(face_);
-            return;
-        }
-        loadedWordIndex_ = session.state.wordIndex;
-        const size_t family = fontChoice(session.state.wordIndex);
-        if (loadedFamilyIndex_ != family || loadedFontSizeIndex_ != typography_.fontSizeIndex) {
-            loadedFamilyIndex_ = family;
-            loadedFontSizeIndex_ = typography_.fontSizeIndex;
-            ++fontRevision_;
-        }
-        face_ = fonts.loadFace(family, typography_.fontSizeIndex);
-        activateFace(face_);
     }
 
     void ReaderScreen::prefetchUpcomingFont(uint32_t nowMs) {
@@ -353,10 +335,6 @@ namespace screens {
         } else {
             text_.prepare(ReadingLoop::wordAt(session, next));
         }
-    }
-
-    FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
-        return fonts.loadFace(fontChoice(wordIndex), readerLayout::pageStrikeIndex());
     }
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,
@@ -940,79 +918,6 @@ namespace screens {
         }
         if (doubleTap(touch.x, touch.y, nowMs))
             start(nowMs, true);
-    }
-
-    void ReaderScreen::toggle(Preferences& preferences, uint32_t nowMs) {
-        if (pageBrowsing_) return;
-        if (session.playing)
-            requestPause(preferences, nowMs);
-        else
-            start(nowMs, true);
-    }
-
-    void ReaderScreen::update(Preferences& preferences, uint32_t nowMs) {
-        if (wpmFeedbackUntilMs_ > 0 && nowMs >= wpmFeedbackUntilMs_) {
-            wpmFeedbackUntilMs_ = 0;
-        }
-        prepareChunk();
-        if (shouldFinishPause(nowMs)) {
-            finishPause(preferences, nowMs);
-            return;
-        }
-        prefetchNextWord(nowMs);
-        nowMs = millis();
-        if (!session.playing)
-            return;
-#if defined(RSVP_BENCHMARK_MODE)
-        // Reading benchmarks load indexed fixtures but intentionally exclude persistence I/O.
-        ReadingLoop::update(session, settings_, nowMs);
-#else
-        const size_t previousIndex = session.state.wordIndex;
-        if (ReadingLoop::update(session, settings_, nowMs)) {
-            ReadingProgress::saveChapterTransition(session, preferences, store, previousIndex, session.state.wordIndex,
-                                                   nowMs);
-        }
-#endif
-    }
-
-    void ReaderScreen::start(uint32_t nowMs, bool locked) {
-        pagePreview_ = false;
-        pageBrowsing_ = false;
-        playLocked_ = locked;
-        pauseAtSentenceEndRequested_ = false;
-        wpmFeedbackUntilMs_ = 0;
-        prepareChunk();
-        ReadingLoop::start(session, nowMs);
-    }
-
-    void ReaderScreen::requestPause(Preferences& preferences, uint32_t nowMs) {
-        if (!session.playing)
-            return;
-        playLocked_ = false;
-        if (settings_.pauseMode == settings::PauseMode::instant) {
-            finishPause(preferences, nowMs);
-            return;
-        }
-        pauseAtSentenceEndRequested_ = true;
-        prepareChunk();
-        if (shouldFinishPause(nowMs)) {
-            finishPause(preferences, nowMs);
-        }
-    }
-
-    bool ReaderScreen::shouldFinishPause(uint32_t nowMs) const {
-        if (!session.playing || !pauseAtSentenceEndRequested_)
-            return false;
-        const uint32_t durationMs = ReadingLoop::currentWordDurationMs(session, settings_);
-        return durationMs > 0 && ReadingLoop::elapsedInCurrentWordMs(session, nowMs) >= durationMs
-            && (ReadingLoop::currentWordEndsSentence(session) || ReadingLoop::atEnd(session));
-    }
-
-    void ReaderScreen::finishPause(Preferences& preferences, uint32_t nowMs) {
-        ReadingLoop::pause(session);
-        pauseAtSentenceEndRequested_ = false;
-        playLocked_ = false;
-        ReadingProgress::save(session, preferences, true, nowMs);
     }
 
     bool ReaderScreen::doubleTap(uint16_t x, uint16_t y, uint32_t nowMs) {
