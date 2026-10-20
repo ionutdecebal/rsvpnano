@@ -6,7 +6,7 @@ namespace screens::modern {
     using ui::modern::Style;
 
     Action header(ui::Context& ui, std::string_view title, Screen& screen, Screen parent, std::string_view trailing) {
-        const auto parentText = parent == Screen::NetworkSettings ? std::string_view{"Wi-Fi"} : parent == Screen::Help ? copy(ui,Copy::Help) : parent == Screen::Read ? caption(ui, UiText::Read, "Menu")
+        auto parentText = parent == Screen::NetworkSettings ? std::string_view{"Wi-Fi"} : parent == Screen::Help ? copy(ui,Copy::Help) : parent == Screen::Read ? caption(ui, UiText::Read, "Menu")
                                : parent == Screen::ReadingHub ? caption(ui, UiText::Reading, "Pace")
                                : parent == Screen::DisplayHub ? ui.text(UiText::Display)
                                : parent == Screen::Connections ? caption(ui, UiText::Network, "Connect")
@@ -14,9 +14,12 @@ namespace screens::modern {
                                : ui.text(parent == Screen::Read ? UiText::Read
                                        : parent == Screen::Library ? UiText::Library
                                        : parent == Screen::Device ? UiText::Device : UiText::Settings);
-        if (button(ui, {8, 0, 94, 43}, std::string{"‹ "} + std::string{parentText}, Style::Plain, true, {}, 13))
+        if (parent == Screen::Dictionary) parentText = "Dictionary";
+        const bool dictionaryParent = parent == Screen::Dictionary;
+        if (button(ui, {8, 0, int16_t(dictionaryParent ? 112 : 94), 43},
+                   std::string{"‹ "} + std::string{parentText}, Style::Plain, true, {}, 13))
             screen = parent;
-        ui.label({112, 0, 222, 43}, title, 15);
+        ui.label({int16_t(dictionaryParent ? 132 : 112), 0, int16_t(dictionaryParent ? 202 : 222), 43}, title, 15);
         ui.label({340, 0, 132, 43}, trailing, 11, ui::themes::Accent, ui::TextAlign::Right);
         if (button(ui, {480, 0, 152, 43}, std::string{copy(ui,Copy::BackBook)}+" ↗", Style::Accent, true, {}, 13))
             return Action::Resume;
@@ -54,7 +57,7 @@ namespace screens::modern {
                            : current == Screen::DictionaryHelp ? std::string_view{"Dictionary setup"}
                            : current == Screen::Help ? std::string_view{"How to read"}
                            : ui.text(current == Screen::ReadingHub ? UiText::Reading : UiText::Display);
-        if (auto action = header(ui, title, screen, current == Screen::DictionaryHelp ? Screen::Connections : current == Screen::Help ? Screen::Device : Screen::Settings);
+        if (auto action = header(ui, title, screen, current == Screen::DictionaryHelp ? Screen::Dictionary : current == Screen::Help ? Screen::Device : Screen::Settings);
             action != Action::None) return action;
         if (current == Screen::ReadingHub) {
             if (button(ui, {16, 52, 298, 112}, ui.text(UiText::Reading), Style::Secondary, true,
@@ -64,17 +67,13 @@ namespace screens::modern {
         } else if (current == Screen::DisplayHub) {
             if (button(ui, {16, 52, 298, 112}, ui.text(UiText::ReaderLayout), Style::Secondary, true,
                        "Preview your font, guides & controls")) screen = Screen::ReaderAppearance;
-            if (button(ui, {326, 52, 298, 52}, ui.text(UiText::Display), Style::Secondary, true,
-                       "Theme, brightness, language & sleep")) screen = Screen::InterfaceSettings;
-            if (button(ui, {326, 112, 298, 52}, ui.text(UiText::Typeface), Style::Secondary, true,
-                       "Font & language for the open book")) screen = Screen::BookFonts;
+            if (button(ui, {326, 52, 298, 112}, ui.text(UiText::Display), Style::Secondary, true,
+                       "Theme & sleep")) screen = Screen::InterfaceSettings;
         } else if (current == Screen::Connections) {
-            if (button(ui, {12, 51, 198, 52}, "Wi-Fi & identity", Style::Secondary, true, "Networks & device name",13)) screen = Screen::NetworkSettings;
-            if (button(ui, {220, 51, 198, 52}, ui.text(UiText::CompanionSync), Style::Secondary, true, "Local companion",13)) return Action::CompanionSync;
-            if (button(ui, {428, 51, 198, 52}, "Dictionary", Style::Secondary, true, "Look up a word",13)) return Action::OpenDictionary;
-            if (button(ui, {12, 111, 198, 53}, ui.text(UiText::UsbTransfer), Style::Secondary, true, "Transfer with a cable",13)) return Action::UsbTransfer;
-            if (button(ui, {220, 111, 198, 53}, ui.text(UiText::RefreshRss), Style::Secondary, true, "Refresh saved feeds",13)) return Action::RssRefresh;
-            if (button(ui, {428, 111, 198, 53}, "Dictionary setup", Style::Secondary, true, "Offline pack & online help",13)) screen=Screen::DictionaryHelp;
+            if (button(ui, {12, 51, 300, 52}, "Wi-Fi & identity", Style::Secondary, true, "Networks & device name",13)) screen = Screen::NetworkSettings;
+            if (button(ui, {328, 51, 300, 52}, ui.text(UiText::CompanionSync), Style::Secondary, true, "Local companion",13)) return Action::CompanionSync;
+            if (button(ui, {12, 111, 300, 53}, ui.text(UiText::UsbTransfer), Style::Secondary, true, "Transfer with a cable",13)) return Action::UsbTransfer;
+            if (button(ui, {328, 111, 300, 53}, ui.text(UiText::RefreshRss), Style::Secondary, true, "Refresh saved feeds",13)) return Action::RssRefresh;
         } else if (current == Screen::DictionaryHelp) {
             ui.label({16,50,298,27},"Offline English dictionary",17);
             ui.label({16,82,298,78},"Copy english.oewn from the release dictionary pack into /dictionaries on your SD card. About 48 MB; no account needed.",13,ui::themes::Muted,ui::TextAlign::Start,4);

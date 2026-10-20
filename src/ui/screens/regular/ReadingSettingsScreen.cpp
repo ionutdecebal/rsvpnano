@@ -19,10 +19,9 @@ namespace screens {
             if(button(ui,{166,51,146,53},t(C::PauseMode),Style::Secondary,true,ui.text(config.pauseMode==settings::PauseMode::sentenceEnd?UiText::SentenceEnd:UiText::Instant),13)){
                 config.pauseMode=settings::cycleEnum(config.pauseMode);changed=true;
             }
-            if(button(ui,{12,111,146,53},t(C::TextAction),Style::Secondary,true,t(config.holdToRead?C::Hold:C::Tap),13)){
+            if(button(ui,{12,111,300,53},t(C::TextAction),Style::Secondary,true,t(config.holdToRead?C::Hold:C::Tap),13)){
                 config.holdToRead=!config.holdToRead;changed=true;
             }
-            if(button(ui,{166,111,146,53},t(C::BookSettings),Style::Secondary,true,{},13))screen=Screen::BookFonts;
             changed|=ui.slider({330,50,298,36},t(C::LongWords),config.pacing.longWordDelayMs," ms");
             changed|=ui.slider({330,90,298,36},t(C::ComplexWords),config.pacing.complexWordDelayMs," ms");
             changed|=ui.slider({330,130,298,36},t(C::Punctuation),config.pacing.punctuationDelayMs," ms");

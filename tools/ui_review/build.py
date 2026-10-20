@@ -12,7 +12,7 @@ GROUPS=[
  {'id':'appearance','title':'Appearance & pace','description':'Settings → Reading or Appearance. Typography, guides and reading/paused controls retain their own settings.'},
  {'id':'system','title':'Device & connections','description':'Settings → Display, Connections, Device or Help. Includes keyboards, upload, storage, encryption and updates.'},
  {'id':'status','title':'Loading & recovery','description':'Startup, library loading, errors and interrupted operations. Status states use the firmware renderer.'}]
-TITLES={'menu':'Main menu','quick-controls':'Quick controls','reader-paused':'Reader · paused','reader-playing':'Reader · playing','dictionary':'Dictionary · offline definition','dictionary-setup':'Dictionary · install and online help','reading':'Reading settings','reading-controls':'Reading controls','display':'Display settings','help':'Help & introduction','updates':'Firmware & updates','encryption':'Settings encryption','encryption-confirm':'Encryption confirmation','wifi-settings':'Wi-Fi & update source','wifi-scan':'Wi-Fi · networks','wifi-scanning':'Wi-Fi · scanning','wifi-empty':'Wi-Fi · none found','wifi-failed':'Wi-Fi · scan failed','wifi-password':'Wi-Fi · password','ota-owner':'Update repository · keyboard','ota-tag':'Release tag · keyboard'}
+TITLES={'library-details':'Library · Book settings','book-font-language':'Book settings · font and language','menu':'Main menu','quick-controls':'Quick controls','reader-paused':'Reader · paused','reader-playing':'Reader · playing','dictionary':'Dictionary · offline definition','dictionary-setup':'Dictionary · install and online help','reading':'Reading settings','reading-controls':'Reading controls','display':'Display settings','help':'Help & introduction','updates':'Firmware & updates','encryption':'Settings encryption','encryption-confirm':'Encryption confirmation','wifi-settings':'Wi-Fi & update source','wifi-scan':'Wi-Fi · networks','wifi-scanning':'Wi-Fi · scanning','wifi-empty':'Wi-Fi · none found','wifi-failed':'Wi-Fi · scan failed','wifi-password':'Wi-Fi · password','ota-owner':'Update repository · keyboard','ota-tag':'Release tag · keyboard'}
 INTRO=['Welcome','Touch practice','Quick controls','Find your speed','Tune pacing','Essential menu','Page navigation','Essential settings','Focus timer','Physical buttons','Upload books','Dictionary']
 COVERAGE={'Read':'menu','Library':'library','Chapters':'chapters','Settings':'settings','ReadingSettings':'reading-controls','InterfaceSettings':'display-controls','PacingSettings':'pacing','ReaderAppearance':'appearance-type','BookFonts':'book-font-language','NetworkSettings':'wifi-settings','WifiScan':'wifi-scan','WifiConnect':'wifi-password','NetworkEdit':'ota-tag','Device':'device','StorageEncryption':'encryption','Sync':'companion','Ota':'updates','FocusTimers':'focus','FocusEditor':'focus-editor','FocusNameEdit':'focus-name','FocusSession':'focus-session','Reader':'reader-paused','Usb':'usb-transfer','Status':'startup','Standby':'standby','ReadingHub':'reading','DisplayHub':'display','FocusPresets':'focus-presets','FindPlace':'find-place','FindChapters':'find-chapters','BookSearch':'search-results','BookSearchKeyboard':'search-keyboard','QuickControls':'quick-controls','Onboarding':'intro-en-0','ButtonMap':'button-map','AddBooks':'add-books','TouchCheck':'touch-check-edges','Dictionary':'dictionary','DictionarySearch':'dictionary-search','DictionaryHelp':'dictionary-setup'}
 # These retained enum values are not reachable in the LCD release's navigation.
@@ -23,7 +23,7 @@ def classify(n):
  if n.startswith('focus'):return 'focus'
  if n.startswith(('appearance','pacing','reading','chunk')):return 'appearance'
  if n.startswith(('reader','page','find-','search-','quick-')):return 'reading'
- if n.startswith(('library','chapter')):return 'library'
+ if n.startswith(('library','chapter','book-font','book-language','book-math')):return 'library'
  if n.startswith(('startup','loading','status')):return 'status'
  return 'system'
 def title(n):
@@ -33,18 +33,19 @@ def title(n):
  return n.replace('-',' ').capitalize()
 def route(g,n):
  if g=='onboarding':return 'First boot / Settings → Help → Replay introduction'
- if g=='dictionary':return 'Book → middle button → Dictionary' if n!='dictionary-setup' else 'Settings → Connections → Dictionary setup'
+ if g=='dictionary':return 'Book → middle button → Dictionary' if n!='dictionary-setup' else 'Book → middle button → Dictionary → ?'
  if g=='reading':return 'Book → middle button → Page / Find place' if n.startswith(('page','find','search')) else 'Book → middle button for controls'
  if g=='appearance':return 'Menu → Settings → Reading / Appearance'
  if g=='focus':return 'Menu → Start Focus → Presets / Session'
- if g=='library':return 'Menu → Library / Chapters'
+ if g=='library':return 'Menu → Library → Book settings' if n.startswith(('book-','library-details')) else 'Menu → Library / Chapters'
  if g=='status':return 'During startup, loading or recovery'
  return 'Menu → Settings → Display / Connections / Device / Help'
 def links(g,n):
  if n=='menu':return ['reader-paused','library','chapters','settings','focus']
  if n=='settings':return ['reading','appearance-type','display','connections','device','help']
  if n=='quick-controls':return ['reader-paused','menu','page','dictionary']
- if n=='connections':return ['wifi-settings','companion','usb-transfer','dictionary','dictionary-setup']
+ if n=='connections':return ['wifi-settings','companion','usb-transfer']
+ if n=='library':return ['reader-paused','book-font-language','connections']
  if n=='device':return ['updates','encryption','status-storage']
  if n=='help':return ['button-map','add-books','intro-en-0']
  if n in ('display','display-controls'):return ['touch-check-edges','settings']

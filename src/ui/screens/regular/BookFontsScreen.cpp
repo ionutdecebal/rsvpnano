@@ -6,6 +6,8 @@
 
 namespace screens {
     namespace {
+        bool choosingLanguage = false;
+        size_t languagePage = 0, targetIndex = 0;
         struct BookLanguage { std::string_view tag, name; };
         constexpr BookLanguage commonLanguages[]{
             {"", "Automatic"}, {"en", "English"}, {"fr", "French"}, {"de", "German"},
@@ -21,11 +23,9 @@ namespace screens {
             return locales::localeName(catalog, locale);
         }
         bool modernBookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
-                             const locales::Catalog& catalog, FontCatalog& fonts, Screen& screen) {
+                             const locales::Catalog& catalog, FontCatalog& fonts, Screen& screen, Screen parent, std::string_view bookTitle) {
             using ui::modern::button;
             using ui::modern::Style;
-            static bool choosingLanguage = false;
-            static size_t languagePage = 0, targetIndex = 0;
             if (choosingLanguage) {
                 std::vector<BookLanguage> choices(std::begin(commonLanguages), std::end(commonLanguages));
                 const auto add = [&](std::string_view tag) {
@@ -55,7 +55,7 @@ namespace screens {
                 }
                 return changed;
             }
-            if (modern::header(ui,"Book font & language",screen,Screen::Settings)==Action::Resume) screen=Screen::Reader;
+            if (modern::header(ui,"Book settings",screen,parent,bookTitle)==Action::Resume) screen=Screen::Reader;
             const auto language = overrides.locale ? languageName(catalog,*overrides.locale)
                                                     : languageName(catalog,metadata.locale.empty()?"und":std::string_view{metadata.locale});
             const std::string languageValue = overrides.locale ? std::string{language} : "Auto · "+std::string{language};
@@ -102,9 +102,14 @@ namespace screens {
         }
     }
 
+    void resetBookFonts() {
+        choosingLanguage = false;
+        languagePage = targetIndex = 0;
+    }
+
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
-                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen) {
-        if (ui.modernPresentation()) return modernBookFonts(ui,metadata,overrides,localeCatalog,fonts,screen);
+                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen, Screen parent, std::string_view bookTitle) {
+        if (ui.modernPresentation()) return modernBookFonts(ui,metadata,overrides,localeCatalog,fonts,screen,parent,bookTitle);
         const ui::Rect content = detail::content(ui);
         size_t languageCount = 0;
         metadata.forEachLanguage([&languageCount](std::string_view, uint32_t scripts) {

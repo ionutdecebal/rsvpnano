@@ -232,6 +232,9 @@ void App::update(uint32_t nowMs) {
 
 void App::renderScreen(uint32_t nowMs) {
     if (focusScreen_.breakVisible()) screen_ = screens::Screen::FocusSession;
+    if (!backgroundJobActive() && bookSettings_.ready()
+        && screen_ != screens::Screen::BookFonts && screen_ != screens::Screen::Status)
+        bookSettings_.clear();
     if (screen_ != screens::Screen::Reader) readerScreen_.cancelModernControls();
     if (screen_ != screens::Screen::Onboarding && onboardingScreen_.active()) onboardingScreen_.close();
     // Presentation only: the real RSVP/page renderer keeps its font and geometry paths.
@@ -280,6 +283,16 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.endFrame();
         if (result == screens::Action::OpenBook) {
             runBookOpen(libraryScreen_.selectedIndex(), nowMs);
+        } else if (result == screens::Action::OpenBookSettings) {
+            readerScreen_.pauseImmediately(prefs_, nowMs);
+            jobBookIndex_ = libraryScreen_.selectedIndex();
+            bookSettings_.clear();
+            screens::resetBookFonts();
+            screen_ = screens::Screen::Status;
+            statusUntilMs_ = 0;
+            screens::status(immediateUi_, "Book settings", "Loading language and fonts");
+            if (!startBackgroundJob(JobKind::BookSettings))
+                showTransientStatus("Settings unavailable", "Please try again", {}, 1200, screens::Screen::Library);
         } else {
             handleScreenAction(result, nowMs);
         }
@@ -431,7 +444,21 @@ void App::renderScreen(uint32_t nowMs) {
     }
     case screens::Screen::BookFonts: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        if (screens::bookFonts(immediateUi_, readerScreen_.session.metadata, readerScreen_.session.state.overrides,
+        if (bookSettings_.ready()) {
+            const auto previous = bookSettings_.overrides;
+            if (screens::bookFonts(immediateUi_, bookSettings_.metadata, bookSettings_.overrides,
+                                   localeCatalog_, readerScreen_.fonts, screen_, screens::Screen::Library,
+                                   bookSettings_.title)) {
+                if (!bookSettings_.save()) {
+                    bookSettings_.overrides = previous;
+                    showTransientStatus("Settings not saved", "Check the SD card and try again", {}, 1800,
+                                        screens::Screen::BookFonts);
+                } else if (bookSettings_.path == readerScreen_.session.sourcePath()) {
+                    readerScreen_.session.state.overrides = bookSettings_.overrides;
+                    requestTypographyRefresh();
+                }
+            }
+        } else if (screens::bookFonts(immediateUi_, readerScreen_.session.metadata, readerScreen_.session.state.overrides,
                                localeCatalog_, readerScreen_.fonts, screen_)) {
             ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
             requestTypographyRefresh();
@@ -513,6 +540,13 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     switch (action) {
     case screens::Action::None:
     case screens::Action::OpenBook:
+    case screens::Action::OpenBookSettings:
+        return;
+    case screens::Action::CycleLanguage:
+        interfaceScreen_.cycleLanguage(immediateUi_, settingsStore_.settings().interface);
+        settingsStore_.acceptChanges();
+        reloadUiAssets();
+        renderScreen(nowMs);
         return;
     case screens::Action::OpenDictionary:
         readerScreen_.pauseImmediately(prefs_,nowMs);
@@ -716,7 +750,8 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
                 screen_ = screen_ == screens::Screen::NetworkSettings && immediateUi_.modernPresentation()
                           ? screens::Screen::Connections : screens::Screen::Settings;
             } else if (screen_ == screens::Screen::BookFonts) {
-                screen_ = immediateUi_.modernPresentation() ? screens::Screen::ReadingHub : screens::Screen::Read;
+                screens::resetBookFonts();
+                screen_ = immediateUi_.modernPresentation() ? screens::Screen::Library : screens::Screen::Read;
             } else if (screen_ == screens::Screen::ReadingHub || screen_ == screens::Screen::DisplayHub
                        || screen_ == screens::Screen::Connections) {
                 screen_ = screens::Screen::Settings;
@@ -725,7 +760,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
             } else if ((screen_ == screens::Screen::ButtonMap || screen_ == screens::Screen::AddBooks)) {
                 screen_ = screens::Screen::Help;
             } else if (screen_ == screens::Screen::DictionaryHelp) {
-                screen_ = screens::Screen::Connections;
+                screen_ = screens::Screen::Dictionary;
             } else if (screen_ == screens::Screen::Help) {
                 screen_ = screens::Screen::Settings;
             } else if (screen_ == screens::Screen::Dictionary || screen_ == screens::Screen::DictionarySearch) {
@@ -802,6 +837,21 @@ void App::updateBackgroundJob() {
         vQueueDelete(jobQueue_);
         jobQueue_ = nullptr;
         Logger::checkpoint("running");
+        if (completed == JobKind::BookSettings) {
+            if (bookSettings_.ready()) {
+                if (bookSettings_.path == readerScreen_.session.sourcePath())
+                    bookSettings_.overrides = readerScreen_.session.state.overrides;
+                screen_ = screens::Screen::BookFonts;
+                statusUntilMs_ = 0;
+                immediateUi_.cancelTouchUntilRelease();
+                immediateUi_.invalidate();
+                renderScreen(millis());
+            } else {
+                showTransientStatus("Settings unavailable", "Could not read this book", "Check the SD card", 1600,
+                                    screens::Screen::Library);
+            }
+            return;
+        }
         if(completed==JobKind::OnlineDictionary){
             screen_=screens::Screen::Dictionary;statusUntilMs_=0;
             immediateUi_.cancelTouchUntilRelease();immediateUi_.invalidate();renderScreen(millis());return;
@@ -1005,6 +1055,10 @@ void App::runBackgroundJob() {
     }
     case JobKind::OnlineDictionary:
         dictionary_.lookupOnline(settingsStore_);
+        break;
+    case JobKind::BookSettings:
+        Logger::checkpoint("book_settings");
+        bookSettings_.load(storage_, jobBookIndex_);
         break;
     case JobKind::Library:
         Logger::checkpoint("library_load");

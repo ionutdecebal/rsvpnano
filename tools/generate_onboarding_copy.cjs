@@ -33,6 +33,11 @@ copy.swipeHelp=["Middle button: speed, brightness and navigation. Tap Menu for a
 copy.powerHelp=["Open reading controls", "Lesesteuerung öffnen", "Deschide comenzile de lectură"];
 copy.dictionaryLesson=["Press the middle button, then tap Dictionary. Browse nearby words or search.", "Drücke die mittlere Taste und wähle Wörterbuch. Wörter wechseln oder suchen.", "Apasă butonul din mijloc, apoi Dicționar. Schimbă cuvântul sau caută."];
 copy.guidesUnavailableChunks=["Guides are unavailable in chunk mode. Switch to Word to use them.", "Hilfslinien sind im Gruppenmodus nicht verfügbar. Nutze dafür den Wortmodus.", "Ghidajele nu sunt disponibile în modul grup. Treci la Cuvânt pentru a le folosi."];
+copy.displayHint=['Theme & sleep','Farben & Ruhe','Temă și repaus'];
+copy.deviceHint=['Language, storage & updates','Sprache, Speicher & Updates','Limbă, stocare și actualizări'];
+copy.displayExplain=['Choose your theme, sleep delay and screensaver. Brightness is in quick controls.','Wähle Farben, Ruhezeit und Bildschirmschoner. Helligkeit ist in der Lesesteuerung.','Alege tema, repausul și economizorul. Luminozitatea e în comenzile rapide.'];
+copy.deviceExplain=['Change the interface language, check storage and update firmware.','Wähle die Menüsprache, prüfe den Speicher und aktualisiere die Firmware.','Schimbă limba interfeței, verifică stocarea și actualizează firmware-ul.'];
+copy.menuLibrary=['Open a book or change its font and language with Book settings. Each book keeps its reading place.','Öffne ein Buch oder ändere Schrift und Sprache in den Bucheinstellungen. Die Lesestelle bleibt gespeichert.','Deschide o carte sau schimbă fontul și limba din setările cărții. Locul lecturii rămâne salvat.'];
 // RSVP Nano branding; the Pocket Lines mark is retained only as the reading guide.
 const keys=Object.keys(copy),name=k=>k[0].toUpperCase()+k.slice(1);
 const target=path.join(root,'src/ui/screens');

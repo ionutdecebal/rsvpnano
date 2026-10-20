@@ -112,6 +112,33 @@ namespace {
         std::puts("Banner wordmark: exact artwork fits its loading region; RSVP foreground stays static, the accent pulses, and light/dark/custom colours redraw cleanly.");
     }
 
+    void verifyRelocatedControls(Arduino_Canvas& panel) {
+        ui::Context ui(panel);ui.setModernPresentation(true);
+        ui.setTouchSource({.surface={640,172},.poll=&poll});
+        screens::InterfaceScreen display;settings::InterfaceSettings config;
+        for (auto language : {"de", "ro", "en"}) {
+            display.cycleLanguage(ui,config);
+            assert(config.locale==language && ui.locale()==language);
+        }
+        ReadingSession session;dictionary::Dictionary dictionary;dictionary.open(session);
+        auto screen=screens::Screen::Dictionary;uint32_t now=0;
+        const auto frame=[&](bool down,int x,int y) {
+            contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=25);
+            ui.beginFrame(uint8_t(screen));
+            if(screen==screens::Screen::Dictionary)dictionary.draw(ui,session,screen,now);
+            else screens::modern::hub(ui,screen);
+            ui.endFrame();
+        };
+        frame(false,0,0);
+        const std::vector<uint16_t> lookup(panel.getFramebuffer(),panel.getFramebuffer()+640*172);
+        frame(true,336,20);frame(false,336,20);
+        assert(screen==screens::Screen::DictionaryHelp);frame(false,0,0);
+        frame(true,40,20);frame(false,40,20);assert(screen==screens::Screen::Dictionary);
+        frame(false,0,0);
+        assert(std::equal(lookup.begin(),lookup.end(),panel.getFramebuffer()));
+        std::puts("Relocated controls: interface language cycles EN/DE/RO; Dictionary help returns without resetting the lookup.");
+    }
+
     void verifyPageFontRestoration(Arduino_GFX& panel) {
         ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
         settings::SettingsStore settings;auto& config=settings.settings().reading;
@@ -352,7 +379,7 @@ namespace {
         auto screen=screens::Screen::BookFonts;uint32_t now=500000;
         const auto frame=[&](bool down,int x,int y) {
             contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=25);ui.beginFrame(static_cast<uint8_t>(screen));
-            screens::bookFonts(ui,metadata,overrides,catalog,fonts,screen);ui.endFrame();
+            screens::bookFonts(ui,metadata,overrides,catalog,fonts,screen,screens::Screen::Library,"Selected book");ui.endFrame();
         };
         const auto tap=[&](int x,int y){frame(true,x,y);frame(false,x,y);frame(false,x,y);};
         const auto save=[&](const char* name) {
@@ -360,7 +387,7 @@ namespace {
             std::fprintf(file,"P6\n640 172\n255\n");
             for(int i=0;i<640*172;++i) {const auto pixel=panel.getFramebuffer()[i];const unsigned char rgb[]{static_cast<unsigned char>(((pixel>>11)&31)*255/31),static_cast<unsigned char>(((pixel>>5)&63)*255/63),static_cast<unsigned char>((pixel&31)*255/31)};std::fwrite(rgb,1,3,file);}std::fclose(file);
         };
-        frame(false,0,0);save("book-font-language");tap(120,76);save("book-language-picker");
+        screens::resetBookFonts();frame(false,0,0);save("book-font-language");save("library-details");tap(120,76);save("book-language-picker");
         tap(520,76);assert(overrides.locale && *overrides.locale=="fr");
         tap(480,138);assert(overrides.languageFonts.size()==1 && overrides.languageFonts[0].fontId=="literata");
         frame(false,0,0);save("book-font-overrides");
@@ -368,6 +395,10 @@ namespace {
         metadata.textRuns={{0,"en",TextDirection::ltr,UnicodeText::ScriptLatin},{20,"fr",TextDirection::ltr,UnicodeText::ScriptLatin}};
         frame(false,0,0);tap(480,76);tap(480,138);assert(overrides.languageFonts.size()==1 && overrides.languageFonts[0].locale=="fr");
         tap(140,138);metadata.scriptMask|=UnicodeText::ScriptMath;frame(false,0,0);tap(480,76);frame(false,0,0);save("book-math-font");
+        tap(40,22);assert(screen==screens::Screen::Library);
+        screen=screens::Screen::BookFonts;tap(120,76); // Leave a picker open for another book.
+        screens::resetBookFonts();ui.invalidate();frame(false,0,0);
+        tap(40,22);assert(screen==screens::Screen::Library);
         screen=screens::Screen::WifiConnect;ui::KeyboardState keyboard;std::string password="sample-password";
         const auto keyFrame=[&]{ui.beginFrame(static_cast<uint8_t>(screen));ui.keyboard({8,8,624,156},password,63,keyboard,"Home Wi-Fi",true);ui.endFrame();};
         keyFrame();save("wifi-keyboard");keyboard.passwordVisible=true;keyFrame();save("wifi-keyboard-visible");
@@ -520,6 +551,7 @@ int main(int argc, char** argv) {
     verifyBannerWordmark(panel);
     verifyRealPlaybackPause(panel);
     verifyPageFontRestoration(panel);
+    verifyRelocatedControls(panel);
     verifyReaderControlRoutes(panel);
     verifyReaderTouchComfort(panel);
     verifyAppearanceAndFocusRoutes(panel);
@@ -556,7 +588,6 @@ int main(int argc, char** argv) {
         {screens::Screen::DictionaryHelp,"dictionary-setup"},
         {screens::Screen::Read, "menu"}, {screens::Screen::Read, "menu-paper"}, {screens::Screen::QuickControls,"quick-controls"}, {screens::Screen::Library, "library"},
         {screens::Screen::Library, "library-long"}, {screens::Screen::Library, "library-empty"},
-        {screens::Screen::Library, "library-details"},
         {screens::Screen::Settings, "settings"}, {screens::Screen::Chapters, "chapters"},
         {screens::Screen::ReadingHub, "reading"}, {screens::Screen::DisplayHub, "display"},
         {screens::Screen::Connections, "connections"}, {screens::Screen::Device, "device"},
@@ -674,15 +705,6 @@ int main(int argc, char** argv) {
             tap(420,135,[&]{focus.draw(ui,0,screen);});
             assert(focus.badge(0)=="Paused 25:00");
             ui.beginFrame(static_cast<uint8_t>(screen),focus.frameSurface(screen));focus.draw(ui,0,screen);ui.endFrame();
-        }
-        if (std::string_view{name} == "library-details") {
-            uint32_t now = 100;
-            for (const bool down : {true, false, false}) {
-                contact = {down, 550, 110}; ui.pollTouch(now += 25);
-                ui.beginFrame(static_cast<uint8_t>(screen));
-                library.draw(ui, books, now, screen);
-                ui.endFrame();
-            }
         }
         const auto path = std::filesystem::path{argv[1]} / (std::string{name} + ".ppm");
         auto* file = std::fopen(path.c_str(), "wb");

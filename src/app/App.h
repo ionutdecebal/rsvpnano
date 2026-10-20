@@ -19,6 +19,7 @@
 #include "feeds/RssFeeds.h"
 #include "settings/SettingsStore.h"
 #include "library/StorageManager.h"
+#include "library/BookSettingsEditor.h"
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/LibraryScreen.h"
@@ -47,6 +48,7 @@ private:
         Typography,
         OnboardingStorage,
         OnlineDictionary,
+        BookSettings,
     };
 
     struct JobUpdate {
@@ -101,6 +103,7 @@ private:
     Board::Power::BatteryState battery_;
     screens::ReaderScreen readerScreen_{Board::Display::gfx(), settingsStore_.settings().reading};
     screens::LibraryScreen libraryScreen_;
+    BookSettingsEditor bookSettings_;
     screens::ChaptersScreen chaptersScreen_;
     screens::InterfaceScreen interfaceScreen_;
     screens::NetworkScreen networkScreen_;

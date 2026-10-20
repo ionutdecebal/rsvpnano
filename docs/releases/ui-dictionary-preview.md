@@ -121,6 +121,28 @@ of English meanings. Data licences do not replace the firmware's existing licenc
 Candidate 3 is delivered as a manual browser-flash BIN. The prototype development
 OTA feed still points to candidate 2; it has not been repointed for this pass.
 
+## Feedback pass — 20 October, candidate 4
+
+- Connections now has Wi-Fi, the local companion, USB and RSS. Dictionary stays
+  in quick controls; its **?** button opens installation/online help and returns
+  to the same lookup.
+- Library replaces Book details with Book settings for the selected book.
+  Language/font overrides persist without opening that book or changing either
+  saved position. Unindexed imports are prepared by the loading worker. Failed
+  saves are reported and leave the draft unchanged; override writes use a
+  temporary file and replacement backup. Changes to the currently open book
+  also refresh the reader's live overrides/font.
+- Reading settings no longer duplicates Book settings. Interface language is in
+  Device; Display keeps theme, standby and screensaver controls. Introduction
+  directions and the review board follow these routes.
+- Page browsing continues to use the exact **Small** strike of the book font,
+  as confirmed by the founder (not Compact). Candidate 3 already selected that
+  strike; no additional scaling or smaller substitute is introduced. Repeated
+  page/reader transition tests still check all RSVP/chunk sizes while paused.
+
+Candidate 4 is a manual browser-flash BIN. The development OTA feed and public
+firmware releases are unchanged; physical acceptance is still pending.
+
 ## Test update from the full prototype
 
 The founder requested delivery through the existing private development feed.
@@ -134,7 +156,7 @@ Host HTTP/checksum verification is not evidence of a successful physical update.
 ## Preview update channel
 
 An empty update tag in this build resolves to
-`preview-ui-dictionary-20261020.3`, not GitHub's latest stable release.
+`preview-ui-dictionary-20261020.4`, not GitHub's latest stable release.
 Explicit owner/repository/tag settings remain supported. If upgrading from a
 custom development build, inspect Connections → Wi-Fi → Release tag before
 updating; saved custom values are not silently discarded.

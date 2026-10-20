@@ -36,8 +36,9 @@ screens::Action Dictionary::draw(ui::Context& ui,ReadingSession& session,screens
         return Action::None;
     }
     if(button(ui,{8,0,102,44},"‹ Controls",Style::Plain)) {screen=Screen::QuickControls;return Action::None;}
-    ui.label({120,0,240,44},"Dictionary",17);
+    ui.label({120,0,180,44},"Dictionary",17);
     if(screen==Screen::Dictionary){
+        if(button(ui,{314,0,44,44},"?",Style::Plain)){screen=Screen::DictionaryHelp;return Action::None;}
         if(button(ui,{370,0,122,44},"Search",Style::Secondary)){draft_=query_;screen=Screen::DictionarySearch;}
         if(button(ui,{504,0,128,44},"Look online",Style::Accent,!query_.empty()))return Action::OnlineDictionary;
         ui::modern::rule(ui,{0,43,640,1});

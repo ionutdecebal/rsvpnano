@@ -4,8 +4,9 @@
 #include <ranges>
 
 namespace screens {
+    void resetBookFonts() {}
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
-                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen) {
+                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen, Screen, std::string_view) {
         size_t languageCount = 0;
         metadata.forEachLanguage([&languageCount](std::string_view, uint32_t scripts) {
             languageCount += (scripts & ~UnicodeText::ScriptMath) != 0;

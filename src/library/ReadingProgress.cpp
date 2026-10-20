@@ -82,12 +82,17 @@ namespace ReadingProgress {
         }
 
         std::expected<void, std::error_code> writeBookState(std::string_view bookPath,
-                                                            const reading::StoredState& state) {
+                                                            const reading::StoredState& state, bool atomic = false) {
             std::string output;
             if (glz::write_toml(state, output))
                 return std::unexpected(std::make_error_code(std::errc::io_error));
 
             const std::string sidecarPath = StoragePaths::bookStatePathFor(bookPath);
+            if (atomic) {
+                const auto temporary = sidecarPath + ".tmp", backup = sidecarPath + ".bak";
+                return StorageFiles::writeFileAtomic(Board::Storage::filesystem(), sidecarPath.c_str(),
+                                                      temporary.c_str(), backup.c_str(), output);
+            }
             File file = Board::Storage::filesystem().open(sidecarPath.c_str(), FILE_WRITE);
             if (!file || file.isDirectory()) {
                 if (file)
@@ -159,6 +164,17 @@ namespace ReadingProgress {
                          static_cast<unsigned int>(wordIndex), static_cast<unsigned int>(identity.wordCount),
                          StoragePaths::bookStatePathFor(bookPath).c_str());
             });
+    }
+
+    std::expected<void, std::error_code> writeBookOverrides(std::string_view bookPath, const BookIdentity& identity,
+                                                             const settings::ReadingOverrides& overrides) {
+        if (bookPath.empty() || !isValidIdentity(identity))
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return loadWritableBookState(bookPath, identity).and_then([&](reading::StoredState state) {
+            state.identity = identity;
+            state.reading.overrides = overrides;
+            return writeBookState(bookPath, state, true);
+        });
     }
 
     std::expected<void, std::error_code> writeBookLanguageFonts(std::string_view bookPath, const BookIdentity& identity,

@@ -28,6 +28,9 @@ namespace ReadingProgress {
     std::expected<void, std::error_code> writeBookLanguageFonts(std::string_view bookPath,
                                                                 const reading::BookIdentity& identity,
                                                                 std::vector<settings::LanguageFont> languageFonts);
+    std::expected<void, std::error_code> writeBookOverrides(std::string_view bookPath,
+                                                             const reading::BookIdentity& identity,
+                                                             const settings::ReadingOverrides& overrides);
     void save(ReadingSession& session, Preferences& preferences, bool force, uint32_t nowMs);
     void cache(ReadingSession& session, Preferences& preferences, uint32_t wordIndex);
     void mirror(const ReadingSession& session, const IndexedBookStore& store);

@@ -93,6 +93,8 @@ namespace screens {
         CheckOnboardingStorage,
         OpenDictionary,
         OnlineDictionary,
+        OpenBookSettings,
+        CycleLanguage,
     };
 
     Action read(ui::Context& ui, std::string_view title, std::string_view author, uint8_t progress, Screen& screen);
@@ -106,13 +108,16 @@ namespace screens {
                    void (*setBrightness)(uint8_t));
         bool draw(ui::Context& ui, settings::InterfaceSettings& settings, std::span<const uint32_t> standbyDurations,
                   void (*setBrightness)(uint8_t), Screen& screen);
+        void cycleLanguage(ui::Context& ui, settings::InterfaceSettings& settings);
 
     private:
         const locales::Catalog* languages_ = nullptr;
     };
     bool pacingSettings(ui::Context& ui, settings::PacingSettings& settings, Screen& screen);
     bool bookFonts(ui::Context& ui, const BookMetadata& metadata, settings::ReadingOverrides& overrides,
-                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen);
+                   const locales::Catalog& localeCatalog, FontCatalog& fonts, Screen& screen,
+                   Screen parent = Screen::Settings, std::string_view bookTitle = {});
+    void resetBookFonts();
     class NetworkScreen {
     public:
         bool startupCheckPending = false;

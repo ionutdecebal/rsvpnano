@@ -48,7 +48,6 @@ namespace screens {
         int32_t startOffset_ = 0;
         int32_t offset_ = 0;
         size_t selectedIndex_ = 0;
-        bool showingDetails_ = false;
         std::vector<LibraryItem> items_;
         bool itemsValid_ = false;
         uint32_t itemsRevision_ = 0;

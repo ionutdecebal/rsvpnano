@@ -31,4 +31,7 @@ public:
         return it == fixture::integers.end() ? fallback : it->second;
     }
     size_t putUInt(const char* key, uint32_t value) { fixture::integers[key] = value; return sizeof(value); }
+    size_t putString(const char* key, const char* value) {
+        fixture::blobs[key] = value; return fixture::blobs[key].size();
+    }
 };

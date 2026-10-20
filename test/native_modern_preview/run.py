@@ -31,7 +31,7 @@ def main():
         "ui/screens/regular/PacingSettingsScreen.cpp", "ui/screens/regular/OtaScreen.cpp",
         "ui/screens/regular/StatusScreen.cpp", "ui/screens/regular/BookFontsScreen.cpp",
         "ui/screens/ModernReaderChrome.cpp", "ui/screens/ReaderLayout.cpp", "ui/screens/regular/ReaderLayout.cpp",
-        "ui/screens/regular/InterfaceSettingsScreen.cpp",
+        "ui/screens/regular/InterfaceSettingsScreen.cpp", "ui/screens/InterfaceSettingsScreen.cpp",
         "ui/screens/ModernAppearanceScreen.cpp", "ui/screens/regular/FocusScreen.cpp",
         "focus/FocusTimers.cpp", "focus/FocusSession.cpp",
         "ui/screens/ModernReaderControls.cpp", "ui/screens/OnboardingCopy.cpp", "ui/screens/OnboardingScreen.cpp", "ui/screens/OnboardingStorageScreen.cpp", "ui/screens/BookUploadScreen.cpp", "ui/screens/TouchCheckScreen.cpp", "drivers/touch/axs15231b_touch/axs15231b_touch.cpp",

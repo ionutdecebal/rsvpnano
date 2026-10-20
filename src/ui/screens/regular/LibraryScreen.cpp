@@ -141,22 +141,10 @@ namespace screens {
             using ui::modern::button;
             using ui::modern::Style;
             using ui::modern::Direction;
-            if (items.empty()) showingDetails_ = false;
             const auto count = std::to_string(items.empty() ? 0 : selectedIndex_ + 1) + " / "
                              + std::to_string(items.size());
-            if (showingDetails_) {
-                if (button(ui, {8, 0, 108, 43}, "< " + std::string{ui.text(UiText::Library)}, Style::Plain)) {
-                    showingDetails_ = false;
-                    ui.invalidate();
-                    return Action::None;
-                }
-                ui.label({128, 0, 280, 43}, "Book details", 2);
-                ui.label({464, 0, 160, 43}, count, 1, ui::themes::Muted, ui::TextAlign::Right);
-                ui::modern::rule(ui, {0, 43, 640, 1});
-            } else {
-                if (const auto action = modern::header(ui, ui.text(UiText::Library), screen, Screen::Read, count);
-                    action != Action::None) return action;
-            }
+            if (const auto action = modern::header(ui, ui.text(UiText::Library), screen, Screen::Read, count);
+                action != Action::None) return action;
             if (items.empty()) {
                 ui.label({16, 52, 408, 60}, ui.text(UiText::NoLibraryItems), 3);
                 ui.label({16, 118, 408, 42}, "Add a book using the companion or USB.", 2, ui::themes::Muted,
@@ -164,33 +152,23 @@ namespace screens {
                 if (button(ui, {448, 80, 176, 56}, ui.text(UiText::Add), Style::Primary)) screen = Screen::Connections;
                 return Action::None;
             }
-            if (!showingDetails_) {
-                const bool previous = ui::modern::arrow(ui, {16, 56, 56, 104}, Direction::Left, items.size() > 1);
-                const bool next = ui::modern::arrow(ui, {408, 56, 56, 104}, Direction::Right, items.size() > 1);
-                if (previous) selectedIndex_ = selectedIndex_ == 0 ? items.size() - 1 : selectedIndex_ - 1;
-                if (next) selectedIndex_ = (selectedIndex_ + 1) % items.size();
-            }
+            const bool previous = ui::modern::arrow(ui, {16, 56, 56, 104}, Direction::Left, items.size() > 1);
+            const bool next = ui::modern::arrow(ui, {408, 56, 56, 104}, Direction::Right, items.size() > 1);
+            if (previous) selectedIndex_ = selectedIndex_ == 0 ? items.size() - 1 : selectedIndex_ - 1;
+            if (next) selectedIndex_ = (selectedIndex_ + 1) % items.size();
             const auto& item = items[selectedIndex_];
             const std::string_view author = item.book == nullptr || item.book->author.empty()
                                              ? ui.text(UiText::Unknown) : std::string_view{item.book->author};
-            if (showingDetails_) {
-                ui.label({16, 48, 440, 67}, title(item), 2, ui::themes::Foreground, ui::TextAlign::Start, 3);
-                ui.label({16, 117, 440, 22}, author, 2, ui::themes::Muted);
-                ui.label({16, 143, 440, 20}, item.chapter, 1, ui::themes::Muted);
-            } else {
-                ui.label({84, 48, 312, 72}, title(item), 28, ui::themes::Foreground, ui::TextAlign::Start, 2);
-                ui.label({84, 120, 312, 20}, author, 13, ui::themes::Muted);
-                ui.progress({84, 150, 100, 2}, item.progress);
-                ui.label({194, 139, 202, 24}, std::to_string(item.progress) + "% · " + std::string{item.chapter}, 11,
+            ui.label({84, 48, 312, 72}, title(item), 28, ui::themes::Foreground, ui::TextAlign::Start, 2);
+            ui.label({84, 120, 312, 20}, author, 13, ui::themes::Muted);
+            ui.progress({84, 150, 100, 2}, item.progress);
+            ui.label({194, 139, 202, 24}, std::to_string(item.progress) + "% · " + std::string{item.chapter}, 11,
                          ui::themes::Muted);
-            }
             ui::modern::rule(ui, {476, 56, 1, 104});
             if (button(ui, {480, 52, 144, 36}, modern::caption(ui, UiText::Read, "Open book"), Style::Primary, item.book != nullptr))
                 return Action::OpenBook;
-            if (button(ui, {480, 96, 144, 32}, showingDetails_ ? ui.text(UiText::Library) : "Book details")) {
-                showingDetails_ = !showingDetails_;
-                ui.invalidate();
-            }
+            if (button(ui, {480, 96, 144, 32}, "Book settings", Style::Secondary, item.book != nullptr, {}, 13))
+                return Action::OpenBookSettings;
             if (button(ui, {480, 136, 144, 28}, "+ " + std::string{ui.text(UiText::Add)}, Style::Accent))
                 screen = Screen::Connections;
             return Action::None;

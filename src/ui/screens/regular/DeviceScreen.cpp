@@ -37,8 +37,11 @@ namespace screens {
                                                    screen, current == Screen::Device ? Screen::Settings : Screen::Device);
                 action != Action::None) return action;
             if (current == Screen::Device) {
-                if (button(ui,{12,51,300,53},"Storage",Style::Secondary,true,storageStatus)) return Action::StorageStatus;
-                if (button(ui,{328,51,300,53},"Firmware & updates",Style::Secondary,true,"Version and update checks")) screen=Screen::Ota;
+                const std::string_view language = ui.locale() == "en" ? "English" : ui.locale() == "de" ? "Deutsch"
+                                               : ui.locale() == "ro" ? "Română" : ui.locale();
+                if (button(ui,{12,51,198,53},"Storage",Style::Secondary,true,storageStatus)) return Action::StorageStatus;
+                if (button(ui,{220,51,198,53},ui.text(UiText::Language),Style::Secondary,true,language)) return Action::CycleLanguage;
+                if (button(ui,{428,51,200,53},"Firmware & updates",Style::Secondary,true,"Version and updates",13)) screen=Screen::Ota;
                 if (button(ui,{12,111,300,53},"Settings encryption",Style::Secondary,true,encryptionStatus)) {
                     encryptionAcknowledged=false;encryptionControlsVisible=false;screen=Screen::StorageEncryption;
                 }

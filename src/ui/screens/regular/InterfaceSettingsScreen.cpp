@@ -5,23 +5,6 @@
 #include "ui/screens/OnboardingCopy.h"
 
 namespace screens {
-    namespace {
-
-        std::string_view nextLocale(const locales::Catalog& catalog, std::string_view current) {
-            if(current=="en")return "de";
-            if(current=="de")return "ro";
-            bool returnNext = current == "ro";
-            for (const auto& pack: catalog) {
-                if(pack.locale=="en"||pack.locale=="de"||pack.locale=="ro")continue;
-                if (returnNext)
-                    return pack.locale;
-                returnNext = pack.locale == current;
-            }
-            return Localization::kDefaultLocale;
-        }
-
-    } // namespace
-
     bool InterfaceScreen::draw(ui::Context& ui, settings::InterfaceSettings& config,
                                std::span<const uint32_t> standbyDurations, void (*setBrightness)(uint8_t),
                                Screen& screen) {
@@ -31,15 +14,10 @@ namespace screens {
             using ui::modern::Style;
             if (modern::header(ui, modern::copy(ui,modern::Copy::Display), screen, Screen::Settings) == Action::Resume) screen = Screen::Reader;
             if (button(ui,{340,0,132,43},modern::copy(ui,modern::Copy::TouchTest),Style::Plain,true,{},13)) screen=Screen::TouchCheck;
-            if (button(ui, {12, 51, 300, 52}, ui.text(UiText::Theme), Style::Secondary, true,
+            if (button(ui, {12, 51, 616, 52}, ui.text(UiText::Theme), Style::Secondary, true,
                        config.selectedThemeId == ui::themes::kDefaultThemeId && themes.resolve(config.selectedThemeId).definition.colors == ui::themes::ThemeColors{} ? "Ink" : themes.resolve(config.selectedThemeId).definition.name)) {
                 const auto& next = themes.next(config.selectedThemeId);
                 config.selectedThemeId = next.id; ui.setTheme(next); changed = true;
-            }
-            if (button(ui, {328, 51, 300, 52}, ui.text(UiText::Language), Style::Secondary, true,
-                       languages_ ? locales::localeName(*languages_, config.locale) : std::string_view{config.locale})) {
-                config.locale = !languages_ ? (config.locale=="en"?"de":config.locale=="de"?"ro":"en") : std::string{nextLocale(*languages_, config.locale)};
-                ui.setLocale(config.locale); changed = true;
             }
             std::string standby{ui.text(UiText::Off)};
             const size_t index = config.standbyTimerIndex;
@@ -91,9 +69,7 @@ namespace screens {
         if (ui.setting({content.x, secondRowY, halfWidth, rowHeight}, ui.text(UiText::Language),
                        languages_ ? locales::localeName(*languages_, config.locale) : std::string_view{config.locale},
                        ui::SettingLayout::Inline)) {
-            config.locale = !languages_ ? std::string{Localization::kDefaultLocale}
-                                        : std::string{nextLocale(*languages_, config.locale)};
-            ui.setLocale(config.locale);
+            cycleLanguage(ui, config);
             changed = true;
         }
 

@@ -11,7 +11,6 @@
 
 namespace screens {
     void LibraryScreen::reset() {
-        showingDetails_ = false;
         carouselGesture_ = {};
         dragging_ = false;
         moved_ = false;
@@ -19,7 +18,6 @@ namespace screens {
     }
 
     void LibraryScreen::invalidate() {
-        showingDetails_ = false;
         items_.clear();
         itemsValid_ = false;
     }

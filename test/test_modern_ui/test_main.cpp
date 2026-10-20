@@ -168,7 +168,7 @@ void test_filled_slider_uses_whole_tile_and_commits_after_drag() {
     f.tap(draw,627,149);TEST_ASSERT_EQUAL(3,tracking);
 }
 
-void test_library_arrows_wrap_without_opening_and_details_preserve_selection() {
+void test_library_arrows_and_book_settings_preserve_selection() {
     Fixture f;
     f.screen = screens::Screen::Library;
     screens::LibraryScreen library;
@@ -183,10 +183,10 @@ void test_library_arrows_wrap_without_opening_and_details_preserve_selection() {
     TEST_ASSERT_EQUAL(0, library.selectedIndex());
     f.tap(draw, 40, 100);
     TEST_ASSERT_EQUAL(1, library.selectedIndex());
-    f.tap(draw, 550, 110); f.frame(draw);
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenBookSettings), static_cast<int>(f.tap(draw, 550, 110)));
+    f.frame(draw);
     TEST_ASSERT_EQUAL(1, library.selectedIndex());
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenBook), static_cast<int>(f.tap(draw, 550, 68)));
-    f.tap(draw, 60, 22); f.frame(draw);
     TEST_ASSERT_EQUAL(1, library.selectedIndex());
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Screen::Library), static_cast<int>(f.screen));
 }
@@ -229,15 +229,14 @@ void test_settings_and_connections_keep_existing_actions() {
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Screen::Connections), static_cast<int>(f.screen));
     auto connections = [&] { return screens::modern::hub(f.ui, f.screen); };
     f.frame(connections);
-    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::CompanionSync), static_cast<int>(f.tap(connections, 320, 75)));
-    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenDictionary), static_cast<int>(f.tap(connections, 520, 75)));
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::CompanionSync), static_cast<int>(f.tap(connections, 520, 75)));
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::UsbTransfer), static_cast<int>(f.tap(connections, 130, 138)));
-    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::RssRefresh), static_cast<int>(f.tap(connections, 320, 138)));
-    f.tap(connections,520,138);TEST_ASSERT_EQUAL(static_cast<int>(screens::Screen::DictionaryHelp),static_cast<int>(f.screen));
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::RssRefresh), static_cast<int>(f.tap(connections, 520, 138)));
     f.screen = screens::Screen::Device;
     auto device = [&] { return screens::device(f.ui, true, 5, settings::NvsEncryptionState::Available, f.screen); };
     f.frame(device);
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::StorageStatus), static_cast<int>(f.tap(device,70,77)));
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::CycleLanguage), static_cast<int>(f.tap(device,320,77)));
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Screen::Device),static_cast<int>(f.screen));
     TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::PowerOff),static_cast<int>(f.tap(device,550,140)));
 
@@ -592,7 +591,7 @@ int main() {
     RUN_TEST(test_explicit_line_breaks_do_not_rewrap_the_previous_word);
     RUN_TEST(test_menu_routes_brightness_bounds_and_unchanged_frame);
     RUN_TEST(test_filled_slider_uses_whole_tile_and_commits_after_drag);
-    RUN_TEST(test_library_arrows_wrap_without_opening_and_details_preserve_selection);
+    RUN_TEST(test_library_arrows_and_book_settings_preserve_selection);
     RUN_TEST(test_empty_library_has_no_open_action_and_can_add_books);
     RUN_TEST(test_chapter_browsing_only_seeks_on_explicit_open);
     RUN_TEST(test_settings_and_connections_keep_existing_actions);
