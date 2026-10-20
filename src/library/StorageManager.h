@@ -21,6 +21,8 @@ public:
     using StatusCallback = IndexedBook::StatusCallback;
     void setStatusCallback(StatusCallback callback, void* context);
     bool begin();
+    // Retry a failed startup mount without running migration or a book scan.
+    bool mountForCheck();
     void end();
     void refreshBooks(bool includeMetadata = true);
     std::expected<void, std::error_code> installBook(std::string_view stagedPath, std::string_view destinationPath);
@@ -33,6 +35,7 @@ public:
     std::span<const BookLibrary::Entry> books() const {
         return library_;
     }
+    uint32_t bookRevision() const { return bookRevision_; }
     const BookLibrary::Entry* book(size_t index) const;
     int findBook(std::string_view path) const;
     std::optional<reading::BookIdentity> readBookMetadata(size_t index, BookMetadata& metadata);
@@ -48,4 +51,5 @@ private:
     StatusCallback statusCallback_ = &StorageManager::ignoreStatus;
     void* statusContext_ = nullptr;
     BookLibrary::Listing library_;
+    uint32_t bookRevision_ = 0;
 };

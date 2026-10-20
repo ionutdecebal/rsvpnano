@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RSVP Nano · Preview Edition · Native screen review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f3ee;color:#293137;font:15px/1.6 system-ui,sans-serif}
+main{max-width:1360px;margin:auto;padding:40px 24px}h1{font-size:32px;font-weight:550;letter-spacing:-1px;margin:0}
+p{max-width:850px;color:#59666d}header{margin-bottom:32px}#screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,640px),1fr));gap:26px}
+figure{margin:0}figcaption{margin:0 0 8px;font-size:13px}img{width:100%;max-width:640px;height:auto;display:block;border:1px solid #303a44;border-radius:5px}
+small{display:block;color:#69767b}a{color:#315ce9}
+</style>
+<main>
+<header><small>RSVP NANO / LCD 3.49 / PREVIEW EDITION</small><h1>The native screens.</h1>
+<p>These are 640 × 172 renders from the firmware layouts—not browser recreations. Book data, hardware and catalogs are fixtures. Reader and Appearance words are static RFont4 specimens; these images do not verify live phantom words, touch responsiveness, or a physical device.</p>
+<p>The firmware keeps the existing phone API, reading engine and flip-to-run Focus lifecycle. The large arrows browse books; Open book selects one. Screens below are images, not interactive controls.</p></header>
+<section id="screens"></section>
+</main>
+<script>
+const views=[['menu','Menu'],['library','Library'],['reader-paused','Reader · paused'],['reader-playing','Reader · playing'],['settings','Settings'],['appearance-type','Appearance · typography'],['appearance-guides','Appearance · guides'],['appearance-reading','Appearance · reading'],['appearance-paused','Appearance · paused'],['appearance-more','Appearance · formats'],['focus','Focus · presets'],['focus-session','Focus · session'],['focus-exit','Focus · end confirmation'],['reading','Reading pace'],['reading-controls','Reading controls'],['pacing','Word pacing'],['display','Text & display'],['display-controls','Display controls'],['connections','Connections'],['device','Device & help'],['storage','Storage'],['power','Sleep & power'],['chapters','Chapters'],['updates','Updates'],['help','How to read'],['startup','Boot · storage'],['startup-book','Boot · book loading'],['startup-error','Boot · error'],['library-long','Library · long title'],['library-empty','Library · empty'],['library-details','Book details']];
+for(const [name,title] of views){const f=document.createElement('figure'),c=document.createElement('figcaption'),i=document.createElement('img');c.textContent=title;i.src=name+'.png';i.alt=title+' firmware screen';i.width=640;i.height=172;f.append(c,i);document.querySelector('#screens').append(f)}
+</script>
+</html>

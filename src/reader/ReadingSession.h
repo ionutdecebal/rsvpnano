@@ -18,7 +18,14 @@ struct ReadingSession {
     std::span<const std::string> words;
     const IndexedBookStore* bookStore = nullptr;
     bool playing = false;
+    uint8_t displayWordCount = 1;
+    size_t displayWordIndex = static_cast<size_t>(-1);
     reading::State state;
+
+    std::string_view localeAt(size_t index) const {
+        return state.overrides.locale && !state.overrides.locale->empty()
+                   ? std::string_view{*state.overrides.locale} : metadata.localeAt(index);
+    }
 
     bool stored() const {
         return bookStore != nullptr && bookStore->isOpen();

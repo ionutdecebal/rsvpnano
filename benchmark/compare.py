@@ -15,6 +15,74 @@ METRIC_RE = re.compile(r"\[bench\] metric=([^\s]+)(.*?)(?=\[bench\] metric=|$)")
 WPM_SWEEP_RE = re.compile(r"\[bench\] wpm_sweep phase=([^\s]+)(.*?)(?=\[bench\]|$)")
 WPM_TRANSITION_RE = re.compile(r"\[bench\] wpm_transition phase=([^\s]+)(.*?)(?=\[bench\]|$)")
 VALUE_RE = re.compile(r"([a-z][a-z0-9_]*)=(-?\d+)")
+READER_RESULT_RE = re.compile(r"\[bench\] reader_result case=(\w+)(.*?)(?=\[bench\]|$)")
+READER_CASE_RE = re.compile(r"\[bench\] reader_case name=(\w+)(.*?)(?=\[bench\]|$)")
+
+
+def write_reader_result(log_path: Path) -> bool:
+    """Fail closed on missing, malformed or failed real-time reader cases."""
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    cases: dict[str, dict[str, int]] = {}
+    configured_sizes: dict[str, int] = {}
+    expected_sizes = {"normal": 1, "large": 0}
+    size_labels = {0: "Large", 1: "Medium", 2: "Small", 3: "Compact"}
+    duplicate = False
+    required = {"ok", "wpm", "expected", "displayed", "skipped", "deadline_us", "deadline_misses",
+                "max_cycle_us", "max_gap_us", "elapsed_us", "complete"}
+    for line in text.splitlines():
+        for match in READER_CASE_RE.finditer(line):
+            values = {key: int(value) for key, value in VALUE_RE.findall(match.group(2))}
+            if "font_size" in values:
+                if match.group(1) in configured_sizes:
+                    duplicate = True
+                configured_sizes[match.group(1)] = values["font_size"]
+        for match in READER_RESULT_RE.finditer(line):
+            values = {key: int(value) for key, value in VALUE_RE.findall(match.group(2))}
+            values.setdefault("font_size", configured_sizes.get(match.group(1), -1))
+            if match.group(1) in configured_sizes and values["font_size"] != configured_sizes[match.group(1)]:
+                duplicate = True
+            if match.group(1) in cases:
+                duplicate = True
+            if required <= values.keys():
+                cases[match.group(1)] = values
+    passed = (not duplicate and set(cases) == {"normal", "large"}
+              and "[bench] reader_complete ok=1" in text and "[bench] done" in text)
+    lines = ["# USB reader test: 1,000 WPM", "", "60 ms budget per reading cycle.", "",
+             "| Font size | Result | Displayed | Skipped | Late cycles | Worst cycle | Longest word gap | Playback time |",
+             "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
+    for name in ("normal", "large"):
+        row = cases.get(name)
+        if row is None:
+            passed = False
+            lines.append(f"| {name} | INCOMPLETE | — | — | — | — | — | — |")
+            continue
+        valid = (row["ok"] == 1 and row["complete"] == 1 and row["wpm"] == 1000
+                 and row["expected"] == row["displayed"] == 1000 and row["skipped"] == 0
+                 and row["deadline_us"] == 60000 and row["deadline_misses"] == 0
+                 and 0 < row["max_cycle_us"] <= 60000 and row["max_gap_us"] > 0
+                 and 59880000 <= row["elapsed_us"] <= 60120000
+                 and row["font_size"] == expected_sizes[name])
+        passed = passed and valid
+        actual_font = size_labels.get(row["font_size"], "Unknown font")
+        if row["font_size"] != expected_sizes[name]:
+            actual_font += f" (expected {size_labels[expected_sizes[name]]})"
+        lines.append(f"| {actual_font} | {'PASS' if valid else 'FAIL'} | {row['displayed']} | {row['skipped']} | "
+                     f"{row['deadline_misses']} | {row['max_cycle_us']/1000:.2f} ms | "
+                     f"{row['max_gap_us']/1000:.2f} ms | {row['elapsed_us']/1000000:.3f} s |")
+    verdict = "PASS" if passed else "FAIL / INCOMPLETE"
+    lines[0] += f" — {verdict}"
+    if any(row["font_size"] != expected_sizes.get(name) for name, row in cases.items()):
+        lines += ["", "Wrong or unknown font size: reinstall the corrected diagnostic and repeat. "
+                  "The original diagnostic selected Compact for its Large case; that result cannot certify Large."]
+    lines += ["", "Tests the current 640 × 172 Word-mode UI, built-in Literata, SD-backed words, phantom words "
+              "and an updating Focus badge. Pacing extras are zero. Timings include reader update, draw and display flush.",
+              "", "A pass covers these two test sessions. It does not certify other fonts/scripts, chunk pacing, "
+              "the full app's Wi-Fi/battery/persistence work, or physical panel scanout. Word counts track software "
+              "submissions after flush; no camera is used.", "", "Raw log: " + log_path.name]
+    output = log_path.with_suffix(".reader.md")
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[bench-script] 1000 WPM: {verdict}; report={output}", flush=True)
+    return passed
 
 
 @dataclass

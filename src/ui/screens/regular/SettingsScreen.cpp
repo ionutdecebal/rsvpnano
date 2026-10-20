@@ -1,8 +1,23 @@
 #include "ui/screens/ScreenCommon.h"
+#include "ui/screens/ModernScreens.h"
+#include "ui/screens/OnboardingCopy.h"
 
 namespace screens {
 
     Action settings(ui::Context& ui, Screen& screen) {
+        if (ui.modernPresentation()) {
+            if (auto action = modern::header(ui, ui.text(UiText::Settings), screen); action != Action::None)
+                return action;
+            using C=modern::Copy;
+            constexpr C names[]{C::Reading,C::Appearance,C::Display,C::Connections,C::Device,C::Help};
+            constexpr C details[]{C::ReadingHint,C::AppearanceHint,C::DisplayHint,C::ConnectionsHint,C::DeviceHint,C::HelpHint};
+            constexpr Screen destinations[]{Screen::ReadingHub, Screen::ReaderAppearance, Screen::DisplayHub,
+                                            Screen::Connections, Screen::Device, Screen::Help};
+            for (size_t i=0; i<6; ++i)
+                if (ui::modern::button(ui, {int16_t(12+(i%3)*210), int16_t(51+(i/3)*60), 198, 53}, modern::copy(ui,names[i]),
+                                       ui::modern::Style::Secondary, true, modern::copy(ui,details[i]), 14, ui::TextAlign::Start)) screen=destinations[i];
+            return Action::None;
+        }
         if (const Action action = detail::navigation(ui, Screen::Settings, screen); action != Action::None) {
             return action;
         }

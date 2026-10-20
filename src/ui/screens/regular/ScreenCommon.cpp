@@ -1,4 +1,5 @@
 #include "ui/screens/ScreenCommon.h"
+#include "ui/screens/ModernScreens.h"
 
 namespace screens::detail {
 
@@ -9,6 +10,16 @@ namespace screens::detail {
     } // namespace
 
     Action navigation(ui::Context& ui, Screen active, Screen& screen) {
+        if (ui.modernPresentation()) {
+            const UiText title = active == Screen::Chapters ? UiText::Chapters
+                               : active == Screen::Library ? UiText::Library
+                               : active == Screen::FocusTimers ? UiText::Focus
+                               : active == Screen::Ota ? UiText::FirmwareUpdates
+                               : active == Screen::Device ? UiText::Device : UiText::Settings;
+            return modern::header(ui, ui.text(title), screen,
+                                  active == Screen::Ota ? Screen::Device
+                                  : active == Screen::Device ? Screen::Settings : Screen::Read);
+        }
         if (ui.width() < 620 || ui.height() < 150 || ui.height() > 240) {
             return Action::None;
         }
@@ -51,6 +62,7 @@ namespace screens::detail {
     }
 
     ui::Rect tabContent(ui::Context& ui) {
+        if (ui.modernPresentation()) return {16, 52, 608, 112};
         if (ui.width() >= 620 && ui.height() >= 150 && ui.height() <= 240) {
             const int16_t x = static_cast<int16_t>(kRailWidth + kContentGap);
             return {x, 8, static_cast<int16_t>(ui.width() - x - kRightInset), static_cast<int16_t>(ui.height() - 16)};

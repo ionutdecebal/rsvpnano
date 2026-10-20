@@ -1,0 +1,19 @@
+{
+  "name": "rsvp-usb-reader-benchmark",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test.mjs",
+    "test:browser": "node verify.mjs"
+  },
+  "dependencies": {
+    "esptool-js": "0.7.0",
+    "spark-md5": "3.0.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "playwright": "1.61.1"
+  }
+}

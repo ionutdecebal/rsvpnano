@@ -212,8 +212,12 @@ namespace settings {
 
     void SettingsStore::update(uint32_t nowMs) {
         if ((dirty_ || secretsDirty_) && nowMs - dirtyAtMs_ >= kPersistenceDelayMs) {
-            if (auto result = flush(); !result)
+            if (auto result = flush(); !result) {
+                // Keep pending changes, but allow the UI to run between retries
+                // when an SD card or NVS write fails.
+                dirtyAtMs_ = millis();
                 ESP_LOGE("settings", "persistence failed: %s", result.error().message.c_str());
+            }
         }
     }
 
@@ -237,21 +241,25 @@ namespace settings {
     }
 
     SettingsResult<> SettingsStore::flush() {
+        SettingsResult<> result;
         if (dirty_) {
-            auto result =
+            result =
                 codec::encodeToml(settings_, SettingsSource::Nvs).and_then([this](const std::string& content) {
                     return writeSettings(content);
                 });
-            if (!result)
-                return result;
-            dirty_ = false;
+            if (result)
+                dirty_ = false;
         }
         if (secretsDirty_) {
-            if (auto result = writeSecrets(); !result)
-                return result;
-            secretsDirty_ = false;
+            // Credentials live in NVS. A failed SD mirror must not prevent
+            // them from being saved independently of the public settings.
+            auto secretResult = writeSecrets();
+            if (secretResult)
+                secretsDirty_ = false;
+            else if (result)
+                result = std::move(secretResult);
         }
-        return {};
+        return result;
     }
 
     SettingsResult<> SettingsStore::writeFile(std::string_view content) {

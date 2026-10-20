@@ -2,6 +2,7 @@
 
 #include "ui/screens/ReaderAppearanceLayout.h"
 #include "ui/screens/ReaderLayout.h"
+#include "ui/screens/OnboardingCopy.h"
 
 namespace screens {
     bool ReaderScreen::appearance(ui::Context& ui, Screen& screen) {
@@ -25,6 +26,8 @@ namespace screens {
         // The preview uses the global face; the book must reselect its own override on return.
         loadedWordIndex_ = loadedFamilyIndex_ = renderedWordIndex_ = SIZE_MAX;
 
+        if (ui.modernPresentation()) return modernAppearance(ui, screen);
+
         constexpr std::string_view word = "read", before = "the", after = "on";
         text_.prepare(word);
         const auto& raster = face_.raster.get();
@@ -42,7 +45,7 @@ namespace screens {
 
         auto state = ui::Context::signature(type.fontId);
         for (int value:
-             {int(type.fontSizeIndex), int(type.tracking), int(type.anchor), int(type.guideWidth), int(type.guideGap),
+             {int(type.fontSizeIndex), int(type.tracking), int(type.anchor), int(type.guideSize), int(type.guideTextGap),
               int(type.focusHighlight), int(config.phantomWords), int(appearancePage_), int(config.arrowsVisibility)})
             state = ui::Context::combine(state, value);
         const auto footer =
@@ -56,7 +59,7 @@ namespace screens {
                 const int16_t dx = static_cast<int16_t>(translated.x - preview.x);
                 const int16_t dy = static_cast<int16_t>(translated.y - preview.y);
                 const int16_t wordBaseline = static_cast<int16_t>(baseline + dy);
-                drawGuides(ui, output, static_cast<int16_t>(anchor + dx), wordBaseline);
+                drawGuides(ui, output, static_cast<int16_t>(anchor + dx), wordBaseline, translated);
                 drawWord(word, static_cast<int16_t>(wordX + dx), wordBaseline,
                          static_cast<int16_t>(ui.height() / 2 + dy), focus, false, ui);
                 text_.setTextColor(ui.blend(Foreground, config.phantomWords ? 64 : 28), ui.color(Background));
@@ -116,20 +119,20 @@ namespace screens {
                 appearanceDialPage_ = (appearanceDialPage_ + 1) % 3;
                 ui.invalidate();
             }
-            const auto rotary = [&](size_t index, UiText label, auto& setting) {
+            const auto rotary = [&](size_t index, std::string_view label, auto& setting) {
                 if (layout.pagedDials && (appearanceDialPage_ == 0 || index / 2 != appearanceDialPage_ - 1))
                     return;
                 int value = setting;
                 if (ui.rotary(layout.dials[index], value, setting.min(), setting.max(), setting.step(),
-                              ui.text(label))) {
+                              label)) {
                     setting = value;
                     changed = true;
                 }
             };
-            rotary(0, UiText::Tracking, type.tracking);
-            rotary(1, UiText::Anchor, type.anchor);
-            rotary(2, UiText::Width, type.guideWidth);
-            rotary(3, UiText::Gap, type.guideGap);
+            rotary(0, ui.text(UiText::Tracking), type.tracking);
+            rotary(1, ui.text(UiText::Anchor), type.anchor);
+            rotary(2, modern::copy(ui,modern::Copy::GuideSize), type.guideSize);
+            rotary(3, modern::copy(ui,modern::Copy::TextGap), type.guideTextGap);
         } else {
             const Board::Power::BatteryState battery{{true, 3.9f, 64}, 0, false};
             const auto batteryLabel = readerLayout::batteryText(config.batteryLabel, battery);

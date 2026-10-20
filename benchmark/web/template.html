@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>RSVP Nano · USB speed test</title>
+<style>@@STYLE@@</style>
+</head>
+<body>
+<header><img src="@@LOGO@@" width="141" height="60" alt="RSVP Nano"><span class="edition">READER LAB <span>/</span> STUDY 13 · TEST 02</span><button id="theme" class="quiet" aria-label="Switch to light theme">Light theme</button></header>
+<main>
+  <section class="intro"><div><p class="eyebrow"><span class="dot"></span> ON-DEVICE USB BENCHMARK</p><h1>Fast words.<br><em>Real measurements.</em></h1><p class="lead">Your laptop runs the controls. Your Nano does the reading.<br>Find out how the current UI handles 1,000 words a minute.</p></div><div class="target"><span class="eyebrow">THE TEST</span><div><strong>1,000</strong><span>words / minute</span></div><p><b>60 ms</b> per word <span>·</span> <b>2</b> font sizes</p></div></section>
+  <div id="compatibility" class="notice" hidden></div>
+  <section class="workspace">
+    <div class="setup">
+      <div class="section-label"><span>01 / SET UP & RUN</span><span class="small">LCD 3.49 rev1 only</span></div>
+      <article class="step" id="step-install"><span class="step-number">1</span><div><h2>Install the test firmware</h2><p>Connect your Nano with a USB data cable and leave the SD card in. This temporarily replaces the reader; Study13 is included here to restore afterward.</p><div class="actions"><button id="boot" class="secondary" data-hardware>Enter flash mode</button><button id="install" class="primary" data-hardware>Install diagnostic <span aria-hidden="true">↗</span></button></div><p class="hint">Use the buttons in order and select your Nano in each USB prompt. Already in flash mode? Go straight to Install.</p><progress id="flash-progress" max="100" value="0" hidden aria-label="Firmware installation progress"></progress><p id="flash-label" class="hint" hidden></p><details><summary>Already installed, or trouble connecting?</summary><p>If the diagnostic is already on the device, skip to step 2. Close other serial monitors first. If USB flash mode does not appear, hold BOOT, tap RESET, release BOOT, then select Install diagnostic.</p></details></div></article>
+      <article class="step" id="step-prepare"><span class="step-number">2</span><div><h2>Prepare the test book</h2><p>Wait for the Nano’s USB drive to appear. Choose that drive to copy a small, 1,000-word test book. Your books and fonts stay in place.</p><button id="prepare" class="secondary" data-hardware>Choose Nano drive <span aria-hidden="true">↗</span></button><p class="hint" id="prepare-hint">Select the drive itself, not the “benchmark” folder inside it.</p></div></article>
+      <article class="step" id="step-run"><span class="step-number">3</span><div><h2>Run the speed test</h2><p id="run-instructions">After copying, safely eject the Nano drive in your file manager. The device will restart. Then connect here within two minutes.</p><div class="actions"><button id="run" class="primary" data-hardware>Connect & run test <span aria-hidden="true">→</span></button><button id="stop" class="secondary" hidden>Stop collecting</button></div><p class="hint">About two minutes. Keep this tab open and your laptop awake.</p></div></article>
+    </div>
+    <div class="measurement">
+      <div class="section-label"><span>02 / MEASUREMENTS</span><span id="connection" class="small">USB not connected</span></div>
+      <div id="status" role="status" aria-live="polite" data-kind="idle"><p class="eyebrow" id="status-label">READY WHEN YOU ARE</p><h2 id="status-title">Let’s see it run.</h2><p id="status-message">Install, prepare, then connect. Results below come from the device’s own clock.</p></div>
+      <div class="session-progress" id="session-progress" hidden><div><span id="session-label">Waiting for the Nano…</span><span id="elapsed">0:00 elapsed</span></div><progress id="test-progress" max="120" value="0" aria-label="Estimated test progress"></progress><p class="hint">Progress is estimated. Measurements arrive after each session.</p></div>
+      <div class="case" id="normal"><div class="case-top"><span><b>01</b> Medium font · 43 px</span><span class="case-verdict">WAITING</span></div><div class="cycle"><strong class="cycle-value">—</strong><span>ms / worst cycle</span></div><div class="budget-bar"><span class="budget-fill"></span><i aria-hidden="true"></i></div><div class="budget-label"><span>0 ms</span><span>60 ms budget</span></div><div class="case-stats"><span>Words <b class="words">—</b></span><span>Skipped <b class="skipped">—</b></span><span>Late cycles <b class="late">—</b></span></div><p class="timing hint">Waiting for a complete device result.</p></div>
+      <div class="case" id="large"><div class="case-top"><span><b>02</b> Large font · 52 px</span><span class="case-verdict">WAITING</span></div><div class="cycle"><strong class="cycle-value">—</strong><span>ms / worst cycle</span></div><div class="budget-bar"><span class="budget-fill"></span><i aria-hidden="true"></i></div><div class="budget-label"><span>0 ms</span><span>60 ms budget</span></div><div class="case-stats"><span>Words <b class="words">—</b></span><span>Skipped <b class="skipped">—</b></span><span>Late cycles <b class="late">—</b></span></div><p class="timing hint">Waiting for a complete device result.</p></div>
+      <div class="actions downloads"><button id="report" class="secondary" disabled>Save report ↓</button><button id="raw" class="quiet" disabled>Save raw log ↓</button></div>
+      <label class="import-label">Have a previous USB log? <input id="import" type="file" accept=".log,.txt,text/plain"><span>Open log</span></label>
+    </div>
+  </section>
+  <section class="restore"><div><p class="eyebrow">03 / BACK TO YOUR BOOK</p><h2>Bring back Study13.</h2><p>Finished testing? Enter flash mode, then reinstall the included reader firmware.<br>Both installers preserve the settings partition. No full-chip erase.</p></div><div class="actions"><button id="restore-boot" class="secondary" data-hardware>Enter flash mode</button><button id="restore" class="secondary" data-hardware>Restore Study13 <span aria-hidden="true">↗</span></button></div></section>
+  <section class="notes"><details><summary>What counts as a pass?</summary><p>Both font sizes must display all 1,000 words in order, with no skipped words and no measured reading cycle over 60 ms. Each session must finish within 120 ms of one minute. Missing, interrupted or malformed results cannot pass.</p><p>This tests the current Word-mode UI, built-in Literata, SD-backed words, phantom words, and a changing Focus badge. Extra pacing delays are zero. Update, drawing and display flush are timed on the Nano.</p><p>A pass covers these two sessions. It does not certify other fonts or scripts, chunk mode, the full app’s Wi-Fi/battery/persistence work, or physical panel scanout. The longest word gap is reported separately.</p></details><details id="console"><summary>USB activity & troubleshooting</summary><p>On Linux, macOS or Windows, use a current Chrome or Edge browser. Keep only this page connected to the Nano. If the two-minute connection window expires, press RESET, prepare the drive again, eject and reconnect. To repeat a test, start again at step 2.</p><pre id="log" aria-label="USB activity log">No USB activity yet.</pre></details><details><summary>Build information & open-source licenses</summary><pre id="build-info"></pre><p>Browser USB support uses <a href="https://developer.chrome.com/docs/capabilities/serial" target="_blank" rel="noreferrer">Web Serial</a> and <a href="https://espressif.github.io/esptool-js/" target="_blank" rel="noreferrer">Espressif’s esptool-js</a>. All scripts and firmware are embedded; there are no runtime downloads.</p><pre>@@LICENSES@@</pre></details></section>
+</main>
+<footer><span>RSVP NANO / READER LAB</span><span>Local file. Local USB. Your results stay on your laptop.</span></footer>
+<script id="release" type="application/json">@@RELEASE@@</script>
+<script id="diagnostic-image" type="application/octet-stream">@@DIAGNOSTIC@@</script>
+<script id="restore-image" type="application/octet-stream">@@RESTORE@@</script>
+<script>@@SCRIPT@@</script>
+</body>
+</html>

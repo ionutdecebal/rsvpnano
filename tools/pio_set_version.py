@@ -2,6 +2,7 @@ Import("env")
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -55,6 +56,11 @@ def detect_version() -> str:
     except subprocess.CalledProcessError:
         pass
 
+    label = os.environ.get("RSVP_BUILD_LABEL", "").strip()
+    if label:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,31}", label):
+            raise RuntimeError("RSVP_BUILD_LABEL must be a short lowercase build identifier")
+        version += "." + label
     return version
 
 
@@ -68,5 +74,9 @@ if not generated_header.exists() or generated_header.read_text(encoding="utf-8")
     generated_header.write_text(contents, encoding="utf-8")
 
 env.AppendUnique(CPPPATH=[str(generated_dir)])
+
+# Arduino's platform.txt supplies this flag, but the PlatformIO build does not.
+# Without it set_arduino_panic_handler() registers a callback that is never called.
+env.AppendUnique(LINKFLAGS=["-Wl,--wrap=esp_panic_handler"])
 
 print(f"Firmware version: {version}")

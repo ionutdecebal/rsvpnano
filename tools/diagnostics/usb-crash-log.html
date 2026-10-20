@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RSVP Nano · USB crash log</title>
+<style>
+:root{color-scheme:dark;font:16px/1.55 system-ui,sans-serif;background:#151413;color:#f7f4f1}*{box-sizing:border-box}body{max-width:980px;margin:0 auto;padding:32px 20px}h1{font-size:clamp(26px,5vw,42px);line-height:1.15;margin:10px 0 18px}p,li{color:#c6bbb2}.brand{color:#fd6f42;font-size:13px;letter-spacing:.14em;font-weight:700}section{background:#27221e;border:1px solid #423b35;border-radius:18px;padding:22px;margin:22px 0}ol{padding-left:24px}li+li{margin-top:8px}.actions{display:flex;gap:12px;flex-wrap:wrap}button{border:1px solid #655448;background:#302820;color:inherit;border-radius:12px;padding:14px 20px;font:600 16px system-ui;cursor:pointer;min-height:50px}#connect{background:#fd6f42;color:#21130e;border-color:#fd6f42}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #f7f4f1;outline-offset:3px}#status{margin:14px 0 0;color:#f7f4f1}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;max-height:52vh;overflow:auto;min-height:180px;background:#0e0d0c;padding:16px;border-radius:12px}small{color:#b1a79f}#found{color:#fd6f42}
+</style>
+<div class="brand">RSVP NANO / DIAGNOSTICS</div>
+<h1>Capture a firmware problem.</h1>
+<p>This page reads USB logs from your current firmware. It does not install firmware, send commands, or upload anything.</p>
+<section>
+<ol>
+<li>Open this file in desktop <strong>Chrome or Edge</strong>. Connect the Nano with a USB data cable and close other serial monitors.</li>
+<li>Click <strong>Connect USB</strong> and select the Nano. Leave this page open.</li>
+<li>On the Nano, repeat the action that causes the problem.</li>
+<li>Wait for the Nano to restart. If USB disconnects, this page tries to reconnect; you can also click <strong>Reconnect USB</strong>. Do not manually reset it again.</li>
+<li>Click <strong>Save log</strong> and send the downloaded text file back.</li>
+</ol>
+<div class="actions"><button id="connect">Connect USB</button><button id="stop" disabled>Stop</button><button id="save" disabled>Save log</button></div>
+<p id="status" role="status">Ready · 115200 baud</p>
+<small id="found">Waiting for a restart or panic message.</small>
+</section>
+<pre id="log" aria-label="USB log">No USB data yet.</pre>
+<small>Keep this tab open during the restart. The log stays here if USB disconnects.</small>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let selected=null,reader=null,active=false,wanted=false,log='',retry=null,generation=0;
+const limit=4*1024*1024;
+function append(s){log+=s;if(log.length>limit)log='[Earlier output trimmed at 4 MB]\n'+log.slice(-limit);$('log').textContent=log;$('log').scrollTop=$('log').scrollHeight;$('save').disabled=!log;if(/Guru Meditation|panic-context|previous panic|Previous Backtrace|Stack canary|assert failed|watchdog|reset=panic|reset=brownout|alloc-failed/i.test(log))$('found').textContent='Crash/reset information captured. Save the log after the Nano finishes restarting.';}
+function event(s){append('\n[browser '+new Date().toISOString()+'] '+s+'\n');}
+function buttons(){ $('connect').disabled=active;$('connect').textContent=selected?'Reconnect USB':'Connect USB';$('stop').disabled=!wanted; }
+function retryLater(){clearTimeout(retry);if(wanted&&selected&&!active)retry=setTimeout(()=>capture(false),1000);}
+async function capture(report){
+ if(active||!wanted||!selected)return;
+ active=true;const port=selected,run=++generation;buttons();let opened=false;
+ try{
+  await port.open({baudRate:115200});opened=true;
+  if(!wanted||run!==generation)return;
+  event('USB connected; listening only.');$('status').textContent='Listening · repeat the action on your Nano';
+  const decoder=new TextDecoder();
+  while(wanted&&port.readable&&run===generation){
+   reader=port.readable.getReader();
+   try{for(;;){const {value,done}=await reader.read();if(done)break;if(value)append(decoder.decode(value,{stream:true}));}}
+   finally{reader.releaseLock();reader=null;}
+   if(wanted)break;
+  }
+  const tail=decoder.decode();if(tail)append(tail);
+ }catch(e){if(report||opened)event('USB: '+e.message);}
+ finally{
+  if(opened)try{await port.close();}catch(e){}
+  active=false;buttons();
+  $('status').textContent=wanted?'USB disconnected · waiting to reconnect. Keep the Nano connected.':'Stopped · your captured log is still available.';
+  retryLater();
+ }
+}
+$('connect').onclick=async()=>{
+ if(active)return;
+ clearTimeout(retry);
+ try{selected=await navigator.serial.requestPort();wanted=true;await capture(true);}
+ catch(e){if(e.name!=='NotFoundError'){$('status').textContent=e.message;event('Connection: '+e.message);}}
+};
+$('stop').onclick=async()=>{wanted=false;clearTimeout(retry);if(reader)try{await reader.cancel();}catch(e){}buttons();$('status').textContent='Stopped · your captured log is still available.';};
+$('save').onclick=()=>{const blob=new Blob(['RSVP Nano firmware log\nCaptured '+new Date().toISOString()+'\n'+log],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='RSVP-Nano-Log-'+new Date().toISOString().replace(/[:.]/g,'-')+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);};
+if(!('serial' in navigator)){$('connect').disabled=true;$('status').textContent='Open this file in desktop Chrome or Edge to use USB serial.';}
+else navigator.serial.addEventListener('connect',e=>{if(wanted&&e.target===selected&&!active){clearTimeout(retry);capture(false);}});
+</script>
+</html>

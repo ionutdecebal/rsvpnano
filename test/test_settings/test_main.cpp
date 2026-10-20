@@ -50,6 +50,18 @@ void test_enum_names_are_human_readable() {
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("mode = \"page\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("pauseMode = \"instant\""));
     TEST_ASSERT_NOT_EQUAL(std::string::npos, toml->find("screensaver = \"reaction\""));
+    value.reading.mode = settings::ReadingMode::chunks;
+    auto chunks = settings::codec::encodeToml(value, settings::SettingsSource::Programmatic);
+    TEST_ASSERT_TRUE(chunks.has_value());
+    auto restored = settings::codec::decodeToml(*chunks, settings::SettingsSource::Sd);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_EQUAL(settings::ReadingMode::chunks, restored->reading.mode);
+    std::string json;
+    TEST_ASSERT_TRUE(companion::api::encode(value,json).has_value());
+    auto fromCompanion = companion::api::decode<settings::DeviceSettings>(json);
+    TEST_ASSERT_TRUE(fromCompanion.has_value());
+    TEST_ASSERT_EQUAL(settings::ReadingMode::chunks, fromCompanion->reading.mode);
+
 }
 
 void test_missing_fields_retain_defaults() {
@@ -309,8 +321,30 @@ void test_visibility_toggles_only_selected_state_and_round_trips() {
     TEST_ASSERT_FALSE(invalid.has_value());
 }
 
+
+void test_onboarding_and_touch_preference_migrate_and_persist(){
+    auto old=settings::codec::decodeToml("[reading]\nwpm = 420\n[interface]\nlocale = \"de\"\n",settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE(old.has_value());TEST_ASSERT_FALSE(old->interface.onboardingComplete);TEST_ASSERT_FALSE(old->reading.holdToRead);
+    old->interface.onboardingComplete=true;old->reading.holdToRead=true;
+    auto encoded=settings::codec::encodeToml(*old,settings::SettingsSource::Nvs);TEST_ASSERT_TRUE(encoded.has_value());
+    auto restored=settings::codec::decodeToml(*encoded,settings::SettingsSource::Nvs);TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_TRUE(restored->interface.onboardingComplete);TEST_ASSERT_TRUE(restored->reading.holdToRead);TEST_ASSERT_EQUAL(420,int(restored->reading.wpm));
+}
+
+void test_pocket_lines_guides_migrate_old_settings_without_reinterpreting_horizontal_gap(){
+    auto old=settings::codec::decodeToml("[reading]\nwpm=420\n[reading.typography]\nguideWidth=30\nguideGap=8\nfontSizeIndex=3\n",settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE(old.has_value());TEST_ASSERT_EQUAL(420,int(old->reading.wpm));TEST_ASSERT_EQUAL(3,int(old->reading.typography.fontSizeIndex));
+    TEST_ASSERT_EQUAL(12,int(old->reading.typography.guideSize));TEST_ASSERT_EQUAL(4,int(old->reading.typography.guideTextGap));
+    old->reading.typography.guideSize=24;old->reading.typography.guideTextGap=12;
+    auto encoded=settings::codec::encodeToml(*old,settings::SettingsSource::Nvs);TEST_ASSERT_TRUE(encoded.has_value());
+    TEST_ASSERT_EQUAL(std::string::npos,encoded->find("guideWidth"));TEST_ASSERT_EQUAL(std::string::npos,encoded->find("guideGap"));
+    auto restored=settings::codec::decodeToml(*encoded,settings::SettingsSource::Nvs);TEST_ASSERT_TRUE(restored.has_value());TEST_ASSERT_TRUE(*restored==*old);
+}
+
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_pocket_lines_guides_migrate_old_settings_without_reinterpreting_horizontal_gap);
+    RUN_TEST(test_onboarding_and_touch_preference_migrate_and_persist);
     RUN_TEST(test_defaults_round_trip_through_toml_and_companion_json);
     RUN_TEST(test_battery_curve_reaches_full);
     RUN_TEST(test_visibility_toggles_only_selected_state_and_round_trips);

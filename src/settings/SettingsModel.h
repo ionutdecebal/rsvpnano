@@ -18,6 +18,7 @@ namespace settings {
     enum class ReadingMode : uint8_t {
         rsvp,
         page,
+        chunks,
         Count,
     };
 
@@ -48,8 +49,8 @@ namespace settings {
         bool focusHighlight = true;
         BoundedValue<int, -2, 3> tracking{0};
         BoundedValue<uint8_t, 30, 40> anchor{30};
-        BoundedValue<uint8_t, 12, 30, 2> guideWidth{30};
-        BoundedValue<uint8_t, 2, 8> guideGap{5};
+        BoundedValue<uint8_t, 6, 24, 2> guideSize{12};
+        BoundedValue<uint8_t, 0, 12> guideTextGap{4};
 
         bool operator==(const TypographySettings&) const = default;
     };
@@ -108,6 +109,7 @@ namespace settings {
         BoundedValue<uint16_t, 10, 1000, 10> wpm{300};
         ReadingMode mode = ReadingMode::rsvp;
         PauseMode pauseMode = PauseMode::sentenceEnd;
+        bool holdToRead = false;
         bool phantomWords = true;
         bool chapterScrollReversed = false;
         FooterMetric footerMetric = FooterMetric::percentage;
@@ -127,6 +129,7 @@ namespace settings {
     struct InterfaceSettings {
         BoundedValue<uint8_t, 5, 100, 5> brightnessPercent{70};
         std::string locale = "en";
+        bool onboardingComplete = false;
         BoundedValue<uint8_t, 0, 4> standbyTimerIndex{1};
         standby::Kind screensaver = standby::Kind::life;
         std::string selectedThemeId = "default";

@@ -57,12 +57,6 @@ namespace Axs15231bTouch {
             return false;
         }
 
-        // Some panels return nonzero-filled idle frames with plausible point counts.
-        if (data[0] != 0) {
-            sample.touched = false;
-            return true;
-        }
-
         const uint8_t points = data[1];
         if (points == 0 || points > 4) {
             sample.touched = false;
@@ -71,6 +65,13 @@ namespace Axs15231bTouch {
 
         const uint16_t rawLongAxis = static_cast<uint16_t>(((data[2] & 0x0F) << 8) | data[3]);
         const uint16_t rawShortAxis = static_cast<uint16_t>(((data[4] & 0x0F) << 8) | data[5]);
+        // Byte 0 is gesture metadata, not a touch-valid flag (Waveshare's
+        // reference driver ignores it). Reject filler by its impossible
+        // coordinates instead of dropping valid edge/swipe contacts.
+        if (panelWidth == 0 || panelHeight == 0 || rawShortAxis > panelWidth || rawLongAxis > panelHeight) {
+            sample.touched = false;
+            return true;
+        }
         sample.touched = true;
         sample.physicalX = clampPhysical(rawShortAxis, panelWidth);
         sample.physicalY =

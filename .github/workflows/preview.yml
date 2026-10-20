@@ -1,105 +1,53 @@
-name: Preview firmware
+name: New UI candidate
 
 on:
-  push:
-    tags:
-      - "preview-*"
   workflow_dispatch:
     inputs:
-      channel:
-        description: "Preview tag, for example preview-sd-fix"
+      version:
+        description: "Unique preview-ui-dictionary-* candidate tag"
         required: true
-        default: "preview-manual"
-      label:
-        description: "Optional release title"
-        required: false
-        default: ""
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  prepare:
+  build:
     runs-on: ubuntu-latest
-    outputs:
-      channel: ${{ steps.preview.outputs.channel }}
-      commit_sha: ${{ steps.preview.outputs.commit_sha }}
-      title: ${{ steps.preview.outputs.title }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
+          submodules: recursive
           fetch-depth: 0
-
-      - name: Set preview metadata
-        id: preview
-        env:
-          DISPATCH_CHANNEL: ${{ inputs.channel }}
-          LABEL: ${{ inputs.label }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            CHANNEL="$DISPATCH_CHANNEL"
-          else
-            CHANNEL="$GITHUB_REF_NAME"
-          fi
-          if ! echo "$CHANNEL" | grep -Eq '^preview-[A-Za-z0-9._-]+$'; then
-            echo "::error::Preview channel must look like preview-name, got: ${CHANNEL}"
-            exit 1
-          fi
-
-          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "title=${LABEL:-Preview ${CHANNEL}}" >> "$GITHUB_OUTPUT"
-
-      - name: Move preview tag to this commit
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RELEASE_TAG: ${{ steps.preview.outputs.channel }}
-          BUILD_SHA: ${{ steps.preview.outputs.commit_sha }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f "$RELEASE_TAG" "$BUILD_SHA"
-          git push origin "refs/tags/${RELEASE_TAG}" --force
-
-  build:
-    needs: prepare
-    uses: ./.github/workflows/firmware-build.yml
-    with:
-      firmware_tag: ${{ needs.prepare.outputs.channel }}
-
-  publish:
-    needs: [prepare, build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/setup-python@v7
         with:
-          name: firmware-assets
-          path: build/firmware
-
-      - name: Write preview notes
-        run: |
-          cat > release-notes.md <<'NOTES'
-          Preview firmware build.
-
-          Tag/channel: `${{ needs.prepare.outputs.channel }}`
-          Commit: `${{ needs.prepare.outputs.commit_sha }}`
-
-          Preview releases are replaceable. Use a versioned release for stable firmware.
-          NOTES
-
-      - name: Publish or update preview release
+          python-version: "3.12"
+      - name: Validate candidate tag
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.channel }}
-          RELEASE_TITLE: ${{ needs.prepare.outputs.title }}
-          BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
+          CANDIDATE_TAG: ${{ inputs.version }}
         run: |
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md --prerelease
+          if ! [[ "$CANDIDATE_TAG" =~ ^preview-ui-dictionary-[A-Za-z0-9._-]+$ ]]; then
+            echo 'Invalid candidate tag'; exit 1
           fi
-          gh release upload "$RELEASE_TAG" build/firmware/*.bin --clobber
-          gh release edit "$RELEASE_TAG" \
-            --title "$RELEASE_TITLE" \
-            --notes-file release-notes.md \
-            --target "$BUILD_SHA" \
-            --prerelease
+          if git show-ref --verify --quiet "refs/tags/$CANDIDATE_TAG"; then
+            test "$(git rev-list -n 1 "$CANDIDATE_TAG")" = "$(git rev-parse HEAD)"
+          else
+            git tag "$CANDIDATE_TAG"
+          fi
+      - name: Install build tools
+        run: pip install platformio
+      - name: Build LCD 3.49 Rev1 only
+        env:
+          RSVP_FIRMWARE_TAG: ${{ inputs.version }}
+        run: python3 tools/export_web_firmware.py --env waveshare_esp32s3_touch_lcd_349_rev1
+      - name: Record checksums
+        working-directory: build/firmware
+        run: sha256sum *.bin > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: new-ui-candidate
+          path: build/firmware
+          if-no-files-found: error
+      # Publication is a separate, deliberate step after reviewing and testing
+      # the downloaded binaries. This workflow never moves remote tags or
+      # overwrites assets, and never touches the Classic stable release.

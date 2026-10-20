@@ -11,7 +11,7 @@
 #include "storage/fs/StoragePaths.h"
 
 void ThemeStore::loadFromSd() {
-    themes_ = {ui::themes::defaultTheme()};
+    themes_ = {ui::themes::defaultTheme(), ui::modern::paperTheme()};
 
     File dir = Board::Storage::filesystem().open(StoragePaths::kThemesPath);
     if (!dir || !dir.isDirectory()) {
@@ -71,6 +71,8 @@ void ThemeStore::loadFromSd() {
         themes_.front() = std::move(*defaultTheme);
         loaded.erase(defaultTheme);
     }
+    const auto paper = std::ranges::find(loaded, "paper", &ui::themes::Theme::id);
+    if (paper != loaded.end()) { themes_[1] = std::move(*paper); loaded.erase(paper); }
     themes_.insert(themes_.end(), std::make_move_iterator(loaded.begin()), std::make_move_iterator(loaded.end()));
 }
 

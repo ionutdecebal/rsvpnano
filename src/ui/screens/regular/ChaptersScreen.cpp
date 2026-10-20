@@ -5,6 +5,7 @@
 #include <cstdlib>
 
 #include "ui/screens/ScreenCommon.h"
+#include "ui/screens/ModernScreens.h"
 
 namespace screens {
 
@@ -37,7 +38,7 @@ namespace screens {
             return action;
 
         const ui::Rect content = detail::tabContent(ui);
-        if (ui.button({content.x, content.y, 64, kHeaderHeight}, "<<")) {
+        if (!ui.modernPresentation() && ui.button({content.x, content.y, 64, kHeaderHeight}, "<<")) {
             screen = Screen::Read;
             dragging_ = false;
             return Action::None;
@@ -52,6 +53,62 @@ namespace screens {
             centeredIndex_ = readingIndex;
             offset_ = 0;
             dragging_ = false;
+        }
+
+        if (ui.modernPresentation()) {
+            using ui::modern::button;
+            using ui::modern::Style;
+            using ui::modern::Direction;
+            if (chapters.empty()) {
+                if (button(ui, {16, 72, 608, 72}, ui.text(UiText::StartReading), Style::Primary)) {
+                    ReadingLoop::seekTo(reader, 0);
+                    return Action::Resume;
+                }
+                return Action::None;
+            }
+            centeredIndex_ = std::min(centeredIndex_, chapters.size() - 1);
+            const ui::Rect viewport{16, 52, 358, 112};
+            const auto* touch = ui.touch();
+            if (touch && ui::hasTouch(*touch, ui::TouchStart) && ui::contains(viewport, touch->x, touch->y)) {
+                dragging_ = true;
+                moved_ = false;
+                dragStartIndex_ = centeredIndex_;
+                dragStartY_ = touch->y;
+            }
+            if (dragging_ && touch && (ui::hasTouch(*touch, ui::TouchMove) || ui::hasTouch(*touch, ui::TouchRelease))) {
+                const int delta = static_cast<int>(touch->y) - dragStartY_;
+                moved_ = moved_ || std::abs(delta) > kDragThreshold;
+                if (moved_) {
+                    const int direction = settings.chapterScrollReversed ? -1 : 1;
+                    const int64_t position = std::clamp<int64_t>(
+                        static_cast<int64_t>(dragStartIndex_) * 38 - direction * delta,
+                        0, static_cast<int64_t>(chapters.size() - 1) * 38);
+                    centeredIndex_ = static_cast<size_t>((position + 19) / 38);
+                }
+                if (ui::hasTouch(*touch, ui::TouchRelease)) dragging_ = false;
+            }
+            if (ui::modern::arrow(ui, {386, 52, 56, 52}, Direction::Up, centeredIndex_ > 0)) --centeredIndex_;
+            if (ui::modern::arrow(ui, {386, 112, 56, 52}, Direction::Down, centeredIndex_ + 1 < chapters.size()))
+                ++centeredIndex_;
+            const size_t first = centeredIndex_ == 0 ? 0 : centeredIndex_ - 1;
+            for (size_t row = 0; row < 3; ++row) {
+                const size_t index = first + row;
+                const ui::Rect rect{16, static_cast<int16_t>(52 + row * 38), 358, 36};
+                const auto label = index < chapters.size() ? std::to_string(index + 1) + "  " + chapters[index].title
+                                                          : std::string{};
+                if (button(ui, rect, label, index == centeredIndex_ ? Style::Secondary : Style::Plain,
+                           index < chapters.size(), {}, 14, ui::TextAlign::Start) && !moved_) centeredIndex_ = index;
+            }
+            ui.label({460, 48, 164, 23}, std::to_string(centeredIndex_ + 1) + " / " + std::to_string(chapters.size()),
+                     1, ui::themes::Muted);
+            ui.label({460, 73, 164, 44}, chapters[centeredIndex_].title, 2, ui::themes::Foreground,
+                     ui::TextAlign::Start, 2);
+            ui::modern::rule(ui, {448, 52, 1, 112});
+            if (button(ui, {460, 124, 164, 40}, modern::caption(ui, UiText::Read, "Open chapter ↗"), Style::Primary)) {
+                ReadingLoop::seekTo(reader, chapters[centeredIndex_].wordIndex);
+                return Action::Resume;
+            }
+            return Action::None;
         }
 
         char position[24];

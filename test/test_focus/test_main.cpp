@@ -127,8 +127,43 @@ void test_focus_session_requires_post_expiry_flip_and_handles_wraparound() {
     TEST_ASSERT_EQUAL(focus::Phase::Break, session.phase());
 }
 
+void test_manual_focus_ignores_orientation_and_waits_after_each_break() {
+    focus::Session s;
+    s.beginManual(shortTimer(2), 100);
+    TEST_ASSERT_EQUAL(focus::Phase::Focus, s.phase());
+    s.update(10100, focus::Orientation::Flat);
+    TEST_ASSERT_EQUAL(50000, s.remainingMs(10100));
+    s.pause(10100);s.update(99999, focus::Orientation::ShortB);
+    TEST_ASSERT_EQUAL(focus::Phase::PausedFocus,s.phase());
+    TEST_ASSERT_EQUAL(50000,s.remainingMs(99999));
+    s.resume(100000);s.update(150000,focus::Orientation::Unknown);
+    TEST_ASSERT_EQUAL(focus::Phase::Break,s.phase());
+    TEST_ASSERT_TRUE(s.consumeCompletionCue());
+    TEST_ASSERT_FALSE(s.consumeCompletionCue());
+    s.update(210000,focus::Orientation::Unknown);
+    TEST_ASSERT_EQUAL(focus::Phase::WaitingFocus,s.phase());
+    TEST_ASSERT_EQUAL(2,s.round());
+    s.update(900000,focus::Orientation::ShortA);
+    TEST_ASSERT_EQUAL(focus::Phase::WaitingFocus,s.phase());
+    s.resume(900000);s.update(960000,focus::Orientation::Flat);
+    TEST_ASSERT_EQUAL(focus::Phase::Break,s.phase());
+    s.update(1020000,focus::Orientation::Unknown);
+    TEST_ASSERT_EQUAL(focus::Phase::Complete,s.phase());
+}
+void test_manual_focus_wraparound_and_stop() {
+    focus::Session s; constexpr uint32_t start=0xffffff00;
+    s.beginManual(shortTimer(1),start);s.update(start+60000u,focus::Orientation::Unknown);
+    TEST_ASSERT_EQUAL(focus::Phase::Break,s.phase());
+    TEST_ASSERT_EQUAL(59999,s.remainingMs(start+60001u));
+    s.stop();s.update(start+1000000u,focus::Orientation::ShortA);
+    TEST_ASSERT_EQUAL(focus::Phase::Complete,s.phase());
+    TEST_ASSERT_FALSE(s.consumeCompletionCue());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_manual_focus_ignores_orientation_and_waits_after_each_break);
+    RUN_TEST(test_manual_focus_wraparound_and_stop);
     RUN_TEST(test_focus_config_round_trip_and_validation);
     RUN_TEST(test_focus_session_flip_pause_and_completion);
     RUN_TEST(test_focus_session_requires_post_expiry_flip_and_handles_wraparound);

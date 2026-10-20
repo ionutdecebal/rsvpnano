@@ -1,4 +1,5 @@
 #include "ui/screens/ReaderLayout.h"
+#include "ui/screens/ModernReaderChrome.h"
 
 #include <cstdio>
 
@@ -49,6 +50,7 @@ namespace screens::readerLayout {
 
     ui::TextLayout prepareArrows(ui::Context& ui, const settings::ReadingSettings& settings, bool reading,
                                  bool ghostHidden) {
+        if (ui.modernReadingPalette() && !ghostHidden) return {};
         if (!settings::visible(settings.arrowsVisibility, reading) && !ghostHidden)
             return {};
         const auto rect = horizontalChrome(ui.width(), ui.height(), settings.leftHanded).arrows;
@@ -58,6 +60,7 @@ namespace screens::readerLayout {
     void drawArrows(ui::Context& ui, Arduino_GFX& output, const settings::ReadingSettings& settings, bool reading,
                     const ui::TextLayout& text, int16_t wordHeight, int16_t offsetX, int16_t offsetY,
                     bool ghostHidden) {
+        if (ui.modernReadingPalette() && !ghostHidden) return;
         const bool visible = settings::visible(settings.arrowsVisibility, reading);
         if (!visible && !ghostHidden)
             return;
@@ -70,6 +73,10 @@ namespace screens::readerLayout {
 
     void horizontalChrome(ui::Context& ui, const Chrome& view, const settings::ReadingSettings& settings,
                           const Board::Power::BatteryState& battery) {
+        if (ui.modernReadingPalette() && ui.width() == 640 && ui.height() == 172 && !view.vertical) {
+            modern::readerChrome(ui, view, settings, battery);
+            return;
+        }
         const bool showProgress = settings::visible(settings.progressVisibility, view.reading);
         const auto layout = horizontalChrome(ui.width(), ui.height(), settings.leftHanded,
                                              showProgress || view.ghostHidden ? ui.textWidth(view.footer, 2) : 0);

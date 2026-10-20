@@ -147,6 +147,7 @@ namespace ui {
             int16_t x = 0;
             int16_t y = 0;
             Rect ink;
+            uint8_t proportionalSize = 0;
         };
         std::vector<Line> lines;
         size_t consumed = 0;
@@ -154,11 +155,33 @@ namespace ui {
 
     class Context {
     public:
-        static constexpr size_t kSlotCapacity = 64;
+        // The full LCD keyboard owns 73 drawing/touch slots.
+        static constexpr size_t kSlotCapacity = 96;
         using LanguageFontLoader = std::expected<std::vector<uint8_t>, std::string> (*)(fs::FS&,
                                                                                         const locales::InstalledPack&);
 
         explicit Context(Arduino_GFX& gfx);
+        void setModernPresentation(bool enabled) {
+            if (modernPresentation_ != enabled) {
+                modernPresentation_ = enabled;
+                invalidate();
+            }
+        }
+        bool modernPresentation() const { return modernPresentation_; }
+        // Presentation context only: startup callbacks still report their real
+        // status/progress, and the application clears this when begin() ends.
+        void setStartupPresentation(bool enabled) {
+            if (startupPresentation_ != enabled) { startupPresentation_ = enabled; invalidate(); }
+        }
+        bool startupPresentation() const { return startupPresentation_; }
+        void setModernReadingPalette(bool enabled) {
+            if (modernReadingPalette_ != enabled) { modernReadingPalette_ = enabled; invalidate(); }
+        }
+        bool modernReadingPalette() const { return modernReadingPalette_; }
+        void setBackgroundBusy(bool busy) { backgroundBusy_ = busy; }
+        bool backgroundBusy() const { return backgroundBusy_; }
+        void setFocusBadge(std::string value) { focusBadge_ = std::move(value); }
+        const std::string& focusBadge() const { return focusBadge_; }
 
         static constexpr uint8_t displayWriteAlignment() {
 #ifdef RSVP_BOARD_CONFIG_HEADER
@@ -250,6 +273,7 @@ namespace ui {
         void setLanguageCatalog(fs::FS* filesystem, const locales::Catalog* catalog, LanguageFontLoader fontLoader);
         void setLanguageAssets(locales::UiAssets assets);
         void setLocale(std::string_view locale);
+        std::string_view locale() const { return locale_; }
         void setOrientation(Orientation orientation);
         Orientation orientation() const {
             return touchOrientation_;
@@ -257,10 +281,12 @@ namespace ui {
         std::string_view text(UiText key) const;
         void setTouchSource(TouchSource source);
         bool pollTouch(uint32_t nowMs);
+        void cancelTouchUntilRelease();
+        bool verticalSlider(Rect rect, int& value, int minimum, int maximum);
         const Touch* touch() const {
             return touchPending_ ? &touchEvent_ : nullptr;
         }
-        void beginFrame(uint8_t screen);
+        void beginFrame(uint8_t screen, uint8_t surface = 0);
         void endFrame();
         void invalidate();
         void prepareTextFont(std::string_view text, std::string_view textLocale = {}) const;
@@ -352,7 +378,8 @@ namespace ui {
                                uint8_t maxLines = 1, std::string_view textLocale = {});
         TextLayout prepareFixedText(Rect rect, std::string_view text, uint8_t textSize,
                                     TextAlign align = TextAlign::Center, uint8_t maxLines = 2, bool ellipsis = true);
-        void drawText(Arduino_GFX& output, const TextLayout& layout, uint16_t color, int16_t dx = 0, int16_t dy = 0);
+        void drawText(Arduino_GFX& output, const TextLayout& layout, uint16_t color, int16_t dx = 0, int16_t dy = 0,
+                      int32_t background = -1);
         void portraitText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                           TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
         void portraitVerticalText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
@@ -360,6 +387,7 @@ namespace ui {
         void portraitBattery(Rect rect, uint8_t percent, bool charging, std::string_view label, bool showIcon);
 
         uint16_t color(ui::themes::ColorRole role) const;
+        uint16_t readingFocusColor() const;
         uint16_t blend(ui::themes::ColorRole role, uint8_t alpha) const;
         Arduino_GFX& gfx() {
             return gfx_;
@@ -430,9 +458,12 @@ namespace ui {
         void drawBatteryIcon(Arduino_GFX& output, Rect rect, uint8_t percent, bool charging, uint16_t ink,
                              uint16_t surface);
         int valueAt(Rect rect, uint16_t x, int minimum, int maximum, int step) const;
+        Rect touchBounds(Rect rect) const;
         bool tapped(size_t slot, Rect rect, bool enabled = true);
         bool sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                          std::string_view suffix, ui::themes::ColorRole activeRole);
+        bool filledSliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
+                               std::string_view suffix, themes::ColorRole activeRole, bool vertical);
         bool stepperValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                           std::string_view suffix, ui::themes::ColorRole activeRole);
         void resetTouchGesture();
@@ -445,6 +476,11 @@ namespace ui {
         bool updateTouch(const TouchContact& contact, uint32_t nowMs);
 
         Arduino_GFX& gfx_;
+        bool modernPresentation_ = false;
+        bool startupPresentation_ = false;
+        bool modernReadingPalette_ = false;
+        std::string focusBadge_;
+        bool backgroundBusy_ = false;
         const ui::themes::Theme* theme_ = nullptr;
         fs::FS* languageFilesystem_ = nullptr;
         const locales::Catalog* languageCatalog_ = nullptr;
@@ -465,6 +501,7 @@ namespace ui {
         uint16_t touchLastX_ = 0;
         uint16_t touchLastY_ = 0;
         bool touchActive_ = false;
+        bool touchSuppressed_ = false;
         bool touchHoldEmitted_ = false;
         uint8_t touchOutsideSamples_ = 0;
         bool touchPending_ = false;
@@ -476,6 +513,7 @@ namespace ui {
         int capturedScalarInitialValue_ = 0;
         int8_t capturedStepperDirection_ = 0;
         uint8_t screen_ = 0xFF;
+        uint8_t surface_ = 0;
         size_t gridPage_ = 0;
         bool rotaryDragging_ = false;
         Rect rotaryRect_{};

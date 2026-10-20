@@ -6,11 +6,11 @@
 #include <vector>
 
 #include "reader/ReadingLoop.h"
-#include "library/StorageManager.h"
-#include "library/IndexedBookStore.h"
-#include "library/ReadingProgress.h"
+#include "library/BookLibrary.h"
 #include "ui/screens/Screens.h"
 #include "ui/Layouts.h"
+
+class StorageManager;
 
 namespace screens {
 
@@ -25,6 +25,7 @@ namespace screens {
         Action draw(ui::Context& ui, const std::vector<LibraryItem>& items, uint32_t nowMs, Screen& screen);
         void reset();
         void invalidate();
+        bool needsItems(const StorageManager& storage) const;
         const std::vector<LibraryItem>& items(StorageManager& storage, const IndexedBookStore& bookStore,
                                               const ReadingSession& session);
         size_t selectedIndex() const {
@@ -47,8 +48,10 @@ namespace screens {
         int32_t startOffset_ = 0;
         int32_t offset_ = 0;
         size_t selectedIndex_ = 0;
+        bool showingDetails_ = false;
         std::vector<LibraryItem> items_;
         bool itemsValid_ = false;
+        uint32_t itemsRevision_ = 0;
         ui::CarouselGesture carouselGesture_;
     };
 

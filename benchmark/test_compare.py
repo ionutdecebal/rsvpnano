@@ -2,10 +2,41 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from compare import WpmSweepRow, latest_wpm_sweep, parse_log, parse_wpm_sweep, write_summary
+from compare import WpmSweepRow, latest_wpm_sweep, parse_log, parse_wpm_sweep, write_summary, write_reader_result
 
 
 class ParseLogTests(unittest.TestCase):
+    def reader_log(self, *, displayed=1000, skipped=0, maximum=15000, elapsed=60000300, footer=True):
+        result = ""
+        for name in ("normal", "large"):
+            result += (f"[bench] reader_result case={name} ok=1 wpm=1000 expected=1000 displayed={displayed} "
+                       f"skipped={skipped} deadline_us=60000 deadline_misses=0 max_cycle_us={maximum} "
+                       f"max_gap_us=61000 elapsed_us={elapsed} complete=1 font_size={1 if name == 'normal' else 0}\n")
+        if footer:
+            result += "[bench] reader_complete ok=1\n[bench] done\n"
+        return result
+
+    def test_realtime_reader_report_requires_both_complete_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reader.log"
+            path.write_text(self.reader_log())
+            self.assertTrue(write_reader_result(path))
+            self.assertIn("15.00 ms", path.with_suffix(".reader.md").read_text())
+            self.assertIn("PASS", path.with_suffix(".reader.md").read_text().splitlines()[0])
+            for content in (self.reader_log(footer=False), self.reader_log().replace("case=large", "case=normal"),
+                            self.reader_log().splitlines()[0], "[bench] done\n"):
+                path.write_text(content)
+                self.assertFalse(write_reader_result(path))
+
+    def test_realtime_reader_rejects_skipped_words_late_cycles_and_wrong_speed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reader.log"
+            for content in (self.reader_log(displayed=999), self.reader_log(skipped=1),
+                            self.reader_log(maximum=60001), self.reader_log(elapsed=70000000),
+                            self.reader_log(elapsed=50000000), self.reader_log().replace("ok=1", "ok=0")):
+                path.write_text(content)
+                self.assertFalse(write_reader_result(path))
+
     def test_parses_concatenated_metric_lines(self) -> None:
         line = (
             "[bench] start board=Test Board id=test\n"
@@ -21,6 +52,20 @@ class ParseLogTests(unittest.TestCase):
         self.assertEqual([120, 45], [row.us for row in rows])
         self.assertEqual([3, 0], [row.deadline_misses for row in rows])
         self.assertEqual("Test Board", rows[0].board)
+
+    def test_reader_report_rejects_compact_mislabeled_as_large(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reader.log"
+            path.write_text(self.reader_log().replace("font_size=0", "font_size=3"))
+            self.assertFalse(write_reader_result(path))
+            self.assertIn("Compact (expected Large)", path.with_suffix(".reader.md").read_text())
+            old = self.reader_log().replace(" font_size=0", "").replace(" font_size=1", "")
+            path.write_text(old)
+            self.assertFalse(write_reader_result(path))
+            path.write_text("[bench] reader_case name=normal font_size=1\n"
+                            "[bench] reader_case name=large font_size=3\n" + old)
+            self.assertFalse(write_reader_result(path))
+            self.assertIn("Compact (expected Large)", path.with_suffix(".reader.md").read_text())
 
     def test_ignores_truncated_metric_lines(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

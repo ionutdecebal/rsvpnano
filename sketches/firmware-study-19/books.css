@@ -1,0 +1,21 @@
+/* Static, scan-friendly companion QR; the surrounding UI follows the theme. */
+.book-upload18{height:128px;display:grid;grid-template-columns:111px minmax(0,1fr);gap:20px;padding:8px 16px;align-items:start}
+.companion-qr{display:block;width:111px;height:111px;background:#fff;flex-shrink:0;line-height:0}
+.companion-qr svg{display:block;width:111px;height:111px;max-width:none;max-height:none}
+.upload-guide18{height:112px;min-width:0;display:grid;grid-template-rows:34px minmax(0,1fr);gap:5px}
+.upload-methods18{display:flex;align-items:center;gap:6px;min-width:0}
+.screen .upload-methods18 button{height:34px;min-width:66px;padding:0 10px;font-size:13px;line-height:1;border:1px solid transparent}
+.screen .upload-methods18 button.selected{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.upload-methods18>a{margin-left:auto;color:var(--dim);font-size:12px;line-height:1.1;text-decoration:none;white-space:nowrap}
+.upload-methods18>a:hover,.upload-methods18>a:focus-visible{color:var(--accent);text-decoration:underline}
+.companion-qr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.upload-steps18{padding:0;margin:0;list-style:none;display:flex;flex-direction:column;justify-content:space-between;gap:3px;min-height:0}
+.upload-steps18 li{display:flex;align-items:baseline;gap:9px;min-height:0}
+.upload-steps18 li>span{font-size:12px;color:var(--accent);width:12px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.upload-steps18 p{margin:0;font-size:13px;line-height:15px;color:var(--fg);min-width:0}
+.help18{grid-template-columns:238px minmax(0,1fr);gap:16px;padding:8px 16px}
+.help18 .help-replay{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:52px 52px;gap:8px}
+.help18 .help-replay .add-books-entry{grid-column:1 / -1}
+.screen .help18 .help-replay button{height:52px;font-size:13px;padding:0 10px;white-space:normal}
+.help18 .help-gestures{padding-right:10px;gap:6px}
+.help18 .help-gestures strong{min-width:36px}

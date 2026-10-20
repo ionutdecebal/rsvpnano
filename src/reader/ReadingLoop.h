@@ -34,6 +34,8 @@ namespace ReadingLoop {
 
     std::string_view wordAt(const ReadingSession& session, size_t index);
     size_t wordCount(const ReadingSession& session);
+    size_t displayWordCount(const ReadingSession& session);
+    uint32_t wordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings, size_t index);
     std::pair<size_t, size_t> paragraphBoundsAt(const ReadingSession& session, size_t wordIndex);
     TextParagraph paragraphAt(const ReadingSession& session, size_t wordIndex);
     settings::ReadingPacing pacingMode(const ReadingSession& session);

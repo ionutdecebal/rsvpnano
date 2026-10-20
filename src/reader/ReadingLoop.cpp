@@ -863,6 +863,8 @@ namespace ReadingLoop {
         }
 
         void setCurrentWordFromIndex(ReadingSession& session) {
+            session.displayWordCount = 1;
+            session.displayWordIndex = static_cast<size_t>(-1);
             if (wordCount(session) == 0) {
                 session.currentWord.clear();
                 return;
@@ -934,13 +936,19 @@ namespace ReadingLoop {
 
     bool update(ReadingSession& session, const settings::ReadingSettings& settings, uint32_t nowMs, bool allowCatchUp) {
         bool changed = false;
-        const uint8_t maxCatchUpWords = allowCatchUp ? kMaxCatchUpWords : 1;
+        const uint8_t maxCatchUpWords = allowCatchUp && settings.mode != settings::ReadingMode::chunks ? kMaxCatchUpWords : 1;
         for (uint8_t catchUp = 0; catchUp < maxCatchUpWords; ++catchUp) {
             const uint32_t durationMs = currentWordDurationMs(session, settings);
             if (durationMs == 0 || nowMs - session.lastAdvanceMs < durationMs)
                 break;
-            session.lastAdvanceMs += durationMs;
-            if (!advance(session, 1))
+            if (settings.mode == settings::ReadingMode::chunks) session.lastAdvanceMs = nowMs;
+            else session.lastAdvanceMs += durationMs;
+            const size_t steps = settings.mode == settings::ReadingMode::chunks ? displayWordCount(session) : 1;
+            if (usingLoadedBook(session) && session.state.wordIndex + steps >= wordCount(session)) {
+                session.playing = false;
+                break;
+            }
+            if (!advance(session, steps))
                 break;
             changed = true;
         }
@@ -954,20 +962,43 @@ namespace ReadingLoop {
                                                            : settings::ReadingPacing::words;
     }
 
-    uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings) {
-        const size_t nextIndex = session.state.wordIndex + 1;
+    size_t displayWordCount(const ReadingSession& session) {
+        return session.displayWordIndex == session.state.wordIndex
+                   ? std::clamp<size_t>(session.displayWordCount, 1, 3) : 1;
+    }
+
+    uint32_t wordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings, size_t index) {
+        const std::string word{wordAt(session, index)};
+        const size_t nextIndex = index + 1;
         const bool nextWordStartsLowercase =
             nextIndex < wordCount(session) && startsWithLowercaseLetter(wordAt(session, nextIndex));
 
         if (pacingMode(session) == settings::ReadingPacing::cjkPhrase) {
             const uint32_t characters =
-                static_cast<uint32_t>(std::max(1, codepointCount(session.currentWord, UnicodeText::isWordCharacter)));
+                static_cast<uint32_t>(std::max(1, codepointCount(word, UnicodeText::isWordCharacter)));
             const uint32_t base = (60'000UL * characters + settings.wpm - 1) / settings.wpm;
             return base
-                 + scaledDelayMs(punctuationPausePercentForWord(session.currentWord, false),
+                 + scaledDelayMs(punctuationPausePercentForWord(word, false),
                                  settings.pacing.punctuationDelayMs);
         }
-        return durationForWord(session.currentWord, nextWordStartsLowercase, 60000UL / settings.wpm, settings.pacing);
+        return durationForWord(word, nextWordStartsLowercase, 60000UL / settings.wpm, settings.pacing);
+    }
+
+    uint32_t currentWordDurationMs(const ReadingSession& session, const settings::ReadingSettings& settings) {
+        uint32_t duration = 0;
+        const size_t count = settings.mode == settings::ReadingMode::chunks ? displayWordCount(session) : 1;
+        for (size_t n = 0; n < count && session.state.wordIndex + n < wordCount(session); ++n)
+            duration += wordDurationMs(session, settings, session.state.wordIndex + n);
+        if (duration > 0 && settings.mode == settings::ReadingMode::chunks && pacingMode(session) == settings::ReadingPacing::words) {
+            // Product tuning, not an empirically optimal threshold. Never borrow time
+            // from the following chunk to make a short group fit the nominal WPM.
+            const uint32_t base = 60000UL / settings.wpm;
+            const uint32_t actualCount = std::min<size_t>(count, wordCount(session) - session.state.wordIndex);
+            const uint32_t baseDuration = base * actualCount;
+            const uint32_t minimum = std::max<uint32_t>(300, base * 2);
+            duration += minimum > baseDuration ? minimum - baseDuration : 0;
+        }
+        return duration;
     }
 
     uint32_t elapsedInCurrentWordMs(const ReadingSession& session, uint32_t nowMs) {
@@ -975,12 +1006,12 @@ namespace ReadingLoop {
     }
 
     bool currentWordEndsSentence(const ReadingSession& session) {
-        return wordEndsSentenceAt(session, session.state.wordIndex);
+        return wordEndsSentenceAt(session, session.state.wordIndex + displayWordCount(session) - 1);
     }
 
     bool atEnd(const ReadingSession& session) {
         const size_t count = wordCount(session);
-        return count == 0 || session.state.wordIndex + 1 >= count;
+        return count == 0 || session.state.wordIndex + displayWordCount(session) >= count;
     }
 
     void seekTo(ReadingSession& session, size_t wordIndex) {

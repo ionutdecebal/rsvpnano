@@ -14,7 +14,7 @@ import threading
 import time
 from pathlib import Path
 
-from compare import parse_log, parse_wpm_sweep, write_summary
+from compare import parse_log, parse_wpm_sweep, write_summary, write_reader_result
 
 
 DEFAULT_ENV = "benchmark_waveshare_esp32s3_touch_lcd_349_rev1"
@@ -30,6 +30,21 @@ FONT_MANIFEST_PATH = Path("benchmark/fonts.sha256")
 RFONT4_FILENAME = "font.rfont4"
 ESPRESSIF_USB_ID = "VID:PID=303A:1001"
 COPY_BUFFER_SIZE = 1024 * 1024
+DEVICE_READER_FIXTURE = Path("benchmark/reader-1000.rsvp")
+
+
+def platformio_command() -> list[str]:
+    # Reuse the installed toolchain; do not require uvx or another download.
+    executable = shutil.which("pio") or shutil.which("platformio")
+    if executable:
+        return [executable]
+    home = Path(os.environ.get("PLATFORMIO_CORE_DIR", Path.home() / ".platformio"))
+    executable = home / "penv" / ("Scripts/platformio.exe" if os.name == "nt" else "bin/pio")
+    if executable.is_file():
+        return [str(executable)]
+    if shutil.which("uvx"):
+        return ["uvx", "platformio"]
+    raise RuntimeError("PlatformIO is required: install it or put pio on PATH")
 
 
 def child_environment() -> dict[str, str]:
@@ -43,7 +58,7 @@ def run_checked(args: list[str], cwd: Path) -> None:
 
 def platformio_devices(cwd: Path) -> list[dict[str, str]]:
     result = subprocess.run(
-        ["uvx", "platformio", "device", "list", "--json-output"],
+        [*platformio_command(), "device", "list", "--json-output"],
         cwd=cwd,
         check=True,
         capture_output=True,
@@ -62,7 +77,7 @@ def device_serial(device: dict[str, str]) -> str:
 
 def platformio_python(cwd: Path) -> str:
     result = subprocess.run(
-        ["uvx", "platformio", "system", "info", "--json-output"],
+        [*platformio_command(), "system", "info", "--json-output"],
         cwd=cwd,
         check=True,
         capture_output=True,
@@ -79,6 +94,32 @@ def monitor_command(python: str, environment: str, port: str, baud: str) -> list
         python, "-m", "platformio", "device", "monitor", "-e", environment, "-p", port, "-b", baud,
         "--dtr", "0", "--rts", "0", "-f", "default", "-f", "time", "-f", "esp32_exception_decoder",
     ]
+
+
+def reader_monitor_command(python: str, port: str, baud: str) -> list[str]:
+    # Open once, then request the test on that same connection. This prevents
+    # missing results while USB re-enumerates after the fixture-copy reboot.
+    script = """import serial, sys, time
+p = serial.Serial()
+p.port, p.baudrate, p.timeout = sys.argv[1], int(sys.argv[2]), .2
+p.write_timeout = 1
+p.dtr = p.rts = False
+p.open()
+started, last_request, recent = False, 0, ''
+try:
+    while True:
+        if not started and time.monotonic() - last_request >= 1:
+            p.write(b'reader-start\\n'); p.flush(); last_request = time.monotonic()
+        line = p.readline().decode('utf-8', errors='replace')
+        if line:
+            print(line, end='', flush=True)
+            recent = (recent + line)[-512:]
+            if '[bench] start ' in recent: started = True
+            if '[bench] done' in recent: break
+finally:
+    p.close()
+"""
+    return [python, "-u", "-c", script, port, baud]
 
 
 def enter_bootloader(cwd: Path, port: str) -> None:
@@ -100,6 +141,8 @@ def select_serial_port(devices: list[dict[str, str]], requested: str = "", seria
             return matches[0]
     if requested and any(device.get("port", "").casefold() == requested.casefold() for device in devices):
         return requested
+    if requested and not serial:
+        return ""
     matches = [device["port"] for device in devices if ESPRESSIF_USB_ID in device.get("hwid", "")]
     if len(matches) == 1:
         return matches[0]
@@ -130,7 +173,8 @@ def mounted_roots() -> list[Path]:
     for parent in (Path("/Volumes"), Path("/media"), Path("/run/media")):
         if not parent.is_dir():
             continue
-        roots.extend(path for path in parent.glob("**/*") if path.is_dir() and len(path.relative_to(parent).parts) <= 2)
+        # Only inspect mount roots, not every book and font on every disk.
+        roots.extend(path for pattern in ("*", "*/*") for path in parent.glob(pattern) if path.is_dir())
     return roots
 
 
@@ -144,6 +188,22 @@ def find_benchmark_volume(roots: list[Path]) -> Path | None:
 def file_sha256(path: Path) -> str:
     with path.open("rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def prepare_reader_volume(root: Path) -> None:
+    if not (root / DEVICE_MARKER_PATH).is_file():
+        raise RuntimeError("Not an RSVP benchmark volume")
+    vocabulary = ("a", "the", "river", "quietly", "reading", "window", "beautiful", "understand", "wonderful", "light", "remember", "chapter")
+    words = [f"{vocabulary[i % len(vocabulary)]}{i + 1:04d}" for i in range(1000)]
+    content = "@rsvp 1\n@title USB reader speed test\n@language en\n@direction ltr\n@chapter USB reader test\n\n"
+    content += "\n".join(" ".join(words[i:i + 20]) for i in range(0, 1000, 20)) + "\n"
+    for path, text in ((root / DEVICE_READER_FIXTURE, content), (root / RUN_READY_PATH, "reader-only\n")):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as output:
+            output.write(text)
+            output.flush()
+            os.fsync(output.fileno())
+    print("[bench-script] 1,000-word reader fixture ready; existing books and fonts untouched", flush=True)
 
 
 def catalog_fonts(fonts_root: Path) -> list[tuple[Path, Path]]:
@@ -328,6 +388,7 @@ def main() -> int:
     parser.add_argument("--port", default="", help="Upload/monitor serial port, for example COM3")
     parser.add_argument("--baud", default="115200", help="Monitor baud rate")
     parser.add_argument("--runs", type=int, default=1, help="Number of complete benchmark runs")
+    parser.add_argument("--reader-only", action="store_true", help="Two one-minute 1000 WPM tests of the modern reader; no font sync or conversion suite")
     parser.add_argument("--no-upload", action="store_true", help="Use benchmark firmware already on the device")
     parser.add_argument("--manual-eject", action="store_true", help="Wait for the user to safely eject the device")
     parser.add_argument("--storage-timeout", type=float, default=120, help="Seconds to wait for USB storage")
@@ -353,13 +414,13 @@ def main() -> int:
     logs_dir = benchmark_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     epub_fixture = (repo_root / args.epub_fixture).resolve()
-    if not epub_fixture.is_file():
+    if not args.reader_only and not epub_fixture.is_file():
         raise FileNotFoundError(f"EPUB fixture missing: {epub_fixture}")
     multilingual_fixture = (repo_root / args.multilingual_fixture).resolve()
-    if not multilingual_fixture.is_file():
+    if not args.reader_only and not multilingual_fixture.is_file():
         raise FileNotFoundError(f"multilingual fixture missing: {multilingual_fixture}")
     vertical_epub_fixture = (repo_root / args.vertical_epub_fixture).resolve()
-    if not vertical_epub_fixture.is_file():
+    if not args.reader_only and not vertical_epub_fixture.is_file():
         raise FileNotFoundError(f"vertical EPUB fixture missing: {vertical_epub_fixture}")
 
     devices = platformio_devices(repo_root)
@@ -369,19 +430,24 @@ def main() -> int:
     if not args.no_upload:
         if not initial_port:
             raise RuntimeError("could not identify the RSVP Nano serial port")
-        run_checked(["uvx", "platformio", "run", "-e", args.env, "-j12"], repo_root)
+        print("[bench-script] Installing temporary diagnostic firmware; reinstall your reader firmware after testing.", flush=True)
+        run_checked([*platformio_command(), "run", "-e", args.env], repo_root)
         enter_bootloader(repo_root, initial_port)
         time.sleep(1)
         bootloader_port = wait_for_serial_port(repo_root, initial_port, identity, 15)
         upload_args = [
-            "uvx", "platformio", "run", "-e", args.env, "-t", "upload", "--upload-port", bootloader_port,
+            *platformio_command(), "run", "-e", args.env, "-t", "upload", "--upload-port", bootloader_port,
         ]
         run_checked(upload_args, repo_root)
 
+    all_passed = True
     for run_index in range(1, args.runs + 1):
         print(f"[bench-script] waiting for benchmark storage run={run_index}/{args.runs}", flush=True)
         volume = wait_for_benchmark_volume(args.sd_root, args.storage_timeout)
-        prepare_volume(volume, epub_fixture, multilingual_fixture, vertical_epub_fixture, repo_root / "fonts")
+        if args.reader_only:
+            prepare_reader_volume(volume)
+        else:
+            prepare_volume(volume, epub_fixture, multilingual_fixture, vertical_epub_fixture, repo_root / "fonts")
         if args.manual_eject:
             input(f"Safely eject {volume}, then press Enter: ")
         else:
@@ -393,11 +459,19 @@ def main() -> int:
         timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         suffix = f"-run{run_index}" if args.runs > 1 else ""
         log_path = logs_dir / f"{timestamp}-{args.env}{suffix}.log"
-        monitor_args = monitor_command(platformio_python(repo_root), args.env, port, args.baud)
+        python = platformio_python(repo_root)
+        monitor_args = (reader_monitor_command(python, port, args.baud) if args.reader_only
+                        else monitor_command(python, args.env, port, args.baud))
         monitor_to_log(monitor_args, repo_root, log_path, args.run_timeout)
-        write_results(log_path, logs_dir)
+        if args.reader_only:
+            passed = write_reader_result(log_path)
+            all_passed = passed and all_passed
+            if parse_log(log_path):
+                write_results(log_path, logs_dir)
+        else:
+            write_results(log_path, logs_dir)
 
-    return 0
+    return 0 if all_passed else 1
 
 
 if __name__ == "__main__":

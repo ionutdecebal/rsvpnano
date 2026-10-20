@@ -5,6 +5,7 @@
 #include <esp_heap_caps.h>
 #include <esp_rom_sys.h>
 #include <esp_system.h>
+#include <esp_core_dump.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -122,6 +123,36 @@ namespace {
         }
     }
 
+    void logSavedCrash() {
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+        // A flash dump can survive OTA, so it can recover a crash from the
+        // preceding build even when its panic callback was not linked. Report
+        // only control-flow diagnostics, never stack bytes or private data.
+        if (esp_core_dump_image_check() != ESP_OK)
+            return;
+        static esp_core_dump_summary_t summary;
+        if (esp_core_dump_get_summary(&summary) != ESP_OK) {
+            ESP_LOGW("crash", "saved dump exists but its summary is unavailable");
+            return;
+        }
+        ESP_LOGE("crash", "saved dump (may predate this boot) task=%.16s pc=0x%08x elf_sha256=%.*s",
+                 summary.exc_task, static_cast<unsigned>(summary.exc_pc), APP_ELF_SHA256_SZ - 1,
+                 reinterpret_cast<const char*>(summary.app_elf_sha256));
+#if CONFIG_IDF_TARGET_ARCH_XTENSA
+        ESP_LOGE("crash", "saved exception cause=%u address=0x%08x depth=%u corrupt=%d",
+                 static_cast<unsigned>(summary.ex_info.exc_cause),
+                 static_cast<unsigned>(summary.ex_info.exc_vaddr),
+                 static_cast<unsigned>(summary.exc_bt_info.depth), summary.exc_bt_info.corrupted);
+        // Use the normal USB log route after reboot, not the ROM panic UART.
+        const size_t count = std::min<size_t>(summary.exc_bt_info.depth,
+                                            sizeof(summary.exc_bt_info.bt) / sizeof(summary.exc_bt_info.bt[0]));
+        for (size_t i = 0; i < count; ++i)
+            ESP_LOGE("crash", "saved frame[%u]=0x%08x", static_cast<unsigned>(i),
+                     static_cast<unsigned>(summary.exc_bt_info.bt[i]));
+#endif
+#endif
+    }
+
     void allocationFailed(size_t size, uint32_t caps, const char* functionName) {
         retainedRecord.failedAllocationSize = static_cast<uint32_t>(size);
         retainedRecord.failedAllocationCaps = caps;
@@ -210,6 +241,7 @@ namespace Logger {
     void logResetReason() {
         const esp_reset_reason_t reason = esp_reset_reason();
         ESP_LOGI("diag", "reset=%s(%d)", resetReasonName(reason), static_cast<int>(reason));
+        logSavedCrash();
         if (!hasPreviousRecord || !abnormalReset(reason)) {
             hasPreviousRecord = false;
             return;
@@ -231,10 +263,9 @@ namespace Logger {
                      reinterpret_cast<void*>(previousRecord.panicPc),
                      static_cast<unsigned>(previousRecord.backtraceLength),
                      previousRecord.backtraceCorrupt, previousRecord.backtraceContinues);
-            esp_rom_printf("Previous Backtrace:");
             for (uint8_t index = 0; index < previousRecord.backtraceLength; ++index)
-                esp_rom_printf(" 0x%08x:0x00000000", previousRecord.backtrace[index]);
-            esp_rom_printf("\n");
+                ESP_LOGE("crash", "previous frame[%u]=0x%08x", static_cast<unsigned>(index),
+                         static_cast<unsigned>(previousRecord.backtrace[index]));
         }
         hasPreviousRecord = false;
     }

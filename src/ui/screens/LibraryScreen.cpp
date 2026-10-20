@@ -5,10 +5,13 @@
 #include "logging/Logger.h"
 #include "storage/fs/StoragePaths.h"
 #include "library/IndexedBook.h"
+#include "library/StorageManager.h"
+#include "library/ReadingProgress.h"
 #include "ui/screens/ScreenCommon.h"
 
 namespace screens {
     void LibraryScreen::reset() {
+        showingDetails_ = false;
         carouselGesture_ = {};
         dragging_ = false;
         moved_ = false;
@@ -16,21 +19,25 @@ namespace screens {
     }
 
     void LibraryScreen::invalidate() {
+        showingDetails_ = false;
         items_.clear();
         itemsValid_ = false;
+    }
+
+    bool LibraryScreen::needsItems(const StorageManager& storage) const {
+        return !itemsValid_ || itemsRevision_ != storage.bookRevision() || items_.size() != storage.books().size();
     }
 
     const std::vector<LibraryItem>& LibraryScreen::items(StorageManager& storage, const IndexedBookStore& bookStore,
                                                          const ReadingSession& session) {
         const size_t bookCount = storage.books().size();
-        if (itemsValid_ && items_.size() == bookCount) {
+        if (!needsItems(storage)) {
             const int activeIndex = storage.findBook(session.sourcePath());
             if (activeIndex >= 0 && static_cast<size_t>(activeIndex) < items_.size()) {
                 LibraryItem& current = items_[static_cast<size_t>(activeIndex)];
                 current.progress = ReadingProgress::percent(session.state.wordIndex, ReadingLoop::wordCount(session));
-                if (const ChapterMarker* chapter = session.metadata.chapterAt(session.state.wordIndex)) {
-                    current.chapter = chapter->title;
-                }
+                const auto* chapter = session.metadata.chapterAt(session.state.wordIndex);
+                current.chapter = chapter ? chapter->title : std::string{};
             }
             return items_;
         }
@@ -72,6 +79,7 @@ namespace screens {
             items_.push_back(std::move(item));
         }
         itemsValid_ = true;
+        itemsRevision_ = storage.bookRevision();
         return items_;
     }
 

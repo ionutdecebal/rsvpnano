@@ -1,4 +1,5 @@
 #include "ui/screens/PageReaderScreen.h"
+#include "ui/ClippedGfx.h"
 
 #include <algorithm>
 #include <iterator>
@@ -85,7 +86,7 @@ namespace screens::PageReader {
             if (face.shaper) {
                 const size_t paragraphWord = index - paragraph.firstWord;
                 const size_t offset = paragraph.wordOffsets[paragraphWord];
-                const std::string_view locale = session.metadata.localeAt(index);
+                const std::string_view locale = session.localeAt(index);
                 const size_t glyphStart = state.glyphs.size();
                 if (glyphStart > UINT16_MAX) {
                     prepared.width = text.textAdvance(word, typography.tracking);
@@ -563,7 +564,7 @@ namespace screens::PageReader {
 
         void paintPage(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
                        const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
-                       ui::Rect dirty, size_t highlighted, std::string_view overlay) {
+                       ui::Rect dirty, size_t highlighted, std::string_view overlay, bool clip = false) {
             dirty = ui.paintBounds(dirty);
             const int16_t overlayWidth = ui::Context::textWidth(overlay, kOverlayTextSize);
             const ui::Rect overlayBounds{static_cast<int16_t>(area.x + (area.w - overlayWidth) / 2),
@@ -571,11 +572,14 @@ namespace screens::PageReader {
                                          overlayWidth, kOverlayTextHeight};
             const auto overlayText = ui.prepareText(overlayBounds, overlay, kOverlayTextSize);
             ui.paint(dirty, [&](Arduino_GFX& output, ui::Rect translated) {
-                Arduino_GFX& previousOutput = text.setOutput(output);
+                if (clip) output.fillRect(translated.x,translated.y,translated.w,translated.h,ui.color(ui::themes::Background));
+
                 const int16_t dx = static_cast<int16_t>(translated.x - dirty.x);
                 const int16_t dy = static_cast<int16_t>(translated.y - dirty.y);
                 const ui::Rect translatedArea{static_cast<int16_t>(area.x + dx), static_cast<int16_t>(area.y + dy),
                                               area.w, area.h};
+                ui::ClippedGfx clipped(output, translatedArea);
+                Arduino_GFX& previousOutput = text.setOutput(clip ? static_cast<Arduino_GFX&>(clipped) : output);
                 const ui::Rect viewport{static_cast<int16_t>(-dx), static_cast<int16_t>(-dy), output.width(),
                                         output.height()};
                 if (state.vertical) {
@@ -772,6 +776,83 @@ namespace screens::PageReader {
 
         paintPage(state, ui, text, typography, session, area, area, current, overlay);
         state.highlighted = current;
+    }
+
+
+    void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
+                const settings::TypographySettings& typography, uint32_t revision,
+                const ReadingSession& session, ui::Rect area, size_t selected) {
+        auto& state=browse.layout;
+        if (ReadingLoop::wordCount(session)==0) { ui.redraw(area,0); return; }
+        browse.first=std::min(browse.first,ReadingLoop::wordCount(session)-1);
+        const auto rebuild=[&] {
+            layout(state,text,typeface,typography,session,{area.x,area.y,area.w,640},browse.first);
+            state.layoutRevision=revision; state.layoutArea=area;
+        };
+        if (state.pageStart!=browse.first || state.layoutRevision!=revision || state.layoutArea!=area) rebuild();
+        while (browse.offset<0 && browse.first>0) {
+            const size_t old=browse.first;
+            if (!browse.previousLines.empty() && browse.previousLines.back().first<old) {
+                const auto previous=browse.previousLines.back();browse.previousLines.pop_back();
+                browse.first=previous.first;browse.offset+=previous.second;rebuild();
+            } else {
+                browse.first=anchorIndex(session,old-1);rebuild();
+                size_t line=0;
+                while(line+1<state.lineCount && state.lines[line+1].start<old) ++line;
+                const auto& previous=state.lines[line];
+                browse.first=previous.start;
+                const int height=line+1<state.lineCount ? state.lines[line+1].top-previous.top : previous.bottom-previous.top+6;
+                browse.offset+=std::max(1,height);rebuild();
+            }
+        }
+        browse.offset=std::max(0,browse.offset);
+        if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
+            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
+        while(state.lineCount>1 && browse.offset>=state.lines[1].top-state.lines[0].top) {
+            const int16_t height=state.lines[1].top-state.lines[0].top;
+            if(browse.previousLines.size()>=128) browse.previousLines.erase(browse.previousLines.begin());
+            browse.previousLines.emplace_back(browse.first,height);
+            browse.first=state.lines[1].start; browse.offset-=height; rebuild();
+        }
+        if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
+            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
+        uint32_t signature=ui::Context::combine(revision,browse.first);
+        signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,selected);
+        if(!ui.redraw(area,signature,true)) return;
+        const auto shift=[&](int delta) {
+            for(size_t i=0;i<state.lineCount;++i) {
+                auto& line=state.lines[i];line.y+=delta;line.top+=delta;line.bottom+=delta;line.ink.y+=delta;
+            }
+            for(auto& word:state.words) { word.y+=delta;word.ink.y+=delta; }
+        };
+        shift(-browse.offset);
+        paintPage(state,ui,text,typography,session,area,area,selected,{},true);
+        shift(browse.offset);
+    }
+    size_t wordAtPoint(const BrowseState& browse,int16_t x,int16_t y) {
+        const auto& state=browse.layout;y+=browse.offset;
+        for(size_t l=0;l<state.lineCount;++l) {
+            const auto& line=state.lines[l];
+            if(y<line.top || y>line.bottom+4) continue;
+            size_t nearest=line.start;int distance=INT16_MAX;
+            for(size_t i=line.start;i<line.end;++i) {
+                const auto& word=state.words[i-state.pageStart];
+                if(!line.bidi) {
+                    const int d=x<word.x ? word.x-x : x>word.x+word.width ? x-word.x-word.width : 0;
+                    if(d<distance) { distance=d;nearest=i; }
+                }
+            }
+            if(line.bidi) {
+                for(size_t c=line.characterStart;c<line.characterEnd;++c) {
+                    const auto& character=state.characters[c];
+                    if(!character.belongsToWord) continue;
+                    const int d=std::abs(x-character.x);
+                    if(d<distance) {distance=d;nearest=state.pageStart+character.wordOffset;}
+                }
+            }
+            return nearest;
+        }
+        return SIZE_MAX;
     }
 
 } // namespace screens::PageReader

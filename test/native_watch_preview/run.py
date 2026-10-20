@@ -25,13 +25,14 @@ def main():
     support = Path(__file__).resolve().parent
     library = PROJECT / ".pio/libdeps/waveshare_esp32s3_touch_amoled_18_v2/GFX Library for Arduino/src"
     sources = [
-        "ui/Ui.cpp", "ui/Controls.cpp", "ui/Icons.cpp", "ui/Theme.cpp", "ui/Localization.generated.cpp",
+        "ui/Ui.cpp", "ui/SansFont.cpp", "ui/Modern.cpp", "ui/Controls.cpp", "ui/Icons.cpp", "ui/Theme.cpp", "ui/Localization.generated.cpp",
         "localization/LocalePack.cpp", "text/LocaleTag.cpp", "text/BidiText.cpp", "text/TextShaping.cpp",
         "reader/ReadingLoop.cpp", "ui/screens/watch/ScreenCommon.cpp", "ui/screens/watch/ReadScreen.cpp",
         "ui/screens/watch/SettingsScreen.cpp", "ui/screens/watch/DeviceScreen.cpp",
         "ui/screens/watch/ReadingSettingsScreen.cpp", "ui/screens/watch/PacingSettingsScreen.cpp",
         "ui/screens/watch/ChaptersScreen.cpp", "ui/screens/watch/OtaScreen.cpp",
         "ui/screens/ReaderLayout.cpp", "ui/screens/watch/ReaderLayout.cpp",
+        "ui/screens/ModernReaderChrome.cpp",
     ]
     includes = [support, PROJECT / "test/native_canvas", PROJECT / "test/support", PROJECT / "src", library,
                 PROJECT / "lib/HarfBuzz/upstream/src", PROJECT / "lib/SheenBidi/upstream/Headers",

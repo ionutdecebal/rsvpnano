@@ -41,6 +41,8 @@ namespace {
     constexpr const char* kBenchmarkDir = "/benchmark";
     constexpr const char* kStorageMarkerPath = "/benchmark/.rsvpnano-benchmark";
     constexpr const char* kRunReadyPath = "/benchmark/.run-ready";
+    constexpr const char* kReaderFixturePath = "/benchmark/reader-1000.rsvp";
+    bool gReaderOnly = false;
     constexpr const char* kSdWritePath = "/benchmark/sd-write.bin";
     constexpr const char* kDraculaEpubPath = "/benchmark/Dracula-epub.epub";
     constexpr const char* kDraculaRsvpPath = "/benchmark/Dracula-epub.rsvp";
@@ -112,6 +114,11 @@ namespace {
 
         auto& filesystem = Board::Storage::filesystem();
         if (StorageFiles::fileExists(kRunReadyPath)) {
+            File ready = filesystem.open(kRunReadyPath, FILE_READ);
+            char profile[32]{};
+            const size_t length = ready ? ready.read(reinterpret_cast<uint8_t*>(profile), sizeof(profile)) : 0;
+            gReaderOnly = std::string_view{profile, length}.starts_with("reader-only\n");
+            ready.close();
             filesystem.remove(kRunReadyPath);
             Board::Storage::end();
             ESP_LOGI("bench", "storage_prepared");
@@ -454,6 +461,8 @@ namespace {
         bool frameDeadlineMet = true;
         bool cycleDeadlineMet = true;
 
+        gDisplay.setModernReadingPalette(gDisplay.width() == 640 && gDisplay.height() == 172
+                                         && settings.mode == settings::ReadingMode::rsvp);
         gDisplay.invalidate();
         ReadingLoop::start(reader.session, millis());
         const uint32_t heapBefore = ESP.getFreeHeap();
@@ -553,7 +562,134 @@ namespace {
                  static_cast<unsigned long>(slowestIo.seeks), static_cast<unsigned long>(slowestIo.loadedBytes),
                  static_cast<int>(word.size()), word.data());
         settings.wpm = savedWpm;
+        gDisplay.setModernReadingPalette(false);
         return ok && frameDeadlineMet && cycleDeadlineMet;
+    }
+
+    bool waitForReaderStart() {
+        showStatus("USB reader test", "Ready for the computer", "Waiting for reader-start");
+        constexpr std::string_view command = "reader-start\n";
+        size_t matched = 0;
+        const uint32_t started = millis();
+        while (millis() - started < 120000) {
+            while (Serial.available()) {
+                const char received = static_cast<char>(Serial.read());
+                matched = received == command[matched] ? matched + 1 : received == command.front() ? 1 : 0;
+                if (matched == command.size()) return true;
+            }
+            delay(10);
+        }
+        return false;
+    }
+
+    bool benchmarkReaderRealtime(const char* fontSizeId, const char* name) {
+        constexpr uint32_t deadlineUs = 60000;
+        constexpr size_t expectedWords = 1000;
+        // Font order is Large, Medium, Small, Compact. Resolve the catalog ID
+        // instead of assuming larger indices mean larger text.
+        const size_t fontSize = RFont4::sizeIndexForId(fontSizeId);
+        if (fontSize >= RFont4::kSizeCount) return false;
+        settings::ReadingSettings settings;
+        settings.wpm = 1000;
+        settings.mode = settings::ReadingMode::rsvp;
+        settings.pacing.longWordDelayMs = 0;
+        settings.pacing.complexWordDelayMs = 0;
+        settings.pacing.punctuationDelayMs = 0;
+        settings.phantomWords = true;
+        settings.chapterVisibility = settings::Visibility::always;
+        settings.progressVisibility = settings::Visibility::always;
+        settings.typography.fontSizeIndex = fontSize;
+        auto reader = std::make_unique<screens::ReaderScreen>(Board::Display::gfx(), settings);
+        reader->begin(gTheme);
+        // The built-in font makes this quick check independent of SD font packs.
+        if (!openReadingFixture(*reader, kReaderFixturePath, "reader_fixture_open")
+            || ReadingLoop::wordCount(reader->session) != expectedWords) return false;
+        reader->refreshTypography();
+        const auto face = reader->fonts.loadFace(0, fontSize);
+        const unsigned fontPixels = face.raster.get().pixelsPerEm;
+        StorageManager storage;
+        Board::Power::BatteryState battery{};
+        Preferences preferences; // Benchmark ReaderScreen excludes progress writes.
+        focus::Session focus;
+        focus.beginManual(focus::Timer{}, millis());
+        gDisplay.setModernPresentation(false);
+        gDisplay.setModernReadingPalette(true);
+        gDisplay.invalidate();
+        std::vector<uint32_t> frameCycles;
+        frameCycles.reserve(expectedWords);
+        size_t displayed = 0, skipped = 0, lastWord = SIZE_MAX;
+        uint32_t misses = 0, maximumCycleUs = 0, maximumGapUs = 0, lastPresentedUs = 0;
+        bool monotonic = true;
+        ESP_LOGI("bench", "reader_case name=%s wpm=1000 words=1000 modern=1 phantoms=1 focus=1 "
+                 "font_size=%u font_id=%s font_px=%u", name, static_cast<unsigned>(fontSize),
+                 RFont4::sizeId(fontSize), fontPixels);
+        // No serial logging inside the timed loop. Let normal reading timing run;
+        // never force lastAdvanceMs or seek past a late frame to improve the score.
+        const uint32_t startedUs = micros();
+        ReadingLoop::start(reader->session, millis());
+        while (reader->session.playing && micros() - startedUs < 90000000UL) {
+            const uint32_t cycleStartedUs = micros();
+            const uint32_t now = millis();
+            focus.update(now, focus::Orientation::Unknown);
+            const uint32_t seconds = (focus.remainingMs(now) + 999) / 1000;
+            char badge[24];
+            std::snprintf(badge, sizeof(badge), "Focus %lu:%02lu", static_cast<unsigned long>(seconds / 60),
+                          static_cast<unsigned long>(seconds % 60));
+            gDisplay.setFocusBadge(badge);
+            reader->update(preferences, now);
+            if (!reader->session.playing) break;
+            const size_t index = reader->session.state.wordIndex;
+            gDisplay.beginFrame(static_cast<uint8_t>(screens::Screen::Reader));
+            reader->draw(gDisplay, storage, battery, millis());
+            gDisplay.endFrame();
+            const uint32_t presentedUs = micros();
+            const uint32_t cycleUs = presentedUs - cycleStartedUs;
+            maximumCycleUs = std::max(maximumCycleUs, cycleUs);
+            if (cycleUs > deadlineUs) ++misses;
+            if (index != lastWord) {
+                const size_t expected = lastWord == SIZE_MAX ? 0 : lastWord + 1;
+                if (index > expected) skipped += index - expected;
+                if (index < expected) monotonic = false;
+                if (lastWord != SIZE_MAX) maximumGapUs = std::max(maximumGapUs, presentedUs - lastPresentedUs);
+                lastPresentedUs = presentedUs;
+                lastWord = index;
+                ++displayed;
+                frameCycles.push_back(cycleUs);
+            }
+            // This runs inside setup(), outside Arduino's usual loop-task idle
+            // yield. Let the RTOS idle/watchdog tasks run during the minute test.
+            delay(1);
+        }
+        const uint32_t elapsedUs = micros() - startedUs;
+        const bool complete = !reader->session.playing && displayed == expectedWords && lastWord == expectedWords - 1;
+        const bool correctPace = elapsedUs >= 59880000UL && elapsedUs <= 60120000UL;
+        const bool passed = complete && monotonic && correctPace && skipped == 0 && misses == 0;
+        ReadingLoop::pause(reader->session);
+        gDisplay.setFocusBadge({});
+        gDisplay.setModernReadingPalette(false);
+        logLatencyDistribution(std::string{name} + "_cycle", passed, std::move(frameCycles), deadlineUs);
+        ESP_LOGI("bench", "reader_result case=%s ok=%u wpm=1000 expected=1000 displayed=%u skipped=%u "
+                 "deadline_us=60000 deadline_misses=%lu max_cycle_us=%lu max_gap_us=%lu elapsed_us=%lu complete=%u "
+                 "font_size=%u font_id=%s font_px=%u",
+                 name, passed ? 1 : 0, static_cast<unsigned>(displayed), static_cast<unsigned>(skipped),
+                 static_cast<unsigned long>(misses), static_cast<unsigned long>(maximumCycleUs),
+                 static_cast<unsigned long>(maximumGapUs), static_cast<unsigned long>(elapsedUs), complete ? 1 : 0,
+                 static_cast<unsigned>(fontSize), RFont4::sizeId(fontSize), fontPixels);
+        return passed;
+    }
+
+    bool benchmarkModernReader() {
+        if (gDisplay.width() != 640 || gDisplay.height() != 172) {
+            ESP_LOGE("bench", "reader_error unsupported_display");
+            return false;
+        }
+        bool mounted = false;
+        if (!SdCard::mount(mounted)) return false;
+        if (!StorageFiles::ensureDirectory(StoragePaths::kLibraryPath)) return false;
+        // Exercise both a normal size and the largest built-in strike.
+        const bool normal = benchmarkReaderRealtime("medium", "normal");
+        const bool large = benchmarkReaderRealtime("large", "large");
+        return normal && large;
     }
 
     bool benchmarkPageScrubbing(screens::ReaderScreen& reader, const StorageManager& storage,
@@ -1102,6 +1238,24 @@ namespace Benchmark {
         runTimed("input_begin", beginInput);
         if (!prepareBenchmarkStorage())
             return;
+
+        if (gReaderOnly) {
+            if (!waitForReaderStart()) {
+                ESP_LOGE("bench", "reader_error host_start_timeout");
+                return;
+            }
+            ESP_LOGI("bench", "start board=%s id=%s", Board::Config::BOARD_LABEL, Board::Config::BOARD_ID);
+            const bool passed = benchmarkModernReader();
+            ESP_LOGI("bench", "reader_complete ok=%u", passed ? 1 : 0);
+            ESP_LOGI("bench", "done");
+            showStatus(passed ? "1000 WPM: PASS" : "1000 WPM: check report", "Results saved on the computer",
+                       "Reinstall reader firmware to read");
+#if RSVP_USB_MSC_ENABLED
+            delay(1500);
+            ESP.restart();
+#endif
+            return;
+        }
 
         ESP_LOGI("bench", "start board=%s id=%s", Board::Config::BOARD_LABEL, Board::Config::BOARD_ID);
 #if !RSVP_USB_MSC_ENABLED

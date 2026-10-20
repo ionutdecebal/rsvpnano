@@ -1,4 +1,5 @@
 #include "ui/screens/ScreenCommon.h"
+#include "ui/screens/ModernScreens.h"
 
 namespace screens {
 
@@ -6,6 +7,14 @@ namespace screens {
         if (const Action action = detail::navigation(ui, Screen::Ota, screen); action != Action::None)
             return action;
         const ui::Rect content = detail::tabContent(ui);
+        if (ui.modernPresentation()) {
+            ui.label({16, 56, 330, 32}, "Keep your reader up to date.", 21);
+            ui.label({16, 94, 330, 40}, firmwareVersion, 13, ui::themes::Muted, ui::TextAlign::Start, 2);
+            ui.label({16, 139, 330, 22}, "Wi-Fi update · keep the reader powered.", 11, ui::themes::Muted);
+            if (ui::modern::button(ui, {374, 58, 250, 44}, ui.text(UiText::CheckOnly), ui::modern::Style::Secondary)) return Action::OtaCheck;
+            if (ui::modern::button(ui, {374, 116, 250, 44}, ui.text(UiText::InstallUpdate), ui::modern::Style::Primary)) return Action::OtaInstall;
+            return Action::None;
+        }
         constexpr int16_t gap = 6;
         ui::Grid actions{content, 3, 56, gap};
         if (ui.button(actions.next(), "<<"))

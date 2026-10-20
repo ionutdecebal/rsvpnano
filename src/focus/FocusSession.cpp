@@ -5,6 +5,7 @@
 namespace focus {
 
     void Session::begin(const Timer& timer) {
+        manual_ = false;
         focusDurationMs_ = static_cast<uint32_t>(timer.focusMinutes) * 60UL * 1000UL;
         breakDurationMs_ = static_cast<uint32_t>(timer.breakMinutes) * 60UL * 1000UL;
         rounds_ = timer.rounds;
@@ -19,7 +20,44 @@ namespace focus {
         completionCuePending_ = false;
     }
 
+    void Session::beginManual(const Timer& timer, uint32_t nowMs) {
+        begin(timer);
+        manual_ = true;
+        startPhase(Phase::Focus, nowMs, Orientation::Unknown);
+    }
+
+    void Session::pause(uint32_t nowMs) {
+        if (!manual_ || phase_ != Phase::Focus) return;
+        pausedRemainingMs_ = remainingMs(nowMs);
+        phase_ = Phase::PausedFocus;
+    }
+
+    void Session::resume(uint32_t nowMs) {
+        if (!manual_) return;
+        if (phase_ == Phase::WaitingFocus) {
+            startPhase(Phase::Focus, nowMs, Orientation::Unknown);
+        } else if (phase_ == Phase::PausedFocus) {
+            durationMs_ = pausedRemainingMs_;
+            startedMs_ = nowMs;
+            phase_ = Phase::Focus;
+        }
+    }
+
     void Session::update(uint32_t nowMs, Orientation orientation) {
+        if (manual_) {
+            if ((phase_ != Phase::Focus && phase_ != Phase::Break) || nowMs - startedMs_ < durationMs_)
+                return;
+            completionCuePending_ = true;
+            if (phase_ == Phase::Focus) {
+                // Every round ends with a break. Reading cannot restart on its own.
+                startPhase(Phase::Break, nowMs, Orientation::Unknown);
+            } else {
+                phase_ = round_ >= rounds_ ? Phase::Complete : Phase::WaitingFocus;
+                if (phase_ == Phase::WaitingFocus) ++round_;
+                durationMs_ = pausedRemainingMs_ = 0;
+            }
+            return;
+        }
         if ((phase_ == Phase::Focus || phase_ == Phase::Break) && nowMs - startedMs_ >= durationMs_) {
             finishPhase(orientation);
             completionCuePending_ = true;

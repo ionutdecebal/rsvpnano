@@ -21,7 +21,7 @@ namespace screens {
             } else if (found >= 0) {
                 for (int16_t index = 0; index < found; ++index) {
                     const String foundSsid = WiFi.SSID(index);
-                    if (foundSsid.isEmpty())
+                    if (foundSsid.length() == 0)
                         continue;
                     const std::string candidate{foundSsid.c_str(), foundSsid.length()};
                     const int32_t rssi = WiFi.RSSI(index);

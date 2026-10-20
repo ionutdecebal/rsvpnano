@@ -37,18 +37,6 @@ namespace screens {
         constexpr uint32_t kFontReadAheadMinimumSlackMs = 10;
 #endif
 
-        int focusOrdinal(int length) {
-            if (length <= 1)
-                return 0;
-            if (length <= 5)
-                return 1;
-            if (length <= 9)
-                return 2;
-            if (length <= 13)
-                return 3;
-            return 4;
-        }
-
         uint32_t codepointAt(std::string_view text, size_t offset) {
             if (offset >= text.size())
                 return 0;
@@ -112,6 +100,7 @@ namespace screens {
                                          const settings::ReadingOverrides& overrides) {
         if (settings.mode == settings::ReadingMode::page)
             pagePreview_ = false;
+        pageBrowsing_ = false;
         typography_ = settings.typography;
         releaseRuntimeCaches();
         ++typographyRevision_;
@@ -129,7 +118,7 @@ namespace screens {
                 if ((scripts & script.mask) == 0)
                     continue;
                 const std::string_view requested =
-                    settings::fontForText(overrides, locale, script.mask, typography_.fontId);
+                    settings::fontForText(overrides, session.metadata.localeAt(wordIndex), script.mask, typography_.fontId);
                 const size_t family = FontCatalog::selectFamily(families, requested, locale, script.mask);
                 if (family != 0 && !prepared[family]) {
                     fonts.loadFace(family, sizeIndex);
@@ -138,10 +127,10 @@ namespace screens {
                 }
             }
         };
-        prepare(0, session.metadata.localeAt(0), session.metadata.scriptMaskAt(0));
+        prepare(0, overrides.locale && !overrides.locale->empty() ? std::string_view{*overrides.locale} : session.metadata.localeAt(0), session.metadata.scriptMaskAt(0));
         for (const BookTextRun& run: session.metadata.textRuns) {
-            const std::string_view locale =
-                run.locale.empty() ? std::string_view{session.metadata.locale} : std::string_view{run.locale};
+            const std::string_view locale = overrides.locale && !overrides.locale->empty()
+                ? std::string_view{*overrides.locale} : session.metadata.localeAt(run.wordIndex);
             prepare(run.wordIndex, locale, run.scriptMask);
         }
 
@@ -170,7 +159,7 @@ namespace screens {
             const size_t offset = paragraph.wordOffsets[localWord];
             const bool rightToLeft = session.metadata.directionAt(wordIndex) == TextDirection::rtl;
             if (face.shaper->shape(paragraph.text, offset, word.size(), rightToLeft,
-                                   session.metadata.localeAt(wordIndex), text_, rsvpGlyphs_))
+                                   session.localeAt(wordIndex), text_, rsvpGlyphs_))
                 text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
         }
         rsvpGlyphs_.clear();
@@ -202,10 +191,11 @@ namespace screens {
     size_t ReaderScreen::fontChoice(size_t wordIndex, const settings::ReadingSettings& settings,
                                     const settings::ReadingOverrides& overrides) const {
         const std::string_view word = ReadingLoop::wordAt(session, wordIndex);
-        const std::string_view locale = session.metadata.localeAt(wordIndex);
+        const std::string_view locale = overrides.locale && !overrides.locale->empty()
+            ? std::string_view{*overrides.locale} : session.metadata.localeAt(wordIndex);
         const uint32_t requiredScripts = UnicodeText::scriptsIn(word);
         const std::string_view requested =
-            settings::fontForText(overrides, locale, requiredScripts, settings.typography.fontId);
+            settings::fontForText(overrides, session.metadata.localeAt(wordIndex), requiredScripts, settings.typography.fontId);
         const auto families = fonts.families();
         if (families.empty())
             return 0;
@@ -324,7 +314,7 @@ namespace screens {
                 const size_t offset = paragraph.wordOffsets[localWord];
                 const bool rightToLeft = session.metadata.directionAt(next) == TextDirection::rtl;
                 if (nextShaper->shape(paragraph.text, offset, nextWord.size(), rightToLeft,
-                                      session.metadata.localeAt(next), text_, rsvpGlyphs_))
+                                      session.localeAt(next), text_, rsvpGlyphs_))
                     text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
                 rsvpGlyphs_.clear();
 
@@ -336,7 +326,7 @@ namespace screens {
                     const std::string_view afterWord = ReadingLoop::wordAt(session, after);
                     const size_t afterOffset = paragraph.wordOffsets[localAfter];
                     if (nextShaper->shape(paragraph.text, afterOffset, afterWord.size(), rightToLeft,
-                                          session.metadata.localeAt(after), text_, rsvpGlyphs_))
+                                          session.localeAt(after), text_, rsvpGlyphs_))
                         text_.prepare(std::span<const ui::fonts::PositionedGlyph>{rsvpGlyphs_});
                     rsvpGlyphs_.clear();
                 }
@@ -390,6 +380,7 @@ namespace screens {
         store.close();
         session = {};
         pagePreview_ = false;
+        pageBrowsing_ = false;
         refreshTypography();
     }
 
@@ -401,8 +392,10 @@ namespace screens {
     }
 
     void ReaderScreen::finishBookOpen(Preferences& preferences, uint32_t nowMs) {
+        returnWord_ = SIZE_MAX; browse_ = {}; searchResults_.clear(); searchQuery_.clear(); searchDraft_.clear(); searchRunning_ = false;
         session.state = {};
         pagePreview_ = false;
+        pageBrowsing_ = false;
         session.lastSavedWordIndex = static_cast<size_t>(-1);
         ReadingLoop::setBookStore(session, store, nowMs);
 
@@ -430,6 +423,7 @@ namespace screens {
         session.metadata.clear();
         session.state = {};
         pagePreview_ = false;
+        pageBrowsing_ = false;
         refreshTypography();
         ReadingLoop::begin(session, nowMs);
     }
@@ -438,6 +432,10 @@ namespace screens {
                             uint32_t nowMs) {
         width_ = ui.width();
         height_ = ui.height();
+        if (ui.modernReadingPalette() && settings_.mode == settings::ReadingMode::page) {
+            settings_.mode = settings::ReadingMode::rsvp; openPage();
+        }
+        if (pageBrowsing_ && ui.modernReadingPalette()) { drawPage(ui); return; }
         if (touchIntent_ == TouchIntent::Scrub || touchIntent_ == TouchIntent::Paragraph) {
             const auto typeface = [this](size_t index) {
                 return pageTypeface(index);
@@ -447,6 +445,7 @@ namespace screens {
                              readerLayout::readingArea(ui.width(), ui.height(), vertical), {});
             return;
         }
+        prepareChunk();
         const std::string_view bookTitle = ReadingProgress::title(session, storage);
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
@@ -460,7 +459,7 @@ namespace screens {
             nextChapter == session.metadata.chapters.begin() ? nullptr : &*std::prev(nextChapter);
         if (chapter != nullptr && session.state.wordIndex == chapter->wordIndex + 1
             && nextChapter != session.metadata.chapters.end())
-            ui.prepareTextFont(nextChapter->title, session.metadata.localeAt(nextChapter->wordIndex));
+            ui.prepareTextFont(nextChapter->title, session.localeAt(nextChapter->wordIndex));
         const std::string_view chapterLabel = chapter != nullptr && !chapter->title.empty()
                                                 ? std::string_view{chapter->title}
                                                 : std::string_view{bookTitle};
@@ -482,7 +481,7 @@ namespace screens {
             footer = readerLayout::progressText(ui, settings.footerMetric, progress, minutes);
         }
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
-        const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
+        const bool overlayVisible = !ui.modernReadingPalette() && wpmFeedbackUntilMs_ > nowMs;
 
         const ui::Rect readingArea = ui.paintBounds(readerLayout::readingArea(ui.width(), ui.height(), vertical));
         if (pageView) {
@@ -493,6 +492,8 @@ namespace screens {
             };
             PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session, readingArea,
                              overlay);
+        } else if (settings.mode == settings::ReadingMode::chunks && chunkLayoutReady_) {
+            drawChunk(ui, readingArea);
         } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings),
                              true)) {
             const std::string overlay =
@@ -541,7 +542,7 @@ namespace screens {
 
                 rsvpGlyphs_.clear();
                 if (shaping) {
-                    const std::string_view locale = session.metadata.localeAt(session.state.wordIndex);
+                    const std::string_view locale = session.localeAt(session.state.wordIndex);
                     if (!bidi) {
                         const auto result = face_.shaper->shape(rsvpParagraph_.text, wordOffset, word.size(), false,
                                                                 locale, text_, rsvpGlyphs_);
@@ -575,7 +576,7 @@ namespace screens {
                                     : bidi   ? wordAdvance(rsvpVisual_)
                                              : text_.textAdvance(word, typography_.tracking);
             int16_t focusCenter = wordWidth / 2;
-            if (focus >= 0) {
+            if (focus >= 0 && settings.mode != settings::ReadingMode::chunks) {
                 int16_t cursor = 0;
                 if (shaped) {
                     const uint32_t target = static_cast<uint32_t>(wordOffset + focus);
@@ -607,23 +608,12 @@ namespace screens {
                         previousValid = true;
                     }
                 } else {
-                    size_t offset = 0;
-                    std::string_view remaining = word;
-                    while (!remaining.empty()) {
-                        const size_t bytes = remaining.size();
-                        uint32_t codepoint = 0;
-                        Utf8Text::next(remaining, codepoint);
-                        const int16_t advance = text_.glyphAdvance(codepoint);
-                        if (offset == static_cast<size_t>(focus)) {
-                            focusCenter = static_cast<int16_t>(cursor + advance / 2);
-                            break;
-                        }
-                        cursor = static_cast<int16_t>(cursor + advance + typography_.tracking);
-                        offset += bytes - remaining.size();
-                    }
+                    focusCenter = wordAnchorOffset(word);
                 }
             }
-            const int16_t anchor = static_cast<int16_t>((ui.width() * typography_.anchor) / 100);
+            const int16_t anchor = settings.mode == settings::ReadingMode::chunks
+                                       ? ui.width() / 2
+                                       : static_cast<int16_t>((ui.width() * typography_.anchor) / 100);
             const int16_t x = static_cast<int16_t>(anchor - focusCenter);
             const int16_t inkTop = face_.raster.get().wordInkTop;
             const int16_t inkBottom = face_.raster.get().wordInkBottom;
@@ -646,20 +636,20 @@ namespace screens {
                 const int16_t wordX = static_cast<int16_t>(x + dx);
                 const int16_t wordBaseline = static_cast<int16_t>(baseline + dy);
                 const int16_t centerY = static_cast<int16_t>(ui.height() / 2 + dy);
-                drawGuides(ui, gfx, static_cast<int16_t>(anchor + dx), wordBaseline);
+                drawGuides(ui, gfx, static_cast<int16_t>(anchor + dx), wordBaseline, translated);
                 if (shaped) {
                     int16_t cursor = wordX;
                     size_t first = 0;
                     while (first < rsvpGlyphs_.size()) {
                         const bool highlighted =
-                            typography_.focusHighlight && rsvpGlyphs_[first].cluster == shapedFocusCluster;
+                            focusHighlightEnabled() && rsvpGlyphs_[first].cluster == shapedFocusCluster;
                         size_t last = first + 1;
                         while (last < rsvpGlyphs_.size()
-                               && (typography_.focusHighlight && rsvpGlyphs_[last].cluster == shapedFocusCluster)
+                               && (focusHighlightEnabled() && rsvpGlyphs_[last].cluster == shapedFocusCluster)
                                       == highlighted)
                             ++last;
-                        text_.setTextColor(ui.color(highlighted ? ui::themes::ColorRole::Accent
-                                                                : ui::themes::ColorRole::Foreground),
+                        text_.setTextColor(highlighted ? ui.readingFocusColor()
+                                                      : ui.color(ui::themes::ColorRole::Foreground),
                                            background_);
                         if (vertical) {
                             for (size_t index = first; index < last; ++index) {
@@ -722,7 +712,7 @@ namespace screens {
                                  .vertical = vertical,
                                  .chapter = chapterLabel.empty() ? ui.text(UiText::Start) : chapterLabel,
                                  .locale = chapter == nullptr ? session.metadata.locale
-                                                              : session.metadata.localeAt(chapter->wordIndex),
+                                                              : session.localeAt(chapter->wordIndex),
                                  .footer = footer,
                                  .batteryLabel = batteryLabel,
                                  .overlay = overlay,
@@ -734,6 +724,10 @@ namespace screens {
                                  .bottomState = pageView ? ui::Context::combine(0, settings.leftHanded)
                                                          : frameSignature(session.currentWord, overlayVisible,
                                                                           cjkPacing, settings),
+                                 .percent = progress,
+                                 .canRead = ReadingLoop::wordCount(session) > 0,
+                                 .pressedControl = modernTouchMoved_ ? uint8_t{0} : modernControl_,
+                                 .pausePending = pauseAtSentenceEndRequested_,
                              },
                              settings, battery);
     }
@@ -754,6 +748,9 @@ namespace screens {
     }
 
     bool ReaderScreen::previousSentenceTapped(uint16_t x, uint16_t y) const {
+        // The modern horizontal chrome has an explicit rewind control; its
+        // word canvas must not retain the old invisible edge-wide hit target.
+        if (width_ == 640 && height_ == 172 && session.metadata.writingMode != WritingMode::verticalRl) return false;
         if (session.metadata.writingMode == WritingMode::verticalRl) {
             const ui::Rect previous =
                 ui::rotateClockwise(portraitPreviousRect(height_, width_, settings_.leftHanded), height_);
@@ -915,9 +912,10 @@ namespace screens {
         if (pagePreview_) {
             lastTapValid_ = false;
             pagePreview_ = false;
+        pageBrowsing_ = false;
             return;
         }
-        const bool footerTapped =
+        const bool footerTapped = (!ui.modernReadingPalette() || session.metadata.writingMode == WritingMode::verticalRl) && (
             session.metadata.writingMode == WritingMode::verticalRl
                 ? ui::contains(ui::rotateClockwise(portraitFooterRect(height_), height_), touch.x, touch.y)
                 : [&] {
@@ -925,7 +923,7 @@ namespace screens {
                       return touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, height_ - 40))
                           && (settings_.leftHanded ? touch.x <= width
                                                    : touch.x >= static_cast<uint16_t>(width_ - width));
-                  }();
+                  }());
         if (footerTapped) {
             settings_.footerMetric = settings::cycleEnum(settings_.footerMetric);
             settingsStore.acceptChanges();
@@ -945,6 +943,7 @@ namespace screens {
     }
 
     void ReaderScreen::toggle(Preferences& preferences, uint32_t nowMs) {
+        if (pageBrowsing_) return;
         if (session.playing)
             requestPause(preferences, nowMs);
         else
@@ -955,6 +954,7 @@ namespace screens {
         if (wpmFeedbackUntilMs_ > 0 && nowMs >= wpmFeedbackUntilMs_) {
             wpmFeedbackUntilMs_ = 0;
         }
+        prepareChunk();
         if (shouldFinishPause(nowMs)) {
             finishPause(preferences, nowMs);
             return;
@@ -977,9 +977,11 @@ namespace screens {
 
     void ReaderScreen::start(uint32_t nowMs, bool locked) {
         pagePreview_ = false;
+        pageBrowsing_ = false;
         playLocked_ = locked;
         pauseAtSentenceEndRequested_ = false;
         wpmFeedbackUntilMs_ = 0;
+        prepareChunk();
         ReadingLoop::start(session, nowMs);
     }
 
@@ -992,6 +994,7 @@ namespace screens {
             return;
         }
         pauseAtSentenceEndRequested_ = true;
+        prepareChunk();
         if (shouldFinishPause(nowMs)) {
             finishPause(preferences, nowMs);
         }
@@ -1106,28 +1109,6 @@ namespace screens {
         return result;
     }
 
-    int ReaderScreen::focusOffset(std::string_view word) const {
-        std::array<size_t, 5> offsets{};
-        int characters = 0;
-        size_t offset = 0;
-        std::string_view remaining = word;
-        while (!remaining.empty()) {
-            const size_t bytes = remaining.size();
-            uint32_t codepoint = 0;
-            Utf8Text::next(remaining, codepoint);
-            if (UnicodeText::isWordCharacter(codepoint)) {
-                if (characters < static_cast<int>(offsets.size()))
-                    offsets[characters] = offset;
-                ++characters;
-            }
-            offset += bytes - remaining.size();
-        }
-        if (characters == 0)
-            return word.empty() ? -1 : 0;
-        const int target = std::min(focusOrdinal(characters), characters - 1);
-        return static_cast<int>(offsets[target]);
-    }
-
     int16_t ReaderScreen::wordAdvance(std::span<const BidiText::Codepoint> word) const {
         int16_t advance = 0;
         uint32_t previous = 0;
@@ -1167,7 +1148,7 @@ namespace screens {
         phantom.shaped = face_.shaper != nullptr;
         int32_t width = 0;
         if (phantom.shaped) {
-            const std::string_view locale = session.metadata.localeAt(session.state.wordIndex);
+            const std::string_view locale = session.localeAt(session.state.wordIndex);
             for (const BidiText::Run& run: phantomLine_) {
                 const auto result =
                     face_.shaper->shape(value, run.offset, run.length, run.rightToLeft, locale, text_, phantom.glyphs);
@@ -1225,66 +1206,6 @@ namespace screens {
         }
     }
 
-    void ReaderScreen::drawWord(std::string_view word, int16_t x, int16_t baseline, int16_t centerY, int focus,
-                                bool vertical, ui::Context& ui) {
-        size_t offset = 0;
-        while (!word.empty()) {
-            const size_t bytes = word.size();
-            uint32_t codepoint = 0;
-            Utf8Text::next(word, codepoint);
-            text_.setTextColor(typography_.focusHighlight && focus >= 0 && offset == static_cast<size_t>(focus)
-                                   ? ui.color(ui::themes::ColorRole::Accent)
-                                   : ui.color(ui::themes::ColorRole::Foreground),
-                               ui.color(ui::themes::ColorRole::Background));
-            x = static_cast<int16_t>(x
-                                     + (vertical ? text_.drawVerticalCodepoint(codepoint, x, centerY)
-                                                 : text_.drawCodepoint(codepoint, x, baseline))
-                                     + typography_.tracking);
-            offset += bytes - word.size();
-        }
-    }
-
-    void ReaderScreen::drawWord(std::span<const BidiText::Codepoint> word, int16_t x, int16_t baseline,
-                                size_t wordOffset, int16_t centerY, int focus, bool vertical, ui::Context& ui) {
-        uint32_t previous = 0;
-        bool previousValid = false;
-        for (size_t index = 0; index < word.size(); ++index) {
-            const BidiText::Codepoint& codepoint = word[index];
-            if (previousValid && !codepoint.rightToLeft)
-                x = static_cast<int16_t>(x + text_.kerningAdjust(previous, codepoint.value));
-            text_.setTextColor(typography_.focusHighlight && focus >= 0
-                                       && codepoint.offset == wordOffset + static_cast<size_t>(focus)
-                                   ? ui.color(ui::themes::ColorRole::Accent)
-                                   : ui.color(ui::themes::ColorRole::Foreground),
-                               ui.color(ui::themes::ColorRole::Background));
-            x = static_cast<int16_t>(x
-                                     + (vertical ? text_.drawVerticalCodepoint(codepoint.value, x, centerY)
-                                                 : text_.drawCodepoint(codepoint.value, x, baseline))
-                                     + (index + 1 < word.size() ? typography_.tracking : 0));
-            previous = codepoint.value;
-            previousValid = true;
-        }
-    }
-
-    void ReaderScreen::drawGuides(ui::Context& ui, Arduino_GFX& gfx, int16_t anchor, int16_t baseline) {
-        const int16_t inkTop = face_.raster.get().wordInkTop;
-        const int16_t inkBottom = face_.raster.get().wordInkBottom;
-        const int16_t guideTop = static_cast<int16_t>(baseline + inkTop - 6);
-        const int16_t guideBottom = static_cast<int16_t>(baseline + inkBottom + 6);
-        const uint16_t guide = ui.blend(ui::themes::ColorRole::Foreground, 96);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideTop,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideTop,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor - typography_.guideWidth), guideBottom,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        gfx.drawFastHLine(static_cast<int16_t>(anchor + typography_.guideGap), guideBottom,
-                          static_cast<int16_t>(typography_.guideWidth - typography_.guideGap), guide);
-        const uint16_t marker = typography_.focusHighlight ? ui.color(ui::themes::ColorRole::Accent) : guide;
-        gfx.drawFastVLine(anchor, guideTop, 5, marker);
-        gfx.drawFastVLine(anchor, static_cast<int16_t>(guideBottom - 4), 5, marker);
-    }
-
     uint32_t ReaderScreen::frameSignature(std::string_view word, bool overlayVisible, bool cjkPacing,
                                           const settings::ReadingSettings& settings) const {
         uint32_t value = ui::Context::signature(word);
@@ -1292,11 +1213,12 @@ namespace screens {
         value = ui::Context::combine(value, overlayVisible);
         value = ui::Context::combine(value, cjkPacing);
         value = ui::Context::combine(value, settings.wpm);
+        value = ui::Context::combine(value, static_cast<uint8_t>(settings.mode));
         value = ui::Context::combine(value, settings.phantomWords);
         value = ui::Context::combine(value, static_cast<uint8_t>(typography_.tracking));
         value = ui::Context::combine(value, typography_.anchor);
-        value = ui::Context::combine(value, typography_.guideWidth);
-        value = ui::Context::combine(value, typography_.guideGap);
+        value = ui::Context::combine(value, typography_.guideSize);
+        value = ui::Context::combine(value, typography_.guideTextGap);
         value = ui::Context::combine(value, typography_.focusHighlight);
         value = ui::Context::combine(value, settings.leftHanded);
         value = ui::Context::combine(value, settings::visible(settings.arrowsVisibility, session.playing));

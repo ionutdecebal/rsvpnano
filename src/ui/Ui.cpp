@@ -8,6 +8,9 @@
 #endif
 
 #include "fonts/UiFont6x9.h"
+#include "ui/SansFont.h"
+#include "ui/Modern.h"
+#include "ui/ClippedGfx.h"
 #include "text/UnicodeText.h"
 #include "text/Utf8Text.h"
 
@@ -21,6 +24,55 @@ namespace ui {
         constexpr uint8_t kUiFontHeight = 9;
         constexpr uint32_t kBuiltInUiScripts = UnicodeText::ScriptLatin | UnicodeText::ScriptCyrillic;
         constexpr uint8_t kTapCancelOutsideSamples = 2;
+
+        void appendSans(TextLayout& layout, Rect rect, std::string_view text, uint8_t requested,
+                        TextAlign align, uint8_t maxLines) {
+            const sans::Font& font = sans::font(requested);
+            const int count = std::min<int>(std::max<int>(1, maxLines), rect.h / font.height);
+            if (count <= 0) return;
+            std::vector<std::string> lines;
+            for (int index=0; index<count && !text.empty(); ++index) {
+                if (text.front() == '\n') {
+                    text.remove_prefix(1);
+                    lines.emplace_back();
+                    continue;
+                }
+                size_t end=0, space=std::string_view::npos;
+                bool hardBreak = false;
+                auto rest=text;
+                uint32_t cp;
+                while (Utf8Text::next(rest,cp)) {
+                    const size_t next=text.size()-rest.size();
+                    if (cp == '\n') { hardBreak = true; break; }
+                    if (sans::width(text.substr(0,next),font)>rect.w) break;
+                    end=next;
+                    if (cp==' ') space=end;
+                }
+                if (!hardBreak && end<text.size() && index+1<count && space!=std::string_view::npos) end=space;
+                if (end==0) break;
+                std::string line{text.substr(0,end)};
+                text.remove_prefix(end);
+                while (!text.empty() && text.front()==' ') text.remove_prefix(1);
+                if (!text.empty() && text.front()=='\n') text.remove_prefix(1);
+                while (!line.empty() && line.back()==' ') line.pop_back();
+                if (index+1==count && !text.empty()) {
+                    while (!line.empty() && sans::width(line+"...",font)>rect.w)
+                        line.resize(Utf8Text::lastCodepointStart(line));
+                    if (sans::width("...",font)<=rect.w) line+="...";
+                }
+                lines.push_back(std::move(line));
+            }
+            int y=rect.y+(rect.h-static_cast<int>(lines.size())*font.height)/2;
+            for (auto& line:lines) {
+                const int w=sans::width(line,font);
+                const int x=align==TextAlign::Center?rect.x+(rect.w-w)/2
+                           :align==TextAlign::Right?rect.x+rect.w-w:rect.x;
+                layout.lines.push_back({std::move(line), nullptr, 1, static_cast<int16_t>(x),
+                                        static_cast<int16_t>(y+font.ascent),
+                                        {rect.x,static_cast<int16_t>(y),rect.w,font.height},font.size});
+                y+=font.height;
+            }
+        }
 
         class PortraitGfx final : public Arduino_GFX {
         public:
@@ -154,6 +206,9 @@ namespace ui {
 
     int16_t Context::textWidthFor(std::string_view text, uint8_t size, std::string_view textLocale) const {
         const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        if ((modernPresentation_ || modernReadingPalette_) && assets == nullptr && sans::supports(text))
+            return static_cast<int16_t>(std::min(32767, sans::width(text, sans::font(size >= 10 ? size : size >= 3 ? 26 : size >= 2 ? 17 : 13))));
+        if (size >= 10) size = std::max<uint8_t>(1, size / 9);
         const uint8_t cellWidth = assets == nullptr ? kUiFontCellWidth : locales::uiFontCellWidth(assets->font);
         const int32_t width = static_cast<int32_t>(Utf8Text::count(text)) * cellWidth * std::max<uint8_t>(1, size);
         return static_cast<int16_t>(std::min<int32_t>(width, INT16_MAX));
@@ -161,6 +216,9 @@ namespace ui {
 
     int16_t Context::textHeightFor(std::string_view text, uint8_t size, std::string_view textLocale) const {
         const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
+        if ((modernPresentation_ || modernReadingPalette_) && assets == nullptr && sans::supports(text))
+            return sans::font(size >= 10 ? size : size >= 3 ? 26 : size >= 2 ? 17 : 13).height;
+        if (size >= 10) size = std::max<uint8_t>(1, size / 9);
         const uint8_t height = assets == nullptr ? kUiFontHeight : locales::uiFontHeight(assets->font);
         return static_cast<int16_t>(height * std::max<uint8_t>(1, size));
     }
@@ -227,6 +285,7 @@ namespace ui {
         case TouchSampleResult::None:
             return false;
         case TouchSampleResult::Reset:
+            touchSuppressed_ = false;
             if (!touchActive_) {
                 resetTouchGesture();
                 return false;
@@ -235,10 +294,15 @@ namespace ui {
             touchHoldEmitted_ = false;
             touchOutsideSamples_ = 0;
             touchStartedAtMs_ = 0;
-            touchEvent_ = {TouchRelease, touchLastX_, touchLastY_};
+            touchEvent_ = {TouchRelease | TouchCancel, touchLastX_, touchLastY_};
             return touchPending_ = true;
         case TouchSampleResult::Contact:
             break;
+        }
+
+        if (touchSuppressed_) {
+            if (!contact.touched) touchSuppressed_ = false;
+            return false;
         }
 
         const uint32_t sampledAtMs = contact.sampledAtMs == 0 ? nowMs : contact.sampledAtMs;
@@ -246,11 +310,17 @@ namespace ui {
         return updateTouch(contact, sampledAtMs);
     }
 
-    void Context::beginFrame(uint8_t screen) {
+    void Context::cancelTouchUntilRelease() {
+        touchSuppressed_ = touchSuppressed_ || touchActive_;
+        resetTouchGesture();
+    }
+
+    void Context::beginFrame(uint8_t screen, uint8_t surface) {
         nextSlot_ = 0;
         drew_ = false;
-        if (screen_ != screen) {
+        if (screen_ != screen || surface_ != surface) {
             screen_ = screen;
+            surface_ = surface;
             gridPage_ = 0;
             rotaryDragging_ = false;
             contentFonts_.clear();
@@ -364,10 +434,10 @@ namespace ui {
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+                if (!modernPresentation_) output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
                 drawText(output, labelText, color(layout == SettingLayout::Inline ? themes::Foreground : themes::Muted),
-                         rect.x, rect.y);
-                drawText(output, valueText, color(themes::Accent), rect.x, rect.y);
+                         rect.x, rect.y, surface);
+                drawText(output, valueText, color(themes::Accent), rect.x, rect.y, surface);
             });
         }
         return tapped(slot, rect);
@@ -385,7 +455,7 @@ namespace ui {
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
+                if (!modernPresentation_) output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5, color(ui::themes::ColorRole::Outline));
                 const int16_t switchX = static_cast<int16_t>(rect.x + rect.w - switchWidth - 7);
                 const int16_t switchY = static_cast<int16_t>(rect.y + (rect.h - 16) / 2);
                 output.fillRoundRect(switchX, switchY, switchWidth, 16, 8,
@@ -393,7 +463,7 @@ namespace ui {
                                                    : ui::themes::ColorRole::ProgressTrack));
                 output.fillCircle(static_cast<int16_t>(switchX + (enabled ? switchWidth - 8 : 8)),
                                   static_cast<int16_t>(switchY + 8), 6, color(ui::themes::ColorRole::Foreground));
-                drawText(output, labelText, color(themes::Foreground), rect.x, rect.y);
+                drawText(output, labelText, color(themes::Foreground), rect.x, rect.y, surface);
             });
         }
         if (!tapped(slot, rect))
@@ -445,14 +515,14 @@ namespace ui {
             paint(rect, [&](Arduino_GFX& output, Rect rect) {
                 const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                 output.fillRoundRect(rect.x, rect.y, rect.w, rect.h, 5, surface);
-                output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5,
+                if (!modernPresentation_) output.drawRoundRect(rect.x, rect.y, rect.w, rect.h, 5,
                                      color(enabled ? ui::themes::ColorRole::Outline
                                                    : ui::themes::ColorRole::ProgressTrack));
-                if (enabled && rect.w > 16 && rect.h >= 28)
+                if (!modernPresentation_ && enabled && rect.w > 16 && rect.h >= 28)
                     output.fillRect(static_cast<int16_t>(rect.x + 8), static_cast<int16_t>(rect.y + rect.h - 3),
                                     static_cast<int16_t>(rect.w - 16), 2, color(ui::themes::ColorRole::Accent));
-                drawText(output, title, color(enabled ? themes::Foreground : themes::Muted), rect.x, rect.y);
-                drawText(output, detail, color(themes::Muted), rect.x, rect.y);
+                drawText(output, title, color(enabled ? themes::Foreground : themes::Muted), rect.x, rect.y, surface);
+                drawText(output, detail, color(themes::Muted), rect.x, rect.y, surface);
                 if (icon != Icon::None)
                     drawIcon(output, {static_cast<int16_t>(rect.x + rect.w - iconWidth), rect.y, iconWidth, rect.h},
                              icon, color(enabled ? ui::themes::ColorRole::Accent : ui::themes::ColorRole::Muted),
@@ -558,6 +628,11 @@ namespace ui {
         }
         paint(rect, [&](Arduino_GFX& output, Rect rect) {
             output.fillRect(rect.x, rect.y, rect.w, rect.h, color(ui::themes::ColorRole::ProgressTrack));
+            if (modernPresentation_ && maximum > minimum) {
+                const int16_t fill = static_cast<int16_t>(static_cast<int32_t>(rect.w) * (value - minimum) / (maximum - minimum));
+                output.fillRect(rect.x, rect.y, fill, rect.h, color(themes::Accent));
+                return;
+            }
             if (maximum > minimum && rect.w > 2 && rect.h > 2) {
                 const int16_t fill =
                     static_cast<int16_t>((static_cast<int32_t>(rect.w - 2) * (value - minimum)) / (maximum - minimum));
@@ -599,8 +674,105 @@ namespace ui {
         });
     }
 
+    bool Context::verticalSlider(Rect rect, int& value, int minimum, int maximum) {
+        return filledSliderValue(rect, {}, value, minimum, maximum, 1, "%", themes::AccentBar, true);
+    }
+
+    bool Context::filledSliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum,
+                                    int step, std::string_view suffix, themes::ColorRole activeRole, bool vertical) {
+        rect = paintBounds(rect);
+        if (rect.w < 2 || rect.h < 2 || maximum <= minimum) return false;
+        const size_t slot = nextSlot_;
+        const Touch* event = touch();
+        const auto pointerValue = [&] {
+            if (!vertical) return valueAt(rect, event->x, minimum, maximum, step);
+            const int offset = std::clamp<int>(rect.y + rect.h - 1 - event->y, 0, rect.h - 1);
+            return minimum + static_cast<int>((int64_t(offset) * (maximum - minimum) + (rect.h - 1) / 2) / (rect.h - 1));
+        };
+        if (event && hasTouch(*event, TouchStart) && contains(touchBounds(rect), event->x, event->y) && slot < kSlotCapacity) {
+            capturedSlot_ = slot;
+            capturedScalarInitialValue_ = std::clamp(value, minimum, maximum);
+            capturedScalarValue_ = capturedScalarInitialValue_;
+        }
+        int displayed = std::clamp(value, minimum, maximum);
+        bool changed = false;
+        if (capturedSlot_ == slot) {
+            if (event && hasTouch(*event, TouchCancel)) {
+                capturedSlot_ = kSlotCapacity; // A controller reset must not commit a preview value.
+            } else {
+                if (event) capturedScalarValue_ = pointerValue();
+                displayed = capturedScalarValue_;
+                const bool released = event && hasTouch(*event, TouchRelease);
+                // Brightness previews on hardware immediately. Other settings commit
+                // once on release, avoiding font reloads and persistence during a drag.
+                if (vertical || released) {
+                    changed = displayed != value;
+                    value = displayed;
+                }
+                if (released) capturedSlot_ = kSlotCapacity;
+            }
+        }
+        const bool pressed = capturedSlot_ == slot;
+        auto state = signature(suffix, signature(label));
+        for (const int part : {displayed, minimum, maximum, step, int(activeRole), int(vertical), int(pressed)})
+            state = combine(state, part);
+        if (claim(Kind::Slider, rect, state).changed) {
+            const int16_t inset = std::min<int16_t>(12, rect.w / 4);
+            const std::string valueText = std::to_string(displayed) + std::string{suffix};
+            TextLayout titleLayout, valueLayout;
+            if (vertical) {
+                valueLayout = prepareText({rect.x, static_cast<int16_t>(rect.y + rect.h - 32), rect.w, 22},
+                                          valueText, 14, TextAlign::Center);
+            } else {
+                const int16_t valueWidth = std::min<int16_t>(rect.w - inset * 2, textWidthFor(valueText, 14));
+                titleLayout = prepareText({static_cast<int16_t>(rect.x + inset), rect.y,
+                                           static_cast<int16_t>(std::max(0, rect.w - inset * 2 - valueWidth - 8)), rect.h},
+                                          label, 14);
+                valueLayout = prepareText({static_cast<int16_t>(rect.x + rect.w - inset - valueWidth), rect.y,
+                                           valueWidth, rect.h}, valueText, 14, TextAlign::Right);
+            }
+            const int16_t length = vertical ? rect.h : rect.w;
+            const int16_t amount = int64_t(length) * (displayed - minimum) / (maximum - minimum);
+            paint(rect, [&](Arduino_GFX& output, Rect target) {
+                const int16_t dx = target.x - rect.x, dy = target.y - rect.y;
+                const int16_t radius = std::min<int16_t>(vertical ? 9 : 6, std::min(target.w, target.h) / 2);
+                const Rect filled = vertical ? Rect{target.x, static_cast<int16_t>(target.y + target.h - amount), target.w, amount}
+                                             : Rect{target.x, target.y, amount, target.h};
+                const Rect empty = vertical ? Rect{target.x, target.y, target.w, static_cast<int16_t>(target.h - amount)}
+                                            : Rect{static_cast<int16_t>(target.x + amount), target.y, static_cast<int16_t>(target.w - amount), target.h};
+                output.fillRect(target.x, target.y, target.w, target.h, color(themes::Background));
+                output.fillRoundRect(target.x, target.y, target.w, target.h, radius, color(themes::SurfaceMuted));
+                const auto drawPart = [&](Rect clip, bool active) {
+                    if (clip.w <= 0 || clip.h <= 0) return;
+                    ClippedGfx viewport(output, clip);
+                    const auto fillRole = activeRole == themes::Accent ? themes::AccentBar : activeRole;
+                    const uint16_t background = color(active ? fillRole : themes::SurfaceMuted);
+                    const uint16_t ink = color(active ? themes::OnAccent : themes::Foreground);
+                    if (active) viewport.fillRoundRect(target.x, target.y, target.w, target.h, radius, background);
+                    drawText(viewport, titleLayout, ink, dx, dy, background);
+                    drawText(viewport, valueLayout, ink, dx, dy, background);
+                    if (vertical) {
+                        const int16_t x = target.x + target.w / 2, y = target.y + 29;
+                        viewport.drawCircle(x, y, 4, ink);
+                        viewport.drawFastHLine(x - 10, y, 4, ink); viewport.drawFastHLine(x + 7, y, 4, ink);
+                        viewport.drawFastVLine(x, y - 10, 4, ink); viewport.drawFastVLine(x, y + 7, 4, ink);
+                        for (const int directionX : {-1, 1}) for (const int directionY : {-1, 1})
+                            viewport.drawLine(x + directionX * 5, y + directionY * 5,
+                                              x + directionX * 7, y + directionY * 7, ink);
+                    }
+                };
+                drawPart(empty, false);
+                drawPart(filled, true);
+                if (pressed) output.drawRoundRect(target.x, target.y, target.w, target.h, radius, color(themes::Foreground));
+            });
+        }
+        return changed;
+    }
+
     bool Context::sliderValue(Rect rect, std::string_view label, int& value, int minimum, int maximum, int step,
                               std::string_view suffix, ui::themes::ColorRole activeRole) {
+        if (modernPresentation_)
+            return filledSliderValue(rect, label, value, minimum, maximum, step, suffix, activeRole, false);
         rect = paintBounds(rect);
         const size_t slot = nextSlot_;
         const Touch* event = touch();
@@ -695,10 +867,10 @@ namespace ui {
                 if (labeled) {
                     const uint16_t surface = color(ui::themes::ColorRole::SurfaceMuted);
                     output.fillRoundRect(visual.x, visual.y, visual.w, visual.h, 5, surface);
-                    output.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5,
+                    if (!modernPresentation_) output.drawRoundRect(visual.x, visual.y, visual.w, visual.h, 5,
                                          color(ui::themes::ColorRole::Outline));
-                    drawText(output, labelText, color(themes::Foreground), dx, dy);
-                    drawText(output, valueLayout, color(activeRole), dx, dy);
+                    drawText(output, labelText, color(themes::Foreground), dx, dy, surface);
+                    drawText(output, valueLayout, color(activeRole), dx, dy, surface);
                 }
                 output.fillRect(track.x, track.y, track.w, track.h, color(ui::themes::ColorRole::ProgressTrack));
                 const int16_t knobX =
@@ -1089,7 +1261,22 @@ namespace ui {
         if (theme_ == nullptr) {
             return role == ui::themes::ColorRole::Background ? kFallbackBlack : kFallbackWhite;
         }
+        // Restyle only the stock palette. Reading can use these colours without
+        // opting its RFont4 text/geometry into the proportional menu font.
+        if ((modernPresentation_ || modernReadingPalette_) && theme_->id == themes::kDefaultThemeId
+            && theme_->definition.colors == themes::ThemeColors{}) {
+            static const auto ink = modern::inkColors();
+            return themes::color(ink, role);
+        }
         return ui::themes::color(theme_->definition.colors, role);
+    }
+
+    uint16_t Context::readingFocusColor() const {
+        // The stock reading focus colour is presentation only. Preserve the
+        // established accent for custom themes and all other device layouts.
+        const bool ink = (modernPresentation_ || modernReadingPalette_) && theme_
+                      && theme_->id == themes::kDefaultThemeId && theme_->definition.colors == themes::ThemeColors{};
+        return color(ink ? themes::GuideFocus : themes::Accent);
     }
 
     uint16_t Context::blend(ui::themes::ColorRole role, uint8_t alpha) const {
@@ -1273,10 +1460,16 @@ namespace ui {
             return;
         const locales::UiAssets* assets = fontAssetsFor(text, textLocale);
         const bool externalFont = assets != nullptr;
+        if ((modernPresentation_ || modernReadingPalette_) && !externalFont && rect.h >= sans::font(11).height && sans::supports(text)) {
+            uint8_t size = textSize >= 10 ? textSize : textSize >= 3 ? 26 : textSize >= 2 ? 17 : 13;
+            if (rect.h < sans::font(size).height) size = rect.h >= sans::font(13).height ? 13 : 11;
+            appendSans(layout,rect,text,size,align,maxLines);
+            return;
+        }
         const uint8_t cellWidth = externalFont ? locales::uiFontCellWidth(assets->font) : kUiFontCellWidth;
         const uint8_t fontHeight = externalFont ? locales::uiFontHeight(assets->font) : kUiFontHeight;
         const size_t codepoints = Utf8Text::count(text);
-        uint8_t size = std::max<uint8_t>(1, textSize);
+        uint8_t size = std::max<uint8_t>(1, textSize >= 10 ? textSize / 9 : textSize);
         while (size > 1) {
             const size_t columns = static_cast<size_t>(rect.w) / (cellWidth * size);
             const size_t lines = columns == 0 ? SIZE_MAX : (codepoints + columns - 1) / columns;
@@ -1367,7 +1560,8 @@ namespace ui {
             appendLine(second, Utf8Text::count(second), static_cast<int16_t>(firstY + lineHeight));
     }
 
-    void Context::drawText(Arduino_GFX& output, const TextLayout& layout, uint16_t textColor, int16_t dx, int16_t dy) {
+    void Context::drawText(Arduino_GFX& output, const TextLayout& layout, uint16_t textColor, int16_t dx, int16_t dy,
+                           int32_t background) {
         if (layout.lines.empty())
             return;
         output.setUTF8Print(true);
@@ -1379,6 +1573,12 @@ namespace ui {
             const Rect visible = intersection(ink, {0, 0, output.width(), output.height()});
             if (line.ink.w > 0 && line.ink.h > 0 && (visible.w <= 0 || visible.h <= 0))
                 continue;
+            if (line.proportionalSize) {
+                sans::draw(output,line.text,sans::font(line.proportionalSize),line.x+dx,line.y+dy,textColor,
+                           background<0?color(themes::Background):static_cast<uint16_t>(background),
+                           ink.x,ink.y,ink.w,ink.h);
+                continue;
+            }
             output.setFont(line.font);
             output.setTextSize(line.size);
             output.setCursor(static_cast<int16_t>(line.x + dx), static_cast<int16_t>(line.y + dy));
@@ -1400,6 +1600,15 @@ namespace ui {
         return std::clamp(value, minimum, maximum);
     }
 
+    Rect Context::touchBounds(Rect rect) const {
+        // The last row owns its otherwise unused margin at the bezel. Keep
+        // interior gaps and neighbouring controls separate.
+        if (modernPresentation_ && width()==640 && height()==172 && rect.y>=44
+            && rect.y+rect.h>=height()-8 && rect.y+rect.h<=height())
+            rect.h=height()-rect.y;
+        return rect;
+    }
+
     bool Context::tapped(size_t slot, Rect rect, bool enabled) {
         if (!enabled) {
             if (capturedSlot_ == slot)
@@ -1409,7 +1618,7 @@ namespace ui {
         const Touch* event = touch();
         if (event == nullptr || slot >= kSlotCapacity)
             return false;
-        if (hasTouch(*event, TouchStart) && contains(rect, event->x, event->y))
+        if (hasTouch(*event, TouchStart) && contains(touchBounds(rect), event->x, event->y))
             capturedSlot_ = slot;
         if (!hasTouch(*event, TouchRelease) || capturedSlot_ != slot)
             return false;

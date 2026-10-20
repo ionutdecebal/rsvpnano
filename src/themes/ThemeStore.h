@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ui/Theme.h"
+#include "ui/Modern.h"
 
 class ThemeStore {
 public:
@@ -23,5 +24,5 @@ public:
     std::span<const ui::themes::Theme> themes() const;
 
 private:
-    std::vector<ui::themes::Theme> themes_{ui::themes::defaultTheme()};
+    std::vector<ui::themes::Theme> themes_{ui::themes::defaultTheme(), ui::modern::paperTheme()};
 };

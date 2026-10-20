@@ -21,6 +21,7 @@
 #include "focus/FocusSession.h"
 #include "focus/FocusTimers.h"
 #include "ui/Ui.h"
+#include "ui/Modern.h"
 #include "ui/Layouts.h"
 
 namespace screens {
@@ -51,6 +52,25 @@ namespace screens {
         Usb,
         Status,
         Standby,
+        ReadingHub,
+        DisplayHub,
+        Connections,
+        Help,
+        StorageHub,
+        PowerHub,
+        FocusPresets,
+        FindPlace,
+        FindChapters,
+        BookSearch,
+        BookSearchKeyboard,
+        QuickControls,
+        Onboarding,
+        ButtonMap,
+        AddBooks,
+        TouchCheck,
+        Dictionary,
+        DictionarySearch,
+        DictionaryHelp,
     };
 
     enum class Action : uint8_t {
@@ -65,6 +85,14 @@ namespace screens {
         EnableStorageEncryption,
         OtaCheck,
         OtaInstall,
+        FocusRead,
+        OpenPage,
+        ReplayIntroduction,
+        FinishIntroduction,
+        SkipIntroduction,
+        CheckOnboardingStorage,
+        OpenDictionary,
+        OnlineDictionary,
     };
 
     Action read(ui::Context& ui, std::string_view title, std::string_view author, uint8_t progress, Screen& screen);
@@ -144,8 +172,20 @@ namespace screens {
             return timers_;
         }
         void close();
+        bool manual() const { return manualActive_; }
+        bool active() const { return manualActive_; }
+        uint8_t frameSurface(Screen screen) const {
+            // Phase changes rearrange controls on the same screen. Rebuild its
+            // slots once, including cancelling a press on a disappearing button.
+            return screen == Screen::FocusSession && manualActive_ ? static_cast<uint8_t>(session_.phase()) + 1 : 0;
+        }
+        bool breakVisible() const { return manualActive_ && session_.phase() != focus::Phase::Focus
+                                                    && session_.phase() != focus::Phase::PausedFocus; }
+        std::string badge(uint32_t nowMs) const;
+
 
     private:
+        Action drawModern(ui::Context& ui, uint32_t nowMs, Screen& screen);
         Action drawTimers(ui::Context& ui, Screen& screen);
         void drawEditor(ui::Context& ui, Screen& screen);
         void drawNameEditor(ui::Context& ui, Screen& screen);
@@ -156,6 +196,11 @@ namespace screens {
         fs::FS* filesystem_ = nullptr;
         focus::Timers timers_;
         focus::Timer draft_;
+        focus::Timer activeTimer_;
+        bool manualActive_ = false;
+        bool readWithFocus_ = false;
+        size_t presetPage_ = 0;
+        ui::modern::ListSwipe presetSwipe_;
         focus::Session session_;
         focus::OrientationReader orientation_;
         ui::KeyboardState keyboard_;
@@ -163,10 +208,13 @@ namespace screens {
         size_t activeIndex_ = 0;
         bool creating_ = false;
         bool deleteConfirm_ = false;
+        bool exitConfirm_ = false;
         bool writable_ = false;
         size_t selectedIndex_ = 0;
         ui::CarouselGesture carouselGesture_;
     };
+    void rememberStatus(std::string_view title, std::string_view line1, std::string_view line2, int progress);
+    void animateStatus(ui::Context& ui, uint32_t nowMs);
     void status(ui::Context& ui, std::string_view title, std::string_view line1 = {}, std::string_view line2 = {},
                 int progress = -1);
 

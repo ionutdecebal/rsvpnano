@@ -1,3 +1,4 @@
+#include "ui/Modern.h"
 #include "ui/Ui.h"
 
 #include <algorithm>
@@ -23,6 +24,56 @@ namespace ui {
 
     KeyboardAction Context::keyboard(Rect rect, std::string& value, size_t maxLength, KeyboardState& state,
                                      std::string_view label, bool masked) {
+        if (modernPresentation() && width() == 640 && height() == 172) {
+            using ui::modern::Style;
+            const auto key = [&](Rect area, std::string_view title, Style style = Style::Secondary) {
+                return ui::modern::button(*this, area, title, style, true, {}, 15);
+            };
+            std::string shown = masked && !state.passwordVisible ? std::string(value.size(), '*') : value;
+            this->label({8, 0, int16_t(masked ? 388 : 462), 36}, shown.empty() ? label : Utf8Text::suffix(shown, masked ? 34 : 48), 15,
+                        shown.empty() ? themes::Muted : themes::Foreground);
+            if (masked && key({398,0,72,36}, text(state.passwordVisible ? UiText::Hide : UiText::Show), Style::Plain))
+                state.passwordVisible = !state.passwordVisible;
+            if (key({478, 0, 52, 36}, "ABC", state.mode == KeyboardMode::Letters ? Style::Accent : Style::Plain)) state.mode = KeyboardMode::Letters;
+            if (key({532, 0, 52, 36}, "123", state.mode == KeyboardMode::Numbers ? Style::Accent : Style::Plain)) state.mode = KeyboardMode::Numbers;
+            if (key({586, 0, 52, 36}, "#+=", state.mode == KeyboardMode::Symbols ? Style::Accent : Style::Plain)) state.mode = KeyboardMode::Symbols;
+            const auto append = [&](std::string_view letter) {
+                if (value.size()+letter.size()>maxLength) return;
+                if (state.shifted && letter.size()==1 && letter[0]>='a' && letter[0]<='z') value+=char(letter[0]-'a'+'A');
+                else value+=letter;
+                state.shifted=false;
+            };
+            for (int row=0;row<3;++row) for(int column=0;column<10;++column) {
+                std::string_view letter;
+                bool erase=false,shift=false;
+                if (state.mode==KeyboardMode::Letters) {
+                    if (row==0) letter=kTopLetters[column];
+                    else if(row==1) { if(column<9) letter=kMiddleLetters[column]; else {letter="⌫";erase=true;} }
+                    else if(column==0) {letter="↑";shift=true;}
+                    else if(column<8) letter=kBottomLetters[column-1];
+                    else letter=column==8?",":".";
+                } else if (state.mode==KeyboardMode::Numbers) {
+                    if(row==0) letter=kNumbers[column];
+                    else if(row==1) { if(column<9)letter=kNumberSymbols[column];else {letter="⌫";erase=true;} }
+                    else letter=kNumberExtras[column];
+                } else {
+                    if(row==0)letter=kTopSymbols[column];
+                    else if(row==1) { if(column<9)letter=kMiddleSymbols[column];else {letter="⌫";erase=true;} }
+                    else letter=kBottomSymbols[column];
+                }
+                std::string shownKey{letter};
+                if(state.shifted && shownKey.size()==1 && shownKey[0]>='a'&&shownKey[0]<='z') shownKey[0]-=('a'-'A');
+                if(key({int16_t(2+column*56),int16_t(38+row*45),54,44},shownKey,shift && state.shifted ? Style::Accent : Style::Secondary)) {
+                    if(erase) { if(!value.empty()) value.erase(Utf8Text::lastCodepointStart(value)); }
+                    else if(shift) state.shifted=!state.shifted;
+                    else append(letter);
+                }
+            }
+            if(key({566,38,72,44},"Space")) append(" ");
+            if(key({566,83,72,44},"Cancel",Style::Plain)) return KeyboardAction::Cancel;
+            if(key({566,128,72,44},masked?"Done":label=="Find in book"?"Search":"Done",Style::Primary)) return KeyboardAction::Submit;
+            return KeyboardAction::None;
+        }
         constexpr int16_t gap = 1;
         const int16_t inputHeight = std::min<int16_t>(36, std::max<int16_t>(32, rect.h / 5));
         const int16_t rowHeight = std::max<int16_t>(1, static_cast<int16_t>((rect.h - inputHeight - gap * 4) / 4));

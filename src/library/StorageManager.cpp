@@ -36,6 +36,11 @@ void StorageManager::setStatusCallback(StatusCallback callback, void* context) {
     statusContext_ = callback == nullptr ? nullptr : context;
 }
 
+bool StorageManager::mountForCheck() {
+    if (mounted_) return true;
+    return SdCard::mount(mounted_);
+}
+
 bool StorageManager::begin() {
     mounted_ = false;
     clearBookCache();
@@ -104,6 +109,7 @@ std::expected<void, std::error_code> StorageManager::removeBook(std::string_view
     Board::Storage::filesystem().remove(StoragePaths::indexedDataPathFor(path).c_str());
     Board::Storage::filesystem().remove(StoragePaths::bookStatePathFor(path).c_str());
     library_.erase(library_.begin() + index);
+    ++bookRevision_;
     return {};
 }
 
@@ -148,6 +154,8 @@ bool StorageManager::loadIndexedBook(size_t index, IndexedBookStore& store, Book
 
     request.statusCallback = statusCallback_;
     request.statusContext = statusContext_;
+    // Loading/conversion may rebuild the list, even on a failed open.
+    ++bookRevision_;
     if (!IndexedBook::load(index, library_, store, metadata, request))
         return false;
     return true;
@@ -163,10 +171,12 @@ void StorageManager::refreshBookPaths(bool includeMetadata) {
     statusCallback_(statusContext_, "SD", "Reading library", includeMetadata ? "Reading metadata" : "Finding books",
                     96);
     BookLibrary::refresh(library_, includeMetadata, RSVP_ON_DEVICE_DOCUMENT_CONVERSION);
+    ++bookRevision_;
     ESP_LOGI("storage", "library scan ready books=%u metadata=%u", static_cast<unsigned>(library_.size()),
              includeMetadata ? 1U : 0U);
 }
 
 void StorageManager::clearBookCache() {
     library_.clear();
+    ++bookRevision_;
 }

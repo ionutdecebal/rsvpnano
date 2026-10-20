@@ -24,6 +24,7 @@ namespace ui {
         TouchRelease = 1U << 2,
         TouchTap = 1U << 3,
         TouchHold = 1U << 4,
+        TouchCancel = 1U << 5,
     };
 
     struct Touch {

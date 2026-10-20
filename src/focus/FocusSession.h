@@ -26,6 +26,9 @@ namespace focus {
     class Session {
     public:
         void begin(const Timer& timer);
+        void beginManual(const Timer& timer, uint32_t nowMs);
+        void resume(uint32_t nowMs);
+        void pause(uint32_t nowMs);
         void update(uint32_t nowMs, Orientation orientation);
         void stop();
 
@@ -60,6 +63,7 @@ namespace focus {
         uint8_t rounds_ = 0;
         bool targetPresentAtWaitStart_ = false;
         bool completionCuePending_ = false;
+        bool manual_ = false;
     };
 
 } // namespace focus

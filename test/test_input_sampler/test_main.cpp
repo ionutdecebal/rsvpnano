@@ -69,7 +69,8 @@ namespace Board::Input {
             pending = true;
             return false;
         }
-        contact.touched = scenario == Scenario::hold && reads.size() <= 2;
+        // The LCD driver replaces the contact aggregate, including its timestamp.
+        contact = {scenario == Scenario::hold && reads.size() <= 2, 12, 34};
         return true;
     }
 } // namespace Board::Input
@@ -126,10 +127,13 @@ void test_active_contact_keeps_sampling_and_confirms_release() {
     ui::TouchContact contact;
     TEST_ASSERT_EQUAL(ui::TouchSampleResult::Contact, Input::pollTouch(contact));
     TEST_ASSERT_TRUE(contact.touched);
+    TEST_ASSERT_EQUAL_UINT32(3, contact.sampledAtMs);
     TEST_ASSERT_EQUAL(ui::TouchSampleResult::Contact, Input::pollTouch(contact));
     TEST_ASSERT_TRUE(contact.touched);
+    TEST_ASSERT_EQUAL_UINT32(23, contact.sampledAtMs);
     TEST_ASSERT_EQUAL(ui::TouchSampleResult::Contact, Input::pollTouch(contact));
     TEST_ASSERT_FALSE(contact.touched);
+    TEST_ASSERT_EQUAL_UINT32(63, contact.sampledAtMs);
     TEST_ASSERT_EQUAL(ui::TouchSampleResult::None, Input::pollTouch(contact));
 }
 

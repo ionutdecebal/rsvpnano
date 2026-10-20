@@ -244,8 +244,10 @@ namespace Input {
                     if (gTouchActive || Board::Input::touchReady()) {
                         nextTouchMs = nowMs + packetIntervalMs;
                         TouchSample sample;
-                        sample.contact.sampledAtMs = nowMs;
                         if (Board::Input::readTouch(sample.contact)) {
+                            // Board drivers may replace the whole contact. Stamp it
+                            // afterwards so queued taps retain acquisition timing.
+                            sample.contact.sampledAtMs = nowMs;
                             if (gTouchReadFailureLogged)
                                 ESP_LOGI("input", "touch packet reads recovered");
                             gTouchReadFailureLogged = false;

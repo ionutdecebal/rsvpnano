@@ -47,12 +47,54 @@ namespace screens {
         bool previousSentenceTapped(uint16_t x, uint16_t y) const;
         void handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
                          settings::SettingsStore& settingsStore);
+        bool handleModernControls(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
+                                  settings::SettingsStore& settingsStore, Screen& screen);
+        void cancelModernControls() { modernControl_ = 0; modernCanvasTouch_ = false; modernHolding_ = false; }
         void toggle(Preferences& preferences, uint32_t nowMs);
         void update(Preferences& preferences, uint32_t nowMs);
+        void pauseImmediately(Preferences& preferences, uint32_t nowMs) { finishPause(preferences, nowMs); }
+        void resumeNow(uint32_t nowMs) { pageBrowsing_ = false; start(nowMs, true); }
+        void openPage();
+        void drawPage(ui::Context& ui);
+        void openLocator(Screen& screen);
+        void drawLocator(ui::Context& ui, Screen& screen, Preferences& preferences, uint32_t nowMs);
+        bool pageBrowsing() const { return pageBrowsing_; }
+
+
 
     private:
+        bool handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, settings::SettingsStore& store, Screen& screen);
+        void commitPlace(size_t index, Preferences& preferences, uint32_t nowMs);
+        std::string placeExcerpt(size_t index, size_t maxWords = 32) const;
+        bool pageBrowsing_ = false;
+        PageReader::BrowseState browse_;
+        size_t pageSelected_ = 0;
+        size_t returnWord_ = SIZE_MAX;
+        size_t candidate_ = 0;
+        size_t locatorOrigin_ = 0;
+        size_t findChapterPage_ = 0;
+        ui::modern::ListSwipe locatorSwipe_;
+        int pageTouchControl_ = 0;
+        int16_t pageTouchY_ = 0;
+        bool pageDragged_ = false;
+        std::string searchQuery_, searchDraft_;
+        ui::KeyboardState searchKeyboard_;
+        std::vector<size_t> searchResults_;
+        size_t searchCursor_ = 0, searchPage_ = 0;
+        bool searchRunning_ = false;
+        void updateSearch();
+        void prepareChunk();
+        void drawChunk(ui::Context& ui, ui::Rect area);
+        std::string chunkText_;
+        bool chunkLayoutReady_ = false;
+        uint32_t chunkRevision_ = 0;
+        bool modernAppearance(ui::Context& ui, Screen& screen);
         int focusOffset(std::string_view word) const;
-        void drawGuides(ui::Context& ui, Arduino_GFX& output, int16_t anchor, int16_t baseline);
+        int16_t wordAnchorOffset(std::string_view word, std::span<const ui::fonts::PositionedGlyph> glyphs = {}) const;
+        bool focusHighlightEnabled() const {
+            return settings_.mode != settings::ReadingMode::chunks && typography_.focusHighlight;
+        }
+        void drawGuides(ui::Context& ui, Arduino_GFX& output, int16_t anchor, int16_t baseline, ui::Rect bounds);
         int16_t wordAdvance(std::span<const BidiText::Codepoint> word) const;
         struct Phantom {
             std::vector<BidiText::Codepoint> visual;
@@ -115,6 +157,13 @@ namespace screens {
         settings::TypographySettings typography_;
         uint16_t background_ = 0;
         bool touching_ = false;
+        uint8_t modernControl_ = 0;
+        bool modernCanvasTouch_ = false;
+        bool modernHolding_ = false;
+        uint16_t modernTouchX_ = 0, modernTouchY_ = 0;
+        bool modernTouchMoved_ = false;
+        bool modernPressedPlaying_ = false;
+        uint32_t modernPressedAtMs_ = 0;
         uint8_t appearancePage_ = 0;
         uint8_t appearanceDialPage_ = 0;
         uint16_t touchStartX_ = 0;

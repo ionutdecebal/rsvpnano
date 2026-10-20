@@ -1,3 +1,4 @@
+#include "reader/ContextChunks.h"
 #include <unity.h>
 #include <vector>
 
@@ -498,8 +499,82 @@ void test_word_at_returns_correct_word(void) {
 // Main
 // ---------------------------------------------------------------------------
 
+void test_context_chunks_keep_phrases_boundaries_and_all_tokens() {
+    const std::vector<std::string> words{"She","opened","the","blue","door","and","stepped","outside."};
+    const auto fit=[](std::string_view text){return text.size()<=30;};
+    TEST_ASSERT_EQUAL(2,ContextChunks::count(words,fit));
+    TEST_ASSERT_EQUAL(3,ContextChunks::count(std::span{words}.subspan(2),fit));
+    size_t at=0;
+    while(at<words.size()) {
+        const auto count=ContextChunks::count(std::span{words}.subspan(at),fit);
+        TEST_ASSERT_TRUE(count>=1&&count<=3&&at+count<=words.size());
+        std::string phrase;
+        for(size_t i=0;i<count;++i) { if(i) {TEST_ASSERT_FALSE(ContextChunks::boundary(words[at+i-1]));phrase+=' ';} phrase+=words[at+i]; }
+        TEST_ASSERT_TRUE(count==1||fit(phrase));at+=count;
+    }
+    TEST_ASSERT_EQUAL(words.size(),at);
+    TEST_ASSERT_TRUE(ContextChunks::boundary("outside.\""));
+    TEST_ASSERT_FALSE(ContextChunks::boundary("Dr."));
+    TEST_ASSERT_FALSE(ContextChunks::englishToken("日本語"));
+    TEST_ASSERT_FALSE(ContextChunks::englishToken("שלום"));
+    TEST_ASSERT_EQUAL(1,ContextChunks::count(words,[](std::string_view){return false;}));
+}
+void test_chunk_duration_counts_words_and_ends_on_final_word() {
+    auto reader=makeReader(300,{"the","blue","door.","Next"});
+    testSettings.mode=settings::ReadingMode::chunks;
+    reader.displayWordIndex=reader.state.wordIndex;reader.displayWordCount=3;
+    uint32_t expected=0;
+    for(size_t i=0;i<3;++i) expected+=ReadingLoop::wordDurationMs(reader,testSettings,i);
+    TEST_ASSERT_EQUAL(expected,ReadingLoop::currentWordDurationMs(reader,testSettings));
+    TEST_ASSERT_TRUE(ReadingLoop::currentWordEndsSentence(reader));
+    ReadingLoop::start(reader,1000);
+    TEST_ASSERT_FALSE(ReadingLoop::update(reader,testSettings,1000+expected-1));
+    TEST_ASSERT_TRUE(ReadingLoop::update(reader,testSettings,1000+expected));
+    TEST_ASSERT_EQUAL(3,reader.state.wordIndex);
+    TEST_ASSERT_EQUAL(1,ReadingLoop::displayWordCount(reader));
+}
+
+void test_chunk_short_frames_have_minimum_time_without_losing_bonuses() {
+    auto reader=makeReader(300,{"the","red","box.","Next"});
+    testSettings.mode=settings::ReadingMode::chunks;
+    testSettings.pacing.longWordDelayMs=0;testSettings.pacing.complexWordDelayMs=0;testSettings.pacing.punctuationDelayMs=0;
+    reader.displayWordIndex=0;
+    for (const auto [count,expected] : {std::pair{1,400},std::pair{2,400},std::pair{3,600}}) {
+        reader.displayWordCount=count;TEST_ASSERT_EQUAL(expected,ReadingLoop::currentWordDurationMs(reader,testSettings));
+    }
+    testSettings.wpm=600;
+    for (int count=1;count<=3;++count) {
+        reader.displayWordCount=count;TEST_ASSERT_EQUAL(300,ReadingLoop::currentWordDurationMs(reader,testSettings));
+    }
+    testSettings.wpm=120;reader.displayWordCount=1;TEST_ASSERT_EQUAL(1000,ReadingLoop::currentWordDurationMs(reader,testSettings));
+    reader.displayWordCount=3;TEST_ASSERT_EQUAL(1500,ReadingLoop::currentWordDurationMs(reader,testSettings));
+    testSettings.wpm=300;testSettings.pacing.punctuationDelayMs=200;ReadingLoop::seekTo(reader,2);
+    reader.displayWordIndex=2;reader.displayWordCount=1;
+    const auto bonus=ReadingLoop::wordDurationMs(reader,testSettings,2)-200;
+    TEST_ASSERT_GREATER_THAN(0,bonus);TEST_ASSERT_EQUAL(400+bonus,ReadingLoop::currentWordDurationMs(reader,testSettings));
+    testSettings.mode=settings::ReadingMode::rsvp;
+    TEST_ASSERT_EQUAL(200+bonus,ReadingLoop::currentWordDurationMs(reader,testSettings));
+}
+
+void test_chunk_stall_does_not_shorten_the_following_frame() {
+    auto reader=makeReader(300,{"a","red","box","a","blue","door","end"});
+    testSettings.mode=settings::ReadingMode::chunks;
+    testSettings.pacing.longWordDelayMs=0;testSettings.pacing.complexWordDelayMs=0;testSettings.pacing.punctuationDelayMs=0;
+    reader.displayWordIndex=0;reader.displayWordCount=2;ReadingLoop::start(reader,1000);
+    TEST_ASSERT_TRUE(ReadingLoop::update(reader,testSettings,5000));
+    TEST_ASSERT_EQUAL(2,reader.state.wordIndex);TEST_ASSERT_EQUAL(5000,reader.lastAdvanceMs);
+    reader.displayWordIndex=2;reader.displayWordCount=2;
+    TEST_ASSERT_FALSE(ReadingLoop::update(reader,testSettings,5001));
+    TEST_ASSERT_FALSE(ReadingLoop::update(reader,testSettings,5399));
+    TEST_ASSERT_TRUE(ReadingLoop::update(reader,testSettings,5400));TEST_ASSERT_EQUAL(4,reader.state.wordIndex);
+}
+
 int main(void) {
     UNITY_BEGIN();
+    RUN_TEST(test_chunk_short_frames_have_minimum_time_without_losing_bonuses);
+    RUN_TEST(test_chunk_stall_does_not_shorten_the_following_frame);
+    RUN_TEST(test_context_chunks_keep_phrases_boundaries_and_all_tokens);
+    RUN_TEST(test_chunk_duration_counts_words_and_ends_on_final_word);
 
     RUN_TEST(test_wpm_base_interval);
     RUN_TEST(test_cjk_phrases_use_characters_per_minute);

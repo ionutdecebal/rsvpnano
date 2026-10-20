@@ -30,7 +30,7 @@ namespace screens {
         if (watch::setting(ui, grid.item(2), UiText::ReadingMode,
                            ui.text(config.mode == settings::ReadingMode::page ? UiText::ScrollMode
                                                                               : UiText::RsvpMode))) {
-            config.mode = settings::cycleEnum(config.mode);
+            config.mode = config.mode == settings::ReadingMode::page ? settings::ReadingMode::rsvp : settings::ReadingMode::page;
             changed = true;
         }
         if (watch::setting(ui, grid.item(3), UiText::ReaderHand,

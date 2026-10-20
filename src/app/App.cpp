@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdio>
 #include <esp_system.h>
+#include <esp_random.h>
 #include <string>
 
 #include "board/BoardAudio.h"
@@ -19,6 +20,8 @@
 #include "library/ReadingProgress.h"
 #include "storage/migration/Migration.h"
 #include "update/OtaUpdater.h"
+#include "ui/screens/ModernScreens.h"
+#include "ui/screens/OnboardingCopy.h"
 
 namespace {
 
@@ -61,7 +64,16 @@ void App::begin() {
     }
     immediateUi_.setOrientation(Board::Display::defaultUiOrientation());
     immediateUi_.setTheme(interfaceScreen_.themes.resolve(settingsStore_.settings().interface.selectedThemeId));
-    screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
+    const bool modernStartup = immediateUi_.width() == 640 && immediateUi_.height() == 172;
+    immediateUi_.setStartupPresentation(modernStartup);
+    const auto startupStage = [&](UiText title) {
+        if (modernStartup)
+            screens::status(immediateUi_, immediateUi_.text(title), immediateUi_.text(UiText::Checking));
+    };
+    if (modernStartup)
+        startupStage(UiText::Storage);
+    else
+        screens::status(immediateUi_, immediateUi_.text(UiText::Ready));
     if (!Input::begin())
         ESP_LOGE("input", "startup failed");
     immediateUi_.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
@@ -69,15 +81,18 @@ void App::begin() {
     storage_.begin();
     Logger::startupCheckpoint("storage");
     fs::FS* filesystem = storage_.mounted() ? &Board::Storage::filesystem() : nullptr;
+    startupStage(UiText::Settings);
     if (auto result = settingsStore_.begin(filesystem); !result)
         ESP_LOGW("settings", "startup warning: %s", result.error().message.c_str());
     Logger::startupCheckpoint("settings");
     Logger::checkpoint("locale_catalog");
+    startupStage(UiText::Language);
     localeCatalog_ = filesystem == nullptr
                        ? locales::Catalog{}
                        : locales::scanInstalled(*filesystem, static_cast<size_t>(UiText::Count));
     ESP_LOGI("languages", "catalog ready installed=%u", static_cast<unsigned>(localeCatalog_.size()));
     Logger::startupCheckpoint("locale_catalog");
+    startupStage(UiText::FontSection);
     readerScreen_.fonts.loadFromSd();
     Logger::startupCheckpoint("fonts");
     Logger::checkpoint("ui_locale");
@@ -90,14 +105,41 @@ void App::begin() {
         focusScreen_.begin(Board::Storage::filesystem());
     else
         focusScreen_.begin();
+    startupStage(UiText::Library);
     readerScreen_.loadInitialBook(immediateUi_, storage_, prefs_, bootMs_);
     Logger::startupCheckpoint("book");
     libraryScreen_.invalidate();
+    // Leave the last real status (including failures) visible until the usual
+    // transition. Do not introduce a second splash delay or fake a Ready state.
+    if(modernStartup){
+        statusDestination_=settingsStore_.settings().interface.onboardingComplete?screens::Screen::Read:screens::Screen::Onboarding;
+        if(!settingsStore_.settings().interface.onboardingComplete)onboardingScreen_.begin(immediateUi_,settingsStore_.settings(),millis());
+        if(settingsStore_.settings().reading.mode==settings::ReadingMode::page){
+            settingsStore_.settings().reading.mode=settings::ReadingMode::rsvp;settingsStore_.acceptChanges();
+        }
+    }
+    immediateUi_.setStartupPresentation(false);
     ESP_LOGI("startup", "ready");
 }
 
 void App::update(uint32_t nowMs) {
-    serialCompanion_.update(nowMs);
+    if (focusScreen_.active()) {
+        if (focusScreen_.update(nowMs)) Board::Audio::beep();
+        if (focusScreen_.breakVisible()) {
+            if (!backgroundJobActive() && readerScreen_.session.playing)
+                readerScreen_.pauseImmediately(prefs_, nowMs);
+            screen_ = screens::Screen::FocusSession;
+        }
+    }
+    if(onboardingJobActive()){
+        onboardingScreen_.update(nowMs);
+        if(screen_!=screens::Screen::Onboarding || !onboardingScreen_.active()
+            || !onboardingScreen_.storageChecking() || onboardingScreen_.storageRequest()!=onboardingJobRequest_)
+            onboardingStorageCancel_.store(true);
+    }
+    immediateUi_.setBackgroundBusy(backgroundJobActive()&&!(onboardingJobActive()&&screen_==screens::Screen::Onboarding));
+    immediateUi_.setFocusBadge(focusScreen_.badge(nowMs));
+    if(!onboardingJobActive())serialCompanion_.update(nowMs);
     Input::ActionMask actions;
     while (Input::poll(actions)) {
         lastActivityMs_ = nowMs;
@@ -111,10 +153,26 @@ void App::update(uint32_t nowMs) {
     }
 
     updateBackgroundJob();
+    immediateUi_.setBackgroundBusy(backgroundJobActive()&&!(onboardingJobActive()&&screen_==screens::Screen::Onboarding));
     const bool preparingTypography = typographyJobActive();
-
-    if (backgroundJobActive() && !preparingTypography)
+    if (focusScreen_.breakVisible()) {
+        screen_ = screens::Screen::FocusSession;
+        immediateUi_.setModernPresentation(true);
+        immediateUi_.setModernReadingPalette(false);
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_), focusScreen_.frameSurface(screen_));
+        const auto action = focusScreen_.draw(immediateUi_, nowMs, screen_);
+        immediateUi_.endFrame();
+        // A loading worker owns the book; a manual resume waits until it is finished.
+        handleScreenAction(action, nowMs);
+        lastActivityMs_ = nowMs;
         return;
+    }
+
+    if (backgroundJobActive() && !preparingTypography) {
+        if(onboardingJobActive()&&screen_==screens::Screen::Onboarding)renderScreen(nowMs);
+        else screens::animateStatus(immediateUi_, nowMs);
+        return;
+    }
 
     if (screen_ == screens::Screen::Status) {
         if (statusUntilMs_ == 0 || !deadlineReached(nowMs, statusUntilMs_))
@@ -125,7 +183,7 @@ void App::update(uint32_t nowMs) {
             return;
         }
         screen_ = statusDestination_;
-        if (networkScreen_.startupCheckPending) {
+        if (networkScreen_.startupCheckPending && screen_ != screens::Screen::Onboarding) {
             networkScreen_.startupCheckPending = false;
             runOtaCheck(false);
             return;
@@ -148,13 +206,15 @@ void App::update(uint32_t nowMs) {
         return;
     }
 
-    if (!usbTransfer_.active())
+    // Finish/Skip saves setup explicitly. Do not let an automatic settings
+    // retry block the practice/error screens on the card they just rejected.
+    if (!usbTransfer_.active() && screen_ != screens::Screen::Onboarding)
         settingsStore_.update(nowMs);
 
     Board::Power::updateBattery(battery_, nowMs);
     if (!preparingTypography)
         readerScreen_.update(prefs_, nowMs);
-    if (screen_ == screens::Screen::FocusSession) {
+    if (screen_ == screens::Screen::FocusSession && !focusScreen_.manual()) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
     }
@@ -162,7 +222,8 @@ void App::update(uint32_t nowMs) {
 
     renderScreen(nowMs);
     if (!preparingTypography && !readerScreen_.session.playing && !companionApi_.active() && !usbTransfer_.active()
-        && screen_ != screens::Screen::FocusSession && screen_ != screens::Screen::Status
+        && !focusScreen_.active() && screen_ != screens::Screen::FocusSession && screen_ != screens::Screen::Status
+        && screen_ != screens::Screen::Onboarding
         && kStandbyMs[settingsStore_.settings().interface.standbyTimerIndex] > 0
         && nowMs - lastActivityMs_ >= kStandbyMs[settingsStore_.settings().interface.standbyTimerIndex]) {
         enterStandby(nowMs);
@@ -170,6 +231,13 @@ void App::update(uint32_t nowMs) {
 }
 
 void App::renderScreen(uint32_t nowMs) {
+    if (focusScreen_.breakVisible()) screen_ = screens::Screen::FocusSession;
+    if (screen_ != screens::Screen::Reader) readerScreen_.cancelModernControls();
+    if (screen_ != screens::Screen::Onboarding && onboardingScreen_.active()) onboardingScreen_.close();
+    // Presentation only: the real RSVP/page renderer keeps its font and geometry paths.
+    immediateUi_.setModernPresentation(screens::modern::enabled(immediateUi_.width(), immediateUi_.height(), screen_));
+    immediateUi_.setModernReadingPalette(immediateUi_.width() == 640 && immediateUi_.height() == 172
+                                        && screen_ == screens::Screen::Reader);
     if (serialCompanion_.active()) {
         companionApi_.renderStatus(true);
         return;
@@ -185,11 +253,27 @@ void App::renderScreen(uint32_t nowMs) {
             screens::status(immediateUi_, immediateUi_.text(UiText::FontSection), immediateUi_.text(UiText::Checking));
             return;
         }
-        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_), readerScreen_.pageBrowsing());
         readerScreen_.draw(immediateUi_, storage_, battery_, nowMs);
         immediateUi_.endFrame();
         return;
+    case screens::Screen::FindPlace:
+    case screens::Screen::FindChapters:
+    case screens::Screen::BookSearch:
+    case screens::Screen::BookSearchKeyboard:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        readerScreen_.drawLocator(immediateUi_, screen_, prefs_, nowMs);
+        immediateUi_.endFrame();
+        break;
     case screens::Screen::Library: {
+        if (libraryScreen_.needsItems(storage_)) {
+            screen_ = screens::Screen::Status;
+            statusUntilMs_ = 0;
+            screens::status(immediateUi_, "Loading library", "Getting your books ready", {});
+            if (!startBackgroundJob(JobKind::Library))
+                showTransientStatus("Library unavailable", "Please try again", {}, 1200, screens::Screen::Read);
+            return;
+        }
         const auto& items = libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.session);
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const screens::Action result = libraryScreen_.draw(immediateUi_, items, nowMs, screen_);
@@ -212,12 +296,82 @@ void App::renderScreen(uint32_t nowMs) {
         {
             const int bookIndex = storage_.findBook(readerScreen_.session.sourcePath());
             const BookLibrary::Entry* book = bookIndex < 0 ? nullptr : storage_.book(static_cast<size_t>(bookIndex));
-            action = screens::read(immediateUi_, ReadingProgress::title(readerScreen_.session, storage_),
+            const auto title = ReadingProgress::title(readerScreen_.session, storage_);
+            const auto author = book == nullptr ? std::string_view{} : std::string_view{book->author};
+            const auto progress = ReadingProgress::percent(readerScreen_.session.state.wordIndex,
+                                                            ReadingLoop::wordCount(readerScreen_.session));
+            if (immediateUi_.modernPresentation()) {
+                auto& interface = settingsStore_.settings().interface;
+                const uint8_t brightness = interface.brightnessPercent;
+                const auto& chapters = readerScreen_.session.metadata.chapters;
+                const auto chapter = std::ranges::upper_bound(chapters, readerScreen_.session.state.wordIndex,
+                                                              {}, &ChapterMarker::wordIndex) - chapters.begin();
+                action = screens::modern::menu(immediateUi_, title, author, progress,
+                                               ReadingLoop::wordCount(readerScreen_.session) > 0, interface, screen_, chapter);
+                if (brightness != interface.brightnessPercent) {
+                    Board::Display::setBrightness(interface.brightnessPercent);
+                    settingsStore_.acceptChanges();
+                }
+            } else {
+                action = screens::read(immediateUi_, title,
                                    book == nullptr ? std::string_view{} : std::string_view{book->author},
-                                   ReadingProgress::percent(readerScreen_.session.state.wordIndex,
-                                                            ReadingLoop::wordCount(readerScreen_.session)),
-                                   screen_);
+                                   progress, screen_);
+            }
         }
+        break;
+    case screens::Screen::QuickControls: {
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        auto& config=settingsStore_.settings();
+        const auto speed=config.reading.wpm;const auto brightness=config.interface.brightnessPercent;
+        action=screens::modern::quickControls(immediateUi_,config.reading,config.interface,screen_);
+        if(speed!=config.reading.wpm || brightness!=config.interface.brightnessPercent){
+            if(brightness!=config.interface.brightnessPercent)Board::Display::setBrightness(config.interface.brightnessPercent);
+            settingsStore_.acceptChanges();
+        }
+        break;
+    }
+    case screens::Screen::Dictionary:
+    case screens::Screen::DictionarySearch:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action=dictionary_.draw(immediateUi_,readerScreen_.session,screen_,nowMs);
+        break;
+    case screens::Screen::Onboarding: {
+        if(!onboardingScreen_.active())onboardingScreen_.begin(immediateUi_,settingsStore_.settings(),nowMs);
+        onboardingScreen_.setStorageBusy(onboardingJobActive());
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_),onboardingScreen_.surface());
+        const auto locale=settingsStore_.settings().interface.locale;
+        action=onboardingScreen_.draw(immediateUi_,settingsStore_.settings(),nowMs);
+        if(onboardingScreen_.takeSettingsChanged())settingsStore_.acceptChanges();
+        if(locale!=settingsStore_.settings().interface.locale){
+            if(onboardingJobActive()||onboardingScreen_.storageProgress().state!=OnboardingStorage::State::Ready)onboardingReloadUiPending_=true;
+            else reloadUiAssets();
+        }
+        if(onboardingJobActive()&&(!onboardingScreen_.storageChecking()||onboardingScreen_.storageRequest()!=onboardingJobRequest_))
+            onboardingStorageCancel_.store(true);
+        break;
+    }
+    case screens::Screen::TouchCheck:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action=touchCheckScreen_.draw(immediateUi_,screen_);
+        break;
+    case screens::Screen::Help:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action=screens::OnboardingScreen::help(immediateUi_,settingsStore_.settings().reading,screen_);
+        break;
+    case screens::Screen::AddBooks:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action=screens::modern::header(immediateUi_,screens::modern::copy(immediateUi_,screens::modern::Copy::AddBooks),screen_,screens::Screen::Help);
+        if(action==screens::Action::None)onboardingScreen_.books(immediateUi_);
+        break;
+    case screens::Screen::ButtonMap:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action=screens::modern::header(immediateUi_,screens::modern::copy(immediateUi_,screens::modern::Copy::PhysicalButtons),screen_,screens::Screen::Help);
+        onboardingScreen_.buttons(immediateUi_);
+        break;
+    case screens::Screen::Connections:
+    case screens::Screen::DictionaryHelp:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action = screens::modern::hub(immediateUi_, screen_);
         break;
     case screens::Screen::Chapters:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
@@ -228,6 +382,7 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::settings(immediateUi_, screen_);
         break;
+    case screens::Screen::ReadingHub:
     case screens::Screen::ReadingSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const settings::ReadingMode mode = settingsStore_.settings().reading.mode;
@@ -247,6 +402,7 @@ void App::renderScreen(uint32_t nowMs) {
         }
         break;
     }
+    case screens::Screen::DisplayHub:
     case screens::Screen::InterfaceSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const std::string locale = settingsStore_.settings().interface.locale;
@@ -299,6 +455,8 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         networkScreen_.drawEdit(immediateUi_, settingsStore_, screen_);
         break;
+    case screens::Screen::StorageHub:
+    case screens::Screen::PowerHub:
     case screens::Screen::Device:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::device(immediateUi_, storage_.mounted(), storage_.books().size(),
@@ -317,18 +475,19 @@ void App::renderScreen(uint32_t nowMs) {
         action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_);
         break;
     }
+    case screens::Screen::FocusPresets:
     case screens::Screen::FocusTimers:
     case screens::Screen::FocusEditor:
     case screens::Screen::FocusNameEdit:
     case screens::Screen::FocusSession: {
-        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_), focusScreen_.frameSurface(screen_));
         action = focusScreen_.draw(immediateUi_, nowMs, screen_);
         immediateUi_.endFrame();
         if (action != screens::Action::None) {
             handleScreenAction(action, nowMs);
             return;
         }
-        if (renderedScreen == screens::Screen::FocusSession && screen_ != screens::Screen::FocusSession)
+        if (!focusScreen_.manual() && renderedScreen == screens::Screen::FocusSession && screen_ != screens::Screen::FocusSession)
             focusScreen_.close();
         if (screen_ != renderedScreen)
             renderScreen(nowMs);
@@ -344,11 +503,62 @@ void App::renderScreen(uint32_t nowMs) {
 }
 
 void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
+    if(onboardingJobActive()&&(action==screens::Action::FinishIntroduction||action==screens::Action::SkipIntroduction)){
+        // Let the user practise in RAM while a slow filesystem returns, but never
+        // open the library or a second storage operation over an unfinished job.
+        onboardingStorageCancel_.store(true);onboardingScreen_.waitForStorage();renderScreen(nowMs);return;
+    }
     if (backgroundJobActive() && action != screens::Action::None)
         return;
     switch (action) {
     case screens::Action::None:
     case screens::Action::OpenBook:
+        return;
+    case screens::Action::OpenDictionary:
+        readerScreen_.pauseImmediately(prefs_,nowMs);
+        dictionary_.open(readerScreen_.session);
+        screen_=screens::Screen::Dictionary;
+        renderScreen(nowMs);return;
+    case screens::Action::OnlineDictionary:
+        readerScreen_.pauseImmediately(prefs_,nowMs);
+        screen_=screens::Screen::Status;statusUntilMs_=0;
+        screens::status(immediateUi_,"Looking up word","Your book stays paused");
+        if(!startBackgroundJob(JobKind::OnlineDictionary))
+            showTransientStatus("Please try again","Worker could not start",{},1200,screens::Screen::Dictionary);
+        return;
+    case screens::Action::CheckOnboardingStorage:
+        ReadingLoop::pause(readerScreen_.session);
+        onboardingStorageCancel_.store(false);
+        onboardingJobRequest_=onboardingScreen_.storageRequest();onboardingJobStartedMs_=nowMs;
+        onboardingJobWasMounted_=storage_.mounted();
+        if(!startBackgroundJob(JobKind::OnboardingStorage))
+            onboardingScreen_.acceptStorageProgress(onboardingJobRequest_,{OnboardingStorage::State::TimedOut,0},nowMs);
+        renderScreen(nowMs);return;
+    case screens::Action::OpenPage:
+        readerScreen_.pauseImmediately(prefs_,nowMs);readerScreen_.openPage();screen_=screens::Screen::Reader;
+        renderScreen(nowMs);return;
+    case screens::Action::ReplayIntroduction:
+        readerScreen_.pauseImmediately(prefs_,nowMs);onboardingScreen_.begin(immediateUi_,settingsStore_.settings(),nowMs);
+        screen_=screens::Screen::Onboarding;renderScreen(nowMs);return;
+    case screens::Action::FinishIntroduction:
+    case screens::Action::SkipIntroduction: {
+        const bool complete=onboardingScreen_.canComplete();
+        bool saved=true;
+        if(complete){
+            if(onboardingReloadUiPending_){onboardingReloadUiPending_=false;reloadUiAssets();}
+            settingsStore_.settings().interface.onboardingComplete=true;settingsStore_.acceptChanges();
+            if(auto result=settingsStore_.flush();!result){saved=false;ESP_LOGW("settings","introduction save pending: %s",result.error().message.c_str());}
+        }
+        onboardingScreen_.close();
+        screen_=complete&&action==screens::Action::FinishIntroduction&&ReadingLoop::wordCount(readerScreen_.session)>0?screens::Screen::Reader:screens::Screen::Read;
+        if(!saved){showTransientStatus(screens::modern::copy(immediateUi_,screens::modern::Copy::SdSavePending),
+            screens::modern::copy(immediateUi_,screens::modern::Copy::SdSaveRetry),{},1800,screen_);return;}
+        renderScreen(nowMs);return;
+    }
+    case screens::Action::FocusRead:
+        if (!focusScreen_.breakVisible()) readerScreen_.resumeNow(nowMs);
+        screen_ = screens::Screen::Reader;
+        renderScreen(nowMs);
         return;
     case screens::Action::Resume:
         ReadingLoop::pause(readerScreen_.session);
@@ -359,6 +569,7 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         powerOff(nowMs);
         return;
     case screens::Action::CompanionSync:
+
         screen_ = screens::Screen::Sync;
         immediateUi_.invalidate();
         screens::status(immediateUi_, immediateUi_.text(UiText::CompanionSync), immediateUi_.text(UiText::Connecting));
@@ -410,8 +621,14 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         exitStandby(nowMs);
         return;
     }
-    if (backgroundJobActive() || screen_ == screens::Screen::Status)
+    if(onboardingJobActive()&&Input::hasAction(actions,Input::ActionPowerOff)){
+        // Only a disposable probe may be open. Do not flush settings through the
+        // same potentially stalled filesystem while powering down.
+        onboardingStorageCancel_.store(true);powerOffBoard();return;
+    }
+    if ((backgroundJobActive()&&!(onboardingJobActive()&&screen_==screens::Screen::Onboarding)) || screen_ == screens::Screen::Status)
         return;
+    if (focusScreen_.breakVisible() && !Input::hasAction(actions, Input::ActionPowerOff)) return;
     if (usbTransfer_.active() && Input::hasAction(actions, Input::ActionPowerOff)) {
         exitUsbTransfer();
         return;
@@ -424,11 +641,20 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         exitUsbTransfer(screens::Screen::Read);
         return;
     }
+    if(screen_==screens::Screen::Onboarding){
+        if(Input::hasAction(actions,Input::ActionPowerOff)){onboardingScreen_.pause();powerOff(nowMs);}
+        else if(Input::hasAction(actions,Input::ActionStandby)){if(!onboardingJobActive()){onboardingScreen_.pause();enterStandby(nowMs);}}
+        else if(Input::hasAction(actions,Input::ActionOpenMenu)){handleScreenAction(screens::Action::SkipIntroduction,nowMs);}
+        else if(Input::hasAction(actions,Input::ActionBack)){onboardingScreen_.next(-1);renderScreen(nowMs);}
+        else if(Input::hasAction(actions,Input::ActionSelect)||Input::hasAction(actions,Input::ActionPlayPause)){
+            onboardingScreen_.hardwarePlay(nowMs);renderScreen(nowMs);
+        }
+        return;
+    }
     if (Input::hasAction(actions, Input::ActionOpenMenu)) {
         if (screen_ == screens::Screen::Reader) {
             ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
             ReadingLoop::pause(readerScreen_.session);
-            libraryScreen_.invalidate();
             screen_ = screens::Screen::Read;
         } else {
             if (companionApi_.active()) {
@@ -436,7 +662,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
             } else {
                 networkScreen_.closeWifi();
             }
-            if (screen_ == screens::Screen::FocusSession)
+            if (screen_ == screens::Screen::FocusSession && !focusScreen_.manual())
                 focusScreen_.close();
             ReadingLoop::pause(readerScreen_.session);
             screen_ = screens::Screen::Reader;
@@ -444,7 +670,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         renderScreen(nowMs);
         return;
     }
-    if (screen_ == screens::Screen::FocusSession
+    if (screen_ == screens::Screen::FocusSession && !focusScreen_.manual()
         && (Input::hasAction(actions, Input::ActionBack) || Input::hasAction(actions, Input::ActionSelect))) {
         focusScreen_.close();
         screen_ = screens::Screen::FocusTimers;
@@ -468,6 +694,12 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
             if (screen_ == screens::Screen::Read) {
                 ReadingLoop::pause(readerScreen_.session);
                 screen_ = screens::Screen::Reader;
+            } else if (screen_ == screens::Screen::BookSearchKeyboard) {
+                screen_ = screens::Screen::BookSearch;
+            } else if (screen_ == screens::Screen::BookSearch || screen_ == screens::Screen::FindChapters) {
+                screen_ = screens::Screen::FindPlace;
+            } else if (screen_ == screens::Screen::FindPlace) {
+                screen_ = screens::Screen::Reader;
             } else if (screen_ == screens::Screen::StorageEncryption || screen_ == screens::Screen::Sync
                        || screen_ == screens::Screen::Ota) {
                 screen_ = screens::Screen::Device;
@@ -481,9 +713,25 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
             } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::InterfaceSettings
                        || screen_ == screens::Screen::PacingSettings || screen_ == screens::Screen::ReaderAppearance
                        || screen_ == screens::Screen::NetworkSettings) {
-                screen_ = screens::Screen::Settings;
+                screen_ = screen_ == screens::Screen::NetworkSettings && immediateUi_.modernPresentation()
+                          ? screens::Screen::Connections : screens::Screen::Settings;
             } else if (screen_ == screens::Screen::BookFonts) {
-                screen_ = screens::Screen::Read;
+                screen_ = immediateUi_.modernPresentation() ? screens::Screen::ReadingHub : screens::Screen::Read;
+            } else if (screen_ == screens::Screen::ReadingHub || screen_ == screens::Screen::DisplayHub
+                       || screen_ == screens::Screen::Connections) {
+                screen_ = screens::Screen::Settings;
+            } else if ((screen_ == screens::Screen::ButtonMap || screen_ == screens::Screen::AddBooks || screen_ == screens::Screen::TouchCheck)) {
+                screen_ = screens::Screen::Help;
+            } else if (screen_ == screens::Screen::DictionaryHelp) {
+                screen_ = screens::Screen::Connections;
+            } else if (screen_ == screens::Screen::Help) {
+                screen_ = screens::Screen::Settings;
+            } else if (screen_ == screens::Screen::Dictionary || screen_ == screens::Screen::DictionarySearch) {
+                screen_ = screens::Screen::QuickControls;
+            } else if (screen_ == screens::Screen::QuickControls) {
+                screen_ = screens::Screen::Reader;
+            } else if (screen_ == screens::Screen::StorageHub || screen_ == screens::Screen::PowerHub) {
+                screen_ = screens::Screen::Device;
             } else if (screen_ == screens::Screen::FocusNameEdit) {
                 screen_ = screens::Screen::FocusEditor;
             } else if (screen_ == screens::Screen::FocusEditor) {
@@ -495,7 +743,6 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         } else {
             ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
             ReadingLoop::pause(readerScreen_.session);
-            libraryScreen_.invalidate();
             screen_ = screens::Screen::Read;
             renderScreen(nowMs);
         }
@@ -518,10 +765,12 @@ void App::handleTouch(uint32_t nowMs) {
         exitStandby(nowMs);
         return;
     }
-    if (companionApi_.active() || usbTransfer_.active() || backgroundJobActive() || screen_ == screens::Screen::Status)
+    if (companionApi_.active() || usbTransfer_.active()
+        || (backgroundJobActive()&&!(onboardingJobActive()&&screen_==screens::Screen::Onboarding)) || screen_ == screens::Screen::Status)
         return;
     if (screen_ == screens::Screen::Reader) {
-        readerScreen_.handleTouch(immediateUi_, nowMs, prefs_, settingsStore_);
+        if (!readerScreen_.handleModernControls(immediateUi_, nowMs, prefs_, settingsStore_, screen_))
+            readerScreen_.handleTouch(immediateUi_, nowMs, prefs_, settingsStore_);
     } else {
         renderScreen(nowMs);
     }
@@ -540,7 +789,9 @@ void App::updateBackgroundJob() {
     JobUpdate update;
     while (jobQueue_ != nullptr && xQueueReceive(jobQueue_, &update, 0) == pdTRUE) {
         if (!update.complete) {
-            screens::status(immediateUi_, update.title, update.line1, update.line2, update.progressPercent);
+            if(onboardingJobActive()){
+                if(screen_==screens::Screen::Onboarding)onboardingScreen_.acceptStorageProgress(update.storageRequest,update.storage,millis());
+            }else screens::status(immediateUi_, update.title, update.line1, update.line2, update.progressPercent);
             continue;
         }
 
@@ -549,6 +800,32 @@ void App::updateBackgroundJob() {
         vQueueDelete(jobQueue_);
         jobQueue_ = nullptr;
         Logger::checkpoint("running");
+        if(completed==JobKind::OnlineDictionary){
+            screen_=screens::Screen::Dictionary;statusUntilMs_=0;
+            immediateUi_.cancelTouchUntilRelease();immediateUi_.invalidate();renderScreen(millis());return;
+        }
+        if(completed==JobKind::OnboardingStorage){
+            onboardingScreen_.setStorageBusy(false);
+            if(!onboardingJobWasMounted_&&storage_.mounted())onboardingStorageNeedsRecovery_=true;
+            if(screen_==screens::Screen::Onboarding)onboardingScreen_.acceptStorageProgress(update.storageRequest,update.storage,millis());
+            if(update.storage.state==OnboardingStorage::State::Ready&&onboardingStorageNeedsRecovery_
+                &&onboardingScreen_.active()&&onboardingScreen_.storageVisible()
+                &&onboardingScreen_.storageRequest()==update.storageRequest&&onboardingScreen_.canComplete()){
+                recoverOnboardingStorage();onboardingStorageNeedsRecovery_=false;
+            }
+            if(onboardingReloadUiPending_&&onboardingScreen_.storageProgress().state==OnboardingStorage::State::Ready){
+                onboardingReloadUiPending_=false;reloadUiAssets();
+            }
+            immediateUi_.cancelTouchUntilRelease();immediateUi_.invalidate();renderScreen(millis());return;
+        }
+        if (completed == JobKind::Library) {
+            immediateUi_.cancelTouchUntilRelease();
+            libraryScreen_.reset();
+            screen_ = screens::Screen::Library;
+            statusUntilMs_ = 0;
+            renderScreen(millis());
+            return;
+        }
         if (completed == JobKind::Typography) {
             if (bookOpenPending_) {
                 const size_t index = pendingBookIndex_;
@@ -641,6 +918,24 @@ void App::backgroundJobEntry(void* context) {
 void App::runBackgroundJob() {
     JobUpdate complete;
     switch (jobKind_) {
+    case JobKind::OnboardingStorage: {
+        const auto stop=[](void* ctx){auto& app=*static_cast<App*>(ctx);return app.onboardingStorageCancel_.load()
+            || uint32_t(millis()-app.onboardingJobStartedMs_)>=OnboardingStorage::kTimeoutMs;};
+        const auto report=[](void* ctx,OnboardingStorage::Progress progress){
+            auto& app=*static_cast<App*>(ctx);JobUpdate update;update.storage=progress;
+            update.storageRequest=app.onboardingJobRequest_;app.enqueueJobUpdate(update);
+        };
+        complete.storageRequest=onboardingJobRequest_;
+        const bool mounted=!stop(this)&&storage_.mountForCheck();
+        complete.storage=OnboardingStorage::check(Board::Storage::filesystem(),mounted,esp_random(),report,stop,this);
+        if(complete.storage.state==OnboardingStorage::State::Cancelled&&uint32_t(millis()-onboardingJobStartedMs_)>=OnboardingStorage::kTimeoutMs)
+            complete.storage.state=OnboardingStorage::State::TimedOut;
+        if(complete.storage.state==OnboardingStorage::State::Ready&&(!onboardingJobWasMounted_||onboardingStorageNeedsRecovery_))
+            storage_.refreshBooks(false);
+        if(stop(this))complete.storage.state=uint32_t(millis()-onboardingJobStartedMs_)>=OnboardingStorage::kTimeoutMs
+            ?OnboardingStorage::State::TimedOut:OnboardingStorage::State::Cancelled;
+        break;
+    }
     case JobKind::Rss: {
         Logger::checkpoint("rss_update");
         Preferences preferences;
@@ -706,6 +1001,13 @@ void App::runBackgroundJob() {
         jobBookLoaded_ = storage_.loadIndexedBook(jobBookIndex_, readerScreen_.store, readerScreen_.session.metadata);
         break;
     }
+    case JobKind::OnlineDictionary:
+        dictionary_.lookupOnline(settingsStore_);
+        break;
+    case JobKind::Library:
+        Logger::checkpoint("library_load");
+        libraryScreen_.items(storage_, readerScreen_.store, readerScreen_.session);
+        break;
     case JobKind::Typography:
         Logger::checkpoint("typography");
         readerScreen_.refreshTypography(settingsStore_.settings().reading, readerScreen_.session.state.overrides);
@@ -747,6 +1049,7 @@ void App::enqueueJobUpdate(JobUpdate update, bool mustSucceed) {
 }
 
 void App::runRss() {
+
     ReadingLoop::pause(readerScreen_.session);
     screen_ = screens::Screen::Status;
     statusUntilMs_ = 0;
@@ -782,6 +1085,7 @@ void App::runBookOpen(size_t index, uint32_t nowMs) {
 }
 
 void App::enterUsbTransfer(uint32_t nowMs) {
+
 #if RSVP_USB_TRANSFER_ENABLED
     if (serialCompanion_.active())
         return;
@@ -829,6 +1133,23 @@ void App::exitUsbTransfer(screens::Screen destination) {
     renderScreen(millis());
 }
 
+void App::recoverOnboardingStorage() {
+    // The worker has returned and verified the newly mounted card. Reload only
+    // now, so the UI never races a mount or a filesystem probe.
+    auto& disk=Board::Storage::filesystem();
+    const auto chosenLocale=settingsStore_.settings().interface.locale;
+    if(auto result=settingsStore_.begin(&disk);!result)
+        ESP_LOGW("settings","card recovery warning: %s",result.error().message.c_str());
+    if(settingsStore_.settings().interface.locale!=chosenLocale){
+        settingsStore_.settings().interface.locale=chosenLocale;settingsStore_.acceptChanges();
+    }
+    localeCatalog_=locales::scanInstalled(disk,static_cast<size_t>(UiText::Count));
+    readerScreen_.fonts.loadFromSd();
+    if(!focusScreen_.active())focusScreen_.begin(disk);
+    loadAppearanceSettings();libraryScreen_.invalidate();
+    if(onboardingScreen_.active())onboardingScreen_.refreshDraft(settingsStore_.settings().reading);
+}
+
 void App::applySettings() {
     loadAppearanceSettings();
     readerScreen_.applyTheme(interfaceScreen_.themes.resolve(settingsStore_.settings().interface.selectedThemeId));
@@ -848,7 +1169,11 @@ void App::loadAppearanceSettings() {
         current.reading.typography.fontId = settings::TypographySettings{}.fontId;
         corrected = true;
     }
-    if (current.interface.locale != Localization::kDefaultLocale
+    // The modern introduction ships these translations in flash. An empty SD
+    // locale directory must not undo the language selected on Welcome/reboot.
+    const bool bundledModernLocale=screens::modern::enabled(immediateUi_.width(),immediateUi_.height(),screens::Screen::Onboarding)
+        &&(current.interface.locale=="de"||current.interface.locale=="ro");
+    if (!bundledModernLocale && current.interface.locale != Localization::kDefaultLocale
         && !locales::findPackForLocale(localeCatalog_, current.interface.locale)) {
         current.interface.locale = Localization::kDefaultLocale;
         corrected = true;
@@ -876,6 +1201,7 @@ void App::reloadUiAssets() {
 }
 
 void App::runOtaCheck(bool install) {
+
     ReadingLoop::pause(readerScreen_.session);
     if (install) {
         const uint32_t nowMs = millis();
@@ -891,6 +1217,7 @@ void App::runOtaCheck(bool install) {
 }
 
 void App::enterStandby(uint32_t nowMs) {
+    if (focusScreen_.active()) return;
     if (companionApi_.active()) {
         companionApi_.end();
     } else {
@@ -979,10 +1306,10 @@ void App::lightSleepFromStandby() {
 }
 
 void App::powerOff(uint32_t nowMs) {
+
     if (companionApi_.active())
         companionApi_.end();
-    if (screen_ == screens::Screen::FocusSession)
-        focusScreen_.close();
+    focusScreen_.close();
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     ReadingLoop::pause(readerScreen_.session);
@@ -1002,6 +1329,7 @@ void App::renderStorageStatus(void* context, const char* title, const char* line
         return;
 
     App& app = *static_cast<App*>(context);
+    if(app.onboardingJobActive())return; // The setup screen owns its three-stage progress.
     if (app.backgroundJobActive()) {
         JobUpdate update;
         copyText(update.title, title == nullptr ? "SD" : title);

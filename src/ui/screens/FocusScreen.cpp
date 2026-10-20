@@ -44,6 +44,7 @@ namespace screens {
     }
 
     Action FocusScreen::draw(ui::Context& ui, uint32_t nowMs, Screen& screen) {
+        if (ui.modernPresentation()) return drawModern(ui, nowMs, screen);
         switch (screen) {
         case Screen::FocusTimers:
             return drawTimers(ui, screen);
@@ -75,10 +76,11 @@ namespace screens {
 
     void FocusScreen::close() {
         session_.stop();
+        manualActive_ = false;
     }
 
     void FocusScreen::drawNameEditor(ui::Context& ui, Screen& screen) {
-        const ui::Rect content = detail::content(ui);
+        const ui::Rect content = ui.modernPresentation() ? ui::Rect{0, 0, 640, 172} : detail::content(ui);
         const ui::KeyboardAction action =
             ui.keyboard(content, draft_.name, focus::kMaxTimerNameBytes, keyboard_, ui.text(UiText::TimerName));
         if (action == ui::KeyboardAction::Cancel || action == ui::KeyboardAction::Submit)

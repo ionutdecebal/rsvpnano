@@ -28,6 +28,12 @@
 
 ## What is RSVP Nano?
 
+**This branch contains the New UI + dictionary candidate for LCD 3.49 Rev1.**
+See the [preview guide, scope and acceptance checks](docs/releases/ui-dictionary-preview.md).
+The existing [Classic release](https://github.com/ionutdecebal/rsvpnano/releases/tag/v0.1.2)
+remains the stable choice. The historical multi-board project description below
+does not imply this preview has been verified on every board.
+
 RSVP Nano is a small standalone reader that presents text one word at a time using Rapid Serial
 Visual Presentation. It also supports page reading when you want surrounding context. Books,
 articles, settings, fonts, themes, languages, and reading progress live on a microSD card.

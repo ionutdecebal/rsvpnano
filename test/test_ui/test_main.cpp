@@ -442,6 +442,27 @@ void test_missing_sample_does_not_interrupt_active_touch() {
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
 }
 
+void test_touch_loading_transition_requires_a_fresh_press() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    enableTouch(context);
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(1));
+    context.cancelTouchUntilRelease();
+    TEST_ASSERT_NULL(context.touch());
+    TEST_ASSERT_FALSE(context.pollTouch(2));
+    gContact = {false, 20, 10};
+    TEST_ASSERT_FALSE(context.pollTouch(3));
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(4));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchStart));
+    gContact = {false, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(5));
+    context.cancelTouchUntilRelease();
+    gContact = {true, 20, 10};
+    TEST_ASSERT_TRUE(context.pollTouch(6)); // no unnecessary extra tap when already released
+}
+
 void test_touch_reset_cancels_active_gesture() {
     Arduino_GFX gfx;
     ui::Context context(gfx);
@@ -454,6 +475,7 @@ void test_touch_reset_cancels_active_gesture() {
 
     gTouchResult = ui::TouchSampleResult::Reset;
     TEST_ASSERT_TRUE(context.pollTouch(3));
+    TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchCancel));
     TEST_ASSERT_TRUE(ui::hasTouch(*context.touch(), ui::TouchRelease));
     TEST_ASSERT_FALSE(ui::hasTouch(*context.touch(), ui::TouchTap));
     TEST_ASSERT_EQUAL(60, context.touch()->x);
@@ -1224,6 +1246,26 @@ void test_setting_gives_long_values_the_full_card_width() {
     TEST_ASSERT_EQUAL(16, gfx.textWrites);
 }
 
+void test_filled_slider_discards_preview_on_touch_reset_and_screen_change() {
+    Arduino_GFX gfx(640,172);
+    ui::Context context(gfx);auto colors=theme();context.setTheme(colors);
+    context.setModernPresentation(true);enableTouch(context);
+    int delay=200;uint32_t now=0;
+    const auto frame=[&](uint8_t screen) {
+        context.pollTouch(++now);context.beginFrame(screen);
+        const bool changed=context.slider({12,49,198,50},"Punctuation",delay,0,600,50," ms");
+        context.endFrame();return changed;
+    };
+    gContact={true,209,60};TEST_ASSERT_FALSE(frame(1));TEST_ASSERT_EQUAL(200,delay);
+    gTouchResult=ui::TouchSampleResult::Reset;
+    TEST_ASSERT_FALSE(frame(1));TEST_ASSERT_EQUAL(200,delay);
+    gTouchResult=ui::TouchSampleResult::Contact;
+    gContact={true,209,60};TEST_ASSERT_FALSE(frame(1));
+    gContact={false,209,60};TEST_ASSERT_FALSE(frame(2));TEST_ASSERT_EQUAL(200,delay);
+    gContact={true,209,60};TEST_ASSERT_FALSE(frame(2));
+    gContact={false,209,60};TEST_ASSERT_TRUE(frame(2));TEST_ASSERT_EQUAL(600,delay);
+}
+
 void test_slider_redraws_with_its_active_color() {
     Arduino_GFX gfx;
     ui::Context context(gfx);
@@ -1662,8 +1704,35 @@ void test_appearance_controls_fit_lcd() {
     TEST_ASSERT_EQUAL(128, editor.reader.chapter.y);
 }
 
+void test_page_browse_scrolls_without_changing_saved_reader_position() {
+    Arduino_GFX gfx(136, 172);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());auto colors=theme();context.setTheme(colors);
+    std::array<std::string,100> words;words.fill("word");
+    ReadingSession session;ReadingLoop::setWords(session,words,0);
+    screens::PageReader::BrowseState browse;
+    settings::TypographySettings typography;
+    const auto typeface=[](size_t)->FontCatalog::Face{return {std::cref(kReaderFont),nullptr};};
+    const ui::Rect area{0,30,136,48};
+    const auto render=[&]{context.beginFrame(1);screens::PageReader::browse(browse,context,text,typeface,typography,1,session,area,0);context.endFrame();};
+    render();const auto first=browse.first;
+    browse.offset+=38;render();
+    TEST_ASSERT_GREATER_THAN(first,browse.first);
+    TEST_ASSERT_EQUAL(0,session.state.wordIndex);
+    browse.offset-=38;render();
+    TEST_ASSERT_EQUAL(first,browse.first);
+    const auto& word=browse.layout.words.front();
+    const auto& line=browse.layout.lines.front();
+    TEST_ASSERT_EQUAL(browse.first,screens::PageReader::wordAtPoint(browse,word.x+1,line.top+2));
+    browse.offset=10000;render();
+    TEST_ASSERT_LESS_THAN(words.size(),browse.first);
+    TEST_ASSERT_EQUAL(0,session.state.wordIndex);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_page_browse_scrolls_without_changing_saved_reader_position);
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
     RUN_TEST(test_reader_font_resolves_opentype_glyph_ids);
     RUN_TEST(test_reader_batches_adjacent_shaped_glyphs);
@@ -1676,6 +1745,7 @@ int main(int, char**) {
     RUN_TEST(test_slow_press_remains_tap_until_hold_threshold);
     RUN_TEST(test_missing_sample_does_not_interrupt_active_touch);
     RUN_TEST(test_touch_reset_cancels_active_gesture);
+    RUN_TEST(test_touch_loading_transition_requires_a_fresh_press);
     RUN_TEST(test_queued_touch_uses_sample_time_instead_of_ui_time);
     RUN_TEST(test_stepper_taps_and_repeats);
     RUN_TEST(test_disabled_button_ignores_touch);
@@ -1705,6 +1775,7 @@ int main(int, char**) {
     RUN_TEST(test_labels_align_and_battery_owns_its_drawing);
     RUN_TEST(test_setting_gives_long_values_the_full_card_width);
     RUN_TEST(test_slider_redraws_with_its_active_color);
+    RUN_TEST(test_filled_slider_discards_preview_on_touch_reset_and_screen_change);
     RUN_TEST(test_wide_slider_uses_larger_label_and_value_text);
     RUN_TEST(test_keyboard_edits_and_submits);
     RUN_TEST(test_orientation_owns_graphics_touch_and_hourglass_cache);
