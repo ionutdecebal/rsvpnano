@@ -3,7 +3,7 @@
 #include "settings/SettingsModel.h"
 #include "text/AsciiText.h"
 namespace update {
-inline constexpr char kDefaultUiReleaseTag[]="preview-ui-dictionary-20261020.1";
+inline constexpr char kDefaultUiReleaseTag[]="preview-ui-dictionary-20261020.2";
 struct ReleaseSource {std::string owner,repo,tag;};
     inline bool splitOwnerRepo(std::string_view value, std::string& owner, std::string& repo) {
         const std::string_view trimmed = AsciiText::trim(value);

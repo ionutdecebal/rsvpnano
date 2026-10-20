@@ -1,4 +1,5 @@
 #include "settings/SettingsStore.h"
+#include "settings/WifiProfiles.h"
 #include <esp_log.h>
 
 #include <Arduino.h>
@@ -98,7 +99,7 @@ namespace settings {
         }
 
         void sanitize(DeviceSecrets& value) {
-            truncate(value.wifiPassword, rules::kWifiPasswordMaxLength);
+            wifi::sanitize(value);
         }
 
     } // namespace

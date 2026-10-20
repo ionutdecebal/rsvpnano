@@ -5,6 +5,7 @@
 #include <expected>
 #include <functional>
 #include <system_error>
+#include "settings/WifiProfiles.h"
 
 namespace net {
 
@@ -16,6 +17,14 @@ namespace net {
     std::expected<void, std::error_code> connectStation(const char* ssid, const char* password,
                                                         const WifiProgress& progress = nullptr,
                                                         uint32_t timeoutMs = 15000);
+
+    // Scan without disabling an existing companion access point. Credentials
+    // are never copied to public settings or logged.
+    std::vector<settings::WifiProfile> savedConnectionOrder(const settings::NetworkSettings& network,
+                                                           const settings::DeviceSecrets& secrets);
+    std::expected<void, std::error_code> connectSaved(const settings::NetworkSettings& network,
+                                                      const settings::DeviceSecrets& secrets,
+                                                      const WifiProgress& progress = nullptr);
 
     // Disconnects and powers the radio off (WIFI_OFF).
     void disconnect();

@@ -13,7 +13,54 @@
 #include "reader/ReadingSession.h"
 #include "settings/SettingsCodec.h"
 #include "settings/SettingsGlaze.h"
+#include "settings/WifiProfiles.h"
 #include "text/UnicodeText.h"
+
+void test_saved_wifi_migrates_switches_forgets_and_keeps_passwords_private(){
+    settings::DeviceSettings device;settings::DeviceSecrets secrets;
+    device.network.ssid="Home";secrets.wifiPassword="home secret";
+    settings::wifi::remember(device.network,secrets,"Hotspot","phone secret");
+    TEST_ASSERT_EQUAL(2,secrets.wifiNetworks.size());
+    TEST_ASSERT_EQUAL_STRING("home secret",settings::wifi::password(device.network,secrets,"Home")->c_str());
+    TEST_ASSERT_EQUAL_STRING("phone secret",settings::wifi::password(device.network,secrets,"Hotspot")->c_str());
+    auto stored=settings::codec::encodeSecrets(secrets,settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE(stored.has_value());
+    auto restored=settings::codec::decodeSecrets(*stored,settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE_MESSAGE(restored.has_value(),restored?"":restored.error().message.c_str());
+    TEST_ASSERT_TRUE(secrets==*restored);
+    auto publicSettings=settings::codec::encodeToml(device,settings::SettingsSource::Sd);
+    TEST_ASSERT_EQUAL(std::string::npos,publicSettings->find("phone secret"));
+    TEST_ASSERT_EQUAL(std::string::npos,publicSettings->find("wifiNetworks"));
+    auto order=settings::wifi::connectionOrder(settings::wifi::profiles(device.network,secrets),{{"Home",-42},{"Hotspot",-80},{"Stranger",-20}});
+    TEST_ASSERT_EQUAL_STRING("Home",order.front().ssid.c_str());
+    order=settings::wifi::connectionOrder(settings::wifi::profiles(device.network,secrets),{{"Home",-42}});
+    TEST_ASSERT_EQUAL_STRING("Home",order.front().ssid.c_str());
+    settings::wifi::forgetCurrent(device.network,secrets);
+    TEST_ASSERT_FALSE(settings::wifi::password(device.network,secrets,"Hotspot").has_value());
+    TEST_ASSERT_EQUAL_STRING("Home",device.network.ssid.c_str());
+    settings::wifi::remember(device.network,secrets,"Home","changed");
+    TEST_ASSERT_EQUAL(1,secrets.wifiNetworks.size());
+    TEST_ASSERT_EQUAL_STRING("changed",secrets.wifiPassword.c_str());
+    settings::wifi::remember(device.network,secrets,"Guest","");
+    TEST_ASSERT_TRUE(settings::wifi::password(device.network,secrets,"Guest").has_value());
+    settings::wifi::forgetCurrent(device.network,secrets);settings::wifi::forgetCurrent(device.network,secrets);
+    TEST_ASSERT_TRUE(device.network.ssid.empty());TEST_ASSERT_TRUE(secrets.wifiNetworks.empty());
+}
+void test_saved_wifi_capacity_and_legacy_roundtrip(){
+    auto legacy=settings::codec::decodeSecrets("wifiPassword = \"old password\"\n",settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE(legacy.has_value());TEST_ASSERT_TRUE(legacy->wifiNetworks.empty());
+    settings::NetworkSettings network{"Original"};auto secrets=*legacy;
+    for(int i=0;i<7;++i)settings::wifi::remember(network,secrets,std::to_string(i),std::string(63,'\"'));
+    TEST_ASSERT_EQUAL(settings::wifi::kMaxProfiles,secrets.wifiNetworks.size());
+    const auto encoded=settings::codec::encodeSecrets(secrets,settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE(encoded.has_value());TEST_ASSERT_LESS_THAN(settings::kMaxSecretsBytes,encoded->size());
+    const auto decoded=settings::codec::decodeSecrets(*encoded,settings::SettingsSource::Nvs);
+    TEST_ASSERT_TRUE(decoded.has_value());TEST_ASSERT_TRUE(*decoded==secrets);
+    auto ordered=settings::wifi::connectionOrder(settings::wifi::profiles(network,secrets),{});
+    TEST_ASSERT_EQUAL_STRING(network.ssid.c_str(),ordered.front().ssid.c_str());
+    const auto before=secrets;
+    settings::wifi::remember(network,secrets,std::string(33,'s'),"invalid");TEST_ASSERT_TRUE(before==secrets);
+}
 
 void setUp() {}
 void tearDown() {}
@@ -343,6 +390,8 @@ void test_pocket_lines_guides_migrate_old_settings_without_reinterpreting_horizo
 
 int main() {
     UNITY_BEGIN();
+    RUN_TEST(test_saved_wifi_migrates_switches_forgets_and_keeps_passwords_private);
+    RUN_TEST(test_saved_wifi_capacity_and_legacy_roundtrip);
     RUN_TEST(test_pocket_lines_guides_migrate_old_settings_without_reinterpreting_horizontal_gap);
     RUN_TEST(test_onboarding_and_touch_preference_migrate_and_persist);
     RUN_TEST(test_defaults_round_trip_through_toml_and_companion_json);

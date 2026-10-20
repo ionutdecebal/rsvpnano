@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "settings/SettingsRules.h"
+#include "settings/WifiProfiles.h"
 #include "text/AsciiText.h"
 
 namespace {
@@ -34,9 +35,12 @@ namespace {
 } // namespace
 
 void CompanionApi::storeNetwork(std::string ssid, std::string password) {
-    settingsStore_.settings().network.ssid = std::move(ssid);
+    if(ssid.empty()){
+        settingsStore_.settings().network.ssid.clear();
+        settingsStore_.secrets().wifiPassword.clear();
+        settingsStore_.secrets().wifiNetworks.clear();
+    }else settings::wifi::remember(settingsStore_.settings().network,settingsStore_.secrets(),std::move(ssid),std::move(password));
     settingsStore_.acceptChanges();
-    settingsStore_.secrets().wifiPassword = std::move(password);
     settingsStore_.acceptSecretChanges();
     networkScreen_.begin(settingsStore_);
     networkScreen_.startupCheckPending = false;

@@ -24,8 +24,13 @@ void OnboardingScreen::books(ui::Context& ui){
     const C keys[]{uploadUsb_?C::UploadUsbOne:C::UploadWifiOne,uploadUsb_?C::UploadUsbTwo:C::UploadWifiTwo,uploadUsb_?C::UploadUsbThree:C::UploadWifiThree};
     for(int i=0;i<3;++i){
         const int16_t y=91+i*22;
-        ui.label({147,y,14,20},std::to_string(i+1),11,Accent);
-        ui.label({168,y,456,int16_t(i==2?34:20)},t(keys[i]),13,Foreground,ui::TextAlign::Start,i==2?2:1);
+        const ui::Rect body{168,y,456,int16_t(i==2?34:20)};
+        const auto layout=ui.prepareText(body,t(keys[i]),13,ui::TextAlign::Start,i==2?2:1);
+        if(!layout.lines.empty()){
+            const auto first=layout.lines.front().ink;
+            ui.label({147,first.y,14,first.h},std::to_string(i+1),13,Accent);
+        }
+        ui.label(body,t(keys[i]),13,Foreground,ui::TextAlign::Start,i==2?2:1);
     }
 }
 }

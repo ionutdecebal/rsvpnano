@@ -304,8 +304,8 @@ static std::expected<LatestRelease, Error> prepareRelease(const settings::Device
         });
     }
 
-    auto connected = net::connectStation(settings.network.ssid.c_str(), secrets.wifiPassword.c_str(), [&](int percent) {
-        reportStatus(callback, context, kStatusTitle, "Connecting Wi-Fi", settings.network.ssid.c_str(), percent);
+    auto connected = net::connectSaved(settings.network, secrets, [&](int percent) {
+        reportStatus(callback, context, kStatusTitle, "Connecting saved Wi-Fi", "Trying available networks", percent);
     });
     if (!connected) {
         net::disconnect();

@@ -160,8 +160,17 @@ namespace settings {
         bool operator==(const DeviceSettings&) const = default;
     };
 
+    struct WifiProfile {
+        std::string ssid;
+        std::string password;
+        bool operator==(const WifiProfile&) const = default;
+    };
+
     struct DeviceSecrets {
+        // Keep the legacy current password for older firmware; all credentials
+        // live only in the secrets store, never in SD settings or the public API.
         std::string wifiPassword;
+        std::vector<WifiProfile> wifiNetworks;
 
         bool operator==(const DeviceSecrets&) const = default;
     };

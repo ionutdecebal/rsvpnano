@@ -415,7 +415,6 @@ namespace {
 RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::DeviceSettings& settings,
                                  const settings::DeviceSecrets& secrets, StatusCallback callback, void* context) {
     const std::string& ssid = settings.network.ssid;
-    const std::string& wifiPassword = secrets.wifiPassword;
 
     Result result;
     if (AsciiText::trim(ssid).empty()) {
@@ -424,8 +423,8 @@ RssFeeds::Result RssFeeds::check(Preferences& preferences, const settings::Devic
         return result;
     }
 
-    auto connected = net::connectStation(ssid.c_str(), wifiPassword.c_str(), [&](int percent) {
-        report(callback, context, "Connecting Wi-Fi", ssid.c_str(), percent);
+    auto connected = net::connectSaved(settings.network, secrets, [&](int percent) {
+        report(callback, context, "Connecting saved Wi-Fi", "Trying available networks", percent);
     });
     if (!connected) {
         net::disconnect();

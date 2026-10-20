@@ -1,4 +1,5 @@
 #include "ui/screens/watch/Layout.h"
+#include "settings/WifiProfiles.h"
 
 namespace screens {
     Action NetworkScreen::draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
@@ -72,7 +73,7 @@ namespace screens {
                 screen = Screen::NetworkSettings;
                 return;
             }
-            password_ = network.ssid == store.settings().network.ssid ? store.secrets().wifiPassword : std::string{};
+            password_ = settings::wifi::password(store.settings().network,store.secrets(),network.ssid).value_or("");
             selectedNetworkIndex_ = index;
             keyboard_ = {};
             connectionFailed_ = false;

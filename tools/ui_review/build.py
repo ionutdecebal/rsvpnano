@@ -5,15 +5,15 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 GROUPS=[
  {'id':'onboarding','title':'First use','description':'Welcome → SD check → gestures → speed and pacing → navigation → buttons → books → dictionary.'},
- {'id':'reading','title':'Reading & navigation','description':'Book ↔ swipe-up controls → menu, page browser or dictionary. Find place previews a jump before committing.'},
+ {'id':'reading','title':'Reading & navigation','description':'Book ↔ middle-button controls → menu, page browser or dictionary. Find place previews a jump before committing.'},
  {'id':'library','title':'Library & books','description':'Menu → Library → book details/open. Chapters and search help you find a passage.'},
  {'id':'dictionary','title':'Dictionary','description':'Controls → Dictionary → word search or explicit online lookup. Connections → Dictionary setup.'},
  {'id':'focus','title':'Focus','description':'Menu → Focus → read with focus or timer only. Presets → edit/add. Breaks pause reading.'},
  {'id':'appearance','title':'Appearance & pace','description':'Settings → Reading or Appearance. Typography, guides and reading/paused controls retain their own settings.'},
  {'id':'system','title':'Device & connections','description':'Settings → Display, Connections, Device or Help. Includes keyboards, upload, storage, encryption and updates.'},
  {'id':'status','title':'Loading & recovery','description':'Startup, library loading, errors and interrupted operations. Status states use the firmware renderer.'}]
-TITLES={'menu':'Main menu','quick-controls':'Swipe-up controls','reader-paused':'Reader · paused','reader-playing':'Reader · playing','dictionary':'Dictionary · offline definition','dictionary-setup':'Dictionary · install and online help','reading':'Reading settings','reading-controls':'Reading controls','display':'Display settings','help':'Help & introduction','updates':'Firmware & updates','encryption':'Settings encryption','encryption-confirm':'Encryption confirmation','wifi-settings':'Wi-Fi & update source','wifi-scan':'Wi-Fi · networks','wifi-scanning':'Wi-Fi · scanning','wifi-empty':'Wi-Fi · none found','wifi-failed':'Wi-Fi · scan failed','wifi-password':'Wi-Fi · password','ota-owner':'Update repository · keyboard','ota-tag':'Release tag · keyboard'}
-INTRO=['Welcome','Touch practice','Swipe-up controls','Find your speed','Tune pacing','Essential menu','Page navigation','Essential settings','Focus timer','Physical buttons','Upload books','Dictionary']
+TITLES={'menu':'Main menu','quick-controls':'Quick controls','reader-paused':'Reader · paused','reader-playing':'Reader · playing','dictionary':'Dictionary · offline definition','dictionary-setup':'Dictionary · install and online help','reading':'Reading settings','reading-controls':'Reading controls','display':'Display settings','help':'Help & introduction','updates':'Firmware & updates','encryption':'Settings encryption','encryption-confirm':'Encryption confirmation','wifi-settings':'Wi-Fi & update source','wifi-scan':'Wi-Fi · networks','wifi-scanning':'Wi-Fi · scanning','wifi-empty':'Wi-Fi · none found','wifi-failed':'Wi-Fi · scan failed','wifi-password':'Wi-Fi · password','ota-owner':'Update repository · keyboard','ota-tag':'Release tag · keyboard'}
+INTRO=['Welcome','Touch practice','Quick controls','Find your speed','Tune pacing','Essential menu','Page navigation','Essential settings','Focus timer','Physical buttons','Upload books','Dictionary']
 COVERAGE={'Read':'menu','Library':'library','Chapters':'chapters','Settings':'settings','ReadingSettings':'reading-controls','InterfaceSettings':'display-controls','PacingSettings':'pacing','ReaderAppearance':'appearance-type','BookFonts':'book-font-language','NetworkSettings':'wifi-settings','WifiScan':'wifi-scan','WifiConnect':'wifi-password','NetworkEdit':'ota-tag','Device':'device','StorageEncryption':'encryption','Sync':'companion','Ota':'updates','FocusTimers':'focus','FocusEditor':'focus-editor','FocusNameEdit':'focus-name','FocusSession':'focus-session','Reader':'reader-paused','Usb':'usb-transfer','Status':'startup','Standby':'standby','ReadingHub':'reading','DisplayHub':'display','FocusPresets':'focus-presets','FindPlace':'find-place','FindChapters':'find-chapters','BookSearch':'search-results','BookSearchKeyboard':'search-keyboard','QuickControls':'quick-controls','Onboarding':'intro-en-0','ButtonMap':'button-map','AddBooks':'add-books','TouchCheck':'touch-check-edges','Dictionary':'dictionary','DictionarySearch':'dictionary-search','DictionaryHelp':'dictionary-setup'}
 # These retained enum values are not reachable in the LCD release's navigation.
 INACTIVE={'StorageHub':'LCD Device uses the storage-status action instead.','PowerHub':'LCD Device offers power off; sleep is in Display settings.'}
@@ -33,8 +33,8 @@ def title(n):
  return n.replace('-',' ').capitalize()
 def route(g,n):
  if g=='onboarding':return 'First boot / Settings → Help → Replay introduction'
- if g=='dictionary':return 'Book → swipe up → Dictionary' if n!='dictionary-setup' else 'Settings → Connections → Dictionary setup'
- if g=='reading':return 'Book → swipe up → Page / Find place' if n.startswith(('page','find','search')) else 'Book → swipe up for controls'
+ if g=='dictionary':return 'Book → middle button → Dictionary' if n!='dictionary-setup' else 'Settings → Connections → Dictionary setup'
+ if g=='reading':return 'Book → middle button → Page / Find place' if n.startswith(('page','find','search')) else 'Book → middle button for controls'
  if g=='appearance':return 'Menu → Settings → Reading / Appearance'
  if g=='focus':return 'Menu → Start Focus → Presets / Session'
  if g=='library':return 'Menu → Library / Chapters'
@@ -46,7 +46,9 @@ def links(g,n):
  if n=='quick-controls':return ['reader-paused','menu','page','dictionary']
  if n=='connections':return ['wifi-settings','companion','usb-transfer','dictionary','dictionary-setup']
  if n=='device':return ['updates','encryption','status-storage']
- if n=='help':return ['button-map','add-books','intro-en-0','touch-check']
+ if n=='help':return ['button-map','add-books','intro-en-0']
+ if n in ('display','display-controls'):return ['touch-check-edges','settings']
+ if n=='wifi-settings':return ['wifi-scan','wifi-saved','updates']
  if g=='dictionary':return ['quick-controls','dictionary-search','dictionary-setup']
  if g=='focus':return ['menu','focus','focus-presets','focus-session']
  if g=='onboarding':return ['intro-en-0','intro-en-11','menu']

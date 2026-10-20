@@ -644,7 +644,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
     if(screen_==screens::Screen::Onboarding){
         if(Input::hasAction(actions,Input::ActionPowerOff)){onboardingScreen_.pause();powerOff(nowMs);}
         else if(Input::hasAction(actions,Input::ActionStandby)){if(!onboardingJobActive()){onboardingScreen_.pause();enterStandby(nowMs);}}
-        else if(Input::hasAction(actions,Input::ActionOpenMenu)){handleScreenAction(screens::Action::SkipIntroduction,nowMs);}
+        else if(Input::hasAction(actions,Input::ActionOpenMenu)){onboardingScreen_.hardwareControls();renderScreen(nowMs);}
         else if(Input::hasAction(actions,Input::ActionBack)){onboardingScreen_.next(-1);renderScreen(nowMs);}
         else if(Input::hasAction(actions,Input::ActionSelect)||Input::hasAction(actions,Input::ActionPlayPause)){
             onboardingScreen_.hardwarePlay(nowMs);renderScreen(nowMs);
@@ -655,7 +655,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         if (screen_ == screens::Screen::Reader) {
             ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
             ReadingLoop::pause(readerScreen_.session);
-            screen_ = screens::Screen::Read;
+            screen_ = immediateUi_.modernReadingPalette() ? screens::Screen::QuickControls : screens::Screen::Read;
         } else {
             if (companionApi_.active()) {
                 companionApi_.end();
@@ -720,7 +720,9 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
             } else if (screen_ == screens::Screen::ReadingHub || screen_ == screens::Screen::DisplayHub
                        || screen_ == screens::Screen::Connections) {
                 screen_ = screens::Screen::Settings;
-            } else if ((screen_ == screens::Screen::ButtonMap || screen_ == screens::Screen::AddBooks || screen_ == screens::Screen::TouchCheck)) {
+            } else if (screen_ == screens::Screen::TouchCheck) {
+                screen_ = screens::Screen::InterfaceSettings;
+            } else if ((screen_ == screens::Screen::ButtonMap || screen_ == screens::Screen::AddBooks)) {
                 screen_ = screens::Screen::Help;
             } else if (screen_ == screens::Screen::DictionaryHelp) {
                 screen_ = screens::Screen::Connections;

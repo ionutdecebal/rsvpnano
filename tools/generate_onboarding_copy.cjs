@@ -26,6 +26,12 @@ copy.dictionaryOffline=['Offline English','Englisch offline','Engleză offline']
 copy.dictionaryOfflineBody=['Copy english.oewn from the release pack to /dictionaries on your SD card. No phone or account needed.','english.oewn aus dem Release-Paket nach /dictionaries auf der SD-Karte kopieren. Ohne Handy oder Konto.','Copiază english.oewn din pachetul lansării în /dictionaries pe cardul SD. Fără telefon sau cont.'];
 copy.dictionaryOnline=['Look online','Online suchen','Caută online'];
 copy.dictionaryOnlineBody=['Tap Look online for Wiktionary over Wi-Fi. Only the word is sent when you ask.','Online suchen nutzt Wiktionary per WLAN. Das Wort wird nur auf Anfrage gesendet.','Caută online folosește Wiktionary prin Wi-Fi. Cuvântul e trimis doar la cerere.'];
+copy.swipeTitle=["Middle button.", "Mittlere Taste.", "Butonul din mijloc."];
+copy.swipeBody=["Press the middle button at the top right for speed, brightness and navigation.", "Drücke oben rechts die mittlere Taste für Tempo, Helligkeit und Navigation.", "Apasă butonul din mijloc, sus în dreapta, pentru viteză, luminozitate și navigare."];
+copy.swipeAccessible=["Press the middle button for controls", "Mittlere Taste für die Lesesteuerung", "Butonul din mijloc deschide comenzile"];
+copy.swipeHelp=["Middle button: speed, brightness and navigation. Tap Menu for all settings.", "Mittlere Taste: Tempo, Helligkeit und Navigation. Menü öffnet alle Einstellungen.", "Butonul din mijloc: viteză, luminozitate și navigare. Meniu deschide toate setările."];
+copy.powerHelp=["Open reading controls", "Lesesteuerung öffnen", "Deschide comenzile de lectură"];
+copy.dictionaryLesson=["Press the middle button, then tap Dictionary. Browse nearby words or search.", "Drücke die mittlere Taste und wähle Wörterbuch. Wörter wechseln oder suchen.", "Apasă butonul din mijloc, apoi Dicționar. Schimbă cuvântul sau caută."];
 // RSVP Nano branding; the Pocket Lines mark is retained only as the reading guide.
 const keys=Object.keys(copy),name=k=>k[0].toUpperCase()+k.slice(1);
 const target=path.join(root,'src/ui/screens');

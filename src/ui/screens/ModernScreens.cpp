@@ -6,7 +6,7 @@ namespace screens::modern {
     using ui::modern::Style;
 
     Action header(ui::Context& ui, std::string_view title, Screen& screen, Screen parent, std::string_view trailing) {
-        const auto parentText = parent == Screen::Help ? copy(ui,Copy::Help) : parent == Screen::Read ? caption(ui, UiText::Read, "Menu")
+        const auto parentText = parent == Screen::NetworkSettings ? std::string_view{"Wi-Fi"} : parent == Screen::Help ? copy(ui,Copy::Help) : parent == Screen::Read ? caption(ui, UiText::Read, "Menu")
                                : parent == Screen::ReadingHub ? caption(ui, UiText::Reading, "Pace")
                                : parent == Screen::DisplayHub ? ui.text(UiText::Display)
                                : parent == Screen::Connections ? caption(ui, UiText::Network, "Connect")
@@ -93,16 +93,16 @@ namespace screens::modern {
 namespace screens::modern {
 Action quickControls(ui::Context& ui,settings::ReadingSettings& reading,settings::InterfaceSettings& interface,Screen& screen){
     using ui::modern::button;using ui::modern::Style;
-    ui.label({16,8,298,20},copy(ui,Copy::TrayTitle),11,ui::themes::Muted);
-    if(button(ui,{16,42,58,58},"−",Style::Secondary,true,{},26))reading.wpm=std::max<int>(reading.wpm.min(),int(reading.wpm)-10);
-    ui.label({82,36,168,56},std::to_string(reading.wpm),39,ui::themes::Foreground,ui::TextAlign::Center);
-    ui.label({82,94,168,18},"WPM",11,ui::themes::Muted,ui::TextAlign::Center);
-    if(button(ui,{258,42,58,58},"+",Style::Secondary,true,{},26))reading.wpm=std::min<int>(reading.wpm.max(),int(reading.wpm)+10);
-    if(button(ui,{16,120,300,44},std::string{copy(ui,Copy::BackBook)}+" ↓",Style::Primary))return Action::Resume;
-    ui::modern::rule(ui,{334,8,1,156});
-    if(button(ui,{350,8,105,72},copy(ui,Copy::Menu),Style::Secondary,true,{},13))screen=Screen::Read;
-    if(button(ui,{463,8,105,72},copy(ui,Copy::Page),Style::Secondary,true,{},13))return Action::OpenPage;
-    if(button(ui,{350,90,218,74},"Dictionary",Style::Secondary,true,{},12))return Action::OpenDictionary;
+    if(button(ui,{16,8,104,72},copy(ui,Copy::Menu),Style::Secondary,true,{},13))screen=Screen::Read;
+    if(button(ui,{128,8,104,72},copy(ui,Copy::Page),Style::Secondary,true,{},13))return Action::OpenPage;
+    if(button(ui,{16,90,216,74},copy(ui,Copy::Dictionary),Style::Secondary,true,{},13))return Action::OpenDictionary;
+    ui::modern::rule(ui,{246,8,1,156});
+    ui.label({260,8,308,20},copy(ui,Copy::TrayTitle),11,ui::themes::Muted);
+    if(button(ui,{260,42,58,58},"−",Style::Secondary,true,{},26))reading.wpm=std::max<int>(reading.wpm.min(),int(reading.wpm)-10);
+    ui.label({326,36,176,56},std::to_string(reading.wpm),39,ui::themes::Foreground,ui::TextAlign::Center);
+    ui.label({326,94,176,18},"WPM",11,ui::themes::Muted,ui::TextAlign::Center);
+    if(button(ui,{510,42,58,58},"+",Style::Secondary,true,{},26))reading.wpm=std::min<int>(reading.wpm.max(),int(reading.wpm)+10);
+    if(button(ui,{260,120,308,44},copy(ui,Copy::BackBook),Style::Primary))return Action::Resume;
     int brightness=interface.brightnessPercent;
     if(ui.verticalSlider({580,8,52,156},brightness,5,100))interface.brightnessPercent=brightness;
     return Action::None;

@@ -30,6 +30,7 @@ namespace screens {
             using ui::modern::button;
             using ui::modern::Style;
             if (modern::header(ui, modern::copy(ui,modern::Copy::Display), screen, Screen::Settings) == Action::Resume) screen = Screen::Reader;
+            if (button(ui,{340,0,132,43},modern::copy(ui,modern::Copy::TouchTest),Style::Plain,true,{},13)) screen=Screen::TouchCheck;
             if (button(ui, {12, 51, 300, 52}, ui.text(UiText::Theme), Style::Secondary, true,
                        config.selectedThemeId == ui::themes::kDefaultThemeId && themes.resolve(config.selectedThemeId).definition.colors == ui::themes::ThemeColors{} ? "Ink" : themes.resolve(config.selectedThemeId).definition.name)) {
                 const auto& next = themes.next(config.selectedThemeId);

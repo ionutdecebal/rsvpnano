@@ -15,6 +15,7 @@
 #include "logging/Logger.h"
 #include "text/AsciiText.h"
 #include "update/OtaUpdater.h"
+#include "network/WifiConnection.h"
 
 namespace {
 
@@ -115,7 +116,7 @@ void CompanionApi::renderStatus(bool usbConnected) {
 
 std::string_view CompanionApi::statusLine1() const {
     if (stationConnected_.load())
-        return settingsStore_.settings().network.ssid;
+        return stationSsid_;
     return statusLine1_;
 }
 
@@ -146,11 +147,11 @@ CompanionApi::OperationResult CompanionApi::startAccessPoint() {
 }
 
 CompanionApi::OperationResult CompanionApi::startStation() {
-    const std::string& ssid = settingsStore_.settings().network.ssid;
-    if (ssid.empty())
-        return {};
-
-    if (WiFi.begin(ssid.c_str(), settingsStore_.secrets().wifiPassword.c_str()) == WL_CONNECT_FAILED)
+    const auto saved=net::savedConnectionOrder(settingsStore_.settings().network,settingsStore_.secrets());
+    if(saved.empty())return {};
+    const auto& ssid=saved.front().ssid;
+    WiFi.setAutoReconnect(true);
+    if (WiFi.begin(ssid.c_str(), saved.front().password.c_str()) == WL_CONNECT_FAILED)
         return std::unexpected("Could not start the saved Wi-Fi connection");
 
     ESP_LOGI("companion", "station connecting ssid=%s; softAP remains available", ssid.c_str());
@@ -218,8 +219,9 @@ void CompanionApi::applyNetworkState(void* context) {
     if (auto mdns = self.startMdns(); !mdns)
         ESP_LOGW("companion", "station connected without mDNS discovery: %s", mdns.error().c_str());
     self.stationUrl_ = httpUrl(WiFi.localIP());
+    self.stationSsid_=WiFi.SSID().c_str();
     self.stationConnected_.store(true);
-    const std::string& ssid = self.settingsStore_.settings().network.ssid;
+    const std::string& ssid = self.stationSsid_;
     ESP_LOGI("companion", "station ready ssid=%s ip=%s fallback=%s", ssid.c_str(), WiFi.localIP().toString().c_str(),
              self.accessPointSsid_.c_str());
     screens::status(self.ui_, self.ui_.text(UiText::Sync), ssid, self.stationUrl_);

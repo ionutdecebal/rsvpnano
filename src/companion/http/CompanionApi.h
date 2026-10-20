@@ -235,6 +235,7 @@ private:
 
     httpd_handle_t server_ = nullptr;
     std::atomic_bool active_ = false;
+    std::string stationSsid_;
     std::atomic_bool stationConnected_ = false;
     std::mutex networkStateMutex_;
     std::mutex operationsMutex_;

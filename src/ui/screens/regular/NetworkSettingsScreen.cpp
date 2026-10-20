@@ -23,8 +23,8 @@ namespace screens {
             if (ui::modern::row(ui, {16, 52, 292, 50}, "Wi-Fi network", ssidStored ? std::string_view{settings.network.ssid} : ui.text(UiText::NotSet), ui::modern::Symbol::Connect)) {
                 openWifiScan(); screen = Screen::WifiScan;
             }
-            if (button(ui, {16, 110, 140, 50}, ui.text(UiText::CompanionSetup), Style::Primary)) return Action::CompanionSync;
-            if (button(ui, {164, 110, 144, 50}, ui.text(UiText::ForgetNetwork), Style::Plain, ssidStored)) {
+            if (button(ui, {16, 110, 140, 50}, "Saved ("+std::to_string(settings::wifi::profiles(settings.network,store.secrets()).size())+")", Style::Secondary)) {openSavedWifi();screen=Screen::WifiScan;}
+            if (button(ui, {164, 110, 144, 50}, "Forget selected", Style::Plain, ssidStored)) {
                 password_.clear(); saveNetwork(store, {}); startupCheckPending = false;
             }
             if (ui.toggle({328, 52, 296, 30}, ui.text(UiText::StartupCheck), store.settings().updates.checkOnStartup)) store.acceptChanges();
@@ -95,6 +95,21 @@ namespace screens {
 
     void NetworkScreen::drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen) {
         const ui::Rect content = detail::content(ui);
+        if(savedNetworks_&&ui.modernPresentation()){
+            using ui::modern::button;using ui::modern::Style;
+            if(modern::header(ui,"Saved Wi-Fi",screen,Screen::NetworkSettings)==Action::Resume){screen=Screen::Reader;return;}
+            if(button(ui,{340,0,132,43},"Add network",Style::Plain,true,{},13)){openWifiScan();return;}
+            const auto saved=settings::wifi::profiles(store.settings().network,store.secrets());
+            if(saved.empty())ui.label({16,58,608,98},"No saved networks. Add your home Wi-Fi or hotspot once.",15,ui::themes::Muted,ui::TextAlign::Center,2);
+            for(size_t i=0;i<saved.size();++i){
+                if(button(ui,{int16_t(12+i%3*208),int16_t(52+i/3*58),198,52},saved[i].ssid,
+                    saved[i].ssid==store.settings().network.ssid?Style::Accent:Style::Secondary,true,
+                    saved[i].ssid==store.settings().network.ssid?"Selected · auto-connect":"Saved · auto-connect",13)){
+                    password_=saved[i].password;saveNetwork(store,saved[i].ssid);screen=Screen::NetworkSettings;return;
+                }
+            }
+            return;
+        }
         updateWifiScan();
 
         constexpr int16_t gap = 4;
@@ -140,9 +155,12 @@ namespace screens {
         }
         for (size_t index = 0; index < networkCount_; ++index) {
             const WifiNetwork& network = networks_[index];
-            const std::string signal = std::to_string(network.rssi) + " dBm";
+            const auto savedPassword=settings::wifi::password(store.settings().network,store.secrets(),network.ssid);
+            const std::string signal = savedPassword ? "Saved" : std::to_string(network.rssi) + " dBm";
             if (ui.setting(grid.next(), network.ssid, signal, ui::SettingLayout::Inline)) {
-                const bool savedNetwork = network.ssid == store.settings().network.ssid;
+                if(savedPassword&&network.secured==!savedPassword->empty()){
+                    password_=*savedPassword;saveNetwork(store,network.ssid);closeWifi();screen=Screen::NetworkSettings;return;
+                }
                 if (!network.secured) {
                     password_.clear();
                     saveNetwork(store, network.ssid);
@@ -150,7 +168,7 @@ namespace screens {
                     screen = Screen::NetworkSettings;
                     return;
                 }
-                password_ = savedNetwork ? store.secrets().wifiPassword : std::string{};
+                password_ = savedPassword.value_or("");
                 selectedNetworkIndex_ = index;
                 keyboard_ = {};
                 connectionFailed_ = false;

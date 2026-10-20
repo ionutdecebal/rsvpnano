@@ -16,6 +16,7 @@ public:
     void pause();
     void update(uint32_t nowMs);
     void hardwarePlay(uint32_t nowMs);
+    void hardwareControls(){if(step_==2&&!storageVisible_){pause();controlsFound_=true;}}
     Action draw(ui::Context& ui,settings::DeviceSettings& settings,uint32_t nowMs);
     bool takeSettingsChanged(){return std::exchange(settingsChanged_,false);}
     const settings::ReadingSettings& draft() const{return draft_;}

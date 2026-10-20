@@ -3,13 +3,13 @@
 #include "ui/screens/ReaderLayout.h"
 
 namespace screens::modern {
-    enum class ReaderControl : uint8_t { None, Chapter, Footer, Focus, Controls };
+    enum class ReaderControl : uint8_t { None, Chapter, Footer, Focus, Menu };
     constexpr ui::Rect readerControlRect(ReaderControl control) {
         switch(control){
         case ReaderControl::Chapter:return {12,0,290,36};
         case ReaderControl::Focus:return {310,0,194,36};
         case ReaderControl::Footer:return {510,136,122,34};
-        case ReaderControl::Controls:return {270,136,100,34};
+        case ReaderControl::Menu:return {8,136,104,34};
         default:return {};
         }
     }

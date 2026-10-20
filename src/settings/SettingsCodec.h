@@ -12,7 +12,7 @@
 namespace settings {
 
     inline constexpr size_t kMaxSettingsBytes = 8192;
-    inline constexpr size_t kMaxSecretsBytes = 1024;
+    inline constexpr size_t kMaxSecretsBytes = 4096;
 
     enum class SettingsSource : uint8_t {
         Nvs,

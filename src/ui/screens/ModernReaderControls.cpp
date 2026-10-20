@@ -32,12 +32,9 @@ namespace screens {
                    && nowMs-modernPressedAtMs_>=350){modernHolding_=true;start(nowMs,false);}
                 return true;
             }
-            const bool holding=modernHolding_;cancelModernControls();
+            const bool holding=modernHolding_,moved=modernTouchMoved_;cancelModernControls();
             if(holding){finishPause(preferences,nowMs);return true;}
-            if(dy < -30 && std::abs(dy)>std::abs(dx)*1.3){
-                finishPause(preferences,nowMs);screen=Screen::QuickControls;ui.invalidate();return true;
-            }
-            if(!modernTouchMoved_ && (!settings_.holdToRead || modernPressedPlaying_)
+            if(!moved && (!settings_.holdToRead || modernPressedPlaying_)
                && session.playing==modernPressedPlaying_) toggle(preferences,nowMs);
             return true;
         }
@@ -47,7 +44,7 @@ namespace screens {
            || control!=modern::readerControlAt(touch->x,touch->y,settings_,session.playing,
                                                ReadingLoop::wordCount(session)>0,!ui.focusBadge().empty())) return true;
         switch(control){
-        case ReaderControl::Controls:finishPause(preferences,nowMs);screen=Screen::QuickControls;ui.invalidate();break;
+        case ReaderControl::Menu:finishPause(preferences,nowMs);screen=Screen::Read;ui.invalidate();break;
         case ReaderControl::Chapter:finishPause(preferences,nowMs);openLocator(screen);break;
         case ReaderControl::Focus:finishPause(preferences,nowMs);screen=Screen::FocusSession;break;
         case ReaderControl::Footer:

@@ -30,7 +30,7 @@ void Dictionary::lookupOnline(settings::SettingsStore& settings) {
     const auto& ssid=settings.settings().network.ssid;
     if(ssid.empty()){message="Set up Wi-Fi under Connections first";return;}
     const bool wasConnected=WiFi.status()==WL_CONNECTED;
-    if(!wasConnected&&!net::connectStation(ssid.c_str(),settings.secrets().wifiPassword.c_str())){message="Wi-Fi unavailable · offline dictionary still works";net::disconnect();return;}
+    if(!wasConnected&&!net::connectSaved(settings.settings().network,settings.secrets())){message="Wi-Fi unavailable · offline dictionary still works";net::disconnect();return;}
     if(time(nullptr)<1700000000){
         configTime(0,0,"pool.ntp.org","time.cloudflare.com");const uint32_t start=millis();
         while(time(nullptr)<1700000000&&millis()-start<10000)delay(100);

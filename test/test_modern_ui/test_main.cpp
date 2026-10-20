@@ -136,12 +136,12 @@ void test_menu_routes_brightness_bounds_and_unchanged_frame() {
     f.frame(controls);f.tap(controls,606,8);TEST_ASSERT_EQUAL(100,static_cast<int>(interface.brightnessPercent));
     f.frame(controls,true,606,86);f.frame(controls,true,560,171);TEST_ASSERT_EQUAL(5,static_cast<int>(interface.brightnessPercent));
     f.frame(controls,true,560,0);TEST_ASSERT_EQUAL(100,static_cast<int>(interface.brightnessPercent));f.frame(controls,false,560,0);
-    f.tap(controls,286,70);TEST_ASSERT_EQUAL(310,static_cast<int>(reading.wpm));
-    f.tap(controls,40,70);TEST_ASSERT_EQUAL(300,static_cast<int>(reading.wpm));
-    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenPage),static_cast<int>(f.tap(controls,510,44)));
-    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenDictionary),static_cast<int>(f.tap(controls,400,127)));
-    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenDictionary),static_cast<int>(f.tap(controls,510,127)));
-    f.tap(controls,400,44);TEST_ASSERT_EQUAL(static_cast<int>(screens::Screen::Read),static_cast<int>(f.screen));
+    f.tap(controls,540,70);TEST_ASSERT_EQUAL(310,static_cast<int>(reading.wpm));
+    f.tap(controls,286,70);TEST_ASSERT_EQUAL(300,static_cast<int>(reading.wpm));
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenPage),static_cast<int>(f.tap(controls,180,44)));
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenDictionary),static_cast<int>(f.tap(controls,50,127)));
+    TEST_ASSERT_EQUAL(static_cast<int>(screens::Action::OpenDictionary),static_cast<int>(f.tap(controls,180,127)));
+    f.tap(controls,65,44);TEST_ASSERT_EQUAL(static_cast<int>(screens::Screen::Read),static_cast<int>(f.screen));
 
 }
 
@@ -269,15 +269,15 @@ void test_reader_controls_respect_visibility_and_do_not_cover_the_word() {
     for (int x = 0; x < 640; x += 4)
         for (int y = 36; y < 120; y += 4)
             TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None), control(x, y));
-    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(50,155));
+    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(310,155));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(450,155));
-    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::Controls),control(310,155));
+    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::Menu),control(50,155));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(560,18));
     config.arrowsVisibility=settings::Visibility::always;
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(160,155,true));
     TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::None),control(120,122,true));
     config.arrowsVisibility=settings::Visibility::never;
-    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::Controls),control(310,155,true));
+    TEST_ASSERT_EQUAL(static_cast<int>(ReaderControl::Menu),control(50,155,true));
     Fixture f;
     for (bool playing : {false, true}) {
         f.ui.beginFrame(0);
@@ -460,7 +460,7 @@ void test_onboarding_copy_fits_native_fonts_without_ellipsis(){
     for(auto locale:{"en","de","ro"}){
         f.ui.setLocale(locale);fits({16,50,310,68},C::WelcomeTitle,26,2);fits({12,115,244,51},C::SpeedAdvice,13,3);
         for(auto key:{C::PacingAdvice,C::LongDelayAdvice,C::ComplexDelayAdvice,C::PunctuationDelayAdvice})fits({296,89,332,35},key,11,3);
-        for(auto key:{C::MenuLibrary,C::MenuChapters,C::MenuFocus,C::MenuSettings,C::MenuBook,C::ReadingExplain,C::AppearanceExplain,C::DisplayExplain,C::ConnectionsExplain,C::DeviceExplain,C::HelpExplain,C::BrowseExplain,C::FindExplain,C::SearchExplain,C::PositionExplain,C::DemoBookReturn,C::ReadFocusExplain,C::TimerOnlyExplain})fits({16,94,224,70},key,13,4);
+        for(auto key:{C::SwipeBody,C::SwipeHelp,C::DictionaryLesson,C::MenuLibrary,C::MenuChapters,C::MenuFocus,C::MenuSettings,C::MenuBook,C::ReadingExplain,C::AppearanceExplain,C::DisplayExplain,C::ConnectionsExplain,C::DeviceExplain,C::HelpExplain,C::BrowseExplain,C::FindExplain,C::SearchExplain,C::PositionExplain,C::DemoBookReturn,C::ReadFocusExplain,C::TimerOnlyExplain})fits({16,94,224,70},key,13,4);
         for(auto key:{C::SdChecking,C::SdReady,C::SdUnavailable,C::SdFolders,C::SdWrite,C::SdTimeout})fits({16,51,310,28},key,21,1);
         for(auto key:{C::SdCheckingBody,C::SdReadyBody,C::SdUnavailableBody,C::SdFoldersBody,C::SdWriteBody,C::SdTimeoutBody,C::SdBusyBody})fits({16,84,310,51},key,13,3);
         fits({16,140,310,30},C::SdDemoNote,11,2);
@@ -542,19 +542,19 @@ void test_bottom_margin_belongs_to_last_button_and_slider_only(){
     pressed=false;f.tap(draw,440,122);TEST_ASSERT_FALSE(pressed);TEST_ASSERT_FALSE(above);
 }
 
-void test_touch_check_reaches_edges_and_returns_to_help(){
+void test_touch_check_reaches_edges_and_returns_to_display(){
     Fixture f;screens::TouchCheckScreen check;f.screen=screens::Screen::TouchCheck;
     const auto draw=[&]{return check.draw(f.ui,f.screen);};
     f.frame(draw);
     for(auto y:{44,86,129,171})for(auto x:{0,106,319,533,639})f.frame(draw,true,x,y);
     f.frame(draw,false,639,171);const auto writes=f.gfx.writes;f.frame(draw);TEST_ASSERT_EQUAL(writes,f.gfx.writes);
-    f.tap(draw,40,20);TEST_ASSERT_EQUAL(int(screens::Screen::Help),int(f.screen));
+    f.tap(draw,40,20);TEST_ASSERT_EQUAL(int(screens::Screen::InterfaceSettings),int(f.screen));
 }
 
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_bottom_margin_belongs_to_last_button_and_slider_only);
-    RUN_TEST(test_touch_check_reaches_edges_and_returns_to_help);
+    RUN_TEST(test_touch_check_reaches_edges_and_returns_to_display);
     RUN_TEST(test_storage_check_waits_for_explicit_continue_and_blocks_completion);
     RUN_TEST(test_storage_timeout_back_and_close_reject_late_results);
     RUN_TEST(test_failed_check_demo_and_pending_retry_do_not_overlap_storage_jobs);

@@ -10,6 +10,7 @@
 #include "ui/screens/ModernReaderChrome.h"
 #include "ui/screens/ReaderScreen.h"
 #include "ui/screens/OnboardingScreen.h"
+#include "settings/WifiProfiles.h"
 #include "ui/screens/TouchCheckScreen.h"
 #include "ui/screens/StandbyScreen.h"
 #include <WiFi.h>
@@ -117,19 +118,19 @@ namespace {
         const auto sample=[&](bool down,int x,int y,uint32_t elapsed=25){contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=elapsed);return reader.handleModernControls(ui,now,preferences,settings,screen);};
         const auto tap=[&](int x,int y){assert(sample(true,x,y));assert(sample(false,x,y));};
         tap(260,86);assert(reader.session.playing);tap(260,86);assert(!reader.session.playing);
-        tap(320,155);assert(screen==screens::Screen::QuickControls);screen=screens::Screen::Reader;
+        tap(50,155);assert(screen==screens::Screen::Read);screen=screens::Screen::Reader;
         const auto index=reader.session.state.wordIndex;const auto speed=config.wpm;
         for(auto [x,y]:{std::pair{390,86},std::pair{130,86},std::pair{260,135}}){
             sample(true,260,86);sample(true,x,y);sample(false,x,y);
             assert(screen==screens::Screen::Reader && reader.session.state.wordIndex==index && config.wpm==speed && !reader.pageBrowsing());
         }
-        sample(true,260,115);sample(true,260,45);sample(false,260,45);assert(screen==screens::Screen::QuickControls);
+        sample(true,260,115);sample(true,260,45);sample(false,260,45);assert(screen==screens::Screen::Reader);assert(!reader.session.playing);
         screen=screens::Screen::Reader;config.chapterVisibility=settings::Visibility::always;tap(100,18);assert(screen==screens::Screen::FindPlace);
         screen=screens::Screen::Reader;tap(370,18);assert(screen==screens::Screen::Reader);
         ui.setFocusBadge("Focus 12:00");tap(370,18);assert(screen==screens::Screen::FocusSession);
         screen=screens::Screen::Reader;ui.setFocusBadge("");const auto footer=config.footerMetric;tap(600,155);assert(config.footerMetric!=footer);
         reader.session.metadata.writingMode=WritingMode::verticalRl;assert(!sample(true,260,86));assert(!sample(false,260,86));
-        std::puts("Quiet reader: text playback, swipe-up controls, clean inactive chrome, saved book/WPM during other drags, Focus and page routes verified.");
+        std::puts("Quiet reader: text playback, Menu touch target and ignored reader swipes, clean inactive chrome, saved book/WPM during other drags, Focus and page routes verified.");
     }
     void verifyReaderTouchComfort(Arduino_GFX& panel) {
         ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
@@ -534,7 +535,7 @@ int main(int argc, char** argv) {
             word.drawString("reading", 230, 112, 0);
             screens::modern::readerChrome(ui, {.vertical=false, .chapter="Chapter 4 · Martha", .footer="42%",
                 .batteryLabel="84%", .reading=playing, .topState=0, .bottomState=0, .percent=42,
-                .pressedControl=std::string_view{name} == "reader-pressed" ? static_cast<uint8_t>(screens::modern::ReaderControl::Controls) : uint8_t{0},
+                .pressedControl=std::string_view{name} == "reader-pressed" ? static_cast<uint8_t>(screens::modern::ReaderControl::Menu) : uint8_t{0},
                 .pausePending=std::string_view{name} == "reader-pausing"},
                 reading, {{true, 3.9f, 84}, 0, false});
             break;
@@ -654,14 +655,14 @@ int main(int argc, char** argv) {
     ui.setLocale("en");onboarding.interface.locale="en";onboarding.reading.holdToRead=true;intro.begin(ui,onboarding,introNow);intro.next();
     introFrame(false,0,0);introFrame(true,410,100);introFrame(true,410,100,349);assert(!intro.sample().playing);
     introFrame(true,410,100,1);assert(intro.sample().playing);introFrame(false,410,100);assert(!intro.sample().playing);
-    intro.next();introFrame(false,0,0);introFrame(true,410,130);introFrame(true,410,65);introFrame(false,410,65);introFrame(false,0,0);
+    intro.next();introFrame(false,0,0);intro.hardwareControls();introFrame(false,0,0);
     snapshot("intro-controls-found");
     assert(intro.surface()==5);
     introFrame(true,606,20);introFrame(false,606,20);assert(onboarding.interface.brightnessPercent==70);
     assert(onboarding.reading.wpm==300);
     ui.setTheme(ui::modern::paperTheme());intro.next();introFrame(false,0,0);snapshot("intro-speed-paper");
     intro.next();introFrame(false,0,0);snapshot("intro-pacing-paper");intro.close();
-    std::puts("Introduction: translated lessons, hold threshold/release, swipe discovery, independent practice settings and themes rendered.");
+    std::puts("Introduction: translated lessons, hold threshold/release, middle-button controls discovery, independent practice settings and themes rendered.");
 
     // Render production storage states and QR pixels in each built-in language/theme.
     using S=OnboardingStorage::State;
@@ -715,6 +716,14 @@ int main(int argc, char** argv) {
     tap(240,70,[&]{network.drawWifiScan(ui,reviewStore,reviewScreen);});
     assert(reviewScreen==screens::Screen::WifiConnect);
     frame([&]{network.drawWifiConnect(ui,reviewStore,reviewScreen);});snapshot("wifi-password");
+    settings::wifi::remember(reviewStore.settings().network,reviewStore.secrets(),"Home network","sample-only");
+    settings::wifi::remember(reviewStore.settings().network,reviewStore.secrets(),"Pixel hotspot","sample-only");
+    network.openSavedWifi();reviewScreen=screens::Screen::WifiScan;
+    frame([&]{network.drawWifiScan(ui,reviewStore,reviewScreen);});snapshot("wifi-saved");
+    tap(80,80,[&]{network.drawWifiScan(ui,reviewStore,reviewScreen);});
+    assert(reviewScreen==screens::Screen::NetworkSettings);
+    assert(reviewStore.settings().network.ssid=="Pixel hotspot");
+    frame(networkDraw);snapshot("wifi-settings-saved");
     reviewScreen=screens::Screen::ButtonMap;
     frame([&]{screens::modern::header(ui,"Physical buttons",reviewScreen,screens::Screen::Help);intro.buttons(ui);});snapshot("button-map");
     reviewScreen=screens::Screen::AddBooks;

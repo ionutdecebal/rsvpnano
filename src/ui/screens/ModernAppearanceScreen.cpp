@@ -93,10 +93,10 @@ bool ReaderScreen::modernAppearance(ui::Context& ui,Screen& screen){
             else changed|=ui.slider({378,87,250,33},t(C::Anchor),type.anchor,"%");
             const auto families=fonts.families();const auto found=std::ranges::find(families,type.fontId,&FontCatalog::Family::id);
             const size_t family=found==families.end()?0:found-families.begin();
-            if(button(ui,{378,124,156,44},families.empty()?"Font":families[family].label,Style::Secondary,!families.empty(),{},13)){
+            if(button(ui,{378,124,121,44},families.empty()?"Font":families[family].label,Style::Secondary,!families.empty(),{},13)){
                 type.fontId=families[(family+1)%families.size()].id;changed=true;
             }
-            if(button(ui,{542,124,86,44},RFont4::sizeLabel(type.fontSizeIndex),Style::Secondary,true,{},13)){type.fontSizeIndex.cycle();changed=true;}
+            if(button(ui,{507,124,121,44},RFont4::sizeLabel(type.fontSizeIndex),Style::Secondary,true,{},13)){type.fontSizeIndex.cycle();changed=true;}
         }else{
             changed|=ui.slider({378,50,250,33},t(C::GuideSize),type.guideSize," px");
             changed|=ui.slider({378,87,250,33},t(C::TextGap),type.guideTextGap," px");

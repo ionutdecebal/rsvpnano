@@ -120,6 +120,7 @@ namespace screens {
         void begin(settings::SettingsStore& store);
         Action draw(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
         void openWifiScan();
+        void openSavedWifi(){closeWifi();savedNetworks_=true;}
         void closeWifi();
         void drawWifiScan(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
         bool drawWifiConnect(ui::Context& ui, settings::SettingsStore& store, Screen& screen);
@@ -146,6 +147,7 @@ namespace screens {
 
         void saveNetwork(settings::SettingsStore& store, std::string_view ssid);
         void updateWifiScan();
+        bool savedNetworks_=false;
 
         std::array<WifiNetwork, 8> networks_;
         size_t networkCount_ = 0;

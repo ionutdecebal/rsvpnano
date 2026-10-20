@@ -76,7 +76,6 @@ void OnboardingScreen::touchPractice(ui::Context& ui,const settings::ReadingSett
     if(moved_&&holding_){pause();holding_=false;}
     if(ui::hasTouch(*touch,ui::TouchRelease)){
         touching_=false;
-        if(step_==2&&dy < -30&&std::abs(dy)>std::abs(dx)*1.3){controlsFound_=true;ui.invalidate();return;}
         if(step_!=1)return;
         if(holding_){pause();holding_=false;}
         else if(!moved_&&(!settings.holdToRead||pressedPlaying_)&&sample_.playing==pressedPlaying_)play(nowMs,false);
@@ -110,21 +109,21 @@ Action OnboardingScreen::draw(ui::Context& ui,settings::DeviceSettings& settings
     update(nowMs);
     if(storageVisible_)return storageCheck(ui,nowMs);
     const auto t=[&](C key){return modern::copy(ui,key);};
-    if(step_==1||(step_==2&&!controlsFound_))touchPractice(ui,settings.reading,nowMs);
+    if(step_==1)touchPractice(ui,settings.reading,nowMs);
     // The discovered panel fills the display just like the everyday controls.
     if(step_==2&&controlsFound_){
-        ui.label({16,8,202,20},"2 / 11 · "+std::string{t(C::TrayTitle)},11,Muted);
-        if(button(ui,{224,4,100,36},t(C::SkipTour),Style::Plain,true,{},11))return Action::SkipIntroduction;
-        if(button(ui,{16,42,58,58},"−",Style::Secondary,true,{},26))draft_.wpm=std::max<int>(100,int(draft_.wpm)-10);
-        ui.label({82,36,168,56},std::to_string(draft_.wpm),39,Foreground,ui::TextAlign::Center);
-        ui.label({82,94,168,18},"WPM",11,Muted,ui::TextAlign::Center);
-        if(button(ui,{258,42,58,58},"+",Style::Secondary,true,{},26))draft_.wpm=std::min<int>(1000,int(draft_.wpm)+10);
-        if(button(ui,{16,120,48,44},"‹",Style::Secondary)){next(-1);return Action::None;}
-        if(button(ui,{72,120,244,44},t(C::Next),Style::Primary)){next();return Action::None;}
-        ui::modern::rule(ui,{334,8,1,156});
-        if(button(ui,{350,8,104,72},t(C::Menu),Style::Secondary)){next(3);return Action::None;}
-        if(button(ui,{462,8,104,72},t(C::Page),Style::Secondary)){next(4);return Action::None;}
-        if(button(ui,{350,88,216,76},t(C::Dictionary),Style::Secondary)){next(9);return Action::None;}
+        if(button(ui,{16,8,104,72},t(C::Menu),Style::Secondary)){next(3);return Action::None;}
+        if(button(ui,{128,8,104,72},t(C::Page),Style::Secondary)){next(4);return Action::None;}
+        if(button(ui,{16,90,216,74},t(C::Dictionary),Style::Secondary)){next(9);return Action::None;}
+        ui::modern::rule(ui,{246,8,1,156});
+        ui.label({260,8,190,20},"2 / 11 · "+std::string{t(C::TrayTitle)},11,Muted);
+        if(button(ui,{468,4,100,32},t(C::SkipTour),Style::Plain,true,{},11))return Action::SkipIntroduction;
+        if(button(ui,{260,42,58,58},"−",Style::Secondary,true,{},26))draft_.wpm=std::max<int>(100,int(draft_.wpm)-10);
+        ui.label({326,36,176,56},std::to_string(draft_.wpm),39,Foreground,ui::TextAlign::Center);
+        ui.label({326,94,176,18},"WPM",11,Muted,ui::TextAlign::Center);
+        if(button(ui,{510,42,58,58},"+",Style::Secondary,true,{},26))draft_.wpm=std::min<int>(1000,int(draft_.wpm)+10);
+        if(button(ui,{260,120,48,44},"‹",Style::Secondary)){next(-1);return Action::None;}
+        if(button(ui,{316,120,252,44},t(C::Next),Style::Primary)){next();return Action::None;}
         ui.verticalSlider({580,8,52,156},brightness_,5,100);return Action::None;
     }
     if(step_&&button(ui,{8,0,44,43},"‹",Style::Plain,true,{},23)){next(-1);return Action::None;}
@@ -154,8 +153,8 @@ Action OnboardingScreen::draw(ui::Context& ui,settings::DeviceSettings& settings
         const bool hold=settings.reading.holdToRead;
         const C title=step_==2?C::SwipeTitle:sample_.playing?(hold?C::PauseHold:C::PauseTap):paused_?C::PausedTitle:hold?C::TryHold:C::TryTap;
         const C body=step_==2?C::SwipeBody:sample_.playing?C::SampleRunning:paused_?C::PausedBody:hold?C::TryHoldBody:C::TryTapBody;
-        explanation(ui,title,body);ui::modern::rule(ui,{264,44,1,128});drawWord(ui,{274,56,350,100});
-        if(step_==2)ui.label({390,137,90,30},"↑",21,Accent,ui::TextAlign::Center);
+        explanation(ui,title,body);ui::modern::rule(ui,{264,44,1,128});drawWord(ui,step_==2?ui::Rect{274,46,350,80}:ui::Rect{274,56,350,100});
+        if(step_==2&&button(ui,{330,130,242,36},t(C::KeyboardAlternative),Style::Secondary,true,{},13)){hardwareControls();ui.invalidate();}
     }else if(step_==3){
         ui.label({12,49,240,18},t(C::BaseSpeed),11,Muted);
         bool changed=false;const bool wasPlaying=sample_.playing;
@@ -219,17 +218,28 @@ void OnboardingScreen::pageLesson(ui::Context& ui){
     if(pageTool_==0){
         if(button(ui,{256,50,150,40},t(C::Find),Style::Secondary,true,{},13)){setPageTool(ui,1);return;}
         if(button(ui,{414,50,214,40},t(C::BackBook),Style::Accent,true,{},13)){setPageTool(ui,5);return;}
-        // Short sample rows give a real vertical drag and selectable word targets.
         const auto* touch=ui.touch();
-        if(touch&&ui::hasTouch(*touch,ui::TouchStart)){touching_=ui::contains({256,94,372,72},touch->x,touch->y);touchY_=touch->y;}
-        if(touch&&ui::hasTouch(*touch,ui::TouchCancel))touching_=false;
-        if(touch&&touching_&&ui::hasTouch(*touch,ui::TouchRelease)){
-            const int dy=int(touch->y)-touchY_;touching_=false;
-            if(std::abs(dy)>20){pageStart_=std::clamp<int>(int(pageStart_)+(dy<0?4:-4),0,int(words_.size()>8?words_.size()-8:0));ui.invalidate();}
+        if(touch&&ui::hasTouch(*touch,ui::TouchStart)){
+            touching_=ui::contains({256,94,372,72},touch->x,touch->y);touchX_=touch->x;touchY_=touch->y;
         }
-        for(size_t i=0;i<8&&pageStart_+i<words_.size();++i){
-            const size_t index=pageStart_+i;
-            if(button(ui,{int16_t(256+i%4*93),int16_t(94+i/4*36),90,34},words_[index],selectedWord_==index?Style::Accent:Style::Plain,true,{},13))selectedWord_=index;
+        if(touch&&ui::hasTouch(*touch,ui::TouchCancel))touching_=false;
+        bool tap=false;
+        if(touch&&touching_&&ui::hasTouch(*touch,ui::TouchRelease)){
+            const int dy=int(touch->y)-touchY_,dx=int(touch->x)-touchX_;touching_=false;
+            if(std::abs(dy)>20){pageStart_=std::clamp<int>(int(pageStart_)+(dy<0?6:-6),0,int(words_.size()>6?words_.size()-6:0));ui.invalidate();}
+            else tap=std::abs(dx)<18;
+        }
+        const auto& font=ui::sans::font(15);
+        const int space=ui::sans::width(" ",font);
+        int x=260,y=96;
+        for(size_t index=pageStart_;index<words_.size();++index){
+            const int width=ui::sans::width(words_[index],font);
+            if(x>260&&x+width>624){x=260;y+=24;}
+            if(y+22>168)break;
+            const ui::Rect target{int16_t(x-space/2),int16_t(y),int16_t(width+space),24};
+            if(tap&&ui::contains(target,touch->x,touch->y))selectedWord_=index;
+            ui.label({int16_t(x),int16_t(y),int16_t(width),24},words_[index],15,index==selectedWord_?Accent:Foreground);
+            x+=width+space;
         }
     }else{
         if(pageTool_==5)ui.label({264,54,356,62},words_[selectedWord_],28,Foreground,ui::TextAlign::Center);
@@ -239,23 +249,26 @@ void OnboardingScreen::pageLesson(ui::Context& ui){
 }
 void OnboardingScreen::buttons(ui::Context& ui){
     const auto t=[&](C key){return modern::copy(ui,key);};
-    const ui::Rect area{12,50,370,88};
+    // Front silhouette: 640:172 display aspect, with the three top-right buttons.
+    const ui::Rect area{12,44,370,128};
     if(ui.redraw(area,button_))ui.paint(area,[&](Arduino_GFX& gfx,ui::Rect r){
         const auto edge=ui.color(Outline),ink=ui.color(Muted),active=ui.color(Accent);
-        gfx.drawRoundRect(r.x+5,r.y+24,320,62,9,edge);gfx.drawRoundRect(r.x+17,r.y+34,294,42,3,edge);
-        gfx.drawRoundRect(r.x+326,r.y+48,26,17,5,ink);
-        for(int i=0;i<3;++i){const int x=r.x+248+i*25;gfx.fillRoundRect(x,r.y+19,14,6,2,button_==i+1?active:ink);gfx.drawCircle(x+7,r.y+8,7,button_==i+1?active:ink);}
+        gfx.drawRoundRect(r.x+5,r.y+16,300,106,9,edge);
+        gfx.drawRoundRect(r.x+27,r.y+34,256,69,3,edge);
+        gfx.drawRoundRect(r.x+305,r.y+61,22,15,5,ink);
+        for(int i=0;i<3;++i){const int x=r.x+218+i*25;
+            gfx.fillRoundRect(x,r.y+11,14,6,2,button_==i+1?active:ink);
+            gfx.drawCircle(x+7,r.y+5,4,button_==i+1?active:ink);
+        }
     });
-    ui.label({32,86,286,38},"Nano",26,Muted,ui::TextAlign::Center);
-    ui.label({334,120,44,16},"USB",11,Muted,ui::TextAlign::Center);
-    ui.label({14,142,364,24},t(C::FrontOrientation),11,Muted,ui::TextAlign::Center);
-    constexpr C positions[]{C::LeftThree,C::MiddleThree,C::RightThree},actions[]{C::RestartDevice,C::Menu,C::PlayPause};
+    ui.label({40,92,244,38},"Nano",26,Muted,ui::TextAlign::Center);
+    ui.label({334,126,44,20},"USB",11,Muted,ui::TextAlign::Center);
+    constexpr C positions[]{C::LeftThree,C::MiddleThree,C::RightThree},actions[]{C::RestartDevice,C::KeyboardAlternative,C::PlayPause};
     for(uint8_t i=0;i<3;++i)if(button(ui,{392,int16_t(47+i*41),236,39},t(positions[i]),button_==i+1?Style::Accent:Style::Plain,true,t(actions[i]),13,ui::TextAlign::Start))button_=i+1;
 }
 Action OnboardingScreen::help(ui::Context& ui,const settings::ReadingSettings& reading,Screen& screen){
     const auto t=[&](C key){return modern::copy(ui,key);};
     const auto action=modern::header(ui,t(C::Help),screen,Screen::Settings);if(action!=Action::None)return action;
-    if(button(ui,{340,0,132,43},t(C::TouchTest),Style::Plain,true,{},13))screen=Screen::TouchCheck;
     ui.label({16,54,238,48},t(reading.holdToRead?C::SwipeHelpHold:C::TouchHelpTap),13,Foreground,ui::TextAlign::Start,3);
     ui.label({16,109,238,52},t(C::SwipeHelp),13,Muted,ui::TextAlign::Start,3);
     if(button(ui,{276,52,348,52},t(C::AddBooks),Style::Secondary))screen=Screen::AddBooks;
