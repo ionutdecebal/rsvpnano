@@ -11,7 +11,8 @@
 
 namespace dictionary {
 namespace {
-constexpr char kBaseUrl[] = "https://github.com/ionutdecebal/rsvpnano/releases/download/v0.2.0/";
+// Dictionary data is versioned independently of firmware releases.
+constexpr char kBaseUrl[] = "https://github.com/ionutdecebal/rsvpnano/releases/download/dictionary-en-2025.1/";
 struct Manifest { std::string sha256; uint32_t bytes = 0; };
 struct WifiScope {
     bool owned = WiFi.status() != WL_CONNECTED;
@@ -68,7 +69,7 @@ std::expected<void, std::string> installEnglish(const settings::DeviceSettings& 
     if (cancelled()) return std::unexpected("Cancelled");
     auto manifestText = net::downloadText(std::string{kBaseUrl} + "manifest.json", 4096);
     auto attribution = net::downloadText(std::string{kBaseUrl} + "ATTRIBUTION.txt", 4096);
-    if (!manifestText || !attribution) return std::unexpected("Dictionary download unavailable; retry after publication");
+    if (!manifestText || !attribution) return std::unexpected("Dictionary download unavailable; check Wi-Fi and retry");
     Manifest manifest;
     if (glz::read<glz::opts{.error_on_unknown_keys = false}>(manifest, *manifestText)
         || manifest.bytes != kEnglishBytes || manifest.sha256 != kEnglishSha256)

@@ -12,7 +12,10 @@ ATTRIBUTION = ('Adapted from Open English Wordnet 2025 by the Open English Wordn
                'Community, derived from Princeton WordNet. CC BY 4.0. '
                'https://en-word.net/ | https://creativecommons.org/licenses/by/4.0/ '
                'Changes: compact definitions, examples, synonyms and form aliases; '
-               'up to 8 senses per entry on device. Original data remains available at source.')
+               'up to 8 senses per entry on device. Original data remains available at source.\n'
+               'Copyright (c) 2019-present, The Open English WordNet Team.\n'
+               'Provided as-is; the licence includes a disclaimer of warranties.\n\n'
+               + (pathlib.Path(__file__).parent / 'licenses/WNDB-LICENSE.txt').read_text())
 
 def build(archive, output):
     output.mkdir(parents=True, exist_ok=True)

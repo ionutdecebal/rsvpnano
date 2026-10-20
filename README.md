@@ -1,6 +1,6 @@
 > **0.2.0 candidate — publication pending.** Both firmware variants and the dictionary installer
-> are implemented locally. Device acceptance, the GitHub release assets and the public update
-> catalog are still pending; links below describe the intended launch.
+> are implemented. The English dictionary uses a separate data release. Device acceptance,
+> public firmware releases and the update catalog are still pending.
 
 <p align="center">
   <picture>
@@ -158,14 +158,15 @@ saved device settings.
 ## Dictionary setup (New UI)
 
 The dictionary lives on the SD card, separately from the firmware, so you can keep or replace it
-without reflashing the reader.
+without reflashing the reader. English is available now; more languages are planned.
 
 ### Install from the reader
 
 During onboarding, or from **Dictionary → ? → Install / manage**, choose
 **Install English dictionary · about 48 MiB**. The reader will check the SD card and available
 space, connect over Wi-Fi, then download and verify the pack with visible progress.
-You can skip this during setup and install it later.
+You can skip this during setup and install it later. Dictionary packs are hosted on GitHub
+and versioned separately from the firmware.
 
 An existing dictionary stays available until a replacement has downloaded and passed
 verification. Replacing a manually installed pack requires an explicit choice. Press the middle
@@ -173,7 +174,8 @@ button to cancel a download; retry starts a fresh transfer.
 
 ### Install manually or use a custom pack
 
-1. Download `RSVP-Nano-English-Dictionary.zip` from the **New UI 0.2.0** release assets.
+1. Download `RSVP-Nano-English-Dictionary.zip` from the
+   [English dictionary release](https://github.com/ionutdecebal/rsvpnano/releases/tag/dictionary-en-2025.1).
 2. Extract it and copy the `dictionaries` folder to the root of the SD card using a card reader
    or USB mass-storage mode.
 3. From a book, press the **middle button → Dictionary**. Use **Search** to look up another word.

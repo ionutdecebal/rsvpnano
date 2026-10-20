@@ -44,7 +44,9 @@ automatically. Use Settings → Help → Replay introduction.
 ## Install the offline dictionary
 
 During onboarding, or Dictionary → ? → Install / manage, choose **Install English dictionary**.
-This downloads about 48 MiB over Wi-Fi to the SD card. The release assets must be published first.
+This downloads about 48 MiB over Wi-Fi to the SD card from the independent
+[English dictionary data release](https://github.com/ionutdecebal/rsvpnano/releases/tag/dictionary-en-2025.1).
+English is available now; more languages are planned.
 An existing pack requires explicit replacement confirmation and remains intact until verification.
 The middle button cancels; retry restarts the transfer.
 
@@ -172,6 +174,18 @@ firmware releases are unchanged; physical acceptance is still pending.
 - The previous private development OTA feed remains unchanged. Use the provided
   merged image in the existing browser installer for this local candidate.
 
+## Candidate 6 — independent English dictionary download
+
+- English remains the only offered dictionary. Setup, help and onboarding explain
+  that more languages are planned; no empty language selector is added.
+- The installer uses `dictionary-en-2025.1` data assets independently of firmware
+  v0.2.0. Candidate 5 still points to v0.2.0; install candidate 6 to use the new URL.
+- The original 50,137,998-byte dictionary pack and its SHA-256 are unchanged.
+  Attribution includes the original WordNet notices; the ZIP also includes the
+  upstream licence texts. Manual copy and custom pack replacement still work.
+- Only dictionary data is published in this pass. Classic remains latest/stable;
+  firmware releases and the public OTA catalog still await acceptance.
+
 ## Review and acceptance
 
 Open `RSVP-Nano-New-UI-Review.html` locally in a browser. It is self-contained and
@@ -209,8 +223,8 @@ The New UI candidate workflow can also build one target and upload CI artifacts;
 it never publishes automatically or moves remote tags.
 
 Publish the **tested artifacts** as an immutable GitHub prerelease, with both
-firmware images, `SHA256SUMS.txt`, `update-channel.json`, dictionary ZIP plus raw
-`english.oewn`, `manifest.json`, `ATTRIBUTION.txt`, review HTML, source
+firmware images, `SHA256SUMS.txt`, `update-channel.json`, the dictionary ZIP,
+review HTML, source
 revision and these instructions. Do not mark it latest or overwrite older assets.
 
 The installer change is separate from the firmware branch. After acceptance and
@@ -228,3 +242,10 @@ New UI uses a build-only workflow; the Classic workflow refuses existing release
 never force-moves tags, and is restricted to Classic 0.0.x/0.1.x tags. Pages always
 builds main, never a firmware release branch. Merge the separate installer and
 README changes only when their referenced releases are available.
+
+Dictionary data is hosted separately under `dictionary-en-2025.1`, marked as a
+prerelease and explicitly not Latest so firmware discovery is unaffected. Use
+`tools/dictionary/package_release.py` to prepare verified raw assets, the manual
+ZIP, licences and checksums. Attach all assets before publication; never replace
+published packs. A new pack gets a new data version. This release offers English
+only, and must not be represented as multi-language support.

@@ -17,7 +17,7 @@ namespace screens::modern {
             : state.installed ? "Dictionary installed" : "Install once. Read offline.", 19);
         ui.label({16,88,346,72}, !state.message.empty() && !state.confirming ? state.message
             : state.confirming ? "This replaces the current English pack. Keep a copy of a custom dictionary first."
-            : "About 48 MiB on SD. Wi-Fi for download only. Manual SD installation remains available.",
+            : "About 48 MiB on SD. Download over Wi-Fi or copy to SD. More languages are planned.",
             13,ui::themes::Muted,ui::TextAlign::Start,4);
         if (button(ui,{386,54,238,50},state.confirming ? "Confirm replacement"
             : state.installed ? "Replace dictionary" : "Install dictionary",Style::Primary,true,{},13)) {
@@ -103,7 +103,7 @@ namespace screens::modern {
             if (button(ui, {328, 111, 300, 53}, ui.text(UiText::RefreshRss), Style::Secondary, true, "Refresh saved feeds",13)) return Action::RssRefresh;
         } else if (current == Screen::DictionaryHelp) {
             ui.label({16,50,298,27},"Offline English dictionary",17);
-            ui.label({16,82,298,38},"Install over Wi-Fi or copy a pack to SD.",13,ui::themes::Muted,ui::TextAlign::Start,2);
+            ui.label({16,80,298,40},"Install over Wi-Fi or copy to SD.\nMore languages are planned.",13,ui::themes::Muted,ui::TextAlign::Start,2);
             if(button(ui,{16,124,298,40},"Install / manage dictionary",Style::Primary,true,{},13))return Action::OpenDictionarySetup;
             ui.label({334,50,290,27},"Look online when needed",17);
             ui.label({334,82,290,43},"Wiktionary receives the word when you tap Look online. Requires Wi-Fi.",13,ui::themes::Muted,ui::TextAlign::Start,2);

@@ -15,3 +15,7 @@ fixtures. Preserve screen IDs and exported comments across board regeneration.
 Host builds and captures do not establish physical touch, OTA or reading speed.
 Public firmware publication follows candidate review and actual device acceptance.
 Keep installer changes separable from firmware changes to the stable branch.
+
+The founder approved publishing English dictionary data on GitHub independently
+of firmware. The data release must not become Latest or change the firmware update
+feeds. English only for now; the UI should say more languages are planned.

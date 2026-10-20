@@ -1,0 +1,10 @@
+{
+  "tag": "dictionary-en-2025.1",
+  "format": 1,
+  "language": "en",
+  "source": "Open English Wordnet 2025",
+  "sourceUrl": "https://en-word.net/static/english-wordnet-2025-json.zip",
+  "sourceSha256": "7d749f6e2c39e6970e4997839dcf6e42fd281f3c2fae0171d2192bae8cfa4b51",
+  "bytes": 50137998,
+  "sha256": "9f893776ba6b9b5f93abae7c06cdc5ff90ebf7cb4427d343160f26b1488ad9c6"
+}
