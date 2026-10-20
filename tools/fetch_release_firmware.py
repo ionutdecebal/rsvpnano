@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import urllib.error
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 from export_web_firmware import FLASH_EXPORTS, OTA_EXPORTS, write_release_metadata
@@ -59,6 +62,34 @@ def download_file(url: str, destination: Path) -> None:
 def latest_release(repo: str) -> dict:
     return fetch_json(f"https://api.github.com/repos/{repo}/releases/latest")
 
+def stage_ui_preview(repo: str, tag: str) -> dict:
+    """Stage one explicit, immutable preview without replacing Classic files."""
+    if not re.fullmatch(r"preview-ui-dictionary-[A-Za-z0-9._-]+", tag):
+        raise SystemExit("New UI requires an explicit preview-ui-dictionary-* tag.")
+    release = fetch_json(f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+    if release.get("tag_name") != tag or not release.get("prerelease") or release.get("draft"):
+        raise SystemExit("New UI must be a published prerelease at the selected tag.")
+    name = next(x["binary"] for x in FLASH_EXPORTS if x["id"] == "lcd349-v1")
+    asset = find_asset(release, name)
+    sums = find_asset(release, "SHA256SUMS.txt")
+    checksum_file = FIRMWARE_DIR / "new-ui-SHA256SUMS.txt"
+    download_file(sums["browser_download_url"], checksum_file)
+    expected = {}
+    for line in checksum_file.read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 2 and re.fullmatch(r"[a-fA-F0-9]{64}", parts[0]):
+            expected[parts[1].lstrip("*")] = parts[0].lower()
+    destination = FIRMWARE_DIR / ("new-ui-" + name)
+    pending = destination.with_suffix(".partial")
+    try:
+        download_file(asset["browser_download_url"], pending)
+        if hashlib.sha256(pending.read_bytes()).hexdigest() != expected.get(name):
+            raise SystemExit("New UI image checksum mismatch or missing checksum.")
+        pending.replace(destination)
+    finally:
+        pending.unlink(missing_ok=True)
+    return {"version": tag, "firmware": {"lcd349-v1": destination.name}}
+
 
 def find_asset(release: dict, name: str, required: bool = True) -> dict | None:
     for asset in release.get("assets", []):
@@ -99,6 +130,8 @@ def main() -> int:
         dest="assets",
         help="Release asset to download. Repeat to request multiple assets.",
     )
+    parser.add_argument("--preview-tag", default=os.environ.get("RSVP_UI_PREVIEW_TAG", "").strip(),
+                        help="Explicit accepted new-UI prerelease tag; Classic remains the default.")
     args = parser.parse_args()
 
     release = latest_release(args.repo)
@@ -146,6 +179,11 @@ def main() -> int:
 
     if available_firmware:
         write_release_metadata(tag_name, available_firmware)
+        if args.preview_tag:
+            metadata_path = FIRMWARE_DIR / "release.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["newUi"] = stage_ui_preview(args.repo, args.preview_tag)
+            metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
     print(f"Web firmware updated to release {tag_name}")
     return 0
 

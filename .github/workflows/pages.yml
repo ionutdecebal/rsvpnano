@@ -57,6 +57,7 @@ jobs:
         if: github.repository == 'ionutdecebal/rsvpnano'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RSVP_UI_PREVIEW_TAG: ${{ vars.RSVP_UI_PREVIEW_TAG }}
         run: python tools/fetch_release_firmware.py --repo "${{ github.repository }}"
 
       - name: Check and stage web companion
