@@ -5,6 +5,33 @@ namespace screens::modern {
     using ui::modern::button;
     using ui::modern::Style;
 
+    Action dictionarySetup(ui::Context& ui, DictionarySetup& state, Screen& screen) {
+        if (button(ui, {8,0,112,43}, "‹ Back", Style::Plain, true, {}, 13)) {
+            state.confirming = false;
+            screen = state.onboarding ? Screen::Onboarding : Screen::DictionaryHelp;
+            return Action::None;
+        }
+        ui.label({136,0,490,43}, "English dictionary · offline", 17);
+        ui::modern::rule(ui,{0,43,640,1});
+        ui.label({16,52,346,30}, state.confirming ? "Replace your current pack?"
+            : state.installed ? "Dictionary installed" : "Install once. Read offline.", 19);
+        ui.label({16,88,346,72}, !state.message.empty() && !state.confirming ? state.message
+            : state.confirming ? "This replaces the current English pack. Keep a copy of a custom dictionary first."
+            : "About 48 MiB on SD. Wi-Fi for download only. Manual SD installation remains available.",
+            13,ui::themes::Muted,ui::TextAlign::Start,4);
+        if (button(ui,{386,54,238,50},state.confirming ? "Confirm replacement"
+            : state.installed ? "Replace dictionary" : "Install dictionary",Style::Primary,true,{},13)) {
+            if (state.installed && !state.confirming) state.confirming = true;
+            else return Action::InstallDictionary;
+        }
+        if (button(ui,{386,116,238,48},state.confirming ? "Keep current dictionary" : "Wi-Fi settings",
+                   Style::Secondary,true,{},13)) {
+            if (state.confirming) state.confirming = false;
+            else screen = Screen::NetworkSettings;
+        }
+        return Action::None;
+    }
+
     Action header(ui::Context& ui, std::string_view title, Screen& screen, Screen parent, std::string_view trailing) {
         auto parentText = parent == Screen::NetworkSettings ? std::string_view{"Wi-Fi"} : parent == Screen::Help ? copy(ui,Copy::Help) : parent == Screen::Read ? caption(ui, UiText::Read, "Menu")
                                : parent == Screen::ReadingHub ? caption(ui, UiText::Reading, "Pace")
@@ -76,7 +103,8 @@ namespace screens::modern {
             if (button(ui, {328, 111, 300, 53}, ui.text(UiText::RefreshRss), Style::Secondary, true, "Refresh saved feeds",13)) return Action::RssRefresh;
         } else if (current == Screen::DictionaryHelp) {
             ui.label({16,50,298,27},"Offline English dictionary",17);
-            ui.label({16,82,298,78},"Copy english.oewn from the release dictionary pack into /dictionaries on your SD card. About 48 MB; no account needed.",13,ui::themes::Muted,ui::TextAlign::Start,4);
+            ui.label({16,82,298,38},"Install over Wi-Fi or copy a pack to SD.",13,ui::themes::Muted,ui::TextAlign::Start,2);
+            if(button(ui,{16,124,298,40},"Install / manage dictionary",Style::Primary,true,{},13))return Action::OpenDictionarySetup;
             ui.label({334,50,290,27},"Look online when needed",17);
             ui.label({334,82,290,43},"Wiktionary receives the word when you tap Look online. Requires Wi-Fi.",13,ui::themes::Muted,ui::TextAlign::Start,2);
             if(button(ui,{334,128,290,36},"Wi-Fi settings",Style::Secondary,true,{},13))screen=Screen::NetworkSettings;

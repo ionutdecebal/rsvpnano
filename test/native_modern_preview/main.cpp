@@ -822,6 +822,27 @@ int main(int argc, char** argv) {
     }
     reviewScreen=screens::Screen::DictionarySearch;
     frame([&]{dictionary.draw(ui,reader,reviewScreen,introNow);});snapshot("dictionary-search");
+    screens::modern::DictionarySetup setup;
+    reviewScreen=screens::Screen::DictionaryInstall;
+    const auto setupDraw=[&]{return screens::modern::dictionarySetup(ui,setup,reviewScreen);};
+    frame(setupDraw);snapshot("dictionary-install");
+    setup.installed=true;frame(setupDraw);snapshot("dictionary-installed");
+    tap(500,78,setupDraw);assert(setup.confirming);
+    frame(setupDraw);snapshot("dictionary-replace-confirm");
+    tap(500,140,setupDraw);assert(!setup.confirming);
+    setup.message="Download interrupted. Your previous dictionary is unchanged.";
+    frame(setupDraw);snapshot("dictionary-install-error");
+    setup.onboarding=true;tap(40,20,setupDraw);
+    assert(reviewScreen==screens::Screen::Onboarding);
+    OtaUpdater::Offer offer;
+    offer.version="v0.1.3+0123456789ab";offer.ready=true;offer.switching=true;
+    offer.message="Switch uses official updates; custom source is backed up.";
+    reviewScreen=screens::Screen::Ota;
+    const auto otaDraw=[&]{return screens::ota(ui,"v0.2.0+abcdef012345",reviewScreen,&offer);};
+    frame(otaDraw);snapshot("updates-switch-confirm");
+    offer.ready=false;offer.version.clear();offer.message="Update catalog unavailable; retry after publication";
+    frame(otaDraw);snapshot("updates-unavailable");
+    std::puts("Delivery UI: dictionary replacement requires confirmation; onboarding return and update confirmation screens rendered.");
     focus.close();focus.begin();reviewScreen=screens::Screen::FocusPresets;
     const auto focusDraw=[&]{focus.draw(ui,introNow,reviewScreen);};
     frame(focusDraw);snapshot("focus-presets");

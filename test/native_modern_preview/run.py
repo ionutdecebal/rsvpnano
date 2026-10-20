@@ -17,6 +17,7 @@ PROJECT = Path(__file__).resolve().parents[2]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--native-build", type=Path, default=PROJECT / ".pio/build/native_test")
     args = parser.parse_args()
     library = PROJECT / ".pio/libdeps/waveshare_esp32s3_touch_lcd_349_rev1/GFX Library for Arduino/src"
     sources = [
@@ -40,7 +41,7 @@ def main():
     includes = [PROJECT / "test/native_modern_preview", PROJECT / "test/native_watch_preview", PROJECT / "test/native_canvas", PROJECT / "test/support",
                 PROJECT / "src", library, PROJECT / "lib/HarfBuzz/upstream/src",
                 PROJECT / "lib/SheenBidi/upstream/Headers", PROJECT / ".pio/libdeps/native_test/glaze/include"]
-    archives = [next((PROJECT / ".pio/build/native_test").glob(f"lib*/lib{name}.a"))
+    archives = [next(args.native_build.glob(f"lib*/lib{name}.a"))
                 for name in ("HarfBuzz", "SheenBidi")]
     flags = [shutil.which("g++"), "-std=c++23", "-O1", "-funsigned-char", "-ffunction-sections",
              "-fdata-sections", "-DGLZ_DEFAULT_OPTIMIZATION_SIZE", "-DGLZ_DISABLE_ALWAYS_INLINE",

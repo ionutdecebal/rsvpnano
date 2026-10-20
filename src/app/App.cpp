@@ -20,8 +20,10 @@
 #include "library/ReadingProgress.h"
 #include "storage/migration/Migration.h"
 #include "update/OtaUpdater.h"
+#include "update/SwitchSettings.h"
 #include "ui/screens/ModernScreens.h"
 #include "ui/screens/OnboardingCopy.h"
+#include "dictionary/DictionaryInstaller.h"
 
 namespace {
 
@@ -79,6 +81,8 @@ void App::begin() {
     immediateUi_.setTouchSource({.surface = Board::Input::touchSurface(), .poll = &Input::pollTouch});
 
     storage_.begin();
+    if (storage_.mounted() && !dictionary::recoverInstall())
+        ESP_LOGW("dictionary", "Interrupted dictionary install needs SD recovery");
     Logger::startupCheckpoint("storage");
     fs::FS* filesystem = storage_.mounted() ? &Board::Storage::filesystem() : nullptr;
     startupStage(UiText::Settings);
@@ -139,7 +143,7 @@ void App::update(uint32_t nowMs) {
     }
     immediateUi_.setBackgroundBusy(backgroundJobActive()&&!(onboardingJobActive()&&screen_==screens::Screen::Onboarding));
     immediateUi_.setFocusBadge(focusScreen_.badge(nowMs));
-    if(!onboardingJobActive())serialCompanion_.update(nowMs);
+    if(!backgroundJobActive())serialCompanion_.update(nowMs);
     Input::ActionMask actions;
     while (Input::poll(actions)) {
         lastActivityMs_ = nowMs;
@@ -185,7 +189,7 @@ void App::update(uint32_t nowMs) {
         screen_ = statusDestination_;
         if (networkScreen_.startupCheckPending && screen_ != screens::Screen::Onboarding) {
             networkScreen_.startupCheckPending = false;
-            runOtaCheck(false);
+            runOtaCheck(false, false, true);
             return;
         }
     }
@@ -231,12 +235,20 @@ void App::update(uint32_t nowMs) {
 }
 
 void App::renderScreen(uint32_t nowMs) {
+    if (dictionaryWifiReturn_ && (screen_ == screens::Screen::Connections
+        || screen_ == screens::Screen::Read || screen_ == screens::Screen::Reader)) {
+        dictionaryWifiReturn_ = false; screen_ = screens::Screen::DictionaryInstall;
+    }
+    if (dictionarySetup_.onboarding && (screen_ == screens::Screen::Read || screen_ == screens::Screen::Reader))
+        screen_ = screens::Screen::Onboarding;
+    if (screen_ == screens::Screen::Onboarding) dictionarySetup_.onboarding = false;
     if (focusScreen_.breakVisible()) screen_ = screens::Screen::FocusSession;
     if (!backgroundJobActive() && bookSettings_.ready()
         && screen_ != screens::Screen::BookFonts && screen_ != screens::Screen::Status)
         bookSettings_.clear();
     if (screen_ != screens::Screen::Reader) readerScreen_.cancelModernControls();
-    if (screen_ != screens::Screen::Onboarding && onboardingScreen_.active()) onboardingScreen_.close();
+    if (screen_ != screens::Screen::Onboarding && onboardingScreen_.active()
+        && !dictionarySetup_.onboarding) onboardingScreen_.close();
     // Presentation only: the real RSVP/page renderer keeps its font and geometry paths.
     immediateUi_.setModernPresentation(screens::modern::enabled(immediateUi_.width(), immediateUi_.height(), screen_));
     immediateUi_.setModernReadingPalette(immediateUi_.width() == 640 && immediateUi_.height() == 172
@@ -386,6 +398,10 @@ void App::renderScreen(uint32_t nowMs) {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = screens::modern::hub(immediateUi_, screen_);
         break;
+    case screens::Screen::DictionaryInstall:
+        immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
+        action = screens::modern::dictionarySetup(immediateUi_, dictionarySetup_, screen_);
+        break;
     case screens::Screen::Chapters:
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         action = chaptersScreen_.draw(immediateUi_, readerScreen_.session.metadata.chapters, readerScreen_.session,
@@ -499,7 +515,7 @@ void App::renderScreen(uint32_t nowMs) {
         return;
     case screens::Screen::Ota: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
-        action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_);
+        action = screens::ota(immediateUi_, OtaUpdater::currentVersion().data(), screen_, &otaOffer_);
         break;
     }
     case screens::Screen::FocusPresets:
@@ -523,6 +539,8 @@ void App::renderScreen(uint32_t nowMs) {
     }
     immediateUi_.endFrame();
     if (screen_ != renderedScreen) {
+        if (renderedScreen == screens::Screen::DictionaryInstall && screen_ == screens::Screen::NetworkSettings)
+            dictionaryWifiReturn_ = true;
         if (screen_ == screens::Screen::Library)
             libraryScreen_.reset();
     }
@@ -559,6 +577,20 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         screens::status(immediateUi_,"Looking up word","Your book stays paused");
         if(!startBackgroundJob(JobKind::OnlineDictionary))
             showTransientStatus("Please try again","Worker could not start",{},1200,screens::Screen::Dictionary);
+        return;
+    case screens::Action::OpenDictionarySetup:
+        dictionarySetup_ = {};
+        dictionarySetup_.installed = dictionary::installedPack();
+        dictionarySetup_.onboarding = screen_ == screens::Screen::Onboarding;
+        screen_ = screens::Screen::DictionaryInstall;
+        renderScreen(nowMs); return;
+    case screens::Action::InstallDictionary:
+        readerScreen_.pauseImmediately(prefs_, nowMs);
+        dictionaryCancel_.store(false);
+        screen_ = screens::Screen::Status; statusUntilMs_ = 0;
+        screens::status(immediateUi_, "Installing dictionary", "Middle button cancels", {}, 0);
+        if (!startBackgroundJob(JobKind::DictionaryInstall))
+            showTransientStatus("Please try again", "Worker could not start", {}, 1200, screens::Screen::DictionaryInstall);
         return;
     case screens::Action::CheckOnboardingStorage:
         ReadingLoop::pause(readerScreen_.session);
@@ -640,6 +672,9 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
     case screens::Action::OtaInstall:
         runOtaCheck(true);
         return;
+    case screens::Action::OtaSwitchCheck:
+        runOtaCheck(false, true);
+        return;
     }
 }
 
@@ -659,6 +694,11 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         // Only a disposable probe may be open. Do not flush settings through the
         // same potentially stalled filesystem while powering down.
         onboardingStorageCancel_.store(true);powerOffBoard();return;
+    }
+    if (jobKind_ == JobKind::DictionaryInstall && (Input::hasAction(actions, Input::ActionOpenMenu)
+        || Input::hasAction(actions, Input::ActionBack))) {
+        dictionaryCancel_.store(true);
+        return;
     }
     if ((backgroundJobActive()&&!(onboardingJobActive()&&screen_==screens::Screen::Onboarding)) || screen_ == screens::Screen::Status)
         return;
@@ -856,6 +896,24 @@ void App::updateBackgroundJob() {
             screen_=screens::Screen::Dictionary;statusUntilMs_=0;
             immediateUi_.cancelTouchUntilRelease();immediateUi_.invalidate();renderScreen(millis());return;
         }
+        if (completed == JobKind::DictionaryInstall) {
+            dictionarySetup_.installed = dictionary::installedPack();
+            dictionarySetup_.confirming = false;
+            dictionarySetup_.message = update.line1;
+            if (update.line2[0]) dictionarySetup_.message += std::string{" · "} + update.line2;
+            screen_ = screens::Screen::DictionaryInstall; statusUntilMs_ = 0;
+            immediateUi_.cancelTouchUntilRelease(); immediateUi_.invalidate(); renderScreen(millis()); return;
+        }
+        if (completed == JobKind::OtaCheck) {
+            if (otaAutomatic_ && !otaOffer_.ready) {
+                otaAutomatic_ = false;
+                showTransientStatus("OTA", update.line1, update.line2, 1800, screens::Screen::Reader);
+                return;
+            }
+            otaAutomatic_ = false;
+            screen_ = screens::Screen::Ota; statusUntilMs_ = 0;
+            immediateUi_.cancelTouchUntilRelease(); immediateUi_.invalidate(); renderScreen(millis()); return;
+        }
         if(completed==JobKind::OnboardingStorage){
             onboardingScreen_.setStorageBusy(false);
             if(!onboardingJobWasMounted_&&storage_.mounted())onboardingStorageNeedsRecovery_=true;
@@ -935,8 +993,15 @@ void App::updateBackgroundJob() {
             return;
         }
 
-        const bool reboot = completed == JobKind::OtaInstall && update.rebootRequired;
-        showTransientStatus("OTA", update.line1, update.line2, reboot ? 500 : 1400, screens::Screen::Reader);
+        bool reboot = completed == JobKind::OtaInstall && update.rebootRequired;
+        if (reboot) {
+            if (auto saved = OtaUpdater::finalizeInstall(settingsStore_, otaOffer_); !saved) {
+                reboot = false;
+                copyText(update.line1, "Switch cancelled");
+                copyText(update.line2, saved.error().c_str());
+            }
+        }
+        showTransientStatus("OTA", update.line1, update.line2, reboot ? 500 : 2500, screens::Screen::Ota);
         restartAfterStatus_ = reboot;
         return;
     }
@@ -1033,7 +1098,8 @@ void App::runBackgroundJob() {
     case JobKind::OtaCheck: {
         Logger::checkpoint("ota_check");
         const OtaUpdater::Result result =
-            OtaUpdater::checkOnly(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this);
+            OtaUpdater::checkOnly(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus, this,
+                                  otaTarget_, &otaOffer_);
         copyText(complete.line1, result.summary.c_str());
         copyText(complete.line2, result.detail.c_str());
         break;
@@ -1042,7 +1108,7 @@ void App::runBackgroundJob() {
         Logger::checkpoint("ota_install");
         const OtaUpdater::Result result =
             OtaUpdater::checkAndInstall(settingsStore_.settings(), settingsStore_.secrets(), &App::renderStorageStatus,
-                                        this);
+                                        this, &otaOffer_);
         copyText(complete.line1, result.summary.c_str());
         copyText(complete.line2, result.detail.c_str());
         complete.rebootRequired = result.rebootRequired;
@@ -1056,6 +1122,15 @@ void App::runBackgroundJob() {
     case JobKind::OnlineDictionary:
         dictionary_.lookupOnline(settingsStore_);
         break;
+    case JobKind::DictionaryInstall: {
+        const auto result = dictionary::installEnglish(settingsStore_.settings(), settingsStore_.secrets(),
+            dictionarySetup_.confirming, [&](const char* line1, const char* line2, int percent) {
+                renderStorageStatus(this, "Dictionary", line1, line2, percent);
+            }, [&] { return dictionaryCancel_.load(); });
+        copyText(complete.line1, result ? "Dictionary ready" : result.error().c_str());
+        copyText(complete.line2, result ? "Available offline" : "Try again from dictionary setup");
+        break;
+    }
     case JobKind::BookSettings:
         Logger::checkpoint("book_settings");
         bookSettings_.load(storage_, jobBookIndex_);
@@ -1256,7 +1331,10 @@ void App::reloadUiAssets() {
     immediateUi_.setLanguageAssets(std::move(assets));
 }
 
-void App::runOtaCheck(bool install) {
+void App::runOtaCheck(bool install, bool switching, bool automatic) {
+    otaAutomatic_ = automatic;
+    if (install && !otaOffer_.ready) return;
+    if (!install) { otaTarget_ = switching ? OtaUpdater::Target::Other : OtaUpdater::Target::Current; otaOffer_ = {}; }
 
     ReadingLoop::pause(readerScreen_.session);
     if (install) {

@@ -33,4 +33,38 @@ class Channels(unittest.TestCase):
                 with self.assertRaises(SystemExit):fetch.stage_ui_preview("owner/repo",tag)
                 self.assertEqual(dest.read_bytes(),b"previous")
                 self.assertFalse(list(root.glob("*.partial")))
+
+    def test_public_020_preview_tag_is_allowed(self):
+        with patch.object(fetch, "fetch_json", side_effect=RuntimeError("validated tag")):
+            with self.assertRaisesRegex(RuntimeError, "validated tag"):
+                fetch.stage_ui_preview("owner/repo", "v0.2.0")
+        for tag in ("latest", "../v0.2.0", "v0.1.2", "main"):
+            with self.assertRaises(SystemExit):
+                fetch.stage_ui_preview("owner/repo", tag)
+
+    def test_catalog_requires_matching_ota_bytes_and_preserves_old_on_error(self):
+        import json
+        name="rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
+        commit="a"*40; tag="v0.2.0"
+        image=b"\xe9"+(tag+"+"+commit[:12]).encode()+b"\0"+b"x"*65536
+        entry={"channel":"new-ui","board":"waveshare_esp32s3_touch_lcd_3_49",
+               "tag":tag,"commit":commit,"asset":name,"bytes":len(image),
+               "sha256":hashlib.sha256(image).hexdigest()}
+        descriptor={"schema":1,"releases":[entry]}
+        preview={"tag_name":tag,"prerelease":True,"assets":[
+            {"name":"update-channel.json","browser_download_url":"descriptor"},
+            {"name":name,"browser_download_url":"ota"}]}
+        classic={"tag_name":"v0.1.2","assets":[]} # Old Classic is not a switch target.
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            def download(url,path):
+                path.write_bytes(json.dumps(descriptor).encode() if url=="descriptor" else image)
+            with patch.object(fetch,"FIRMWARE_DIR",root),patch.object(fetch,"fetch_json",return_value=preview),patch.object(fetch,"download_file",side_effect=download):
+                fetch.stage_update_catalog("owner/repo",classic,tag)
+                self.assertEqual(json.loads((root/"channels.json").read_text())["releases"],[entry])
+                original=(root/"channels.json").read_bytes()
+                entry["sha256"]="0"*64
+                with self.assertRaises(SystemExit):fetch.stage_update_catalog("owner/repo",classic,tag)
+                self.assertEqual((root/"channels.json").read_bytes(),original)
+                self.assertFalse(list(root.glob("*.partial")))
 if __name__=="__main__":unittest.main()

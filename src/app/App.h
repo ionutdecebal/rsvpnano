@@ -27,6 +27,7 @@
 #include "ui/screens/OnboardingScreen.h"
 #include "ui/screens/TouchCheckScreen.h"
 #include "ui/screens/Screens.h"
+#include "ui/screens/ModernScreens.h"
 #include "ui/screens/StandbyScreen.h"
 #include "update/OtaUpdater.h"
 #include "usb/UsbMassStorageManager.h"
@@ -49,6 +50,7 @@ private:
         OnboardingStorage,
         OnlineDictionary,
         BookSettings,
+        DictionaryInstall,
     };
 
     struct JobUpdate {
@@ -82,7 +84,7 @@ private:
     void reloadUiAssets();
     void enterUsbTransfer(uint32_t nowMs);
     void exitUsbTransfer(screens::Screen destination = screens::Screen::Reader);
-    void runOtaCheck(bool install);
+    void runOtaCheck(bool install, bool switching = false, bool automatic = false);
     void enterStandby(uint32_t nowMs);
     void exitStandby(uint32_t nowMs);
     void lightSleepFromStandby();
@@ -113,6 +115,12 @@ private:
     screens::OnboardingScreen onboardingScreen_;
     screens::TouchCheckScreen touchCheckScreen_;
     dictionary::Dictionary dictionary_;
+    screens::modern::DictionarySetup dictionarySetup_;
+    std::atomic<bool> dictionaryCancel_{false};
+    bool dictionaryWifiReturn_ = false;
+    OtaUpdater::Offer otaOffer_;
+    bool otaAutomatic_ = false;
+    OtaUpdater::Target otaTarget_ = OtaUpdater::Target::Current;
     CompanionApi companionApi_{settingsStore_,   storage_,       localeCatalog_, immediateUi_, readerScreen_,
                                interfaceScreen_, networkScreen_, libraryScreen_, focusScreen_};
     UsbMassStorageManager usbTransfer_;

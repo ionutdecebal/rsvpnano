@@ -54,6 +54,11 @@ def links(g,n):
  if g=='focus':return ['menu','focus','focus-presets','focus-session']
  if g=='onboarding':return ['intro-en-0','intro-en-11','menu']
  return ['menu','settings']
+COVERAGE['DictionaryInstall']='dictionary-install'
+TITLES.update({'dictionary-install':'Dictionary · download to SD','dictionary-installed':'Dictionary · installed',
+ 'dictionary-replace-confirm':'Dictionary · replace confirmation','dictionary-install-error':'Dictionary · retry',
+ 'updates-switch-confirm':'Firmware · confirm switch','updates-unavailable':'Firmware · retry check'})
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('screens',type=Path);p.add_argument('output',type=Path);a=p.parse_args()
  sha=subprocess.check_output(['git','rev-parse','--short=12','HEAD'],cwd=ROOT,text=True).strip()

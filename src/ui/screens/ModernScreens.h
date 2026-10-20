@@ -16,7 +16,7 @@ namespace screens::modern {
         case Screen::ReadingHub: case Screen::DisplayHub: case Screen::Connections: case Screen::Help:
         case Screen::StorageHub: case Screen::StorageEncryption: case Screen::PowerHub: case Screen::FocusPresets:
         case Screen::FindPlace: case Screen::FindChapters: case Screen::BookSearch: case Screen::BookSearchKeyboard:
-        case Screen::Dictionary: case Screen::DictionarySearch: case Screen::DictionaryHelp:
+        case Screen::Dictionary: case Screen::DictionarySearch: case Screen::DictionaryHelp: case Screen::DictionaryInstall:
         case Screen::QuickControls: case Screen::Onboarding: case Screen::ButtonMap: case Screen::AddBooks: case Screen::TouchCheck:
             return true;
         default:
@@ -34,6 +34,13 @@ namespace screens::modern {
     Action menu(ui::Context& ui, std::string_view title, std::string_view author, uint8_t progress,
                 bool hasBook, settings::InterfaceSettings& interface, Screen& screen, size_t chapter = 0);
     Action hub(ui::Context& ui, Screen& screen);
+    struct DictionarySetup {
+        bool installed = false;
+        bool confirming = false;
+        bool onboarding = false;
+        std::string message;
+    };
+    Action dictionarySetup(ui::Context& ui, DictionarySetup& state, Screen& screen);
     Action quickControls(ui::Context& ui, settings::ReadingSettings& reading,
                          settings::InterfaceSettings& interface, Screen& screen);
 }

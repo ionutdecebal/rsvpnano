@@ -276,7 +276,7 @@ constexpr const char* words[][3] = {
     {"Dictionary", "Wörterbuch", "Dicționar"},
     {"Press the middle button, then tap Dictionary. Browse nearby words or search.", "Drücke die mittlere Taste und wähle Wörterbuch. Wörter wechseln oder suchen.", "Apasă butonul din mijloc, apoi Dicționar. Schimbă cuvântul sau caută."},
     {"Offline English", "Englisch offline", "Engleză offline"},
-    {"Copy english.oewn from the release pack to /dictionaries on your SD card. No phone or account needed.", "english.oewn aus dem Release-Paket nach /dictionaries auf der SD-Karte kopieren. Ohne Handy oder Konto.", "Copiază english.oewn din pachetul lansării în /dictionaries pe cardul SD. Fără telefon sau cont."},
+    {"Install over Wi-Fi or copy the release pack to SD. Later: middle button, then Dictionary.", "Per WLAN installieren oder Release-Paket auf SD kopieren. Später: mittlere Taste, dann Wörterbuch.", "Instalează prin Wi-Fi sau copiază pachetul pe SD. Apoi: butonul din mijloc, Dicționar."},
     {"Look online", "Online suchen", "Caută online"},
     {"Tap Look online for Wiktionary over Wi-Fi. Only the word is sent when you ask.", "Online suchen nutzt Wiktionary per WLAN. Das Wort wird nur auf Anfrage gesendet.", "Caută online folosește Wiktionary prin Wi-Fi. Cuvântul e trimis doar la cerere."},
     {"Guides are unavailable in chunk mode. Switch to Word to use them.", "Hilfslinien sind im Gruppenmodus nicht verfügbar. Nutze dafür den Wortmodus.", "Ghidajele nu sunt disponibile în modul grup. Treci la Cuvânt pentru a le folosi."}

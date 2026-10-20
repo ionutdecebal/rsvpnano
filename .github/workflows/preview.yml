@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Unique preview-ui-dictionary-* candidate tag"
+        description: "Unique preview-ui-dictionary-* or v0.2.x tag (build only)"
         required: true
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
         env:
           CANDIDATE_TAG: ${{ inputs.version }}
         run: |
-          if ! [[ "$CANDIDATE_TAG" =~ ^preview-ui-dictionary-[A-Za-z0-9._-]+$ ]]; then
+          if ! [[ "$CANDIDATE_TAG" =~ ^preview-ui-dictionary-[A-Za-z0-9._-]+$ || "$CANDIDATE_TAG" =~ ^v0\.2\.[0-9]+(-[A-Za-z0-9._-]+)?$ ]]; then
             echo 'Invalid candidate tag'; exit 1
           fi
           if git show-ref --verify --quiet "refs/tags/$CANDIDATE_TAG"; then
@@ -40,6 +40,14 @@ jobs:
         env:
           RSVP_FIRMWARE_TAG: ${{ inputs.version }}
         run: python3 tools/export_web_firmware.py --env waveshare_esp32s3_touch_lcd_349_rev1
+      - name: Record update descriptor
+        env:
+          CANDIDATE_TAG: ${{ inputs.version }}
+        run: |
+          python3 tools/make_update_descriptor.py \
+            --image build/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
+            --channel new-ui --tag "$CANDIDATE_TAG" --commit "$(git rev-parse HEAD)" \
+            --output build/firmware/update-channel.json
       - name: Record checksums
         working-directory: build/firmware
         run: sha256sum *.bin > SHA256SUMS.txt

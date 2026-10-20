@@ -1,7 +1,7 @@
 # RSVP Nano — New UI preview
 
 This branch is a candidate for **Waveshare ESP32-S3 Touch LCD 3.49 Rev1 only**.
-It keeps RSVP Nano branding and the Pocket Lines logo reading guides.
+It keeps RSVP Nano branding and the current reading-guide artwork.
 Classic remains the stable/default release. This is a separate firmware choice;
 there is no live interface switch on the device.
 
@@ -32,8 +32,8 @@ left alone. The complete prototype is maintained separately.
 5. For an application-only update use `rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin`,
    never the merged image. Existing OTA partition offsets are unchanged.
 
-Returning to Classic is an intentional installation of the Classic image for the
-same board. Do not erase or format the SD. Classic may ignore new settings fields
+Returning to Classic is an intentional installation of the selector-equipped Classic image for the
+same board, through Firmware updates or the browser installer. Do not erase or format the SD. Classic may ignore new settings fields
 or replace them when it saves; keep the SD backup if you want to restore the
 preview's exact preferences. Physical upgrade/rollback compatibility is part of
 the acceptance checklist below, not established by a successful build.
@@ -43,7 +43,12 @@ automatically. Use Settings → Help → Replay introduction.
 
 ## Install the offline dictionary
 
-Extract `RSVP-Nano-English-Dictionary.zip`. Copy its `dictionaries` directory to
+During onboarding, or Dictionary → ? → Install / manage, choose **Install English dictionary**.
+This downloads about 48 MiB over Wi-Fi to the SD card. The release assets must be published first.
+An existing pack requires explicit replacement confirmation and remains intact until verification.
+The middle button cancels; retry restarts the transfer.
+
+Alternatively, extract `RSVP-Nano-English-Dictionary.zip`. Copy its `dictionaries` directory to
 the **root of the SD card**, using a card reader or USB mass-storage mode:
 
 ```
@@ -143,27 +148,29 @@ OTA feed still points to candidate 2; it has not been repointed for this pass.
 Candidate 4 is a manual browser-flash BIN. The development OTA feed and public
 firmware releases are unchanged; physical acceptance is still pending.
 
-## Test update from the full prototype
+## Candidate 5 — updates and dictionary installation
 
-The founder requested delivery through the existing private development feed.
-This is a one-time migration: the installed prototype validates this candidate's
-board, size, checksum and image before selecting the inactive slot. This candidate
-then uses the GitHub preview updater below, not the private server feed. Until its
-GitHub prerelease is published, later changes require another USB installation.
-Installing does not delete deferred recordings, books or dictionary files on SD.
-Host HTTP/checksum verification is not evidence of a successful physical update.
-
-## Preview update channel
-
-An empty update tag in this build resolves to
-`preview-ui-dictionary-20261020.4`, not GitHub's latest stable release.
-Explicit owner/repository/tag settings remain supported. If upgrading from a
-custom development build, inspect Connections → Wi-Fi → Release tag before
-updating; saved custom values are not silently discarded.
-
-Future preview tags must be selected explicitly until a dedicated preview feed
-is introduced. Classic's `latest` stays stable and does not select prereleases.
-The old private ecosystem updater is not compiled into this firmware.
+- Firmware updates checks the current interface, or explicitly checks the other one.
+  The selected version is shown before Confirm installation. New UI offers Return
+  to Classic; the narrow Classic maintenance build offers Try New UI on Rev1.
+- Empty official update settings follow the corresponding entry in
+  `https://ionutdecebal.github.io/rsvpnano/firmware/channels.json`.
+  Custom repository/tag settings still work. Switching backs them up in NVS
+  `rsvp_updates` (`new-ui-source` / `classic-source`) and clears the active override.
+  This recovery copy is not automatically restored or exposed as a source picker.
+- HTTPS certificate verification, bounded streaming, exact lengths and SHA-256
+  protect OTA delivery. Only the inactive app slot is written; the main task saves
+  switch settings before selecting it. This is not automatic post-boot health rollback.
+- Classic accepts saved `chunks` mode as single-word RSVP. Native cross-codec tests
+  retain speed and Wi-Fi. Interface-specific settings may still be replaced on save.
+- Dictionary setup and the introduction offer SD installation with progress, cancel,
+  retry, free-space checks, SHA-256 verification of both stream and saved file, and
+  staged recovery. The manifest and attribution travel with the pack. Manual
+  compatible packs remain supported and require confirmation before replacement.
+- The public catalog and raw dictionary assets are not deployed by this candidate.
+  Their unavailable state is shown as a retryable error. Manual SD installation works.
+- The previous private development OTA feed remains unchanged. Use the provided
+  merged image in the existing browser installer for this local candidate.
 
 ## Review and acceptance
 
@@ -184,7 +191,12 @@ results on the Nano for:
 - Offline search, definition paging, repeated lookups, online success/no entry,
   absent Wi-Fi and server failure.
 - Focus timer-only, reading session, break and manual resume.
-- Sleep/wake, settings/encryption, Classic upgrade and deliberate rollback.
+- Sleep/wake, settings/encryption, old Classic → selector Classic → New UI →
+  selector Classic → New UI, normal updates and progress preservation.
+- Dictionary download with missing/full/read-only SD, lost Wi-Fi, cancellation,
+  retry, interrupted replacement, custom-pack preservation and offline lookup.
+- Actual public-catalog OTA delivery and dictionary download after staging/publishing
+  the immutable assets; the native transport tests use a simulated HTTP backend.
 
 This candidate has not been physically verified merely because the build and
 native tests pass.
@@ -192,12 +204,13 @@ native tests pass.
 ## Maintainer publication
 
 Build the accepted source revision with a unique local `preview-ui-dictionary-*`
-tag using `tools/export_web_firmware.py --env waveshare_esp32s3_touch_lcd_349_rev1`.
+tag (public New UI tag **v0.2.0**) using `tools/export_web_firmware.py --env waveshare_esp32s3_touch_lcd_349_rev1`.
 The New UI candidate workflow can also build one target and upload CI artifacts;
 it never publishes automatically or moves remote tags.
 
 Publish the **tested artifacts** as an immutable GitHub prerelease, with both
-firmware images, `SHA256SUMS.txt`, dictionary ZIP/attribution, review HTML, source
+firmware images, `SHA256SUMS.txt`, `update-channel.json`, dictionary ZIP plus raw
+`english.oewn`, `manifest.json`, `ATTRIBUTION.txt`, review HTML, source
 revision and these instructions. Do not mark it latest or overwrite older assets.
 
 The installer change is separate from the firmware branch. After acceptance and
@@ -206,3 +219,12 @@ exact published tag and deploy the narrow installer branch. The staging tool
 verifies the image checksum and places the preview under a distinct filename.
 An unset variable leaves the Classic-only installer intact. Verify downloads and
 both choices after deployment.
+
+The selector Classic build needs its own immutable stable 0.1.x maintenance release
+and descriptor. The staging script includes only descriptor-equipped Classic
+releases as switch targets. Publish that maintenance release before enabling the
+New UI catalog entry; older Classic remains available but is not the round-trip target.
+New UI uses a build-only workflow; the Classic workflow refuses existing releases,
+never force-moves tags, and is restricted to Classic 0.0.x/0.1.x tags. Pages always
+builds main, never a firmware release branch. Merge the separate installer and
+README changes only when their referenced releases are available.

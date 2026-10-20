@@ -1,107 +1,18 @@
 name: Release firmware
 
+# New UI releases must use the scoped candidate build and deliberate publication.
+# In particular, pushing v0.2.0 must not trigger the Classic multi-board release.
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Release tag, for example v0.0.9"
-        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      commit_sha: ${{ steps.release.outputs.commit_sha }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Set release metadata
-        id: release
-        env:
-          DISPATCH_VERSION: ${{ inputs.version }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RELEASE_TAG="$DISPATCH_VERSION"
-          else
-            RELEASE_TAG="$GITHUB_REF_NAME"
-          fi
-          if ! echo "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$'; then
-            echo "::error::Invalid release version: ${RELEASE_TAG}"
-            exit 1
-          fi
-
-          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Verify pushed release tag
-        if: github.event_name != 'workflow_dispatch'
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          BUILD_SHA: ${{ steps.release.outputs.commit_sha }}
-        run: |
-          git fetch --tags origin
-          TAG_SHA="$(git rev-list -n 1 "${RELEASE_TAG}")"
-          if [ "$TAG_SHA" != "$BUILD_SHA" ]; then
-            echo "::error::${RELEASE_TAG} points at ${TAG_SHA}, not ${BUILD_SHA}."
-            exit 1
-          fi
-
-  build:
-    needs: prepare
-    uses: ./.github/workflows/firmware-build.yml
-    with:
-      firmware_tag: ${{ needs.prepare.outputs.tag }}
-
-  publish:
-    needs: [prepare, build]
+  scoped-release-only:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.prepare.outputs.commit_sha }}
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: firmware-assets
-          path: build/firmware
-
-      - name: Load release notes
-        env:
-          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      - name: Use the reviewed New UI publication process
         run: |
-          NOTES_PATH="docs/releases/${RELEASE_TAG}.md"
-          if [ ! -f "$NOTES_PATH" ]; then
-            echo "::error::Missing release notes: ${NOTES_PATH}"
-            exit 1
-          fi
-          cp "$NOTES_PATH" release-notes.md
-
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
-          BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            git fetch --tags origin
-            git tag -f "$RELEASE_TAG" "$BUILD_SHA"
-            git push origin "refs/tags/${RELEASE_TAG}" --force
-          fi
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --yes
-          fi
-
-          gh release create "$RELEASE_TAG" build/firmware/*.bin \
-            --title "$RELEASE_TAG" \
-            --notes-file release-notes.md \
-            --target "$BUILD_SHA"
+          echo 'Use New UI candidate; publish tested artifacts after device acceptance.'
+          exit 1

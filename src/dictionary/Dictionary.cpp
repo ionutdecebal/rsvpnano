@@ -1,5 +1,6 @@
 #include "dictionary/Dictionary.h"
 #include "dictionary/DictionaryPack.h"
+#include "dictionary/DictionaryInstaller.h"
 #include "board/BoardStorage.h"
 #include "text/Utf8Text.h"
 #include "text/UnicodeText.h"
@@ -31,6 +32,7 @@ void Dictionary::open(ReadingSession& session) {
 void Dictionary::lookup(){
     query_=normalized(query_);
     definition_={};sense_=0;definitionOffsets_={0};
+    if (!recoverInstall()) { message="SD dictionary recovery needed; check the card"; return; }
     if(query_.empty()){message="Open a book or search for a word";return;}
     auto pack=Board::Storage::filesystem().open("/dictionaries/english.oewn",FILE_READ);
     if(!pack){message="Install english.oewn in /dictionaries on the SD card";return;}

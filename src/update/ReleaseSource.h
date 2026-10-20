@@ -3,7 +3,7 @@
 #include "settings/SettingsModel.h"
 #include "text/AsciiText.h"
 namespace update {
-inline constexpr char kDefaultUiReleaseTag[]="preview-ui-dictionary-20261020.4";
+inline constexpr char kDefaultUiReleaseTag[]=""; // Empty follows the installed interface's channel.
 struct ReleaseSource {std::string owner,repo,tag;};
     inline bool splitOwnerRepo(std::string_view value, std::string& owner, std::string& repo) {
         const std::string_view trimmed = AsciiText::trim(value);
@@ -37,7 +37,6 @@ struct ReleaseSource {std::string owner,repo,tag;};
             }
         }
 
-        if (source.tag.empty()) source.tag = kDefaultUiReleaseTag;
         return source;
     }
 
