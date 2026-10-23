@@ -68,7 +68,28 @@ int main() {
     }
     assert(!update::selectRelease(std::string(16385, 'x'),"new-ui",update::kNewUiBoard,release.asset));
     assert(!update::selectRelease("{","new-ui",update::kNewUiBoard,release.asset));
+    auto rev2 = release;
+    rev2.board = update::kNewUiRev2Board;
+    rev2.asset = "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin";
+    auto rev2Classic = rev2; rev2Classic.channel = "classic"; rev2Classic.tag = "v0.1.4";
+    const auto both = glz::write_json(update::Catalog{1, {classic,release,rev2Classic,rev2}}).value();
+    for (const auto& expected : {classic,release,rev2Classic,rev2}) {
+        auto selected = update::selectRelease(both, expected.channel, expected.board, expected.asset);
+        assert(selected && selected->tag == expected.tag && selected->asset == expected.asset);
+        // A catalogue entry for another revision must never be used as fallback.
+        const auto otherAsset = expected.board == rev2.board ? release.asset : rev2.asset;
+        assert(!update::selectRelease(both, expected.channel, expected.board, otherAsset));
+    }
+    assert(!update::selectRelease(glz::write_json(update::Catalog{1,{release}}).value(),
+                                 "new-ui",rev2.board,rev2.asset));
+    assert(!update::selectRelease(glz::write_json(update::Catalog{1,{rev2}}).value(),
+                                 "new-ui",release.board,release.asset));
+    assert(!update::selectRelease(glz::write_json(update::Catalog{1,{rev2,rev2}}).value(),
+                                 "new-ui",rev2.board,rev2.asset));
+    auto unsupported = rev2; unsupported.board = "waveshare_esp32s3_touch_amoled_1_8";
+    assert(!update::validRelease(unsupported, unsupported.board, unsupported.asset));
     puts("Catalog: variant selection, missing/duplicate entries, hardware, asset, size and checksum bounds passed.");
+    puts("Rev2: four board/channel choices, cross-revision rejection, unpublished and duplicate entries passed.");
     int scenarios = 0;
     for (bool existing : {false, true}) for (bool crash : {false, true}) for (int fault = 1; fault <= 15; ++fault) {
         FaultFS fs; seed(fs, existing); fs.failAt = fault; fs.crash = crash;

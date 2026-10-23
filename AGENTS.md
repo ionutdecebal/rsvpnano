@@ -6,7 +6,9 @@ The complete ecosystem prototype is preserved separately; do not add the new
 Android app, notes, recording, Bluetooth phone sync or private service data here.
 
 Keep Classic available and the default stable release. New UI is an explicitly
-selected preview for LCD 3.49 Rev1. Use unique release tags and separate merged
+selected preview for LCD 3.49 Rev1; this branch also prepares a local Rev2 candidate.
+The founder requires review before ANY push or publication of this Rev2 work.
+Read `docs/releases/lcd349-rev2-candidate.md`. Use unique release tags and separate merged
 browser and application-only OTA artifacts. Never move published tags, overwrite
 assets or change flash partitions. Preserve SD books, progress and deferred data.
 

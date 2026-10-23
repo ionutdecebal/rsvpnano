@@ -17,7 +17,7 @@ bool validHex(std::string_view value, size_t length) {
 }
 bool validRelease(const Release& r, std::string_view board, std::string_view asset) {
     return (r.channel == "classic" || r.channel == "new-ui")
-        && (r.channel != "new-ui" || board == kNewUiBoard)
+        && (r.channel != "new-ui" || supportsNewUi(board))
         && r.board == board && r.asset == asset && r.asset.ends_with("-ota.bin")
         && validToken(r.asset) && validToken(r.tag) && validHex(r.commit, 40)
         && validHex(r.sha256, 64) && r.bytes >= 65536 && r.bytes <= 8U * 1024 * 1024;

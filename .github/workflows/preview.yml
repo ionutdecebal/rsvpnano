@@ -6,6 +6,13 @@ on:
       version:
         description: "Unique preview-ui-dictionary-* or v0.2.x tag (build only)"
         required: true
+      board:
+        description: "LCD 3.49 hardware revision"
+        type: choice
+        default: lcd349-v1
+        options:
+          - lcd349-v1
+          - lcd349-v2
 
 permissions:
   contents: read
@@ -36,16 +43,30 @@ jobs:
           fi
       - name: Install build tools
         run: pip install platformio
-      - name: Build LCD 3.49 Rev1 only
+      - name: Select hardware revision
+        env:
+          CANDIDATE_BOARD: ${{ inputs.board }}
+        run: |
+          case "$CANDIDATE_BOARD" in
+            lcd349-v1)
+              echo 'FIRMWARE_ENV=waveshare_esp32s3_touch_lcd_349_rev1' >> "$GITHUB_ENV"
+              echo 'OTA_ASSET=rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin' >> "$GITHUB_ENV" ;;
+            lcd349-v2)
+              echo 'FIRMWARE_ENV=waveshare_esp32s3_touch_lcd_349_rev2' >> "$GITHUB_ENV"
+              echo 'OTA_ASSET=rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin' >> "$GITHUB_ENV" ;;
+            *) echo 'Unsupported candidate board'; exit 1 ;;
+          esac
+      - name: Build selected LCD 3.49 revision
         env:
           RSVP_FIRMWARE_TAG: ${{ inputs.version }}
-        run: python3 tools/export_web_firmware.py --env waveshare_esp32s3_touch_lcd_349_rev1
+        run: python3 tools/export_web_firmware.py --env "$FIRMWARE_ENV"
       - name: Record update descriptor
         env:
           CANDIDATE_TAG: ${{ inputs.version }}
+          CANDIDATE_BOARD: ${{ inputs.board }}
         run: |
           python3 tools/make_update_descriptor.py \
-            --image build/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
+            --image "build/firmware/$OTA_ASSET" --board "$CANDIDATE_BOARD" \
             --channel new-ui --tag "$CANDIDATE_TAG" --commit "$(git rev-parse HEAD)" \
             --output build/firmware/update-channel.json
       - name: Record checksums
@@ -53,7 +74,7 @@ jobs:
         run: sha256sum *.bin > SHA256SUMS.txt
       - uses: actions/upload-artifact@v7
         with:
-          name: new-ui-candidate
+          name: new-ui-candidate-${{ inputs.board }}
           path: build/firmware
           if-no-files-found: error
       # Publication is a separate, deliberate step after reviewing and testing

@@ -49,7 +49,8 @@ namespace {
         analogWriteResolution(WaveshareLcd349::DisplayWiring::kBacklightPin, 8);
         analogWriteFrequency(WaveshareLcd349::DisplayWiring::kBacklightPin, 25000);
 
-        // Rev1 backlight is inverted: 0 = full on, 255 = off.
+        // Both LCD revisions inject PWM into the backlight feedback circuit:
+        // 0 = full on, 255 = off. Only the MCU pin changes on Rev2.
         analogWrite(WaveshareLcd349::DisplayWiring::kBacklightPin, 255 - gBacklightDuty);
     }
 
@@ -90,7 +91,25 @@ namespace Board::Display {
         pinMode(WaveshareLcd349::DisplayWiring::kBacklightPin, OUTPUT);
 
         if constexpr (WaveshareLcd349::DisplayWiring::kResetPin < 0) {
-            BoardDrivers::Tca9554::configureOutputPin(Wire1, WaveshareLcd349::Tca9554Wiring::kAddress, 5, true);
+            // Rev2 routes LCD reset through the expander. Arduino_GFX cannot
+            // pulse it with reset GPIO -1, particularly after a software reboot.
+            // Use Waveshare's Rev2 high/low/high reset timing before panel init.
+            const auto reset = [](bool high) {
+                return BoardDrivers::Tca9554::configureOutputPin(
+                    Wire1, WaveshareLcd349::Tca9554Wiring::kAddress,
+                    WaveshareLcd349::Tca9554Wiring::kDisplayResetPin, high,
+                    WaveshareLcd349::Tca9554Wiring::kReleaseBusBeforeRead);
+            };
+            bool resetOk = reset(true);
+            if (resetOk) { delay(30); resetOk = reset(false); }
+            if (resetOk) { delay(250); resetOk = reset(true); }
+            if (!resetOk) {
+                ESP_LOGE("display", "Rev2 expander display reset failed");
+                setBacklight(false);
+                setBacklightPower(false);
+                return false;
+            }
+            delay(30);
         }
 
         logDisplayMemory();

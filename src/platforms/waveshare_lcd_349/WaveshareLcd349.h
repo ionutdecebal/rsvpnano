@@ -77,6 +77,7 @@ namespace WaveshareLcd349::Tca9554Wiring {
     constexpr uint8_t kAddress = 0x20;
     constexpr bool kReleaseBusBeforeRead = false;
     constexpr uint8_t kBacklightEnablePin = 1;
+    constexpr uint8_t kDisplayResetPin = 5; // Rev2 only; Rev1 uses MCU GPIO21.
     constexpr uint8_t kSysEnablePin = 6;
     constexpr uint8_t kAudioEnablePin = 7;
     constexpr uint8_t kTouchInterruptPin = 0;
