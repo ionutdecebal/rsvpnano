@@ -16,6 +16,7 @@ on:
       - 'kotlin-js-store/wasm/**'
       - 'tools/fetch_release_firmware.py'
       - 'tools/export_web_firmware.py'
+      - 'tools/package_release.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
