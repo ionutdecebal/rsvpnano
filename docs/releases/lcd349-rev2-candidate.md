@@ -1,11 +1,14 @@
-# LCD 3.49 Rev2 — local v0.2.0 candidate
+# LCD 3.49 Rev2 — tested v0.2.0 source preview
 
-The founder requested the v0.2.0 UI/dictionary release for LCD 3.49 Rev2 and
-confirmed a Rev2 device is available. **Do not push, open a PR, publish assets,
-dispatch Actions, deploy Pages or change OTA feeds until the founder reviews the
-candidate and explicitly approves.** Local branch: `work/ui-020-rev2`.
+The founder tested the v0.2.0 UI/dictionary candidate on a confirmed LCD 3.49 Rev2
+and reported that it performs well. On 23 October 2026 they approved pushing the
+tested source branch and updating the README to show Rev2 support.
+Branch: `work/ui-020-rev2`. **Firmware releases, installer and OTA publication are
+separate steps and are not covered by this source-push approval.**
 
 Base: published `v0.2.0`, commit `cf42168db427b4a0e96601d4f093313e5cbfb243`.
+Tested firmware commit: `73af8bc7c4fdd4bd3c665a447f2fa2c5b3f8cf92`.
+Subsequent README/status changes do not change the tested firmware code.
 Candidate tag: `v0.2.0-rev2.1` (local only). Never move the published v0.2.0 tag
 or replace its assets. This retains v0.2.0 features and branding; it is not the
 notes/Bluetooth/app prototype or Pocket Lines firmware.
@@ -31,7 +34,8 @@ shows LCD_BL feeding the boost controller's feedback node through R52, consisten
 with the inverted duty values in the vendor PWM helper. A separate vendor LVGL
 example uses plain GPIO levels, so it is not a brightness calibration reference.
 The existing 40 MHz QSPI configuration, SPI host and minimum brightness mapping
-are unchanged; brightness range and sleep/wake still need physical testing.
+are unchanged. The owner's general hardware test passed; it did not include a
+separately reported measurement of the brightness curve or sleep/wake matrix.
 
 ## Updates and artifacts
 
@@ -62,6 +66,12 @@ aliases and the bounded release listing introduced in v0.1.4.
 
 ## Build and local verification
 
+For a normal build of this source branch, use the Rev2 instructions in the README.
+To reproduce the exact tested binary with the commands below, first check out
+`73af8bc7c4fdd4bd3c665a447f2fa2c5b3f8cf92` and create the local tag
+`v0.2.0-rev2.1` at that commit if it does not already exist. This tag has not been
+published; it must point to the checked-out commit for a version-stamped build.
+
 ```sh
 python3 tools/test_update_descriptor.py
 python3 test/native_update_delivery/run.py
@@ -80,6 +90,11 @@ checksums locally. Also compile Rev1 when changing the shared display backend.
 Host checks cannot establish hardware performance or physical OTA compatibility.
 
 ## Device acceptance
+
+The owner's general Rev2 test passed on 23 October 2026. The checklist below
+records the intended acceptance coverage; it is not evidence that each item was
+individually tested. In particular, no Rev2 1000 WPM benchmark or on-device OTA
+switching result has been reported.
 
 Install the candidate **merged** Rev2 BIN with Choose a firmware file in the
 browser companion, selecting LCD 3.49 Rev2. Keep erase first off. Back up SD
