@@ -41,17 +41,18 @@ Classic remains available, and an ordinary update keeps you on your chosen inter
 | Dictionary | Offline English definitions and optional direct Wi-Fi lookup | Not included |
 | Books and connections | Existing web companion, USB transfers and Wi-Fi | Existing web companion, USB transfers and Wi-Fi |
 | Hardware | **Waveshare ESP32-S3 Touch LCD 3.49 Rev1 and Rev2** | [All supported boards below](#supported-hardware) |
-| Updates | Rev1: update New UI or choose **Return to Classic**. Rev2: online updates and switching are not published yet | The selector maintenance build adds **Try New UI** on LCD 3.49 Rev1 |
-| Availability | **0.2.0 preview**, selected explicitly on Rev1; hardware-tested source preview on Rev2 | Stable; the default installer choice |
-| Source | [Rev1](https://github.com/ionutdecebal/rsvpnano/tree/release/ui-dictionary) · [Rev2](https://github.com/ionutdecebal/rsvpnano/tree/work/ui-020-rev2) | [`v0.1.4`](https://github.com/ionutdecebal/rsvpnano/tree/v0.1.4) |
+| Updates | Update New UI or choose **Return to Classic** on Rev1 and Rev2 | **Try New UI** on LCD 3.49 Rev1 and Rev2 (Classic v0.1.5) |
+| Availability | **0.2.0 preview**, selected explicitly on Rev1 and Rev2 | Stable; the default installer choice |
+| Source | [Rev1](https://github.com/ionutdecebal/rsvpnano/tree/release/ui-dictionary) · [Rev2](https://github.com/ionutdecebal/rsvpnano/tree/work/ui-020-rev2) | [`v0.1.5`](https://github.com/ionutdecebal/rsvpnano/tree/v0.1.5) |
 
 [**New UI 0.2.0 Rev1 downloads**](https://github.com/ionutdecebal/rsvpnano/releases/tag/v0.2.0) ·
-[**Rev2 source preview**](#lcd-349-rev2-source-preview) ·
+[**New UI 0.2.0 Rev2 downloads**](https://github.com/ionutdecebal/rsvpnano/releases/tag/v0.2.0-rev2.1) ·
 [**Classic downloads**](https://github.com/ionutdecebal/rsvpnano/releases/latest)
 
 **Rev2 is now supported and has been tested on hardware.** Its v0.2.0 port keeps
-the same interface, onboarding and dictionary. Rev2 release downloads and installer/OTA
-choices will follow separately; the existing `v0.2.0` release files are for Rev1.
+the same interface, onboarding and dictionary. Choose your revision in the web installer
+or switch over Wi-Fi from Classic v0.1.5. Rev1 uses release `v0.2.0`; Rev2 uses
+`v0.2.0-rev2.1`. Each release has its own board-specific files.
 
 This release focuses on the interface, onboarding and dictionary. Voice notes,
 transcription, Bluetooth phone sync and the experimental new phone app are being
@@ -76,7 +77,7 @@ You need a [supported board](#supported-hardware), a USB-C **data** cable and a 
 microSD card. An 8–32 GB card is a straightforward starting point.
 
 1. Open the [web companion](https://ionutdecebal.github.io/rsvpnano/) in desktop **Chrome or Edge**.
-2. Choose your exact board and revision, then **Classic** or **New UI (preview) · 0.2.0** where listed. For New UI on Rev2, use the [source-preview instructions](#lcd-349-rev2-source-preview).
+2. Choose your exact board and revision, then **Classic** or **New UI (preview) · 0.2.0** where listed. Both LCD 3.49 revisions offer New UI.
 3. Follow the flashing steps. The New UI’s introduction walks you through the controls.
 4. Add books from the companion’s Library screen: EPUB, RSVP, text, Markdown, HTML or XHTML.
 5. Open a book on the Nano and make the pace your own.
@@ -92,24 +93,22 @@ use the merged `.bin`; the `-ota.bin` is for application-only OTA updates.
 
 ## Updates and switching
 
-On **LCD 3.49 Rev1**, in the New UI’s **Firmware updates**, choose **Check current software** to stay on
-New UI, or **Return to Classic** to change interfaces. The reader shows the selected
-version before you confirm. It downloads over Wi-Fi and restarts after installation.
+On **LCD 3.49 Rev1 and Rev2**, in the New UI’s **Firmware updates**, choose
+**Check current software** to stay on New UI, or **Return to Classic** to change
+interfaces. The reader shows the selected version before you confirm. It downloads
+over Wi-Fi and restarts after installation.
 
-Classic **v0.1.3 and later** provides the return journey with **Try New UI** on LCD 3.49 Rev1.
-If older firmware reports **rsvp-nano-ota.bin missing**, retry the official update
-to Classic **v0.1.4**, then choose **Try New UI** on Rev1. Rev2's public update feed
-still supplies Classic; its tested New UI source preview is available separately.
-Manual full-flash downloads are bundled in `rsvp-nano-browser-installers.zip`;
+Classic **v0.1.5** provides **Try New UI** on both revisions (Rev1 also supports it
+in v0.1.3–v0.1.4). If your Classic version has no selector yet, update to v0.1.5
+first, then choose **Try New UI**. If older firmware reports **rsvp-nano-ota.bin
+missing**, retry the official update; the legacy filenames are included.
+
+The browser installer also offers both interfaces for both revisions. Classic's
+manual full-flash downloads are bundled in `rsvp-nano-browser-installers.zip`;
 the browser installer selects the correct image for your board automatically.
-If your Classic version has no selector yet, install the selector-equipped Classic
-release first, or choose New UI directly in the web installer. These choices are
-available only for compatible hardware.
-
-Rev2 New UI is not in the public update catalog yet. Its update check and
-**Return to Classic** will report that the software is not published for that board.
-Use the browser installer to return to Classic Rev2 for now. Published Classic Rev2
-does not yet offer **Try New UI**; keep a merged Rev2 New UI build for reinstalling it.
+If you already installed the tested `v0.2.0-rev2.1` candidate, you have the published
+firmware: its update check will show that it is current, and **Return to Classic**
+now has a published target.
 
 Switching installs a different firmware; it is not a live appearance toggle. Both use
 the same SD library, but Classic may replace New UI-only preferences when it saves.
@@ -139,8 +138,8 @@ Keep the pack’s attribution and licence files when sharing it.
 
 ## Supported hardware
 
-**New UI 0.2.0 supports LCD 3.49 Rev1 and Rev2.** Rev2 is currently a
-[hardware-tested source preview](#lcd-349-rev2-source-preview). Classic supports the boards below.
+**New UI 0.2.0 supports LCD 3.49 Rev1 and Rev2** through the web installer,
+on-device updates and source builds. Classic supports all boards below.
 Choose the exact board revision when flashing; firmware is not interchangeable.
 
 <details>
@@ -150,7 +149,7 @@ Choose the exact board revision when flashing; firmware is not interchangeable.
 | Board | PlatformIO environment | Distribution |
 | --- | --- | --- |
 | Waveshare ESP32-S3 Touch LCD 3.49 rev1 | `waveshare_esp32s3_touch_lcd_349_rev1` | Web installer, OTA, source |
-| Waveshare ESP32-S3 Touch LCD 3.49 rev2 | `waveshare_esp32s3_touch_lcd_349_rev2` | Classic: web installer, OTA, source. New UI: source preview |
+| Waveshare ESP32-S3 Touch LCD 3.49 rev2 | `waveshare_esp32s3_touch_lcd_349_rev2` | Web installer, OTA, source |
 | Waveshare ESP32-S3 Touch AMOLED 1.8 V1 | `waveshare_esp32s3_touch_amoled_18_v1` | Web installer, OTA, source |
 | Waveshare ESP32-S3 Touch AMOLED 1.8 V2 | `waveshare_esp32s3_touch_amoled_18_v2` | Web installer, OTA, source; still experimental |
 | Waveshare ESP32-S3 Touch AMOLED 2.06 | `waveshare_esp32s3_touch_amoled_206` | Web installer, OTA, source |
@@ -233,7 +232,7 @@ cd rsvpnano
 ### Firmware
 
 The default `main` branch builds Classic. For the exact Classic maintenance release,
-use tag `v0.1.4`. For the exact New UI 0.2.0 release source:
+use tag `v0.1.5`. For the exact New UI 0.2.0 release source:
 
 ```bash
 git fetch --tags
@@ -242,7 +241,7 @@ git submodule update --init --recursive
 ```
 
 The published `v0.2.0` tag and `release/ui-dictionary` target LCD 3.49 Rev1.
-For the tested Rev2 port, use the separate branch below.
+For the Rev2 release, use its separate tag below.
 
 Install [PlatformIO](https://platformio.org/), then build one target:
 
@@ -262,17 +261,17 @@ Run native firmware tests:
 pio test -e native_test
 ```
 
-### LCD 3.49 Rev2 source preview
+### LCD 3.49 Rev2 build
 
 The v0.2.0 Rev2 port has passed an owner test on a confirmed Rev2 board, both LCD
 revision builds, and update/dictionary checks. A Rev2 1000 WPM benchmark and
 on-device firmware switching have not yet been verified.
 
-From a clone of this repository, check out the Rev2 branch and export its firmware:
+From a clone of this repository, check out the Rev2 release and export its firmware:
 
 ```bash
-git fetch origin
-git switch work/ui-020-rev2
+git fetch origin --tags
+git switch --detach v0.2.0-rev2.1
 git submodule update --init --recursive
 python3 tools/export_web_firmware.py --env waveshare_esp32s3_touch_lcd_349_rev2
 ```
