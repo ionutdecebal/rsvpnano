@@ -139,9 +139,11 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
     var selectedFirmware by remember { mutableStateOf<SelectedFirmware?>(null) }
     var availableReleases by remember { mutableStateOf<List<DeployedRelease>>(emptyList()) }
     var releaseId by remember { mutableStateOf("classic") }
-    val deployedRelease = availableReleases.firstOrNull { it.id == releaseId }
     var releaseError by remember { mutableStateOf<String?>(null) }
     val board = InstallerBoards.firstOrNull { it.id == boardId } ?: InstallerBoards.first()
+    val eligibleReleases = availableReleases.filter { it.id == "classic" || board.id in it.firmware }
+    val deployedRelease = eligibleReleases.firstOrNull { it.id == releaseId }
+        ?: eligibleReleases.firstOrNull { it.id == "classic" }
     var installState by remember(board.id) { mutableStateOf(FirmwareInstallState()) }
     val serialAvailable = supportsWebSerial()
     val secure = isSecureContext()
@@ -224,13 +226,13 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Choose your interface", fontWeight = FontWeight.Bold)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        availableReleases.forEach { release ->
+                        eligibleReleases.forEach { release ->
                             OutlinedButton(onClick = { releaseId = release.id }, enabled = !installState.running) {
-                                Text((if (release.id == releaseId) "✓ " else "") + release.label)
+                                Text((if (release.id == deployedRelease?.id) "✓ " else "") + release.label)
                             }
                         }
                     }
-                    Text(if (releaseId == "classic") "The existing community firmware. Stable and selected by default."
+                    Text(if (deployedRelease?.id != "new-ui") "The existing community firmware. Stable and selected by default."
                         else "New interface, onboarding and dictionary. Preview for LCD 3.49 Rev1 only. Notes and phone sync are deferred.",
                         style = MaterialTheme.typography.bodySmall)
                 }
