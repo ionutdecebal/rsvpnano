@@ -11,6 +11,8 @@ You need a supported RSVP Nano board, a USB-C data cable, and a FAT32 microSD ca
 1. Open the [web companion](https://ionutdecebal.github.io/rsvpnano/) in a desktop browser.
 2. Choose your board and firmware: **Classic** is the default. **New UI (preview) · 0.2.0**
    is available for LCD 3.49 Rev1.
+   LCD 3.49 Rev2 is also supported in the [hardware-tested source preview](../README.md#lcd-349-rev2-source-preview);
+   its release downloads and installer/OTA choices are not published yet.
 3. Follow setup and verify the reader. The New UI includes an on-device introduction.
 4. Add an EPUB, RSVP, text, Markdown, HTML, or XHTML file from the companion's Library screen.
 5. Open the book on the Nano and start reading. For offline definitions in the New UI,
@@ -28,7 +30,7 @@ image. Always match the firmware to your board revision.
 
 ## Updates and switching
 
-On a compatible reader, **Firmware updates** offers:
+On **LCD 3.49 Rev1**, **Firmware updates** offers:
 
 - **Check current software** — get updates for the interface you already use.
 - **Return to Classic** from the New UI, or **Try New UI** from Classic.
@@ -44,8 +46,16 @@ The selector is included in Classic v0.1.3 and later on LCD 3.49 Rev1 so you can
 If an older version reports `rsvp-nano-ota.bin missing`, retry the official update
 to Classic v0.1.4 first. For manual browser flashing, extract your board's full
 image from `rsvp-nano-browser-installers.zip`; do not select an `-ota.bin` file.
-Older Classic builds can use their existing **Release tag** setting to select `v0.2.0` after
-publication, or use the web installer. New UI choices will only appear for supported hardware.
+Older Classic **Rev1** builds can use their existing **Release tag** setting to select
+`v0.2.0`, or use the web installer. That published release contains Rev1 New UI firmware.
+
+**Rev2:** the tested New UI port is currently available from source. Follow the
+[Rev2 build and manual installation instructions](../README.md#lcd-349-rev2-source-preview).
+Its update check and **Return to Classic** will report that the software is not
+published for the board until Rev2 entries are added to the public catalog. For now,
+return to Classic with the browser installer, selecting LCD 3.49 Rev2 and leaving
+**Erase first** off. Published Classic Rev2 has no **Try New UI** option yet, so keep
+your merged New UI Rev2 file for reinstalling it. Do not use a Rev1 binary on Rev2.
 
 Classic and the New UI have separate update selections. The New UI can remain a GitHub
 prerelease while still being offered in the device's update menu.
