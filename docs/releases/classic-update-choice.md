@@ -25,3 +25,10 @@ clean tagged build. Keep merged and application-only binaries separate. The
 Classic workflow now refuses release replacement and tag moves; its automatic
 publication is restricted to v0.0.x/v0.1.x. Do not push a stable release tag during
 candidate testing.
+
+## Publication acceptance — 23 October 2026
+
+The founder confirmed the browser-flashed Classic/New UI round trip and explicitly
+requested publication. The final Classic maintenance release is v0.1.3. Firmware
+implementation is unchanged from the tested candidate; final identities and release
+metadata are rebuilt. Real Wi-Fi OTA round-trip results remain separate and pending.

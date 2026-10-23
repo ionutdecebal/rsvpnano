@@ -10,6 +10,10 @@ on:
       version:
         description: "Release tag, for example v0.0.9"
         required: true
+      draft:
+        description: "Upload a draft release for verification before publication"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -105,6 +109,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
+          CREATE_DRAFT: ${{ inputs.draft || false }}
         run: |
           # Published tags and assets are immutable. Reuse never deletes a release.
           git fetch --tags origin
@@ -121,6 +126,10 @@ jobs:
           if [ -f build/firmware/update-channel.json ]; then
             assets+=(build/firmware/update-channel.json)
           fi
-          gh release create "$RELEASE_TAG" "${assets[@]}" \
+          release_flags=()
+          if [ "$CREATE_DRAFT" = "true" ]; then
+            release_flags+=(--draft --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "${assets[@]}" "${release_flags[@]}" \
             --verify-tag --title "$RELEASE_TAG" \
             --notes-file release-notes.md --target "$BUILD_SHA"
