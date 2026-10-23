@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import urllib.error
 import urllib.request
+import urllib.parse
 from pathlib import Path
 
 from export_web_firmware import FLASH_EXPORTS, OTA_EXPORTS, write_release_metadata
@@ -59,6 +62,34 @@ def download_file(url: str, destination: Path) -> None:
 def latest_release(repo: str) -> dict:
     return fetch_json(f"https://api.github.com/repos/{repo}/releases/latest")
 
+def stage_ui_preview(repo: str, tag: str) -> dict:
+    """Stage one explicit, immutable preview without replacing Classic files."""
+    if not re.fullmatch(r"(?:preview-ui-dictionary-[A-Za-z0-9._-]+|v0\.2\.\d+(?:-[A-Za-z0-9._-]+)?)", tag):
+        raise SystemExit("New UI requires an explicit preview or v0.2.x release tag.")
+    release = fetch_json(f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+    if release.get("tag_name") != tag or not release.get("prerelease") or release.get("draft"):
+        raise SystemExit("New UI must be a published prerelease at the selected tag.")
+    name = next(x["binary"] for x in FLASH_EXPORTS if x["id"] == "lcd349-v1")
+    asset = find_asset(release, name)
+    sums = find_asset(release, "SHA256SUMS.txt")
+    checksum_file = FIRMWARE_DIR / "new-ui-SHA256SUMS.txt"
+    download_file(sums["browser_download_url"], checksum_file)
+    expected = {}
+    for line in checksum_file.read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 2 and re.fullmatch(r"[a-fA-F0-9]{64}", parts[0]):
+            expected[parts[1].lstrip("*")] = parts[0].lower()
+    destination = FIRMWARE_DIR / ("new-ui-" + name)
+    pending = destination.with_suffix(".partial")
+    try:
+        download_file(asset["browser_download_url"], pending)
+        if hashlib.sha256(pending.read_bytes()).hexdigest() != expected.get(name):
+            raise SystemExit("New UI image checksum mismatch or missing checksum.")
+        pending.replace(destination)
+    finally:
+        pending.unlink(missing_ok=True)
+    return {"version": tag, "firmware": {"lcd349-v1": destination.name}}
+
 
 def find_asset(release: dict, name: str, required: bool = True) -> dict | None:
     for asset in release.get("assets", []):
@@ -84,6 +115,51 @@ def find_asset_with_fallback(release: dict, name: str, required: bool = True) ->
     return None, None
 
 
+def stage_update_catalog(repo: str, classic: dict, preview_tag: str) -> None:
+    """Expose only releases containing a verified selector-compatible descriptor."""
+    entries = []
+    releases = [("classic", classic)]
+    if preview_tag:
+        releases.append(("new-ui", fetch_json(
+            f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(preview_tag, safe='')}")))
+    for channel, release in releases:
+        descriptor = find_asset(release, "update-channel.json", required=False)
+        if descriptor is None:
+            # Older Classic has no selector; do not make it the round-trip target.
+            continue
+        if release.get("draft") or bool(release.get("prerelease")) != (channel == "new-ui"):
+            raise SystemExit("Wrong release channel for update catalog")
+        path = FIRMWARE_DIR / f"{channel}-update-channel.json"
+        download_file(descriptor["browser_download_url"], path)
+        document = json.loads(path.read_text())
+        if document.get("schema") != 1 or len(document.get("releases", [])) != 1:
+            raise SystemExit("Invalid update descriptor")
+        entry = document["releases"][0]
+        name = "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
+        if (entry.get("channel") != channel or entry.get("tag") != release["tag_name"]
+            or entry.get("board") != "waveshare_esp32s3_touch_lcd_3_49"
+            or entry.get("asset") != name
+            or not re.fullmatch(r"[a-f0-9]{64}", entry.get("sha256", ""))
+            or not re.fullmatch(r"[a-f0-9]{40}", entry.get("commit", ""))
+            or not 65536 <= entry.get("bytes", 0) <= 8 * 1024 * 1024):
+            raise SystemExit("Invalid update entry")
+        asset = find_asset(release, name)
+        pending = FIRMWARE_DIR / f"{channel}-ota.partial"
+        try:
+            download_file(asset["browser_download_url"], pending)
+            data = pending.read_bytes()
+            version = (entry["tag"] + "+" + entry["commit"][:12]).encode()
+            if (len(data) != entry["bytes"] or hashlib.sha256(data).hexdigest() != entry["sha256"]
+                or data[0] != 0xE9 or version + b"\0" not in data):
+                raise SystemExit("OTA image does not match its update descriptor")
+        finally:
+            pending.unlink(missing_ok=True)
+        entries.append(entry)
+    pending = FIRMWARE_DIR / "channels.json.partial"
+    pending.write_text(json.dumps({"schema": 1, "releases": entries}, indent=2) + "\n")
+    pending.replace(FIRMWARE_DIR / "channels.json")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Populate build/firmware from the latest published GitHub Release."
@@ -99,6 +175,8 @@ def main() -> int:
         dest="assets",
         help="Release asset to download. Repeat to request multiple assets.",
     )
+    parser.add_argument("--preview-tag", default=os.environ.get("RSVP_UI_PREVIEW_TAG", "").strip(),
+                        help="Explicit accepted new-UI prerelease tag; Classic remains the default.")
     args = parser.parse_args()
 
     release = latest_release(args.repo)
@@ -146,6 +224,12 @@ def main() -> int:
 
     if available_firmware:
         write_release_metadata(tag_name, available_firmware)
+        if args.preview_tag:
+            metadata_path = FIRMWARE_DIR / "release.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["newUi"] = stage_ui_preview(args.repo, args.preview_tag)
+            metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+        stage_update_catalog(args.repo, release, args.preview_tag)
     print(f"Web firmware updated to release {tag_name}")
     return 0
 

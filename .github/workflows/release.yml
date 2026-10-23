@@ -3,12 +3,17 @@ name: Release firmware
 on:
   push:
     tags:
-      - "v*"
+      - "v0.0.*"
+      - "v0.1.*"
   workflow_dispatch:
     inputs:
       version:
         description: "Release tag, for example v0.0.9"
         required: true
+      draft:
+        description: "Upload a draft release for verification before publication"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -34,7 +39,7 @@ jobs:
           else
             RELEASE_TAG="$GITHUB_REF_NAME"
           fi
-          if ! echo "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9._-]+)?$'; then
+          if ! echo "$RELEASE_TAG" | grep -Eq '^v0\.[01]\.[0-9]+$'; then
             echo "::error::Invalid release version: ${RELEASE_TAG}"
             exit 1
           fi
@@ -85,23 +90,46 @@ jobs:
           fi
           cp "$NOTES_PATH" release-notes.md
 
+      - name: Prepare update catalog descriptor and checksums
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
+        run: |
+          if [ -f src/update/SwitchSettings.cpp ]; then
+            python3 tools/make_update_descriptor.py \
+              --image build/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
+              --channel classic --tag "$RELEASE_TAG" --commit "$BUILD_SHA" \
+              --output build/firmware/update-channel.json
+          fi
+          cd build/firmware
+          sha256sum *.bin > SHA256SUMS.txt
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           BUILD_SHA: ${{ needs.prepare.outputs.commit_sha }}
+          CREATE_DRAFT: ${{ inputs.draft || false }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            git fetch --tags origin
-            git tag -f "$RELEASE_TAG" "$BUILD_SHA"
-            git push origin "refs/tags/${RELEASE_TAG}" --force
+          # Published tags and assets are immutable. Reuse never deletes a release.
+          git fetch --tags origin
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$BUILD_SHA"
+          else
+            git tag "$RELEASE_TAG" "$BUILD_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
           fi
-
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --yes
+            echo 'Release already exists; refusing to overwrite'; exit 1
           fi
-
-          gh release create "$RELEASE_TAG" build/firmware/*.bin \
-            --title "$RELEASE_TAG" \
-            --notes-file release-notes.md \
-            --target "$BUILD_SHA"
+          assets=(build/firmware/*.bin build/firmware/SHA256SUMS.txt)
+          if [ -f build/firmware/update-channel.json ]; then
+            assets+=(build/firmware/update-channel.json)
+          fi
+          release_flags=()
+          if [ "$CREATE_DRAFT" = "true" ]; then
+            release_flags+=(--draft --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "${assets[@]}" "${release_flags[@]}" \
+            --verify-tag --title "$RELEASE_TAG" \
+            --notes-file release-notes.md --target "$BUILD_SHA"

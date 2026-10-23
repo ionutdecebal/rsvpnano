@@ -117,7 +117,7 @@ private val InstallerBoards = listOf(
 internal enum class FirmwareFilenameMatch { Match, DifferentBoard, Unknown, Ota }
 
 private data class SelectedFirmware(val name: String, val file: BrowserFile)
-private data class DeployedRelease(val version: String, val firmware: Map<String, String>)
+private data class DeployedRelease(val version: String, val firmware: Map<String, String>, val id: String = "classic", val label: String = "RSVP Nano — Classic")
 private data class FirmwareInstallState(
     val bootloaderReady: Boolean = false,
     val running: Boolean = false,
@@ -137,9 +137,13 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
         mutableStateOf(window.localStorage.getItem("rsvpnano.web.board") ?: InstallerBoards.first().id)
     }
     var selectedFirmware by remember { mutableStateOf<SelectedFirmware?>(null) }
-    var deployedRelease by remember { mutableStateOf<DeployedRelease?>(null) }
+    var availableReleases by remember { mutableStateOf<List<DeployedRelease>>(emptyList()) }
+    var releaseId by remember { mutableStateOf("classic") }
     var releaseError by remember { mutableStateOf<String?>(null) }
     val board = InstallerBoards.firstOrNull { it.id == boardId } ?: InstallerBoards.first()
+    val eligibleReleases = availableReleases.filter { it.id == "classic" || board.id in it.firmware }
+    val deployedRelease = eligibleReleases.firstOrNull { it.id == releaseId }
+        ?: eligibleReleases.firstOrNull { it.id == "classic" }
     var installState by remember(board.id) { mutableStateOf(FirmwareInstallState()) }
     val serialAvailable = supportsWebSerial()
     val secure = isSecureContext()
@@ -151,7 +155,7 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         runCatching { fetchDeployedRelease() }
-            .onSuccess { deployedRelease = it }
+            .onSuccess { availableReleases = it }
             .onFailure { releaseError = "The latest firmware is not available right now. You can still choose a firmware file." }
     }
 
@@ -218,6 +222,21 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
         Column(
             Modifier.align(Alignment.TopCenter).fillMaxSize().widthIn(max = 1120.dp),
         ) {
+            if (step == 1) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose your interface", fontWeight = FontWeight.Bold)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        eligibleReleases.forEach { release ->
+                            OutlinedButton(onClick = { releaseId = release.id }, enabled = !installState.running) {
+                                Text((if (release.id == deployedRelease?.id) "✓ " else "") + release.label)
+                            }
+                        }
+                    }
+                    Text(if (deployedRelease?.id != "new-ui") "The existing community firmware. Stable and selected by default."
+                        else "New interface, onboarding and dictionary. Preview for LCD 3.49 Rev1 only. Notes and phone sync are deferred.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
             val frameShape = RoundedCornerShape(28.dp)
             val frameBase = MaterialTheme.colorScheme.surface
             Column(
@@ -577,7 +596,7 @@ private fun InstallPage(
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Latest stable", fontWeight = FontWeight.Bold)
+                        Text(deployedRelease?.label ?: "Firmware", fontWeight = FontWeight.Bold)
                         Text(deployedRelease?.version ?: "Checking...", style = MaterialTheme.typography.bodySmall)
                     }
                     Button(
@@ -974,7 +993,7 @@ private fun launchFirmware(
     launchInlineEspInstaller(manifest, firmwareUrl, eraseFirst, onState, onFinished, onError)
 }
 
-private suspend fun fetchDeployedRelease(): DeployedRelease = suspendCancellableCoroutine { continuation ->
+private suspend fun fetchDeployedRelease(): List<DeployedRelease> = suspendCancellableCoroutine { continuation ->
     fetchDeployedReleaseJson(
         { body ->
             runCatching {
@@ -983,7 +1002,13 @@ private suspend fun fetchDeployedRelease(): DeployedRelease = suspendCancellable
                 val firmware = root.getValue("firmware").jsonObject.mapValues { (_, value) ->
                     value.jsonPrimitive.content
                 }
-                DeployedRelease(version, firmware)
+                val classic = DeployedRelease(version, firmware)
+                val preview = root["newUi"]?.jsonObject?.let { item ->
+                    DeployedRelease(item.getValue("version").jsonPrimitive.content,
+                        item.getValue("firmware").jsonObject.mapValues { it.value.jsonPrimitive.content },
+                        "new-ui", "RSVP Nano — New UI (preview)")
+                }
+                listOfNotNull(classic, preview)
             }.onSuccess(continuation::resume)
                 .onFailure(continuation::resumeWithException)
         },
