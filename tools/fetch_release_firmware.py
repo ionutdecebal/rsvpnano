@@ -7,12 +7,15 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import urllib.error
 import urllib.request
 import urllib.parse
+import zipfile
 from pathlib import Path
 
 from export_web_firmware import FLASH_EXPORTS, OTA_EXPORTS, write_release_metadata
+from package_release import BROWSER_BUNDLE
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -115,6 +118,49 @@ def find_asset_with_fallback(release: dict, name: str, required: bool = True) ->
     return None, None
 
 
+def stage_browser_bundle(release: dict, names: list[str]) -> set[str]:
+    """Read verified, explicitly named ZIP members; never extract arbitrary paths."""
+    missing = [name for name in names if find_asset_with_fallback(release, name, required=False)[0] is None]
+    bundle = find_asset(release, BROWSER_BUNDLE, required=False)
+    if not missing or bundle is None:
+        return set()
+    sums = find_asset(release, "SHA256SUMS.txt")
+    with tempfile.TemporaryDirectory(dir=FIRMWARE_DIR) as temporary:
+        root = Path(temporary)
+        checksum_file = root / "SHA256SUMS.txt"
+        download_file(sums["browser_download_url"], checksum_file)
+        expected = {}
+        for line in checksum_file.read_text().splitlines():
+            parts = line.split()
+            if len(parts) == 2 and re.fullmatch(r"[a-fA-F0-9]{64}", parts[0]):
+                name = parts[1].lstrip("*")
+                if name in expected:
+                    raise SystemExit("Duplicate browser bundle checksum")
+                expected[name] = parts[0].lower()
+        archive_path = root / BROWSER_BUNDLE
+        download_file(bundle["browser_download_url"], archive_path)
+        digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+        if digest != expected.get(BROWSER_BUNDLE):
+            raise SystemExit("Browser bundle checksum mismatch or missing checksum")
+        if bundle.get("digest") and bundle["digest"] != "sha256:" + digest:
+            raise SystemExit("Browser bundle GitHub digest mismatch")
+        with zipfile.ZipFile(archive_path) as archive:
+            members = archive.namelist()
+            for name in missing:
+                if members.count(name) != 1:
+                    raise SystemExit(f"Missing or duplicate browser bundle member: {name}")
+                if not 65536 < archive.getinfo(name).file_size <= 16 * 1024 * 1024:
+                    raise SystemExit(f"Invalid browser image size: {name}")
+                data = archive.read(name)
+                if data[0] != 0xE9 or hashlib.sha256(data).hexdigest() != expected.get(name):
+                    raise SystemExit(f"Browser image checksum mismatch: {name}")
+                (root / name).write_bytes(data)
+        # Do not replace any staged board until every requested image verifies.
+        for name in missing:
+            (root / name).replace(FIRMWARE_DIR / name)
+    return set(missing)
+
+
 def stage_update_catalog(repo: str, classic: dict, preview_tag: str) -> None:
     """Expose only releases containing a verified selector-compatible descriptor."""
     entries = []
@@ -190,9 +236,15 @@ def main() -> int:
     available_firmware: dict[str, str] = {}
     all_exports = (*FLASH_EXPORTS, *OTA_EXPORTS)
     exports = all_exports if requested_assets is not None else FLASH_EXPORTS
+    bundled = stage_browser_bundle(release, [entry["binary"] for entry in FLASH_EXPORTS
+        if requested_assets is None or entry["binary"] in requested_assets])
     for export in exports:
         asset_name = export["binary"]
         if requested_assets is not None and asset_name not in requested_assets:
+            continue
+        if asset_name in bundled:
+            available_firmware[export["id"]] = asset_name
+            print(f"Verified {asset_name} from {tag_name} browser bundle")
             continue
         asset, release_asset_name = find_asset_with_fallback(
             release,

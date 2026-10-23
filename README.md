@@ -43,7 +43,7 @@ Classic remains available, and an ordinary update keeps you on your chosen inter
 | Hardware | **Waveshare ESP32-S3 Touch LCD 3.49 Rev1 only** | [All supported boards below](#supported-hardware) |
 | Updates | Update New UI or choose **Return to Classic** | The selector maintenance build adds **Try New UI** on compatible hardware |
 | Availability | **0.2.0 preview**, selected explicitly | Stable; the default installer choice |
-| Source | [`release/ui-dictionary`](https://github.com/ionutdecebal/rsvpnano/tree/release/ui-dictionary) | [`v0.1.3`](https://github.com/ionutdecebal/rsvpnano/tree/v0.1.3) |
+| Source | [`release/ui-dictionary`](https://github.com/ionutdecebal/rsvpnano/tree/release/ui-dictionary) | [`v0.1.4`](https://github.com/ionutdecebal/rsvpnano/tree/v0.1.4) |
 
 [**New UI 0.2.0 downloads**](https://github.com/ionutdecebal/rsvpnano/releases/tag/v0.2.0) ·
 [**Classic downloads**](https://github.com/ionutdecebal/rsvpnano/releases/latest)
@@ -91,7 +91,11 @@ In the New UI’s **Firmware updates**, choose **Check current software** to sta
 New UI, or **Return to Classic** to change interfaces. The reader shows the selected
 version before you confirm. It downloads over Wi-Fi and restarts after installation.
 
-Classic **v0.1.3** provides the return journey with **Try New UI** on LCD 3.49 Rev1.
+Classic **v0.1.3 and later** provides the return journey with **Try New UI** on LCD 3.49 Rev1.
+If older firmware reports **rsvp-nano-ota.bin missing**, retry the official update
+to Classic **v0.1.4**, then choose **Try New UI**. Rev2 stays on Classic.
+Manual full-flash downloads are bundled in `rsvp-nano-browser-installers.zip`;
+the browser installer selects the correct image for your board automatically.
 If your Classic version has no selector yet, install the selector-equipped Classic
 release first, or choose New UI directly in the web installer. These choices are
 available only for compatible hardware.
@@ -215,7 +219,7 @@ cd rsvpnano
 ### Firmware
 
 The default `main` branch builds Classic. For the exact Classic maintenance release,
-use tag `v0.1.3`. For the exact New UI 0.2.0 release source:
+use tag `v0.1.4`. For the exact New UI 0.2.0 release source:
 
 ```bash
 git fetch --tags
