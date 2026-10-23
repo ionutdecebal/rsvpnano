@@ -24,6 +24,12 @@ from tools.companion.generate_multilingual_corpus import PARAGRAPHS
 
 
 class FontMapTest(TestCase):
+    def test_extra_large_and_preview_sizes_preserve_existing_indices(self) -> None:
+        sizes = parse_size_spec(DEFAULT_SIZE_SPEC)
+        self.assertEqual([("large", 52), ("medium", 43), ("small", 33), ("compact", 14)], sizes[:4])
+        self.assertEqual(("extra-large", 80), sizes[4])
+        self.assertEqual(("preview", 26), sizes[5])
+
     def test_default_compact_strike_is_readable_outline_size(self) -> None:
         self.assertEqual(14, dict(parse_size_spec(DEFAULT_SIZE_SPEC))["compact"])
 
@@ -151,6 +157,28 @@ class FontMapTest(TestCase):
         ):
             self.assertTrue(ascii_letters.isdisjoint(rfont4_codepoints(Path(f"fonts/{name}/font.rfont4"))), name)
 
+    def test_catalog_fonts_include_extra_large_and_preview_strikes(self) -> None:
+        paths = list(Path("fonts").glob("*/font.rfont4"))
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(font=path.parent.name):
+                data = path.read_bytes()
+                header = struct.unpack_from(RFONT4_HEADER_FORMAT, data)
+                self.assertEqual(6, header[9])
+                strikes = [
+                    struct.unpack_from(RFONT4_STRIKE_FORMAT, data, header[22] + index * header[3])
+                    for index in range(header[9])
+                ]
+                self.assertEqual([52, 43, 33, 14, 80, 26], [strike[8] for strike in strikes])
+                self.assertEqual([4, 4, 4, 1, 4, 4], [strike[9] for strike in strikes])
+                large_ink_height = strikes[0][5] - strikes[0][4] + 1
+                extra_large_ink_height = strikes[4][5] - strikes[4][4] + 1
+                self.assertGreater(extra_large_ink_height, large_ink_height)
+                if path.parent.name == "OpenDyslexic":
+                    # Fit both the 172px reader and its tighter appearance preview.
+                    self.assertLessEqual(extra_large_ink_height, 84)
+                    self.assertGreaterEqual(extra_large_ink_height, large_ink_height * 1.4)
+
     def test_generated_fonts_use_the_default_compact_strike(self) -> None:
         for path in Path("fonts").glob("*/font.rfont4"):
             strike = rfont4_compact_strike(path)
@@ -161,6 +189,8 @@ class FontMapTest(TestCase):
 
         fallback = Path("src/fonts/LiterataFallbackAlpha4.h").read_text(encoding="utf-8")
         self.assertIn("LiterataFallbackAlpha4_14", fallback)
+        self.assertIn("LiterataFallbackAlpha4_80", fallback)
+        self.assertIn("LiterataFallbackAlpha4_26", fallback)
         self.assertNotIn("LiterataFallbackAlpha4_12", fallback)
 
 

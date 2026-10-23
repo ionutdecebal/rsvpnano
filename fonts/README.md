@@ -3,12 +3,12 @@
 This directory holds the offline font pipeline and the pre-converted `.rfont4` catalog used by the web flasher/companion.
 The compiled Literata fallback is intentionally absent from this installable catalog.
 
-`RFont4` is named for its primary packed 4-bit alpha coverage. Format version 7 stores three Alpha4 RSVP strikes and
+`RFont4` is named for its primary packed 4-bit alpha coverage. Format version 8 stores four Alpha4 RSVP strikes, an Alpha4 preview strike, and
 one compact 1-bit strike in the same family file. Codepoints, Unicode page tables, a direct OpenType glyph-ID map,
 and the generated script-capability mask are stored once per family; each strike contains only its metrics, kerning,
 and packed pixels. Alpha4 glyphs are independently LZ4-compressed when that saves space, preserving random access;
 the compact strike remains raw. The renderer finds visible spans after each row is read instead of storing duplicate indexes.
-Older files must be regenerated.
+Files from versions before version 8 must be regenerated.
 
 Folder layout:
 
@@ -33,15 +33,18 @@ src/fonts/
   LiterataFallbackAlpha4.h
 ```
 
-`convert_alpha4_font.py` is the single-family compiler. `large`, `medium`, `small`, and `compact` default to
-`52`, `43`, `33`, and `14` px. The compact strike remains 1-bit, but 14 px gives outline reader faces a readable
+`convert_alpha4_font.py` is the single-family compiler. `large`, `medium`, `small`, `compact`, `extra-large`, and `preview` default to
+`52`, `43`, `33`, `14`, `80`, and `26` px. Existing size indices remain unchanged.
+The reader accepts older four-strike version 8 files, using their Large/Compact strikes for the new sizes until updated.
+Extra Large fits within the reader height; Large and Extra Large use three rows in the swipe page preview.
+The preview selects the largest fitting strike for each font family. The compact strike remains 1-bit, but 14 px gives outline reader faces a readable
 minimum comparable to the hand-drawn 8–10 px UI fonts. Override the sizes with:
 
 ```bash
 uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
   --font path/to/MyFont.ttf \
   --name "My Font" \
-  --sizes large=56,medium=44,small=34,compact=14
+  --sizes large=56,medium=44,small=34,compact=14,extra-large=80,preview=26
 ```
 
 `generate_fonts.py` owns the current source-to-preset mapping. With no arguments it regenerates every installable
@@ -110,8 +113,9 @@ uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha
 Runtime behavior:
 
 - The SD card catalog is built from `/fonts/<folder name>/` directories.
-- Each folder contains one `font.rfont4` family file with Large, Medium, and Small Alpha4 strikes plus one Compact
-  1-bit strike. Compact is selectable in RSVP mode and is always used for page reading and scrub previews.
+- Each folder contains one `font.rfont4` family file with Extra Large, Large, Medium, Small, and Preview Alpha4
+  strikes plus one Compact 1-bit strike. Compact is selectable in RSVP mode and is used for page reading.
+  Large and Extra Large scrub previews use three rows and select the largest strike that fits each row.
 - Optional GDEF/GSUB/GPOS shaping tables are stored once in that same file, never in a locale pack.
 - BMP page tables map codepoints directly to shared render glyphs; only supplementary codepoints have separate lookup
   records. Identical bitmap payloads and kerning slices are interned within each strike.

@@ -26,7 +26,7 @@ namespace {
     constexpr const char* kFallbackId = "literata";
     constexpr const char* kFallbackLabel = "Literata";
     constexpr auto& kFallbackFonts = ui::fonts::LiterataFallbackAlpha4_Sizes;
-    static_assert(std::size(kFallbackFonts) == RFont4::kSizeCount);
+    static_assert(std::size(kFallbackFonts) == RFont4::kStrikeCount);
 
     std::string fontPath(std::string_view id) {
         return std::string{StoragePaths::kFontsPath} + "/" + std::string{id} + "/" + RFont4::kFilename;
@@ -81,7 +81,7 @@ namespace {
                 return std::unexpected("Unsupported or corrupt font format");
             RFont4::Directory directory;
             directory.header = header;
-            return readSection(file, header.strikesOffset, std::span{directory.strikes})
+            return readSection(file, header.strikesOffset, std::span{directory.strikes}.first(header.strikeCount))
                 .and_then([&] {
                     return readSection(file, header.layoutTablesOffset,
                                        std::span{directory.layoutTables}.first(header.layoutTableCount));
@@ -254,15 +254,42 @@ const FontCatalog::Family* FontCatalog::find(std::string_view id) const {
     return found == families_.end() ? nullptr : &*found;
 }
 
+FontCatalog::Face FontCatalog::loadFaceFittingHeight(size_t familyIndex, std::span<const size_t> sizes,
+                                                   int16_t height, bool vertical) {
+    // Inspect metrics before loading: each runtime family retains only one raster strike.
+    const size_t safeFamily = std::min(familyIndex, families_.size() - 1);
+    const RFont4::Directory* directory = nullptr;
+    if (!families_[safeFamily].builtIn) {
+        if (auto family = loadRuntimeFamily(safeFamily))
+            directory = &family->get().directory;
+    }
+    for (const size_t size : sizes) {
+        const size_t actualSize = directory && size >= directory->header.strikeCount
+                                    ? (size == RFont4::kPreviewStrikeIndex ? RFont4::kCompactStrikeIndex : 0)
+                                    : size;
+        const auto& fallback = *kFallbackFonts[actualSize];
+        const int16_t pixelsPerEm = directory ? directory->strikes[actualSize].pixelsPerEm : fallback.pixelsPerEm;
+        const int16_t inkHeight = directory
+            ? directory->strikes[actualSize].wordInkBottom - directory->strikes[actualSize].wordInkTop + 1
+            : fallback.wordInkBottom - fallback.wordInkTop + 1;
+        const int16_t requiredHeight = vertical ? pixelsPerEm : std::max(pixelsPerEm, inkHeight);
+        if (requiredHeight <= height || size == sizes.back())
+            return loadFace(safeFamily, actualSize);
+    }
+    return loadFace(safeFamily, RFont4::kCompactStrikeIndex);
+}
+
 FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
     const size_t safeFamily = std::min(familyIndex, families_.size() - 1);
-    const size_t safeSize = std::min(sizeIndex, RFont4::kSizeCount - 1);
+    const size_t safeSize = std::min(sizeIndex, RFont4::kStrikeCount - 1);
     if (!families_[safeFamily].builtIn) {
         const std::string path = fontPath(families_[safeFamily].id);
         auto family = loadRuntimeFamily(safeFamily);
         if (family) {
             LoadedFamily& loaded = family->get();
-            auto strike = loadRuntimeStrike(loaded, safeSize);
+            const size_t actualSize = safeSize < loaded.directory.header.strikeCount ? safeSize
+                                      : safeSize == RFont4::kPreviewStrikeIndex ? RFont4::kCompactStrikeIndex : 0;
+            auto strike = loadRuntimeStrike(loaded, actualSize);
             if (strike) {
                 TextShaping::Shaper* shaper = nullptr;
                 if (families_[safeFamily].shaping && !loaded.shapingFailed) {

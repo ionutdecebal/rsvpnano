@@ -44,7 +44,7 @@ namespace settings {
 
     struct TypographySettings {
         std::string fontId = "literata";
-        BoundedValue<uint8_t, 0, 3> fontSizeIndex{0};
+        BoundedValue<uint8_t, 0, 4> fontSizeIndex{0};
         bool focusHighlight = true;
         BoundedValue<int, -2, 3> tracking{0};
         BoundedValue<uint8_t, 30, 40> anchor{30};

@@ -20,6 +20,7 @@
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/PageReaderScreen.h"
+#include "ui/screens/ReaderLayout.h"
 #include "ui/screens/Screens.h"
 
 namespace {
@@ -600,6 +601,50 @@ void test_portrait_rects_map_to_the_landscape_framebuffer() {
     TEST_ASSERT_FALSE(ui::contains(ui::rotateClockwise({6, 4, 92, 30}, 172), 100, 10));
 }
 
+void test_page_preview_keeps_three_rows_across_paragraphs_and_invalidates_on_exit() {
+    Arduino_GFX gfx(136, 100);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    auto colors = theme();
+    context.setTheme(colors);
+    settings::TypographySettings typography;
+    std::array<std::string, 24> words;
+    words.fill("a");
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    for (size_t i = 0; i < words.size(); ++i)
+        session.metadata.paragraphStarts.push_back(i);
+    screens::PageReader::State state;
+    auto font = kReaderFont;
+    font.wordInkTop = -21;
+    font.wordInkBottom = 5;
+    const auto typeface = [&](size_t) -> FontCatalog::Face { return {std::cref(font), nullptr}; };
+    constexpr ui::Rect area{0, 0, 136, 100};
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area, {}, screens::readerLayout::kPreviewRows);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(3, state.lineCount);
+    TEST_ASSERT_EQUAL(3, state.pageEnd);
+    for (size_t i = 0; i < state.lineCount; ++i) {
+        TEST_ASSERT_GREATER_OR_EQUAL(state.lines[i].top, state.lines[i].y + font.wordInkTop);
+        TEST_ASSERT_LESS_THAN(state.lines[i].bottom, state.lines[i].y + font.wordInkBottom);
+        if (i)
+            TEST_ASSERT_EQUAL(30, state.lines[i].y - state.lines[i - 1].y);
+    }
+    ReadingLoop::seekTo(session, 18);
+    context.beginFrame(2);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area, {}, screens::readerLayout::kPreviewRows);
+    context.endFrame();
+    TEST_ASSERT_TRUE(state.pageStart <= 18 && state.pageEnd > 18);
+    TEST_ASSERT_EQUAL(3, state.lineCount);
+    context.beginFrame(3);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, state.fixedLineCount);
+    TEST_ASSERT_GREATER_THAN(3, state.lineCount);
+}
+
 void test_page_reader_reselects_typeface_after_seek_or_invalidation() {
     Arduino_GFX gfx(136, 17);
     ui::Context context(gfx);
@@ -873,14 +918,16 @@ void test_reader_streams_rfont4_glyphs_from_file() {
 
     RFont4::Header header;
     std::memcpy(&header, bytes.data(), sizeof(header));
-    std::array<RFont4::StrikeRecord, RFont4::kSizeCount> strikes;
-    std::memcpy(strikes.data(), bytes.data() + header.strikesOffset, sizeof(strikes));
+    std::array<RFont4::StrikeRecord, RFont4::kStrikeCount> strikes{};
+    TEST_ASSERT_TRUE(RFont4::headerValid(header, bytes.size()));
+    std::memcpy(strikes.data(), bytes.data() + header.strikesOffset,
+                header.strikeCount * sizeof(RFont4::StrikeRecord));
     std::array<RFont4::LayoutTableRecord, RFont4::kMaximumLayoutTableCount> tables{};
     std::memcpy(tables.data(), bytes.data() + header.layoutTablesOffset,
                 static_cast<size_t>(header.layoutTableCount) * sizeof(tables.front()));
     TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes, std::span{tables}.first(header.layoutTableCount),
                                          bytes.size()));
-    const RFont4::StrikeRecord& strike = strikes.back();
+    const RFont4::StrikeRecord& strike = strikes[RFont4::kCompactStrikeIndex];
 
     std::array<uint8_t, RFont4::kPageMapBytes> pageMap;
     std::memcpy(pageMap.data(), bytes.data() + header.pageMapOffset, pageMap.size());
@@ -1062,6 +1109,48 @@ void test_page_reader_maps_vertical_columns_to_the_landscape_framebuffer() {
     TEST_ASSERT_GREATER_THAN(state.words[0].x, state.words[2].x);
     TEST_ASSERT_GREATER_THAN(state.words[0].y, state.words[4].y);
     TEST_ASSERT_GREATER_THAN(0, gfx.writes);
+}
+
+void test_vertical_page_preview_limits_rows_and_restores_page_layout() {
+    Arduino_GFX gfx(50, 100);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    std::array<std::string, 30> words;
+    words.fill("日");
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    session.metadata.writingMode = WritingMode::verticalRl;
+    session.metadata.paragraphStarts = {0};
+    screens::PageReader::State state;
+    const auto typeface = [](size_t) -> FontCatalog::Face {
+        return {std::cref(kReaderFont), nullptr};
+    };
+    constexpr ui::Rect area{0, 0, 50, 100};
+
+    context.beginFrame(1);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area, {},
+                              screens::readerLayout::kPreviewRows);
+    context.endFrame();
+    TEST_ASSERT_TRUE(state.vertical);
+    TEST_ASSERT_FALSE(state.words.empty());
+    const size_t previewEnd = state.pageEnd;
+    size_t rows = 1;
+    for (size_t index = 1; index < state.words.size(); ++index) {
+        if (state.words[index].y != state.words[index - 1].y) {
+            TEST_ASSERT_EQUAL(30, state.words[index].y - state.words[index - 1].y);
+            ++rows;
+        }
+    }
+    TEST_ASSERT_EQUAL(3, rows);
+
+    context.beginFrame(2);
+    screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
+    context.endFrame();
+    TEST_ASSERT_EQUAL(0, state.fixedLineCount);
+    TEST_ASSERT_GREATER_THAN(previewEnd, state.pageEnd);
 }
 
 void test_labels_redraw_when_text_or_locale_changes() {
@@ -1683,10 +1772,12 @@ int main(int, char**) {
     RUN_TEST(test_layout_cursors_are_deterministic);
     RUN_TEST(test_rect_intersection_clips_each_edge);
     RUN_TEST(test_portrait_rects_map_to_the_landscape_framebuffer);
+    RUN_TEST(test_page_preview_keeps_three_rows_across_paragraphs_and_invalidates_on_exit);
     RUN_TEST(test_page_reader_reselects_typeface_after_seek_or_invalidation);
     RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
     RUN_TEST(test_page_reader_maps_vertical_columns_to_the_landscape_framebuffer);
+    RUN_TEST(test_vertical_page_preview_limits_rows_and_restores_page_layout);
     RUN_TEST(test_page_reader_caches_visual_bidi_layout);
     RUN_TEST(test_page_reader_only_runs_bidi_for_pages_that_need_it);
     RUN_TEST(test_page_reader_shapes_each_visible_word_once_and_caches_glyphs);

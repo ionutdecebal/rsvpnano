@@ -28,7 +28,7 @@ from fontTools.ttLib import TTFont
 from fontTools.unicodedata import script as unicode_script, script_extension
 
 DEFAULT_MAP = "32-126,160-383,512-591,1024-1279,8208-8230,8240,8249,8250,8364,8470"
-DEFAULT_SIZE_SPEC = "large=52,medium=43,small=33,compact=14"
+DEFAULT_SIZE_SPEC = "large=52,medium=43,small=33,compact=14,extra-large=80,preview=26"
 DEFAULT_ALPHA_CUTOFF = 32
 DEFAULT_GAMMA = 1.15
 MISSING_GLYPH_INDEX = 0xFFFF
@@ -930,7 +930,7 @@ def generate_font(
     return "\n".join(lines), stats
 
 
-SIZE_LABELS = ("large", "medium", "small", "compact")
+SIZE_LABELS = ("large", "medium", "small", "compact", "extra-large", "preview")
 RFONT4_MAGIC = 0x34544652
 RFONT4_VERSION = 8
 RFONT4_HEADER_FORMAT = "<I8H2B6H14I"
@@ -988,7 +988,7 @@ def parse_size_spec(spec: str) -> list[tuple[str, int]]:
         return parsed
     values = [int(token, 0) for token in tokens]
     if len(values) != len(SIZE_LABELS):
-        raise ValueError("--sizes must define large, medium, small, and compact")
+        raise ValueError("--sizes must define large, medium, small, compact, extra-large, and preview")
     return list(zip(SIZE_LABELS, values))
 
 
@@ -1317,7 +1317,7 @@ def pack_rfont4_family(
     layout_tables: dict[str, bytes],
 ) -> bytes:
     if len(strikes) != len(SIZE_LABELS):
-        raise ValueError("RFont4 requires large, medium, small, and compact strikes")
+        raise ValueError("RFont4 requires large, medium, small, compact, extra-large, and preview strikes")
     selected_tables = [(tag, layout_tables[tag]) for tag in FONT_LAYOUT_TAGS if layout_tables.get(tag)]
     name = display_name.encode("utf-8") + b"\0"
     locale_data = b"".join(locale.encode("ascii") + b"\0" for locale in locales)
