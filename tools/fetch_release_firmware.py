@@ -25,6 +25,10 @@ ASSET_FALLBACKS = {
     "rsvp-nano-esp32-s3-touch-lcd-3.49.bin": ("rsvp-nano.bin",),
     "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2.bin": ("rsvp-nano-rev2.bin",),
 }
+UI_BOARDS = {
+    "lcd349-v1": ("waveshare_esp32s3_touch_lcd_3_49", "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"),
+    "lcd349-v2": ("waveshare_esp32s3_touch_lcd_3_49_rev2", "rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin"),
+}
 
 
 def github_headers() -> dict[str, str]:
@@ -65,33 +69,41 @@ def download_file(url: str, destination: Path) -> None:
 def latest_release(repo: str) -> dict:
     return fetch_json(f"https://api.github.com/repos/{repo}/releases/latest")
 
-def stage_ui_preview(repo: str, tag: str) -> dict:
+def stage_ui_preview(repo: str, tag: str, board: str = "lcd349-v1") -> dict:
     """Stage one explicit, immutable preview without replacing Classic files."""
     if not re.fullmatch(r"(?:preview-ui-dictionary-[A-Za-z0-9._-]+|v0\.2\.\d+(?:-[A-Za-z0-9._-]+)?)", tag):
         raise SystemExit("New UI requires an explicit preview or v0.2.x release tag.")
+    if board not in UI_BOARDS:
+        raise SystemExit("Unsupported New UI board")
     release = fetch_json(f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
     if release.get("tag_name") != tag or not release.get("prerelease") or release.get("draft"):
         raise SystemExit("New UI must be a published prerelease at the selected tag.")
-    name = next(x["binary"] for x in FLASH_EXPORTS if x["id"] == "lcd349-v1")
+    name = next(x["binary"] for x in FLASH_EXPORTS if x["id"] == board)
     asset = find_asset(release, name)
     sums = find_asset(release, "SHA256SUMS.txt")
-    checksum_file = FIRMWARE_DIR / "new-ui-SHA256SUMS.txt"
+    checksum_file = FIRMWARE_DIR / f"new-ui-{board}-SHA256SUMS.txt"
     download_file(sums["browser_download_url"], checksum_file)
     expected = {}
     for line in checksum_file.read_text().splitlines():
         parts = line.split()
         if len(parts) == 2 and re.fullmatch(r"[a-fA-F0-9]{64}", parts[0]):
-            expected[parts[1].lstrip("*")] = parts[0].lower()
+            key = parts[1].lstrip("*")
+            if key in expected:
+                raise SystemExit("Duplicate New UI checksum")
+            expected[key] = parts[0].lower()
     destination = FIRMWARE_DIR / ("new-ui-" + name)
     pending = destination.with_suffix(".partial")
     try:
         download_file(asset["browser_download_url"], pending)
-        if hashlib.sha256(pending.read_bytes()).hexdigest() != expected.get(name):
+        digest = hashlib.sha256(pending.read_bytes()).hexdigest()
+        if digest != expected.get(name):
             raise SystemExit("New UI image checksum mismatch or missing checksum.")
+        if asset.get("digest") and asset["digest"] != "sha256:" + digest:
+            raise SystemExit("New UI GitHub digest mismatch")
         pending.replace(destination)
     finally:
         pending.unlink(missing_ok=True)
-    return {"version": tag, "firmware": {"lcd349-v1": destination.name}}
+    return {"version": tag, "firmware": {board: destination.name}}
 
 
 def find_asset(release: dict, name: str, required: bool = True) -> dict | None:
@@ -161,46 +173,72 @@ def stage_browser_bundle(release: dict, names: list[str]) -> set[str]:
     return set(missing)
 
 
-def stage_update_catalog(repo: str, classic: dict, preview_tag: str) -> None:
+def stage_update_catalog(repo: str, classic: dict, preview_tag: str, rev2_preview_tag: str = "") -> None:
     """Expose only releases containing a verified selector-compatible descriptor."""
     entries = []
-    releases = [("classic", classic)]
-    if preview_tag:
-        releases.append(("new-ui", fetch_json(
-            f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(preview_tag, safe='')}")))
-    for channel, release in releases:
+    board_assets = dict(UI_BOARDS.values())
+    seen = set()
+    releases = [("classic", classic, set(board_assets))]
+    for board, tag in (("lcd349-v1", preview_tag), ("lcd349-v2", rev2_preview_tag)):
+        if tag:
+            releases.append(("new-ui", fetch_json(
+                f"https://api.github.com/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}"),
+                {UI_BOARDS[board][0]}))
+    for index, (channel, release, allowed_boards) in enumerate(releases):
         descriptor = find_asset(release, "update-channel.json", required=False)
         if descriptor is None:
             # Older Classic has no selector; do not make it the round-trip target.
+            if channel == "new-ui":
+                raise SystemExit("New UI release is missing its update descriptor")
             continue
         if release.get("draft") or bool(release.get("prerelease")) != (channel == "new-ui"):
             raise SystemExit("Wrong release channel for update catalog")
-        path = FIRMWARE_DIR / f"{channel}-update-channel.json"
+        path = FIRMWARE_DIR / f"{channel}-{index}-update-channel.json"
         download_file(descriptor["browser_download_url"], path)
-        document = json.loads(path.read_text())
-        if document.get("schema") != 1 or len(document.get("releases", [])) != 1:
-            raise SystemExit("Invalid update descriptor")
-        entry = document["releases"][0]
-        name = "rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
-        if (entry.get("channel") != channel or entry.get("tag") != release["tag_name"]
-            or entry.get("board") != "waveshare_esp32s3_touch_lcd_3_49"
-            or entry.get("asset") != name
-            or not re.fullmatch(r"[a-f0-9]{64}", entry.get("sha256", ""))
-            or not re.fullmatch(r"[a-f0-9]{40}", entry.get("commit", ""))
-            or not 65536 <= entry.get("bytes", 0) <= 8 * 1024 * 1024):
-            raise SystemExit("Invalid update entry")
-        asset = find_asset(release, name)
-        pending = FIRMWARE_DIR / f"{channel}-ota.partial"
+        if path.stat().st_size > 16384:
+            raise SystemExit("Update descriptor too large")
         try:
-            download_file(asset["browser_download_url"], pending)
-            data = pending.read_bytes()
-            version = (entry["tag"] + "+" + entry["commit"][:12]).encode()
-            if (len(data) != entry["bytes"] or hashlib.sha256(data).hexdigest() != entry["sha256"]
-                or data[0] != 0xE9 or version + b"\0" not in data):
-                raise SystemExit("OTA image does not match its update descriptor")
-        finally:
-            pending.unlink(missing_ok=True)
-        entries.append(entry)
+            document = json.loads(path.read_text())
+        except (ValueError, UnicodeError) as error:
+            raise SystemExit("Invalid update descriptor") from error
+        listed = document.get("releases", []) if isinstance(document, dict) else []
+        if (not isinstance(document, dict) or document.get("schema") != 1
+            or not isinstance(listed, list) or not 1 <= len(listed) <= len(allowed_boards)):
+            raise SystemExit("Invalid update descriptor")
+        for entry in listed:
+            if not isinstance(entry, dict):
+                raise SystemExit("Invalid update entry")
+            board = entry.get("board", "")
+            if not isinstance(board, str) or board not in allowed_boards:
+                raise SystemExit("Invalid update board")
+            name = board_assets[board]
+            if (entry.get("channel") != channel or entry.get("tag") != release["tag_name"]
+                or entry.get("asset") != name
+                or not isinstance(entry.get("sha256"), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"])
+                or not isinstance(entry.get("commit"), str)
+                or not re.fullmatch(r"[a-f0-9]{40}", entry["commit"])
+                or not isinstance(entry.get("bytes"), int)
+                or not 65536 <= entry["bytes"] <= 8 * 1024 * 1024
+                or (channel, board) in seen):
+                raise SystemExit("Invalid or duplicate update entry")
+            asset = find_asset(release, name)
+            pending = FIRMWARE_DIR / f"{channel}-ota.partial"
+            try:
+                download_file(asset["browser_download_url"], pending)
+                data = pending.read_bytes()
+                version = (entry["tag"] + "+" + entry["commit"][:12]).encode()
+                if (len(data) != entry["bytes"] or hashlib.sha256(data).hexdigest() != entry["sha256"]
+                    or data[0] != 0xE9 or version + b"\0" not in data
+                    or name.encode() + b"\0" not in data
+                    or (asset.get("digest") and asset["digest"] != "sha256:" + entry["sha256"])):
+                    raise SystemExit("OTA image does not match its update descriptor")
+            finally:
+                pending.unlink(missing_ok=True)
+            entries.append(entry)
+            seen.add((channel, board))
+    if rev2_preview_tag and ("classic", UI_BOARDS["lcd349-v2"][0]) not in seen:
+        raise SystemExit("Rev2 New UI requires a selector-compatible Classic return target")
     pending = FIRMWARE_DIR / "channels.json.partial"
     pending.write_text(json.dumps({"schema": 1, "releases": entries}, indent=2) + "\n")
     pending.replace(FIRMWARE_DIR / "channels.json")
@@ -223,6 +261,8 @@ def main() -> int:
     )
     parser.add_argument("--preview-tag", default=os.environ.get("RSVP_UI_PREVIEW_TAG", "").strip(),
                         help="Explicit accepted new-UI prerelease tag; Classic remains the default.")
+    parser.add_argument("--rev2-preview-tag", default=os.environ.get("RSVP_UI_REV2_PREVIEW_TAG", "").strip(),
+                        help="Explicit accepted Rev2 New UI prerelease; independent of the Rev1 tag.")
     args = parser.parse_args()
 
     release = latest_release(args.repo)
@@ -276,12 +316,20 @@ def main() -> int:
 
     if available_firmware:
         write_release_metadata(tag_name, available_firmware)
-        if args.preview_tag:
+        if args.preview_tag or args.rev2_preview_tag:
             metadata_path = FIRMWARE_DIR / "release.json"
             metadata = json.loads(metadata_path.read_text())
-            metadata["newUi"] = stage_ui_preview(args.repo, args.preview_tag)
+            variants = []
+            if args.preview_tag:
+                metadata["newUi"] = stage_ui_preview(args.repo, args.preview_tag)
+                variants.append(metadata["newUi"])
+            if args.rev2_preview_tag:
+                variants.append(stage_ui_preview(args.repo, args.rev2_preview_tag, "lcd349-v2"))
+            # Preserve the Rev1-only field for cached clients while new clients
+            # select a version and image from the variant matching their board.
+            metadata["newUiVariants"] = variants
             metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
-        stage_update_catalog(args.repo, release, args.preview_tag)
+        stage_update_catalog(args.repo, release, args.preview_tag, args.rev2_preview_tag)
     print(f"Web firmware updated to release {tag_name}")
     return 0
 

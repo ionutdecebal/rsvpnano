@@ -82,9 +82,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.put
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -117,7 +114,6 @@ private val InstallerBoards = listOf(
 internal enum class FirmwareFilenameMatch { Match, DifferentBoard, Unknown, Ota }
 
 private data class SelectedFirmware(val name: String, val file: BrowserFile)
-private data class DeployedRelease(val version: String, val firmware: Map<String, String>, val id: String = "classic", val label: String = "RSVP Nano — Classic")
 private data class FirmwareInstallState(
     val bootloaderReady: Boolean = false,
     val running: Boolean = false,
@@ -141,7 +137,7 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
     var releaseId by remember { mutableStateOf("classic") }
     var releaseError by remember { mutableStateOf<String?>(null) }
     val board = InstallerBoards.firstOrNull { it.id == boardId } ?: InstallerBoards.first()
-    val eligibleReleases = availableReleases.filter { it.id == "classic" || board.id in it.firmware }
+    val eligibleReleases = availableReleases.forBoard(board.id)
     val deployedRelease = eligibleReleases.firstOrNull { it.id == releaseId }
         ?: eligibleReleases.firstOrNull { it.id == "classic" }
     var installState by remember(board.id) { mutableStateOf(FirmwareInstallState()) }
@@ -233,7 +229,7 @@ internal fun SetupWizard(presenter: CompanionPresenter, state: CompanionUiState,
                         }
                     }
                     Text(if (deployedRelease?.id != "new-ui") "The existing community firmware. Stable and selected by default."
-                        else "New interface, onboarding and dictionary. Preview for LCD 3.49 Rev1 only. Notes and phone sync are deferred.",
+                        else "New interface, onboarding and dictionary. Preview for LCD 3.49 Rev1 and Rev2. Notes and phone sync are deferred.",
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -997,18 +993,7 @@ private suspend fun fetchDeployedRelease(): List<DeployedRelease> = suspendCance
     fetchDeployedReleaseJson(
         { body ->
             runCatching {
-                val root = Json.parseToJsonElement(body).jsonObject
-                val version = root.getValue("version").jsonPrimitive.content
-                val firmware = root.getValue("firmware").jsonObject.mapValues { (_, value) ->
-                    value.jsonPrimitive.content
-                }
-                val classic = DeployedRelease(version, firmware)
-                val preview = root["newUi"]?.jsonObject?.let { item ->
-                    DeployedRelease(item.getValue("version").jsonPrimitive.content,
-                        item.getValue("firmware").jsonObject.mapValues { it.value.jsonPrimitive.content },
-                        "new-ui", "RSVP Nano — New UI (preview)")
-                }
-                listOfNotNull(classic, preview)
+                parseDeployedReleases(body)
             }.onSuccess(continuation::resume)
                 .onFailure(continuation::resumeWithException)
         },

@@ -46,7 +46,7 @@ class Channels(unittest.TestCase):
         import json
         name="rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin"
         commit="a"*40; tag="v0.2.0"
-        image=b"\xe9"+(tag+"+"+commit[:12]).encode()+b"\0"+b"x"*65536
+        image=b"\xe9"+(tag+"+"+commit[:12]).encode()+b"\0"+name.encode()+b"\0"+b"x"*65536
         entry={"channel":"new-ui","board":"waveshare_esp32s3_touch_lcd_3_49",
                "tag":tag,"commit":commit,"asset":name,"bytes":len(image),
                "sha256":hashlib.sha256(image).hexdigest()}
