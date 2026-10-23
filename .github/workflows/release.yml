@@ -101,8 +101,7 @@ jobs:
               --channel classic --tag "$RELEASE_TAG" --commit "$BUILD_SHA" \
               --output build/firmware/update-channel.json
           fi
-          cd build/firmware
-          sha256sum *.bin > SHA256SUMS.txt
+          python3 tools/package_release.py
 
       - name: Publish GitHub release
         env:
@@ -122,14 +121,14 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo 'Release already exists; refusing to overwrite'; exit 1
           fi
-          assets=(build/firmware/*.bin build/firmware/SHA256SUMS.txt)
-          if [ -f build/firmware/update-channel.json ]; then
-            assets+=(build/firmware/update-channel.json)
-          fi
-          release_flags=()
-          if [ "$CREATE_DRAFT" = "true" ]; then
-            release_flags+=(--draft --latest=false)
-          fi
-          gh release create "$RELEASE_TAG" "${assets[@]}" "${release_flags[@]}" \
+          python3 tools/package_release.py --print-assets > build/publish-assets.txt
+          mapfile -t assets < build/publish-assets.txt
+          test "${#assets[@]}" -gt 0
+          gh release create "$RELEASE_TAG" "${assets[@]}" --draft --latest=false \
             --verify-tag --title "$RELEASE_TAG" \
             --notes-file release-notes.md --target "$BUILD_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-response.json
+          python3 tools/check_legacy_ota_metadata.py build/release-response.json
+          if [ "$CREATE_DRAFT" != "true" ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --latest
+          fi

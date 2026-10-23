@@ -40,7 +40,10 @@ is complete. Switching is always intentional. Custom repository/tag settings rem
 updates. An explicit interface switch backs up that advanced source in device storage and uses
 the official channel; it does not automatically restore a custom source later.
 
-The selector is included in Classic v0.1.3 on LCD 3.49 Rev1 so you can switch in both directions.
+The selector is included in Classic v0.1.3 and later on LCD 3.49 Rev1 so you can switch in both directions.
+If an older version reports `rsvp-nano-ota.bin missing`, retry the official update
+to Classic v0.1.4 first. For manual browser flashing, extract your board's full
+image from `rsvp-nano-browser-installers.zip`; do not select an `-ota.bin` file.
 Older Classic builds can use their existing **Release tag** setting to select `v0.2.0` after
 publication, or use the web installer. New UI choices will only appear for supported hardware.
 
