@@ -2,9 +2,9 @@
 
 This branch contains the **v0.2.0 New UI preview for Waveshare ESP32-S3 Touch LCD 3.49 Rev1 only**.
 The published v0.2.0 scope above is unchanged. This branch additionally contains
-the [hardware-tested Rev2 source preview](lcd349-rev2-candidate.md). The founder
-approved its source push and README update on 23 October 2026; firmware release,
-installer and OTA publication remain separate.
+the [hardware-tested Rev2 port](lcd349-rev2-candidate.md), released separately as
+`v0.2.0-rev2.1`. On 23 October 2026 the founder explicitly approved its source,
+firmware, installer and OTA publication after accepting the Rev2 hardware test.
 It keeps RSVP Nano branding and the current reading-guide artwork.
 Classic remains the stable/default release. This is a separate firmware choice;
 there is no live interface switch on the device.
@@ -26,7 +26,9 @@ left alone. The complete prototype is maintained separately.
 
 ## Install and return to Classic
 
-1. Confirm **LCD 3.49 Rev1**. Other boards should continue using Classic.
+1. These filenames are for **LCD 3.49 Rev1**. Rev2 uses the separate
+   [v0.2.0-rev2.1 release](https://github.com/ionutdecebal/rsvpnano/releases/tag/v0.2.0-rev2.1).
+   Other boards should continue using Classic.
 2. Save a copy of the SD card, especially settings and reading progress.
 3. In the [web companion](https://ionutdecebal.github.io/rsvpnano/), choose your
    board. Choose **New UI (preview)** when listed, or **Choose a firmware file**

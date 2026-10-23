@@ -1,15 +1,16 @@
-# LCD 3.49 Rev2 — tested v0.2.0 source preview
+# LCD 3.49 Rev2 — v0.2.0 release record
 
 The founder tested the v0.2.0 UI/dictionary candidate on a confirmed LCD 3.49 Rev2
 and reported that it performs well. On 23 October 2026 they approved pushing the
 tested source branch and updating the README to show Rev2 support.
-Branch: `work/ui-020-rev2`. **Firmware releases, installer and OTA publication are
-separate steps and are not covered by this source-push approval.**
+The founder subsequently approved publishing the tested firmware, browser installer
+and on-device updates ("okay let's do that"). Branch: `work/ui-020-rev2`.
+The source-only approval below was extended explicitly, not inferred.
 
 Base: published `v0.2.0`, commit `cf42168db427b4a0e96601d4f093313e5cbfb243`.
 Tested firmware commit: `73af8bc7c4fdd4bd3c665a447f2fa2c5b3f8cf92`.
 Subsequent README/status changes do not change the tested firmware code.
-Candidate tag: `v0.2.0-rev2.1` (local only). Never move the published v0.2.0 tag
+Release tag: `v0.2.0-rev2.1`. Never move the published v0.2.0 tag
 or replace its assets. This retains v0.2.0 features and branding; it is not the
 notes/Bluetooth/app prototype or Pocket Lines firmware.
 
@@ -48,29 +49,24 @@ separately reported measurement of the brightness curve or sleep/wake matrix.
 - Flash layout and all partitions remain unchanged. Browser merged images and
   OTA application images keep their existing distinct revision-specific names.
 
-The public catalog currently has no Rev2 New UI or Rev2 Classic entries. Until
-publication, **Check current software** and **Return to Classic** in this candidate
-should report that software is not published for this board. Use the included
-published Classic v0.1.4 Rev2 merged image for browser recovery. Published Classic
-Rev2 does not yet expose Try New UI. Do not describe a full on-device round trip
-as working before the catalog and separate Classic selector work are approved,
-prepared and tested.
+The public delivery uses four board/channel entries: Classic v0.1.5 and New UI
+for each LCD revision. Rev1 New UI remains v0.2.0; Rev2 uses v0.2.0-rev2.1.
+**Check current software** keeps the interface and **Return to Classic** selects
+the Rev2 Classic image. Classic v0.1.5 exposes **Try New UI** on both revisions.
+Older Classic installations first update normally to v0.1.5. A physical Rev2 OTA
+round trip remains unreported; host checks establish artifact/catalog compatibility.
 
-After acceptance, prepare the installer/catalog changes separately from this
-firmware branch, based on current main (which supports ZIP browser installers).
-Keep Classic the default, add the explicit Rev2 New UI choice, preserve both
-Rev1 entries and add the exact verified Rev2 entries. Do not copy the old
-v0.2.0 branch's installer over current main. A Classic Rev2 selector update is a
-separate small change with its own tested release; it must retain the legacy OTA
-aliases and the bounded release listing introduced in v0.1.4.
+Installer/catalog changes are separate from this firmware branch and based on
+current main. They preserve Classic as default, independent board versions, both
+Rev1 entries, legacy OTA aliases and the bounded release listing. The complete
+publication record is in `docs/releases/rev2-delivery.md` on main.
 
 ## Build and local verification
 
 For a normal build of this source branch, use the Rev2 instructions in the README.
 To reproduce the exact tested binary with the commands below, first check out
-`73af8bc7c4fdd4bd3c665a447f2fa2c5b3f8cf92` and create the local tag
-`v0.2.0-rev2.1` at that commit if it does not already exist. This tag has not been
-published; it must point to the checked-out commit for a version-stamped build.
+tag `v0.2.0-rev2.1`, which points to
+`73af8bc7c4fdd4bd3c665a447f2fa2c5b3f8cf92`. Do not recreate or move this tag.
 
 ```sh
 python3 tools/test_update_descriptor.py
@@ -117,8 +113,7 @@ installer so NVS is preserved. Do not flash this file to Rev1 or an AMOLED board
    install/cancel/retry. The same independently released English pack is used.
 8. Focus alongside reading and standalone, full-screen break, manual resume.
 9. Wi-Fi connection, USB mass-storage and book import. Confirm no SD loss.
-10. Firmware update checks must fail clearly while Rev2 entries are unpublished,
-    never offer Rev1. Browser-install the supplied Classic Rev2 recovery image
-    and then this candidate again; verify books, progress and Wi-Fi remain.
+10. Firmware updates must offer the matching Rev2 image, never Rev1. Switch
+    to Classic v0.1.5 and back to New UI; verify books, progress and Wi-Fi remain.
 
-Report failures and the installed version before asking for publication approval.
+Report any failures with the installed version and board revision.
