@@ -127,7 +127,9 @@ jobs:
           gh release create "$RELEASE_TAG" "${assets[@]}" --draft --latest=false \
             --verify-tag --title "$RELEASE_TAG" \
             --notes-file release-notes.md --target "$BUILD_SHA"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-response.json
+          # Drafts are addressed by release ID; the by-tag endpoint is public-only.
+          release_api_url="$(gh release view "$RELEASE_TAG" --json apiUrl --jq .apiUrl)"
+          gh api "$release_api_url" > build/release-response.json
           python3 tools/check_legacy_ota_metadata.py build/release-response.json
           if [ "$CREATE_DRAFT" != "true" ]; then
             gh release edit "$RELEASE_TAG" --draft=false --latest
