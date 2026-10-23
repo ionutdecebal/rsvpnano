@@ -8,7 +8,7 @@ namespace screens {
             return action;
         const ui::Rect content = detail::tabContent(ui);
         constexpr int16_t gap = 6;
-        const bool canSwitch = std::string_view{Board::Config::BOARD_ID} == update::kNewUiBoard;
+        const bool canSwitch = update::supportsNewUi(Board::Config::BOARD_ID);
         ui::Grid actions{content, static_cast<uint8_t>(canSwitch ? 4 : 3), 44, gap};
         if (ui.button(actions.next(), "<<"))
             screen = Screen::Device;

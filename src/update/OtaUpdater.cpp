@@ -113,7 +113,7 @@ OtaUpdater::Result OtaUpdater::checkOnly(const settings::DeviceSettings& s,
     const auto source = update::releaseSourceForSettings(s.updates);
     const bool custom = !offer.switching && (
 #ifdef RSVP_CLASSIC_BUILD
-        std::string_view{Board::Config::BOARD_ID} != update::kNewUiBoard ||
+        !update::supportsNewUi(Board::Config::BOARD_ID) ||
 #endif
         !source.tag.empty()
         || source.owner + "/" + source.repo != update::kOfficialRepo);

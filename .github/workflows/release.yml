@@ -98,6 +98,9 @@ jobs:
           if [ -f src/update/SwitchSettings.cpp ]; then
             python3 tools/make_update_descriptor.py \
               --image build/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-ota.bin \
+              --board lcd349-v1 \
+              --image build/firmware/rsvp-nano-esp32-s3-touch-lcd-3.49-rev2-ota.bin \
+              --board lcd349-v2 \
               --channel classic --tag "$RELEASE_TAG" --commit "$BUILD_SHA" \
               --output build/firmware/update-channel.json
           fi
