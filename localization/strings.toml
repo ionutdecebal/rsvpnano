@@ -17,6 +17,7 @@ language_order = [
 	"Korean",
 	"ChineseSimplified",
 	"ChineseTraditional",
+	"PortugueseBrazil",
 ]
 
 # Add ui_font = { source = "localization/fonts/<locale>.u8g2", license = "..." }
@@ -128,6 +129,13 @@ direction = "ltr"
 translation_status = "preview"
 ui_font = { source = "third_party/fusion-pixel-font/10px-proportional/fusion-pixel-10px-proportional-zh_hant.bdf", license = "OFL-1.1; credit TakWolf and upstream contributors" }
 
+[languages.PortugueseBrazil]
+code = "pt-BR"
+name = "Português (BR)"
+scripts = ["Latn"]
+direction = "ltr"
+translation_status = "preview"
+
 # Main menu
 [[strings]]
 key = "Resume"
@@ -145,6 +153,7 @@ Japanese = "続き"
 Korean = "이어 읽기"
 ChineseSimplified = "继续"
 ChineseTraditional = "繼續"
+PortugueseBrazil = "Continuar"
 
 [[strings]]
 key = "Chapters"
@@ -162,6 +171,7 @@ Japanese = "章"
 Korean = "장"
 ChineseSimplified = "章节"
 ChineseTraditional = "章節"
+PortugueseBrazil = "Capítulos"
 
 [[strings]]
 key = "Library"
@@ -179,6 +189,7 @@ Japanese = "本棚"
 Korean = "서재"
 ChineseSimplified = "书库"
 ChineseTraditional = "書庫"
+PortugueseBrazil = "Biblioteca"
 
 [[strings]]
 key = "Settings"
@@ -196,6 +207,7 @@ Japanese = "設定"
 Korean = "설정"
 ChineseSimplified = "设置"
 ChineseTraditional = "設定"
+PortugueseBrazil = "Ajustes"
 
 [[strings]]
 key = "UsbTransfer"
@@ -213,6 +225,7 @@ Japanese = "USB転送"
 Korean = "USB 전송"
 ChineseSimplified = "USB传输"
 ChineseTraditional = "USB傳輸"
+PortugueseBrazil = "USB"
 
 [[strings]]
 key = "PowerOff"
@@ -230,6 +243,7 @@ Japanese = "電源オフ"
 Korean = "전원 끄기"
 ChineseSimplified = "关机"
 ChineseTraditional = "關機"
+PortugueseBrazil = "Desligar"
 
 
 # Shared navigation and settings categories
@@ -249,6 +263,7 @@ Japanese = "画面"
 Korean = "화면"
 ChineseSimplified = "显示"
 ChineseTraditional = "顯示"
+PortugueseBrazil = "Tela"
 
 [[strings]]
 key = "TypographyTune"
@@ -266,6 +281,7 @@ Japanese = "文字調整"
 Korean = "글꼴 조정"
 ChineseSimplified = "字体调整"
 ChineseTraditional = "字型調整"
+PortugueseBrazil = "Tipografia"
 
 [[strings]]
 key = "WordPacing"
@@ -283,6 +299,7 @@ Japanese = "語速調整"
 Korean = "단어 속도"
 ChineseSimplified = "词速调整"
 ChineseTraditional = "詞速調整"
+PortugueseBrazil = "Ritmo"
 
 
 # Display and reading settings
@@ -302,6 +319,7 @@ Japanese = "テーマ"
 Korean = "테마"
 ChineseSimplified = "主题"
 ChineseTraditional = "主題"
+PortugueseBrazil = "Tema"
 
 [[strings]]
 key = "Brightness"
@@ -319,6 +337,7 @@ Japanese = "明るさ"
 Korean = "밝기"
 ChineseSimplified = "亮度"
 ChineseTraditional = "亮度"
+PortugueseBrazil = "Brilho"
 
 [[strings]]
 key = "Language"
@@ -336,6 +355,7 @@ Japanese = "言語"
 Korean = "언어"
 ChineseSimplified = "语言"
 ChineseTraditional = "語言"
+PortugueseBrazil = "Idioma"
 
 [[strings]]
 key = "ReadingMode"
@@ -353,6 +373,7 @@ Japanese = "読書モード"
 Korean = "읽기 모드"
 ChineseSimplified = "阅读模式"
 ChineseTraditional = "閱讀模式"
+PortugueseBrazil = "Modo de leitura"
 
 
 # Word pacing settings
@@ -372,6 +393,7 @@ Japanese = "長い単語"
 Korean = "긴 단어"
 ChineseSimplified = "长词"
 ChineseTraditional = "長詞"
+PortugueseBrazil = "Palavras longas"
 
 [[strings]]
 key = "Complexity"
@@ -389,6 +411,7 @@ Japanese = "複雑さ"
 Korean = "복잡도"
 ChineseSimplified = "复杂度"
 ChineseTraditional = "複雜度"
+PortugueseBrazil = "Complexidade"
 
 [[strings]]
 key = "Punctuation"
@@ -406,6 +429,7 @@ Japanese = "句読点"
 Korean = "문장 부호"
 ChineseSimplified = "标点"
 ChineseTraditional = "標點"
+PortugueseBrazil = "Pontuação"
 
 # Theme and toggle values
 [[strings]]
@@ -424,6 +448,7 @@ Japanese = "夜"
 Korean = "야간"
 ChineseSimplified = "夜间"
 ChineseTraditional = "夜間"
+PortugueseBrazil = "Noite"
 
 [[strings]]
 key = "Dark"
@@ -441,6 +466,7 @@ Japanese = "暗色"
 Korean = "어둡게"
 ChineseSimplified = "深色"
 ChineseTraditional = "深色"
+PortugueseBrazil = "Escuro"
 
 [[strings]]
 key = "Light"
@@ -458,6 +484,7 @@ Japanese = "明色"
 Korean = "밝게"
 ChineseSimplified = "浅色"
 ChineseTraditional = "淺色"
+PortugueseBrazil = "Claro"
 
 [[strings]]
 key = "On"
@@ -475,6 +502,7 @@ Japanese = "オン"
 Korean = "켜짐"
 ChineseSimplified = "开"
 ChineseTraditional = "開"
+PortugueseBrazil = "Sim"
 
 [[strings]]
 key = "Off"
@@ -492,6 +520,7 @@ Japanese = "オフ"
 Korean = "꺼짐"
 ChineseSimplified = "关"
 ChineseTraditional = "關"
+PortugueseBrazil = "Não"
 
 
 # Typography settings
@@ -511,6 +540,7 @@ Japanese = "文字サイズ"
 Korean = "글꼴 크기"
 ChineseSimplified = "字号"
 ChineseTraditional = "字號"
+PortugueseBrazil = "Tamanho"
 
 [[strings]]
 key = "Typeface"
@@ -528,6 +558,7 @@ Japanese = "書体"
 Korean = "글꼴"
 ChineseSimplified = "字体"
 ChineseTraditional = "字型"
+PortugueseBrazil = "Fonte"
 
 [[strings]]
 key = "PhantomWords"
@@ -545,6 +576,7 @@ Japanese = "前後の語"
 Korean = "주변 단어"
 ChineseSimplified = "淡化词"
 ChineseTraditional = "淡化詞"
+PortugueseBrazil = "Palavras-fantasma"
 
 [[strings]]
 key = "RedHighlight"
@@ -562,6 +594,7 @@ Japanese = "赤で強調"
 Korean = "빨간 강조"
 ChineseSimplified = "红色高亮"
 ChineseTraditional = "紅色醒目"
+PortugueseBrazil = "Vermelho"
 
 [[strings]]
 key = "Tracking"
@@ -579,6 +612,7 @@ Japanese = "字間"
 Korean = "자간"
 ChineseSimplified = "字距"
 ChineseTraditional = "字距"
+PortugueseBrazil = "Espaçamento"
 
 [[strings]]
 key = "Anchor"
@@ -596,6 +630,7 @@ Japanese = "基準位置"
 Korean = "기준점"
 ChineseSimplified = "锚点"
 ChineseTraditional = "錨點"
+PortugueseBrazil = "Âncora"
 
 [[strings]]
 key = "GuideWidth"
@@ -613,6 +648,7 @@ Japanese = "ガイド幅"
 Korean = "안내선 너비"
 ChineseSimplified = "标线宽度"
 ChineseTraditional = "標線寬度"
+PortugueseBrazil = "Largura da guia"
 
 [[strings]]
 key = "GuideGap"
@@ -630,6 +666,7 @@ Japanese = "ガイド間隔"
 Korean = "안내선 간격"
 ChineseSimplified = "标线间距"
 ChineseTraditional = "標線間距"
+PortugueseBrazil = "Abertura da guia"
 
 [[strings]]
 key = "Reset"
@@ -647,6 +684,7 @@ Japanese = "リセット"
 Korean = "초기화"
 ChineseSimplified = "重置"
 ChineseTraditional = "重設"
+PortugueseBrazil = "Redefinir"
 
 [[strings]]
 key = "Typography"
@@ -664,6 +702,7 @@ Japanese = "文字設定"
 Korean = "글꼴 설정"
 ChineseSimplified = "字体设置"
 ChineseTraditional = "字型設定"
+PortugueseBrazil = "Tipografia"
 
 
 # Sample screen hints
@@ -683,6 +722,7 @@ Japanese = "タップで終了"
 Korean = "탭하여 종료"
 ChineseSimplified = "轻触退出"
 ChineseTraditional = "輕觸退出"
+PortugueseBrazil = "toque para sair"
 
 [[strings]]
 key = "TapToReset"
@@ -700,6 +740,7 @@ Japanese = "タップで初期化"
 Korean = "탭하여 초기화"
 ChineseSimplified = "轻触重置"
 ChineseTraditional = "輕觸重設"
+PortugueseBrazil = "toque para redefinir"
 
 [[strings]]
 key = "TapChangeSample"
@@ -717,6 +758,7 @@ Japanese = "タップ:変更  L/R:例"
 Korean = "탭: 변경  L/R: 예시"
 ChineseSimplified = "轻触:更改  L/R:示例"
 ChineseTraditional = "輕觸:更改  L/R:範例"
+PortugueseBrazil = "Toque muda  E/D amostra"
 
 [[strings]]
 key = "TapExitSample"
@@ -734,6 +776,7 @@ Japanese = "タップ:終了  L/R:例"
 Korean = "탭: 종료  L/R: 예시"
 ChineseSimplified = "轻触:退出  L/R:示例"
 ChineseTraditional = "輕觸:退出  L/R:範例"
+PortugueseBrazil = "Toque sai  E/D amostra"
 
 [[strings]]
 key = "TapToggleSample"
@@ -751,6 +794,7 @@ Japanese = "タップ:切替  L/R:例"
 Korean = "탭: 전환  L/R: 예시"
 ChineseSimplified = "轻触:切换  L/R:示例"
 ChineseTraditional = "輕觸:切換  L/R:範例"
+PortugueseBrazil = "Toque alterna  E/D amostra"
 
 [[strings]]
 key = "TapCycleSample"
@@ -768,6 +812,7 @@ Japanese = "タップ:次へ  L/R:例"
 Korean = "탭: 다음  L/R: 예시"
 ChineseSimplified = "轻触:循环  L/R:示例"
 ChineseTraditional = "輕觸:循環  L/R:範例"
+PortugueseBrazil = "Toque cicla  E/D amostra"
 
 
 # Book and restart flow
@@ -787,6 +832,7 @@ Japanese = "開始"
 Korean = "시작"
 ChineseSimplified = "开始"
 ChineseTraditional = "開始"
+PortugueseBrazil = "Iniciar"
 
 [[strings]]
 key = "StartOfBook"
@@ -804,6 +850,7 @@ Japanese = "本の最初から"
 Korean = "책 처음부터"
 ChineseSimplified = "从头开始"
 ChineseTraditional = "從頭開始"
+PortugueseBrazil = "Início do livro"
 
 [[strings]]
 key = "RestartBook"
@@ -821,6 +868,7 @@ Japanese = "最初から読む"
 Korean = "처음부터 읽기"
 ChineseSimplified = "重新阅读"
 ChineseTraditional = "重新閱讀"
+PortugueseBrazil = "Reiniciar livro"
 
 [[strings]]
 key = "AreYouSure"
@@ -838,6 +886,7 @@ Japanese = "よろしいですか？"
 Korean = "확실한가요?"
 ChineseSimplified = "确定吗？"
 ChineseTraditional = "確定嗎？"
+PortugueseBrazil = "Tem certeza?"
 
 [[strings]]
 key = "NoKeepPlace"
@@ -855,6 +904,7 @@ Japanese = "いいえ、位置を保持"
 Korean = "아니요, 위치 유지"
 ChineseSimplified = "否，保留位置"
 ChineseTraditional = "否，保留位置"
+PortugueseBrazil = "Não, manter"
 
 [[strings]]
 key = "YesRestart"
@@ -872,6 +922,7 @@ Japanese = "はい、最初から"
 Korean = "예, 다시 시작"
 ChineseSimplified = "是，重新开始"
 ChineseTraditional = "是，重新開始"
+PortugueseBrazil = "Sim, reiniciar"
 
 [[strings]]
 key = "NoSamples"
@@ -889,6 +940,7 @@ Japanese = "例文なし"
 Korean = "예시 없음"
 ChineseSimplified = "无示例"
 ChineseTraditional = "無範例"
+PortugueseBrazil = "Sem amostras"
 
 
 # Common option labels
@@ -908,6 +960,7 @@ Japanese = "大"
 Korean = "크게"
 ChineseSimplified = "大"
 ChineseTraditional = "大"
+PortugueseBrazil = "Grande"
 
 [[strings]]
 key = "Medium"
@@ -925,6 +978,7 @@ Japanese = "中"
 Korean = "보통"
 ChineseSimplified = "中"
 ChineseTraditional = "中"
+PortugueseBrazil = "Médio"
 
 [[strings]]
 key = "Small"
@@ -942,6 +996,7 @@ Japanese = "小"
 Korean = "작게"
 ChineseSimplified = "小"
 ChineseTraditional = "小"
+PortugueseBrazil = "Pequeno"
 
 [[strings]]
 key = "Standard"
@@ -959,6 +1014,7 @@ Japanese = "標準"
 Korean = "표준"
 ChineseSimplified = "标准"
 ChineseTraditional = "標準"
+PortugueseBrazil = "Padrão"
 
 
 # Reading mode and time estimate options
@@ -978,6 +1034,7 @@ Japanese = "RSVP"
 Korean = "RSVP"
 ChineseSimplified = "RSVP"
 ChineseTraditional = "RSVP"
+PortugueseBrazil = "RSVP"
 
 [[strings]]
 key = "ScrollMode"
@@ -995,6 +1052,7 @@ Japanese = "ページ送り"
 Korean = "페이지 스크롤"
 ChineseSimplified = "页面滚动"
 ChineseTraditional = "頁面捲動"
+PortugueseBrazil = "Rolagem"
 
 [[strings]]
 key = "TimeEstimate"
@@ -1012,6 +1070,7 @@ Japanese = "時間予測"
 Korean = "시간 예측"
 ChineseSimplified = "时间估算"
 ChineseTraditional = "時間估算"
+PortugueseBrazil = "Tempo restante"
 
 [[strings]]
 key = "TimeEstimateAccurate"
@@ -1029,6 +1088,7 @@ Japanese = "正確"
 Korean = "정확"
 ChineseSimplified = "精确"
 ChineseTraditional = "精確"
+PortugueseBrazil = "Preciso"
 
 [[strings]]
 key = "TimeEstimateFast"
@@ -1046,6 +1106,7 @@ Japanese = "高速"
 Korean = "빠름"
 ChineseSimplified = "快速"
 ChineseTraditional = "快速"
+PortugueseBrazil = "Rápido"
 
 
 # Navigation and settings screens
@@ -1065,6 +1126,7 @@ Japanese = "読む"
 Korean = "읽기"
 ChineseSimplified = "阅读"
 ChineseTraditional = "閱讀"
+PortugueseBrazil = "Ler"
 
 [[strings]]
 key = "Device"
@@ -1082,6 +1144,7 @@ Japanese = "端末"
 Korean = "기기"
 ChineseSimplified = "设备"
 ChineseTraditional = "裝置"
+PortugueseBrazil = "Aparelho"
 
 [[strings]]
 key = "Focus"
@@ -1099,6 +1162,7 @@ Japanese = "集中"
 Korean = "집중"
 ChineseSimplified = "专注"
 ChineseTraditional = "專注"
+PortugueseBrazil = "Foco"
 
 [[strings]]
 key = "Reading"
@@ -1116,6 +1180,7 @@ Japanese = "読書"
 Korean = "읽기"
 ChineseSimplified = "阅读"
 ChineseTraditional = "閱讀"
+PortugueseBrazil = "Leitura"
 
 [[strings]]
 key = "ReaderLayout"
@@ -1133,6 +1198,7 @@ Japanese = "読書レイアウト"
 Korean = "읽기 레이아웃"
 ChineseSimplified = "阅读布局"
 ChineseTraditional = "閱讀版面"
+PortugueseBrazil = "Layout do leitor"
 
 [[strings]]
 key = "NetworkUpdates"
@@ -1150,6 +1216,7 @@ Japanese = "通信と更新"
 Korean = "네트워크 및 업데이트"
 ChineseSimplified = "网络与更新"
 ChineseTraditional = "網路與更新"
+PortugueseBrazil = "Rede e atualizações"
 
 [[strings]]
 key = "ReadingSection"
@@ -1167,6 +1234,7 @@ Japanese = "読書"
 Korean = "읽기"
 ChineseSimplified = "阅读"
 ChineseTraditional = "閱讀"
+PortugueseBrazil = "LEITURA"
 
 [[strings]]
 key = "SystemSection"
@@ -1184,6 +1252,7 @@ Japanese = "システム"
 Korean = "시스템"
 ChineseSimplified = "系统"
 ChineseTraditional = "系統"
+PortugueseBrazil = "SISTEMA"
 
 
 # Reading and interface preferences
@@ -1203,6 +1272,7 @@ Japanese = "毎分の語数"
 Korean = "분당 단어"
 ChineseSimplified = "每分钟词数"
 ChineseTraditional = "每分鐘詞數"
+PortugueseBrazil = "Palavras por minuto"
 
 [[strings]]
 key = "BehaviorSection"
@@ -1220,6 +1290,7 @@ Japanese = "動作"
 Korean = "동작"
 ChineseSimplified = "行为"
 ChineseTraditional = "行為"
+PortugueseBrazil = "COMPORTAMENTO"
 
 [[strings]]
 key = "Pause"
@@ -1237,6 +1308,7 @@ Japanese = "停止"
 Korean = "일시 정지"
 ChineseSimplified = "暂停"
 ChineseTraditional = "暫停"
+PortugueseBrazil = "Pausa"
 
 [[strings]]
 key = "SentenceEnd"
@@ -1254,6 +1326,7 @@ Japanese = "文末"
 Korean = "문장 끝"
 ChineseSimplified = "句末"
 ChineseTraditional = "句末"
+PortugueseBrazil = "Fim da frase"
 
 [[strings]]
 key = "Instant"
@@ -1271,6 +1344,7 @@ Japanese = "即時"
 Korean = "즉시"
 ChineseSimplified = "立即"
 ChineseTraditional = "立即"
+PortugueseBrazil = "Imediata"
 
 [[strings]]
 key = "AppearanceSection"
@@ -1288,6 +1362,7 @@ Japanese = "外観"
 Korean = "화면"
 ChineseSimplified = "外观"
 ChineseTraditional = "外觀"
+PortugueseBrazil = "APARÊNCIA"
 
 [[strings]]
 key = "StandbySection"
@@ -1305,6 +1380,7 @@ Japanese = "待機"
 Korean = "대기"
 ChineseSimplified = "待机"
 ChineseTraditional = "待機"
+PortugueseBrazil = "REPOUSO"
 
 [[strings]]
 key = "Standby"
@@ -1322,6 +1398,7 @@ Japanese = "待機時間"
 Korean = "대기 시간"
 ChineseSimplified = "待机"
 ChineseTraditional = "待機"
+PortugueseBrazil = "Repouso"
 
 [[strings]]
 key = "Screensaver"
@@ -1339,6 +1416,7 @@ Japanese = "スクリーンセーバー"
 Korean = "화면 보호기"
 ChineseSimplified = "屏保"
 ChineseTraditional = "螢幕保護"
+PortugueseBrazil = "Protetor de tela"
 
 [[strings]]
 key = "Maze"
@@ -1356,6 +1434,7 @@ Japanese = "迷路"
 Korean = "미로"
 ChineseSimplified = "迷宫"
 ChineseTraditional = "迷宮"
+PortugueseBrazil = "Labirinto"
 
 [[strings]]
 key = "Voronoi"
@@ -1373,6 +1452,7 @@ Japanese = "ボロノイ"
 Korean = "보로노이"
 ChineseSimplified = "沃罗诺伊"
 ChineseTraditional = "沃羅諾伊"
+PortugueseBrazil = "Voronoi"
 
 [[strings]]
 key = "Reaction"
@@ -1390,6 +1470,7 @@ Japanese = "反応"
 Korean = "반응"
 ChineseSimplified = "反应"
 ChineseTraditional = "反應"
+PortugueseBrazil = "Reação"
 
 [[strings]]
 key = "ScreenOff"
@@ -1407,6 +1488,7 @@ Japanese = "画面オフ"
 Korean = "화면 끄기"
 ChineseSimplified = "关闭屏幕"
 ChineseTraditional = "關閉螢幕"
+PortugueseBrazil = "Tela apagada"
 
 [[strings]]
 key = "Life"
@@ -1424,6 +1506,7 @@ Japanese = "ライフ"
 Korean = "라이프"
 ChineseSimplified = "生命"
 ChineseTraditional = "生命"
+PortugueseBrazil = "Vida"
 
 
 # Pacing and typography preferences
@@ -1443,6 +1526,7 @@ Japanese = "書体"
 Korean = "글꼴"
 ChineseSimplified = "字体"
 ChineseTraditional = "字型"
+PortugueseBrazil = "FONTE"
 
 [[strings]]
 key = "GeometrySection"
@@ -1460,6 +1544,7 @@ Japanese = "配置"
 Korean = "배치"
 ChineseSimplified = "布局"
 ChineseTraditional = "佈局"
+PortugueseBrazil = "GEOMETRIA"
 
 [[strings]]
 key = "FocusLetter"
@@ -1477,6 +1562,7 @@ Japanese = "注視文字"
 Korean = "초점 글자"
 ChineseSimplified = "焦点字"
 ChineseTraditional = "焦點字"
+PortugueseBrazil = "Letra de foco"
 
 
 # Reader-screen preferences
@@ -1496,6 +1582,7 @@ Japanese = "利き手"
 Korean = "사용 손"
 ChineseSimplified = "惯用手"
 ChineseTraditional = "慣用手"
+PortugueseBrazil = "Mão do leitor"
 
 [[strings]]
 key = "Left"
@@ -1513,6 +1600,7 @@ Japanese = "左"
 Korean = "왼쪽"
 ChineseSimplified = "左"
 ChineseTraditional = "左"
+PortugueseBrazil = "Esquerda"
 
 [[strings]]
 key = "Right"
@@ -1530,6 +1618,7 @@ Japanese = "右"
 Korean = "오른쪽"
 ChineseSimplified = "右"
 ChineseTraditional = "右"
+PortugueseBrazil = "Direita"
 
 [[strings]]
 key = "ChapterScroll"
@@ -1547,6 +1636,7 @@ Japanese = "章のスクロール"
 Korean = "장 스크롤"
 ChineseSimplified = "章节滚动"
 ChineseTraditional = "章節捲動"
+PortugueseBrazil = "Rolagem de capítulos"
 
 [[strings]]
 key = "Reversed"
@@ -1564,6 +1654,7 @@ Japanese = "逆"
 Korean = "반대"
 ChineseSimplified = "反向"
 ChineseTraditional = "反向"
+PortugueseBrazil = "Invertida"
 
 [[strings]]
 key = "Normal"
@@ -1581,6 +1672,7 @@ Japanese = "通常"
 Korean = "일반"
 ChineseSimplified = "正常"
 ChineseTraditional = "正常"
+PortugueseBrazil = "Normal"
 
 [[strings]]
 key = "Footer"
@@ -1598,6 +1690,7 @@ Japanese = "フッター"
 Korean = "바닥글"
 ChineseSimplified = "页脚"
 ChineseTraditional = "頁尾"
+PortugueseBrazil = "Rodapé"
 
 [[strings]]
 key = "ChapterTime"
@@ -1615,6 +1708,7 @@ Japanese = "章の時間"
 Korean = "장 시간"
 ChineseSimplified = "章节时间"
 ChineseTraditional = "章節時間"
+PortugueseBrazil = "Tempo do capítulo"
 
 [[strings]]
 key = "BookTime"
@@ -1632,6 +1726,7 @@ Japanese = "本の時間"
 Korean = "책 시간"
 ChineseSimplified = "全书时间"
 ChineseTraditional = "全書時間"
+PortugueseBrazil = "Tempo do livro"
 
 [[strings]]
 key = "Percentage"
@@ -1649,6 +1744,7 @@ Japanese = "割合"
 Korean = "백분율"
 ChineseSimplified = "百分比"
 ChineseTraditional = "百分比"
+PortugueseBrazil = "Porcentagem"
 
 [[strings]]
 key = "BatteryLabel"
@@ -1666,6 +1762,7 @@ Japanese = "電池表示"
 Korean = "배터리 표시"
 ChineseSimplified = "电池显示"
 ChineseTraditional = "電池顯示"
+PortugueseBrazil = "Indicador de bateria"
 
 [[strings]]
 key = "TimeLeft"
@@ -1683,6 +1780,7 @@ Japanese = "残り時間"
 Korean = "남은 시간"
 ChineseSimplified = "剩余时间"
 ChineseTraditional = "剩餘時間"
+PortugueseBrazil = "Tempo restante"
 
 [[strings]]
 key = "Voltage"
@@ -1700,6 +1798,7 @@ Japanese = "電圧"
 Korean = "전압"
 ChineseSimplified = "电压"
 ChineseTraditional = "電壓"
+PortugueseBrazil = "Tensão"
 
 [[strings]]
 key = "VisibleWhileReadingSection"
@@ -1717,6 +1816,7 @@ Japanese = "読書中に表示"
 Korean = "읽는 중 표시"
 ChineseSimplified = "阅读时显示"
 ChineseTraditional = "閱讀時顯示"
+PortugueseBrazil = "MOSTRAR AO LER"
 
 [[strings]]
 key = "Battery"
@@ -1734,6 +1834,7 @@ Japanese = "電池"
 Korean = "배터리"
 ChineseSimplified = "电池"
 ChineseTraditional = "電池"
+PortugueseBrazil = "Bateria"
 
 [[strings]]
 key = "Progress"
@@ -1751,6 +1852,7 @@ Japanese = "進捗"
 Korean = "진행률"
 ChineseSimplified = "进度"
 ChineseTraditional = "進度"
+PortugueseBrazil = "Progresso"
 
 
 # Network and update preferences
@@ -1770,6 +1872,7 @@ Japanese = "ネットワーク"
 Korean = "네트워크"
 ChineseSimplified = "网络"
 ChineseTraditional = "網路"
+PortugueseBrazil = "Rede"
 
 [[strings]]
 key = "NotSet"
@@ -1787,6 +1890,7 @@ Japanese = "未設定"
 Korean = "설정 안 됨"
 ChineseSimplified = "未设置"
 ChineseTraditional = "未設定"
+PortugueseBrazil = "Nenhuma"
 
 [[strings]]
 key = "StartupCheck"
@@ -1804,6 +1908,7 @@ Japanese = "起動時に確認"
 Korean = "시작 시 확인"
 ChineseSimplified = "启动时检查"
 ChineseTraditional = "啟動時檢查"
+PortugueseBrazil = "Ao iniciar"
 
 [[strings]]
 key = "OtaOwner"
@@ -1821,6 +1926,7 @@ Japanese = "OTA所有者"
 Korean = "OTA 소유자"
 ChineseSimplified = "OTA所有者"
 ChineseTraditional = "OTA擁有者"
+PortugueseBrazil = "Dono do OTA"
 
 [[strings]]
 key = "Default"
@@ -1838,6 +1944,7 @@ Japanese = "既定"
 Korean = "기본값"
 ChineseSimplified = "默认"
 ChineseTraditional = "預設"
+PortugueseBrazil = "Padrão"
 
 [[strings]]
 key = "ReleaseTag"
@@ -1855,6 +1962,7 @@ Japanese = "リリースタグ"
 Korean = "릴리스 태그"
 ChineseSimplified = "版本标签"
 ChineseTraditional = "版本標籤"
+PortugueseBrazil = "Tag da versão"
 
 [[strings]]
 key = "Latest"
@@ -1872,6 +1980,7 @@ Japanese = "最新"
 Korean = "최신"
 ChineseSimplified = "最新"
 ChineseTraditional = "最新"
+PortugueseBrazil = "Mais recente"
 
 [[strings]]
 key = "CompanionSetup"
@@ -1889,6 +1998,7 @@ Japanese = "Companion設定"
 Korean = "Companion 설정"
 ChineseSimplified = "Companion设置"
 ChineseTraditional = "Companion設定"
+PortugueseBrazil = "Configurar companion"
 
 [[strings]]
 key = "FirmwareUpdates"
@@ -1906,6 +2016,7 @@ Japanese = "ファーム更新"
 Korean = "펌웨어 업데이트"
 ChineseSimplified = "固件更新"
 ChineseTraditional = "韌體更新"
+PortugueseBrazil = "Atualizações"
 
 [[strings]]
 key = "ForgetNetwork"
@@ -1923,6 +2034,7 @@ Japanese = "ネットワーク削除"
 Korean = "네트워크 삭제"
 ChineseSimplified = "忘记网络"
 ChineseTraditional = "忘記網路"
+PortugueseBrazil = "Esquecer rede"
 
 
 # Device, sync, and OTA screens
@@ -1942,6 +2054,7 @@ Japanese = "ストレージ準備完了"
 Korean = "저장소 준비됨"
 ChineseSimplified = "存储就绪"
 ChineseTraditional = "儲存空間就緒"
+PortugueseBrazil = "Armazenamento pronto"
 
 [[strings]]
 key = "StorageUnavailable"
@@ -1959,6 +2072,7 @@ Japanese = "ストレージ使用不可"
 Korean = "저장소 사용 불가"
 ChineseSimplified = "存储不可用"
 ChineseTraditional = "儲存空間不可用"
+PortugueseBrazil = "Armazenamento indisponível"
 
 [[strings]]
 key = "Items"
@@ -1976,6 +2090,7 @@ Japanese = "件"
 Korean = "개"
 ChineseSimplified = "项"
 ChineseTraditional = "項"
+PortugueseBrazil = "itens"
 
 [[strings]]
 key = "OtaUpdate"
@@ -1993,6 +2108,7 @@ Japanese = "OTA更新"
 Korean = "OTA 업데이트"
 ChineseSimplified = "OTA更新"
 ChineseTraditional = "OTA更新"
+PortugueseBrazil = "Atualização OTA"
 
 [[strings]]
 key = "StorageEncryption"
@@ -2010,6 +2126,7 @@ Japanese = "ストレージ暗号化"
 Korean = "저장소 암호화"
 ChineseSimplified = "存储加密"
 ChineseTraditional = "儲存空間加密"
+PortugueseBrazil = "Criptografia do armazenamento"
 
 [[strings]]
 key = "Encryption"
@@ -2027,6 +2144,7 @@ Japanese = "暗号化"
 Korean = "암호화"
 ChineseSimplified = "加密"
 ChineseTraditional = "加密"
+PortugueseBrazil = "Criptografia"
 
 [[strings]]
 key = "StorageEncryptionExplanation"
@@ -2044,6 +2162,7 @@ Japanese = "端末専用鍵を使用。コピーしたNVS設定は他で読め�
 Korean = "기기 전용 키 사용. 복사한 NVS 설정은 다른 기기에서 읽을 수 없습니다."
 ChineseSimplified = "使用设备专用密钥。复制的NVS设置无法在其他设备读取。"
 ChineseTraditional = "使用裝置專用金鑰。複製的NVS設定無法在其他裝置讀取。"
+PortugueseBrazil = "Usa uma chave exclusiva do aparelho. Cópias da NVS não podem ser lidas em outro lugar."
 
 [[strings]]
 key = "StorageEncryptionPermanent"
@@ -2061,6 +2180,7 @@ Japanese = "恒久的にヒューズを焼き、NVSを消去。暗号対応フ�
 Korean = "영구적: 퓨즈 소각, NVS 삭제, 암호화 지원 펌웨어가 필요합니다."
 ChineseSimplified = "永久操作：熔断硬件保险丝、清除NVS，并需加密固件。"
 ChineseTraditional = "永久操作：熔斷硬體保險絲、清除NVS，且需加密韌體。"
+PortugueseBrazil = "Permanente: queima um eFuse, apaga a NVS e exige firmware compatível com criptografia."
 
 [[strings]]
 key = "StorageEncryptionReset"
@@ -2078,6 +2198,7 @@ Japanese = "再起動後にSD設定は戻ります。Wi-Fiパスワードは再�
 Korean = "재시작 후 SD 설정은 복원됩니다. Wi-Fi 비밀번호는 다시 입력하세요."
 ChineseSimplified = "重启后SD设置恢复。需重新输入Wi-Fi密码。"
 ChineseTraditional = "重新啟動後SD設定會恢復。需重新輸入Wi-Fi密碼。"
+PortugueseBrazil = "As configurações do SD voltam ao reiniciar. Digite a senha do Wi-Fi novamente."
 
 [[strings]]
 key = "TapToContinue"
@@ -2095,6 +2216,7 @@ Japanese = "タップで続行"
 Korean = "탭하여 계속"
 ChineseSimplified = "轻触继续"
 ChineseTraditional = "輕觸繼續"
+PortugueseBrazil = "Toque para continuar"
 
 [[strings]]
 key = "IUnderstand"
@@ -2112,6 +2234,7 @@ Japanese = "理解しました"
 Korean = "이해함"
 ChineseSimplified = "我已了解"
 ChineseTraditional = "我已瞭解"
+PortugueseBrazil = "Entendi"
 
 [[strings]]
 key = "EnableProtection"
@@ -2129,6 +2252,7 @@ Japanese = "保護を有効化"
 Korean = "보호 활성화"
 ChineseSimplified = "启用保护"
 ChineseTraditional = "啟用保護"
+PortugueseBrazil = "Ativar proteção"
 
 [[strings]]
 key = "EnablingEncryption"
@@ -2146,6 +2270,7 @@ Japanese = "暗号化中"
 Korean = "암호화 중"
 ChineseSimplified = "正在加密"
 ChineseTraditional = "正在加密"
+PortugueseBrazil = "Ativando criptografia"
 
 [[strings]]
 key = "CompanionSync"
@@ -2163,6 +2288,7 @@ Japanese = "Companion同期"
 Korean = "Companion 동기화"
 ChineseSimplified = "Companion同步"
 ChineseTraditional = "Companion同步"
+PortugueseBrazil = "Sincronizar companion"
 
 [[strings]]
 key = "RefreshRss"
@@ -2180,6 +2306,7 @@ Japanese = "RSS更新"
 Korean = "RSS 새로고침"
 ChineseSimplified = "刷新RSS"
 ChineseTraditional = "重新整理RSS"
+PortugueseBrazil = "Atualizar RSS"
 
 [[strings]]
 key = "CheckOnly"
@@ -2197,6 +2324,7 @@ Japanese = "確認のみ"
 Korean = "확인만"
 ChineseSimplified = "仅检查"
 ChineseTraditional = "僅檢查"
+PortugueseBrazil = "Apenas verificar"
 
 [[strings]]
 key = "InstallUpdate"
@@ -2214,6 +2342,7 @@ Japanese = "更新をインストール"
 Korean = "업데이트 설치"
 ChineseSimplified = "安装更新"
 ChineseTraditional = "安裝更新"
+PortugueseBrazil = "Instalar atualização"
 
 
 # Focus, chapters, library, and reader statuses
@@ -2233,6 +2362,7 @@ Japanese = "集中タイマー"
 Korean = "집중 타이머"
 ChineseSimplified = "专注计时器"
 ChineseTraditional = "專注計時器"
+PortugueseBrazil = "Timer de foco"
 
 [[strings]]
 key = "TimerName"
@@ -2250,6 +2380,7 @@ Japanese = "タイマー名"
 Korean = "타이머 이름"
 ChineseSimplified = "计时器名称"
 ChineseTraditional = "計時器名稱"
+PortugueseBrazil = "Nome"
 
 [[strings]]
 key = "FocusMinutes"
@@ -2267,6 +2398,7 @@ Japanese = "集中"
 Korean = "집중"
 ChineseSimplified = "专注"
 ChineseTraditional = "專注"
+PortugueseBrazil = "Foco"
 
 [[strings]]
 key = "BreakMinutes"
@@ -2284,6 +2416,7 @@ Japanese = "休憩"
 Korean = "휴식"
 ChineseSimplified = "休息"
 ChineseTraditional = "休息"
+PortugueseBrazil = "Intervalo"
 
 [[strings]]
 key = "Rounds"
@@ -2301,6 +2434,7 @@ Japanese = "回数"
 Korean = "횟수"
 ChineseSimplified = "轮数"
 ChineseTraditional = "輪數"
+PortugueseBrazil = "Rounds"
 
 [[strings]]
 key = "Add"
@@ -2318,6 +2452,7 @@ Japanese = "追加"
 Korean = "추가"
 ChineseSimplified = "添加"
 ChineseTraditional = "新增"
+PortugueseBrazil = "Adicionar"
 
 [[strings]]
 key = "Save"
@@ -2335,6 +2470,7 @@ Japanese = "保存"
 Korean = "저장"
 ChineseSimplified = "保存"
 ChineseTraditional = "儲存"
+PortugueseBrazil = "Salvar"
 
 [[strings]]
 key = "Delete"
@@ -2352,6 +2488,7 @@ Japanese = "削除"
 Korean = "삭제"
 ChineseSimplified = "删除"
 ChineseTraditional = "刪除"
+PortugueseBrazil = "Excluir"
 
 [[strings]]
 key = "Break"
@@ -2369,6 +2506,7 @@ Japanese = "休憩"
 Korean = "휴식"
 ChineseSimplified = "休息"
 ChineseTraditional = "休息"
+PortugueseBrazil = "Intervalo"
 
 [[strings]]
 key = "Paused"
@@ -2386,6 +2524,7 @@ Japanese = "一時停止"
 Korean = "일시 정지"
 ChineseSimplified = "已暂停"
 ChineseTraditional = "已暫停"
+PortugueseBrazil = "Pausado"
 
 [[strings]]
 key = "Complete"
@@ -2403,6 +2542,7 @@ Japanese = "完了"
 Korean = "완료"
 ChineseSimplified = "完成"
 ChineseTraditional = "完成"
+PortugueseBrazil = "Concluído"
 
 [[strings]]
 key = "ImuUnavailable"
@@ -2420,6 +2560,7 @@ Japanese = "IMU使用不可"
 Korean = "IMU 사용 불가"
 ChineseSimplified = "IMU不可用"
 ChineseTraditional = "IMU不可用"
+PortugueseBrazil = "IMU indisponível"
 
 [[strings]]
 key = "Exit"
@@ -2437,6 +2578,7 @@ Japanese = "終了"
 Korean = "종료"
 ChineseSimplified = "退出"
 ChineseTraditional = "退出"
+PortugueseBrazil = "Sair"
 
 [[strings]]
 key = "StartReading"
@@ -2454,6 +2596,7 @@ Japanese = "読書開始"
 Korean = "읽기 시작"
 ChineseSimplified = "开始阅读"
 ChineseTraditional = "開始閱讀"
+PortugueseBrazil = "Começar a ler"
 
 [[strings]]
 key = "Chapter"
@@ -2471,6 +2614,7 @@ Japanese = "章"
 Korean = "장"
 ChineseSimplified = "章节"
 ChineseTraditional = "章節"
+PortugueseBrazil = "Capítulo"
 
 [[strings]]
 key = "Unknown"
@@ -2488,6 +2632,7 @@ Japanese = "不明"
 Korean = "알 수 없음"
 ChineseSimplified = "未知"
 ChineseTraditional = "未知"
+PortugueseBrazil = "Desconhecido"
 
 [[strings]]
 key = "NoLibraryItems"
@@ -2505,6 +2650,7 @@ Japanese = "本がありません"
 Korean = "책 없음"
 ChineseSimplified = "书库为空"
 ChineseTraditional = "書庫為空"
+PortugueseBrazil = "Biblioteca vazia"
 
 [[strings]]
 key = "Done"
@@ -2522,6 +2668,7 @@ Japanese = "完了"
 Korean = "완료"
 ChineseSimplified = "完成"
 ChineseTraditional = "完成"
+PortugueseBrazil = "pronto"
 
 [[strings]]
 key = "OpeningBook"
@@ -2539,6 +2686,7 @@ Japanese = "本を開いています"
 Korean = "책 여는 중"
 ChineseSimplified = "正在打开书籍"
 ChineseTraditional = "正在開啟書籍"
+PortugueseBrazil = "Abrindo livro"
 
 [[strings]]
 key = "BookFailed"
@@ -2556,6 +2704,7 @@ Japanese = "本を開けません"
 Korean = "책 열기 실패"
 ChineseSimplified = "书籍打开失败"
 ChineseTraditional = "書籍開啟失敗"
+PortugueseBrazil = "Erro no livro"
 
 [[strings]]
 key = "CheckSdCard"
@@ -2573,6 +2722,7 @@ Japanese = "SDカードを確認"
 Korean = "SD 카드 확인"
 ChineseSimplified = "检查SD卡"
 ChineseTraditional = "檢查SD卡"
+PortugueseBrazil = "Verifique o cartão SD"
 
 
 # Shared status messages
@@ -2592,6 +2742,7 @@ Japanese = "準備完了"
 Korean = "준비됨"
 ChineseSimplified = "就绪"
 ChineseTraditional = "就緒"
+PortugueseBrazil = "PRONTO"
 
 [[strings]]
 key = "HoldPowerToExit"
@@ -2609,6 +2760,7 @@ Japanese = "PWR長押しで終了"
 Korean = "PWR 길게 눌러 종료"
 ChineseSimplified = "长按PWR退出"
 ChineseTraditional = "長按PWR退出"
+PortugueseBrazil = "segure PWR para sair"
 
 [[strings]]
 key = "SdReady"
@@ -2626,6 +2778,7 @@ Japanese = "SD準備完了"
 Korean = "SD 준비됨"
 ChineseSimplified = "SD就绪"
 ChineseTraditional = "SD就緒"
+PortugueseBrazil = "SD pronto"
 
 [[strings]]
 key = "SdUnavailable"
@@ -2643,6 +2796,7 @@ Japanese = "SD使用不可"
 Korean = "SD 사용 불가"
 ChineseSimplified = "SD不可用"
 ChineseTraditional = "SD不可用"
+PortugueseBrazil = "SD indisponível"
 
 [[strings]]
 key = "LibraryEntries"
@@ -2660,6 +2814,7 @@ Japanese = "蔵書件数"
 Korean = "서재 항목"
 ChineseSimplified = "书库条目"
 ChineseTraditional = "書庫項目"
+PortugueseBrazil = "itens na biblioteca"
 
 [[strings]]
 key = "CheckingFeeds"
@@ -2677,6 +2832,7 @@ Japanese = "フィード確認中"
 Korean = "피드 확인 중"
 ChineseSimplified = "正在检查订阅"
 ChineseTraditional = "正在檢查訂閱"
+PortugueseBrazil = "Verificando feeds"
 
 [[strings]]
 key = "CouldNotStart"
@@ -2694,6 +2850,7 @@ Japanese = "開始できません"
 Korean = "시작할 수 없음"
 ChineseSimplified = "无法启动"
 ChineseTraditional = "無法啟動"
+PortugueseBrazil = "Falha ao iniciar"
 
 [[strings]]
 key = "Unavailable"
@@ -2711,6 +2868,7 @@ Japanese = "使用不可"
 Korean = "사용 불가"
 ChineseSimplified = "不可用"
 ChineseTraditional = "不可用"
+PortugueseBrazil = "Indisponível"
 
 [[strings]]
 key = "Checking"
@@ -2728,6 +2886,7 @@ Japanese = "確認中"
 Korean = "확인 중"
 ChineseSimplified = "正在检查"
 ChineseTraditional = "正在檢查"
+PortugueseBrazil = "Verificando"
 
 [[strings]]
 key = "ReleasePower"
@@ -2745,6 +2904,7 @@ Japanese = "PWRを離す"
 Korean = "PWR 놓기"
 ChineseSimplified = "松开PWR"
 ChineseTraditional = "放開PWR"
+PortugueseBrazil = "Solte PWR"
 
 [[strings]]
 key = "Storage"
@@ -2762,6 +2922,7 @@ Japanese = "ストレージ"
 Korean = "저장소"
 ChineseSimplified = "存储"
 ChineseTraditional = "儲存空間"
+PortugueseBrazil = "Armazenamento"
 
 [[strings]]
 key = "Sync"
@@ -2779,6 +2940,7 @@ Japanese = "同期"
 Korean = "동기화"
 ChineseSimplified = "同步"
 ChineseTraditional = "同步"
+PortugueseBrazil = "Sincronização"
 
 [[strings]]
 key = "ChapterShort"
@@ -2796,6 +2958,7 @@ Japanese = "章"
 Korean = "장"
 ChineseSimplified = "章"
 ChineseTraditional = "章"
+PortugueseBrazil = "CAP"
 
 [[strings]]
 key = "BookShort"
@@ -2813,6 +2976,7 @@ Japanese = "本"
 Korean = "책"
 ChineseSimplified = "书"
 ChineseTraditional = "書"
+PortugueseBrazil = "LIVRO"
 
 [[strings]]
 key = "ScanningNetworks"
@@ -2830,6 +2994,7 @@ Japanese = "ネットワーク検索中"
 Korean = "네트워크 검색 중"
 ChineseSimplified = "正在扫描网络"
 ChineseTraditional = "正在掃描網路"
+PortugueseBrazil = "Buscando redes"
 
 [[strings]]
 key = "ScanFailed"
@@ -2847,6 +3012,7 @@ Japanese = "検索失敗"
 Korean = "검색 실패"
 ChineseSimplified = "扫描失败"
 ChineseTraditional = "掃描失敗"
+PortugueseBrazil = "Falha na busca"
 
 [[strings]]
 key = "NoNetworksFound"
@@ -2864,6 +3030,7 @@ Japanese = "ネットワークなし"
 Korean = "네트워크 없음"
 ChineseSimplified = "未找到网络"
 ChineseTraditional = "找不到網路"
+PortugueseBrazil = "Nenhuma rede encontrada"
 
 [[strings]]
 key = "Retry"
@@ -2881,6 +3048,7 @@ Japanese = "再試行"
 Korean = "다시 시도"
 ChineseSimplified = "重试"
 ChineseTraditional = "重試"
+PortugueseBrazil = "Tentar novamente"
 
 [[strings]]
 key = "Connecting"
@@ -2898,6 +3066,7 @@ Japanese = "接続中"
 Korean = "연결 중"
 ChineseSimplified = "正在连接"
 ChineseTraditional = "正在連线"
+PortugueseBrazil = "Conectando"
 
 [[strings]]
 key = "ConnectionFailed"
@@ -2915,6 +3084,7 @@ Japanese = "接続失敗"
 Korean = "연결 실패"
 ChineseSimplified = "连接失败"
 ChineseTraditional = "連線失敗"
+PortugueseBrazil = "Falha na conexão"
 
 [[strings]]
 key = "Space"
@@ -2932,6 +3102,7 @@ Japanese = "空白"
 Korean = "공백"
 ChineseSimplified = "空格"
 ChineseTraditional = "空格"
+PortugueseBrazil = "Espaço"
 
 [[strings]]
 key = "Clear"
@@ -2949,6 +3120,7 @@ Japanese = "消去"
 Korean = "지우기"
 ChineseSimplified = "清除"
 ChineseTraditional = "清除"
+PortugueseBrazil = "Limpar"
 
 [[strings]]
 key = "Show"
@@ -2966,6 +3138,7 @@ Japanese = "表示"
 Korean = "표시"
 ChineseSimplified = "显示"
 ChineseTraditional = "顯示"
+PortugueseBrazil = "Ver"
 
 [[strings]]
 key = "Hide"
@@ -2983,6 +3156,7 @@ Japanese = "隠す"
 Korean = "숨기기"
 ChineseSimplified = "隐藏"
 ChineseTraditional = "隱藏"
+PortugueseBrazil = "Ocultar"
 
 [[strings]]
 key = "Width"
@@ -3000,6 +3174,7 @@ Japanese = "幅"
 Korean = "너비"
 ChineseSimplified = "宽度"
 ChineseTraditional = "寬度"
+PortugueseBrazil = "Largura"
 
 [[strings]]
 key = "Gap"
@@ -3017,3 +3192,4 @@ Japanese = "間隔"
 Korean = "간격"
 ChineseSimplified = "间距"
 ChineseTraditional = "間距"
+PortugueseBrazil = "Abertura"
