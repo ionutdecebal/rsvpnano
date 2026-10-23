@@ -1,6 +1,6 @@
 # RSVP Nano — New UI preview
 
-This branch is a candidate for **Waveshare ESP32-S3 Touch LCD 3.49 Rev1 only**.
+This branch contains the **v0.2.0 New UI preview for Waveshare ESP32-S3 Touch LCD 3.49 Rev1 only**.
 It keeps RSVP Nano branding and the current reading-guide artwork.
 Classic remains the stable/default release. This is a separate firmware choice;
 there is no live interface switch on the device.
@@ -249,3 +249,15 @@ prerelease and explicitly not Latest so firmware discovery is unaffected. Use
 ZIP, licences and checksums. Attach all assets before publication; never replace
 published packs. A new pack gets a new data version. This release offers English
 only, and must not be represented as multi-language support.
+
+## Publication acceptance — 23 October 2026
+
+The founder confirmed reading, page view, Focus and dictionary installation, then
+reported the browser-flashed Classic/New UI round trip working and explicitly
+requested publication. Candidate binaries were preview-ui-dictionary-20261020.6
+and preview-classic-switch-20261020.1. Final versions are v0.2.0 (New UI) and v0.1.3
+(Classic maintenance). Firmware implementation remains unchanged from those candidates.
+
+This records acceptance for publication. It does not convert the browser-flash test
+into a Wi-Fi OTA test or assert a largest-font 1000-WPM benchmark. Live OTA device
+results remain to be recorded separately. See v0.2.0.md for the published scope.

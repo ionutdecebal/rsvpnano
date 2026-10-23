@@ -1,0 +1,66 @@
+RSVP NANO - DICTIONARY DEMO CHEAT SHEET
+
+UPLOAD THIS FILE TO THE READER:
+RSVP-Nano-Dictionary-Demo.txt
+
+Use the web companion's Library upload as you would for any text book.
+This cheat sheet is for you; it does not need to be uploaded.
+
+BEFORE THE DEMO
+
+Install the English dictionary pack on the SD card. For Part Two, save a
+working Wi-Fi connection under Connections. Offline lookup needs no network.
+Use a comfortable reading speed; Word mode makes individual words easy to select.
+
+HOW TO SHOW A DEFINITION
+
+Pause near a target word, press the middle button, and open Dictionary.
+Use the Word arrows to select a nearby word if you paused just past it,
+or use Search to type the exact word below.
+
+PART ONE - OFFLINE LOOKUP
+
+These are present in the released English pack, in story order:
+
+1. serendipity
+2. luminous
+3. mellifluous
+4. ephemeral
+
+A definition should appear immediately, with Open English Wordnet as its source.
+You can demonstrate this without an internet connection.
+
+PART TWO - ONLINE LOOKUP
+
+These are absent from that pack, in story order:
+
+1. petrichor
+2. sonder
+3. solarpunk
+
+First show the "No offline entry" message, then tap "Look online".
+With working Wi-Fi, the lookup should return a Wiktionary English definition.
+The online request is deliberate; it is not automatic when an offline entry is missing.
+An online lookup does not permanently add the word to the offline dictionary.
+
+QUICK VERSION
+
+Search for serendipity to show an offline result.
+Search for petrichor to show a missing offline entry, then tap Look online.
+
+VERIFICATION - 23 OCTOBER 2026
+
+Checked against dictionary-en-2025.1 / Open English Wordnet 2025:
+SHA-256 9f893776ba6b9b5f93abae7c06cdc5ff90ebf7cb4427d343160f26b1488ad9c6
+
+All three online examples returned HTTP 200 and English definitions through the
+same Wiktionary API endpoint the firmware uses, within its response-size limit.
+These are host checks; internet availability on the Nano is still required.
+Other/custom dictionary packs may have different word coverage.
+
+Entries checked:
+https://en.wiktionary.org/wiki/petrichor
+https://en.wiktionary.org/wiki/sonder
+https://en.wiktionary.org/wiki/solarpunk
+
+The sample story is original demo text; it does not reproduce dictionary entries.
