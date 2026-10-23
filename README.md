@@ -1,83 +1,135 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="companion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal.svg">
-    <img src="companion/apps/web/src/wasmJsMain/composeResources/drawable/rsvp_nano_horizontal_light.svg" alt="RSVP Nano" width="520">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rsvp-nano-dark.svg">
+    <img src="docs/images/rsvp-nano-light.svg" alt="RSVP Nano" width="360">
   </picture>
 </p>
 
-<p align="center">
-  An open-source, pocket-sized speed reader built on ESP32.
-</p>
+<p align="center"><strong>Your books. Your pace. Your reader.</strong><br>
+An open-source pocket reader built on ESP32.</p>
 
 <p align="center">
-  <a href="https://github.com/ionutdecebal/rsvpnano/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/ionutdecebal/rsvpnano?sort=semver"></a>
-  <a href="https://github.com/ionutdecebal/rsvpnano/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/ionutdecebal/rsvpnano/actions/workflows/test.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/ionutdecebal/rsvpnano"></a>
-  <a href="https://discord.gg/mB5xv2PG53"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white"></a>
+  <a href="https://ionutdecebal.github.io/rsvpnano/"><strong>Set up your reader</strong></a>
+  &nbsp;·&nbsp; <a href="#choose-your-software">Choose your software</a>
+  &nbsp;·&nbsp; <a href="https://github.com/ionutdecebal/rsvpnano/releases">Downloads</a>
+  &nbsp;·&nbsp; <a href="https://discord.gg/mB5xv2PG53">Join the community</a>
 </p>
 
-<p align="center">
-  <a href="https://ionutdecebal.github.io/rsvpnano/"><strong>Open the web companion</strong></a>
-  &nbsp;|&nbsp;
-  <a href="https://github.com/ionutdecebal/rsvpnano/releases">Releases</a>
-  &nbsp;|&nbsp;
-  <a href="docs/releases/v0.0.9.md">v0.0.9 notes</a>
-  &nbsp;|&nbsp;
-  <a href="https://discord.gg/mB5xv2PG53">Discord</a>
-</p>
+RSVP Nano brings your books and articles to a small, standalone reader. **Rapid Serial
+Visual Presentation (RSVP)** shows text one word at a time; the New UI also offers
+contextual word chunks. Set your pace, adjust the timing, and open page view whenever
+you want to browse or find your place.
 
-## What is RSVP Nano?
+Your library and reading progress live on the microSD card. Everyday reading works
+offline, with no account or subscription. The project is free, open source and
+community-powered, with detailed settings and room to experiment.
 
-RSVP Nano is a small standalone reader that presents text one word at a time using Rapid Serial
-Visual Presentation. It also supports page reading when you want surrounding context. Books,
-articles, settings, fonts, themes, languages, and reading progress live on a microSD card.
+## Choose your software
 
-The project includes:
+**Two interfaces, one RSVP Nano project.** Choose the experience that suits you.
+Classic remains available, and an ordinary update keeps you on your chosen interface.
 
-- Multi-board ESP32 firmware with RSVP and page reading.
-- A responsive Compose Multiplatform web companion for setup, flashing, conversion, and management.
-- Android and iOS companions built on shared Kotlin Multiplatform logic.
-- A shared Kotlin conversion engine for EPUB, text, Markdown, HTML, XHTML, and RSVP files.
-- Installable reader fonts, interface language packs, and color themes.
+| | **0.2.0 · New UI** | **Classic** |
+| --- | --- | --- |
+| Interface | A quieter reading screen, consolidated menus, larger touch targets and full-area sliders | The established RSVP Nano interface and controls |
+| Reading | Single-word RSVP or centred contextual chunks, with adjustable pacing | Single-word RSVP and page reading modes |
+| Book navigation | Scrollable page view, text search and chapter jumps; page view is for browsing | Existing page reading and book navigation |
+| Quick access | Middle button opens speed, brightness, Dictionary and the main menu | Existing controls for your board |
+| First use | On-device introduction to the buttons, speed, pacing, SD card, book uploads and dictionary | Setup through the web companion |
+| Focus | Background reading sessions or standalone timers, presets, full-screen breaks and manual resume | Existing focus timers and orientation controls |
+| Customisation | Detailed font, theme, tracking and position settings; per-book settings in Library; guides in Word mode | Existing appearance, reader and per-book settings, including guide geometry |
+| Dictionary | Offline English definitions and optional direct Wi-Fi lookup | Not included |
+| Books and connections | Existing web companion, USB transfers and Wi-Fi | Existing web companion, USB transfers and Wi-Fi |
+| Hardware | **Waveshare ESP32-S3 Touch LCD 3.49 Rev1 only** | [All supported boards below](#supported-hardware) |
+| Updates | Update New UI or choose **Return to Classic** | The selector maintenance build adds **Try New UI** on compatible hardware |
+| Availability | **0.2.0 preview**, selected explicitly | Stable; the default installer choice |
+| Source | [`release/ui-dictionary`](https://github.com/ionutdecebal/rsvpnano/tree/release/ui-dictionary) | [`v0.1.3`](https://github.com/ionutdecebal/rsvpnano/tree/v0.1.3) |
 
-RSVP Nano is under active development. The current release line is `0.x`, so back up important SD
-card content before testing new firmware.
+[**New UI 0.2.0 downloads**](https://github.com/ionutdecebal/rsvpnano/releases/tag/v0.2.0) ·
+[**Classic downloads**](https://github.com/ionutdecebal/rsvpnano/releases/latest)
 
-## Highlights
+This release focuses on the interface, onboarding and dictionary. Voice notes,
+transcription, Bluetooth phone sync and the experimental new phone app are being
+developed separately and are **not included in 0.2.0**.
 
-- **Two reading modes:** focused RSVP playback and paragraph-aware page reading.
-- **Multilingual text:** bidirectional text, Arabic and Hebrew shaping, CJK fonts, and vertical CJK
-  books.
-- **Personal appearance:** installable RFont4 reader fonts, locale packs, downloadable themes,
-  focus highlighting, tracking, guide geometry, and handed layouts.
-- **Companion management:** library uploads, progress editing, settings, Wi-Fi, RSS feeds, focus
-  timers, fonts, themes, locales, and firmware updates.
-- **Flexible connections:** local-network sync, the Nano's direct Wi-Fi network, USB companion
-  control, and USB mass-storage transfer on supported boards.
-- **Offline-friendly setup:** an installable PWA shell, browser firmware installation, Improv Wi-Fi
-  provisioning, and local file conversion without a server-side converter.
-- **Device utilities:** OTA updates, SD diagnostics, configurable focus routines, and Life, Maze,
-  Voronoi, and Reaction screensavers.
+<table>
+  <tr>
+    <td width="50%"><strong>Space to read</strong><br><img src="docs/images/new-ui/reading.png" alt="New UI reading screen: a single centred word with chapter and progress indicators" width="640"></td>
+    <td width="50%"><strong>Your book, one menu away</strong><br><img src="docs/images/new-ui/menu.png" alt="New UI main menu with current book, chapters, library, settings and Focus" width="640"></td>
+  </tr>
+  <tr>
+    <td><strong>Controls when you need them</strong><br><img src="docs/images/new-ui/controls.png" alt="Middle-button controls with speed, brightness, page view and dictionary" width="640"></td>
+    <td><strong>Definitions without leaving the reader</strong><br><img src="docs/images/new-ui/dictionary.png" alt="Offline dictionary showing a word definition and an optional Look online button" width="640"></td>
+  </tr>
+</table>
+
+<sub>New UI screens rendered by the firmware’s production renderer with sample content.</sub>
 
 ## Get started
 
-You need a supported RSVP Nano board, a USB-C data cable, and a FAT32 microSD card. An 8 GB to
-32 GB card is the safest choice.
+You need a [supported board](#supported-hardware), a USB-C **data** cable and a FAT32
+microSD card. An 8–32 GB card is a straightforward starting point.
 
-1. Open the [web companion](https://ionutdecebal.github.io/rsvpnano/) in a desktop browser.
-2. Choose your board and install the latest firmware.
-3. Follow setup to provision Wi-Fi and verify the reader.
-4. Add an EPUB, RSVP, text, Markdown, HTML, or XHTML file from the Library screen.
-5. Open the book on the Nano and start reading.
+1. Open the [web companion](https://ionutdecebal.github.io/rsvpnano/) in desktop **Chrome or Edge**.
+2. Choose your exact board and revision, then **Classic** or **New UI (preview) · 0.2.0**.
+3. Follow the flashing steps. The New UI’s introduction walks you through the controls.
+4. Add books from the companion’s Library screen: EPUB, RSVP, text, Markdown, HTML or XHTML.
+5. Open a book on the Nano and make the pace your own.
 
-Chrome or Edge is required for browser flashing and USB companion access because those features use
-Web Serial. The site still supports local-network management in browsers that can reach the reader.
+Wi-Fi is optional for reading. Books can be transferred over USB or through the local
+Wi-Fi companion. You can replay the New UI introduction under **Settings → Help**.
 
-The web installer uses the firmware bundled with the latest published release. You can also choose a
-compatible full-image `.bin` file manually. Firmware already installed on a Nano can update through
-the device's OTA flow.
+**Already using a Nano?** Back up your SD card and leave **Erase first** off in the web
+installer. Match the firmware to your board revision. For manual browser installation,
+use the merged `.bin`; the `-ota.bin` is for application-only OTA updates.
+
+[Setup, connection and installation details →](docs/new-ui-setup.md)
+
+## Updates and switching
+
+In the New UI’s **Firmware updates**, choose **Check current software** to stay on
+New UI, or **Return to Classic** to change interfaces. The reader shows the selected
+version before you confirm. It downloads over Wi-Fi and restarts after installation.
+
+Classic **v0.1.3** provides the return journey with **Try New UI** on LCD 3.49 Rev1.
+If your Classic version has no selector yet, install the selector-equipped Classic
+release first, or choose New UI directly in the web installer. These choices are
+available only for compatible hardware.
+
+Switching installs a different firmware; it is not a live appearance toggle. Both use
+the same SD library, but Classic may replace New UI-only preferences when it saves.
+Keep an SD backup if you want to restore your exact settings.
+
+[Switching, advanced update sources and manual installation →](docs/new-ui-setup.md#updates-and-switching)
+
+## Dictionary setup (New UI)
+
+**English is available now. More languages are planned.** Install the dictionary once
+on your SD card, then look up words offline without a phone, account or server.
+
+- **From the reader:** press the middle button → **Dictionary → ? → Install / manage dictionary**,
+  then **Install dictionary**. You can also install it during onboarding. The download
+  uses Wi-Fi and takes about **48 MiB** on SD, with progress and verification.
+- **From a computer:** download the [English dictionary ZIP](https://github.com/ionutdecebal/rsvpnano/releases/download/dictionary-en-2025.1/RSVP-Nano-English-Dictionary.zip),
+  extract it, and copy the `dictionaries` folder to the root of the SD card.
+
+**Look online** is optional: it sends the lookup word directly to Wiktionary over Wi-Fi.
+The book is not uploaded. Offline lookup remains available when an online request fails.
+
+The pack is adapted from **Open English Wordnet 2025**. Dictionary data is versioned
+separately from firmware, and compatible custom packs can still be copied to SD.
+Keep the pack’s attribution and licence files when sharing it.
+
+[Manual installation, custom packs and dictionary licences →](docs/new-ui-setup.md#dictionary-setup-new-ui)
 
 ## Supported hardware
+
+**New UI 0.2.0 targets LCD 3.49 Rev1.** Classic supports the boards below.
+Choose the exact board revision when flashing; firmware is not interchangeable.
+
+<details>
+<summary><strong>Board list, build targets and purchase links</strong></summary>
+
 
 | Board | PlatformIO environment | Distribution |
 | --- | --- | --- |
@@ -106,47 +158,52 @@ to you:
 - [Touch AMOLED 2.41](https://www.waveshare.com/esp32-s3-touch-amoled-2.41.htm?&aff_id=ionutdecebal)
 - [ESP32-C6 Touch LCD 1.47](https://www.waveshare.com/esp32-c6-touch-lcd-1.47.htm?&aff_id=ionutdecebal)
 
-## Companion apps
+</details>
 
-| Companion | UI | Status |
-| --- | --- | --- |
-| [Web](https://ionutdecebal.github.io/rsvpnano/) | Compose Multiplatform on Kotlin/Wasm | Hosted setup, flashing, conversion, USB, and LAN management |
-| [Android](companion/apps/android/README.md) | Jetpack Compose | Build from source |
-| [iOS](companion/apps/ios/RSVPNanoCompanion/README.md) | SwiftUI | Build from source |
+## RSVP Nano and Pocket Lines
 
-The companions share device models, API contracts, conversion, persistence formats, and workflows.
-Their layouts remain platform-specific.
+**RSVP Nano continues as the free, community-powered, experimental platform.** We’re
+keeping the detailed settings, the DIY and self-hosted possibilities, and development
+for existing Waveshare readers.
 
-To connect over Wi-Fi, open Companion Sync on the Nano. The apps prefer a reader discovered on the
-same local network and can fall back to the Nano's direct `RSVP-Nano-xxxxxx` network or a manual
-address. The web companion can also connect directly over USB on supported desktop browsers.
+Alongside it, we’re building **Pocket Lines** for people who want a reader they can
+buy and start using straight away: preinstalled software, a simpler device experience
+and services that don’t require self-hosting. A dedicated device with an OLED screen,
+more physical buttons and a metal casing is in development. These are early plans.
 
-## Library and SD card
+The projects now have separate development tracks and repositories. **Both projects’
+software will remain open source.** Our commitment is for every Pocket Lines software
+feature to have a DIY or self-hosted equivalent in RSVP Nano as development progresses.
+That is the direction of travel, not a claim that every planned feature is available today.
 
-The firmware creates its standard folders when writable storage is available. The main layout is:
+[Join the shared community and help shape what comes next →](https://discord.gg/mB5xv2PG53)
 
-```text
-/library/books
-/library/articles
-/config
-/fonts
-/locales
-/themes
-```
+## Companions and your library
 
-Older cards using `/books` are migrated to `/library` without overwriting existing files. The same repair and validation pass is available from the Nano's Device screen and from the web or mobile companion while connected.
+The [web companion](https://ionutdecebal.github.io/rsvpnano/) handles setup, flashing,
+book conversion, USB transfers and local-network management. Existing
+[Android](companion/apps/android/README.md) and
+[iOS](companion/apps/ios/RSVPNanoCompanion/README.md) companions can be built from source.
+They share the Kotlin conversion and device logic; the experimental new phone app
+is a separate development effort.
 
-Books and articles may be uploaded by a companion or copied directly to the card. The reader creates
-rebuildable `.ridx` and `.rdat` index files plus hidden `.rstate.toml` files for durable progress and
-per-book typography.
+Books and articles live under `/library/books` and `/library/articles` on the SD card.
+Fonts, themes, language packs and settings are stored alongside the library. Reader
+indexes can be rebuilt; hidden `.rstate.toml` files preserve progress and per-book settings.
+Always eject USB mass storage before disconnecting the reader.
 
-Always eject USB mass storage before disconnecting it. Run the on-device SD card check if the
-library is missing, read-only, or using an unexpected filesystem layout.
+[Configuration and storage](docs/configuration.md) · [Reader fonts](fonts/README.md) ·
+[Themes](themes/README.md) · [Language packs](locale-packs/README.md)
 
-Configuration is stored as versionless TOML. See [Configuration](docs/configuration.md) for settings,
-RSS, focus timers, themes, NVS mirroring, and recovery behavior.
+## Build and contribute
 
-## Build from source
+Bug reports, feature ideas and focused pull requests are welcome. Tell us **Classic
+or New UI**, your firmware version, board revision and the steps to reproduce.
+Use `main` for Classic firmware work and `release/ui-dictionary` for New UI.
+
+<details>
+<summary><strong>Build firmware and companion apps from source</strong></summary>
+
 
 Clone submodules first:
 
@@ -156,6 +213,18 @@ cd rsvpnano
 ```
 
 ### Firmware
+
+The default `main` branch builds Classic. For the exact Classic maintenance release,
+use tag `v0.1.3`. For the exact New UI 0.2.0 release source:
+
+```bash
+git fetch --tags
+git switch --detach v0.2.0
+git submodule update --init --recursive
+```
+
+Ongoing New UI development lives on `release/ui-dictionary`. Its first release target is
+LCD 3.49 Rev1.
 
 Install [PlatformIO](https://platformio.org/), then build one target:
 
@@ -194,45 +263,20 @@ The staged website is written to `build/webSite`. Detailed native setup is in th
 [Android](companion/apps/android/README.md) and
 [iOS](companion/apps/ios/RSVPNanoCompanion/README.md) guides.
 
-## Repository layout
+</details>
 
-| Path | Purpose |
-| --- | --- |
-| `src/` | Firmware application, board ports, reading engine, UI, storage, networking, and companion API |
-| `companion/shared/` | Shared companion models, API clients, persistence, and workflows |
-| `companion/conversion/` | Shared Kotlin Multiplatform document conversion |
-| `companion/apps/` | Android, iOS, and web applications |
-| `fonts/`, `themes/`, `locale-packs/` | Installable catalogs |
-| `localization/` | Locale and UI-font generation |
-| `test/` | Native firmware tests |
-| `docs/` | Protocol, configuration, hardware, and release documentation |
+For changes, build the affected target and run the relevant tests. Keep board-specific
+behavior in its platform directory and reuse the shared companion/conversion logic.
+Include physical-device results when changing display, touch, power, storage or USB.
 
-## Documentation
-
-- [v0.0.9 release notes](docs/releases/v0.0.9.md)
-- [Companion API](docs/companion-api.md)
-- [USB companion protocol](docs/companion-serial.md)
-- [Conversion format and behavior](docs/conversion/spec.md)
-- [Configuration files](docs/configuration.md)
-- [Hardware architecture and bring-up notes](docs/hardware/README.md)
-- [Reader fonts](fonts/README.md)
-- [Themes](themes/README.md)
-- [Locale packs](locale-packs/README.md)
-
-## Contributing
-
-Issues and focused pull requests are welcome. Before opening a change:
-
-1. Build the affected firmware or companion target.
-2. Run the smallest relevant test suite.
-3. Keep board-specific behavior inside its platform directory.
-4. Reuse shared companion and conversion logic instead of creating another platform implementation.
-5. Include hardware validation details for changes that affect display, touch, power, storage, or USB.
-
-For questions, hardware reports, and development discussion, join the
-[RSVP Nano Discord](https://discord.gg/mB5xv2PG53).
+[Report an issue](https://github.com/ionutdecebal/rsvpnano/issues) ·
+[Companion API](docs/companion-api.md) · [USB protocol](docs/companion-serial.md) ·
+[Conversion format](docs/conversion/spec.md) · [Hardware architecture](docs/hardware/README.md)
 
 ## License
 
-RSVP Nano is distributed under the [MIT license](LICENSE). Bundled fonts and third-party
-libraries retain their own licenses in their respective directories.
+RSVP Nano is distributed under the [MIT license](LICENSE). Fonts and third-party
+libraries keep their own licences. Offline dictionary data is based on Open English
+Wordnet under CC BY 4.0, with the underlying WordNet notices preserved; online definitions
+come from Wiktionary under CC BY-SA 4.0. See the
+[dictionary attribution and setup guide](docs/new-ui-setup.md#dictionary-setup-new-ui).
