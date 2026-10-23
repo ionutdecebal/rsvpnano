@@ -17,9 +17,6 @@ on:
       - 'tools/fetch_release_firmware.py'
       - 'tools/export_web_firmware.py'
       - '.github/workflows/pages.yml'
-  workflow_run:
-    workflows: [Release firmware]
-    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -28,7 +25,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,7 +34,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: main
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -57,6 +54,7 @@ jobs:
         if: github.repository == 'ionutdecebal/rsvpnano'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RSVP_UI_PREVIEW_TAG: ${{ vars.RSVP_UI_PREVIEW_TAG }}
         run: python tools/fetch_release_firmware.py --repo "${{ github.repository }}"
 
       - name: Check and stage web companion
@@ -73,7 +71,7 @@ jobs:
           path: build/webSite
 
   deploy:
-    if: github.repository == 'ionutdecebal/rsvpnano' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    if: github.repository == 'ionutdecebal/rsvpnano' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
 
