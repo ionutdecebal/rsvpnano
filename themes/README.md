@@ -3,6 +3,9 @@
 Copy this `themes` folder to the SD card root. The device loads `*.toml` files from `/themes`
 at startup and appends valid themes after the built-in default theme.
 
+The **Dyslexic background colour** theme (`dyslexic.toml`) uses a yellow background,
+black text, and a blue anchor letter when focus highlighting is enabled.
+
 Theme files are plain text:
 
 ```toml

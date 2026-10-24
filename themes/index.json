@@ -31,7 +31,7 @@
   },
   {
     "id": "dyslexic",
-    "name": "Dyslexic",
+    "name": "Dyslexic background colour",
     "file": "dyslexic.toml",
     "typeface": "opendyslexic"
   },
