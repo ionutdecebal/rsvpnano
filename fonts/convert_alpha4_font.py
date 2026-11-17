@@ -1541,8 +1541,8 @@ def main() -> int:
     )
     parser.add_argument("--output-root", type=Path, default=Path(__file__).resolve().parent)
     parser.add_argument("--header", action="store_true", help="emit the built-in C++ fallback instead of .rfont4 files")
-    parser.add_argument("--header-strike", choices=("large", "medium", "small", "compact"),
-                        help="generate only the selected strike in a C++ header")
+    parser.add_argument("--header-strike", action="append", choices=("large", "medium", "small", "compact"),
+                        help="select one strike to emit in the C++ header; repeat for several")
     parser.add_argument("--shaping", action="store_true", help="embed OpenType layout data and its glyph closure")
     parser.add_argument("--vertical", action="store_true", help="embed sparse UAX #50 and vert/vrt2 glyph rules")
     parser.add_argument("--alpha-cutoff", type=int, default=DEFAULT_ALPHA_CUTOFF)
@@ -1561,7 +1561,7 @@ def main() -> int:
     if args.header_strike:
         if not args.header:
             parser.error("--header-strike requires --header")
-        named_sizes = [(label, size) for label, size in named_sizes if label == args.header_strike]
+        named_sizes = [(label, size) for label, size in named_sizes if label in args.header_strike]
     layout_upm, source_glyph_count, layout_tables, shaping_glyph_ids = (
         font_layout(args.font, codepoints) if args.shaping and not args.header else (0, 0, {}, set())
     )

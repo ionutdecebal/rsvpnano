@@ -1,6 +1,6 @@
 #include "ui/screens/ReaderScreen.h"
 #include "ui/screens/ReaderLayout.h"
-#include "fonts/LiterataPageSmallAlpha4.h"
+#include "fonts/LiterataPageAlpha4.h"
 
 namespace screens {
     void ReaderScreen::activateFace(const FontCatalog::Face& face) {
@@ -34,12 +34,17 @@ namespace screens {
         activateFace(face_);
     }
 
-    FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex, bool nativeSmall) {
+    FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex, bool builtInPageSize) {
         pageFontActive_ = true;
-        if (nativeSmall)
-            return {std::cref(ui::fonts::LiterataPageSmallAlpha4_17)};
+        const auto pageSize = settings_.pageTextSizeIndex();
+        if (builtInPageSize) {
+            constexpr const ui::fonts::AlphaFont* fonts[]{
+                &ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_21, &ui::fonts::LiterataPageAlpha4_26
+            };
+            return {std::cref(*fonts[pageSize - 1])};
+        }
         const size_t size = pageBrowsing_
-            ? RFont4::sizeIndexForId(settings_.pageTextSizeIndex() == 0 ? "compact" : "small")
+            ? RFont4::sizeIndexForId(pageSize == 0 ? "compact" : "small")
             : readerLayout::pageStrikeIndex();
         return fonts.loadFace(fontChoice(wordIndex), size);
     }

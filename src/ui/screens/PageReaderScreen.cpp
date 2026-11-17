@@ -690,43 +690,59 @@ namespace screens::PageReader {
                   | ((((a & green) * inverse + (b & green) * fraction) >> 5) & green));
         }
 
-        void paintScaledPage(Arduino_Canvas& canvas, Arduino_Canvas* viewport,
-                             ui::Context& ui, ui::Rect area, ui::Rect logicalArea, uint8_t scale) {
+        struct PageSampling {
+            static constexpr uint32_t unit = 1U << 16;
+            uint32_t stride;
+            uint32_t first;
+
+            explicit PageSampling(uint8_t scale) : stride(unit * kNativeScale / scale), first((stride - unit) / 2) {}
+
+            uint32_t at(int pixel) const { return first + stride * pixel; }
+            int low(uint32_t position, int length) const { return std::min<int>(position >> 16, length - 1); }
+            int high(int low, int length) const { return std::min(low + 1, length - 1); }
+            uint32_t weight(uint32_t position) const { return (position >> 11) & 31; }
+        };
+
+        void resamplePageRow(uint16_t* dest, int width, const uint16_t* upper, const uint16_t* lower,
+                             int sourceWidth, uint32_t fy, const PageSampling& sample) {
+            if (sample.stride == PageSampling::unit * 2 && sourceWidth == width * 2) {
+                for (int x = 0; x < width; ++x) {
+                    const uint16_t a = upper[2 * x], b = upper[2 * x + 1];
+                    const uint16_t c = lower[2 * x], d = lower[2 * x + 1];
+                    dest[x] = blendPixel(blendPixel(a, b, 16), blendPixel(c, d, 16), fy);
+                }
+                return;
+            }
+            uint32_t sourceX = sample.first;
+            for (int x = 0; x < width; ++x, sourceX += sample.stride) {
+                const int x0 = sample.low(sourceX, sourceWidth);
+                const int x1 = sample.high(x0, sourceWidth);
+                const uint32_t fx = sample.weight(sourceX);
+                dest[x] = blendPixel(blendPixel(upper[x0], upper[x1], fx), blendPixel(lower[x0], lower[x1], fx), fy);
+            }
+        }
+
+        void paintScaledPage(Arduino_Canvas& canvas, ui::Context& ui, ui::Rect area, ui::Rect logicalArea,
+                             uint8_t scale) {
             const uint16_t* pixels = canvas.getFramebuffer();
-            uint16_t* frame = viewport ? viewport->getFramebuffer() : nullptr;
-            // Sample the centers of the output pixels in the original antialiased bitmap.
-            const uint32_t stride = (uint32_t(kNativeScale) << 16) / scale;
-            const uint32_t first = (stride - (1U << 16)) / 2;
+            const PageSampling sample(scale);
             ui.paint(area, [&](Arduino_GFX& output, ui::Rect translated) {
                 std::array<uint16_t, 640> row;
                 if (translated.w > static_cast<int16_t>(row.size()))
                     return;
-                uint32_t sourceY = first;
-                for (int16_t y = 0; y < translated.h; ++y, sourceY += stride) {
-                    uint16_t* dest = frame ? frame + y * translated.w : row.data();
-                    const int y0 = std::min<int>(sourceY >> 16, logicalArea.h - 1);
-                    const int y1 = std::min(y0 + 1, int(logicalArea.h) - 1);
-                    const uint32_t fy = (sourceY >> 11) & 31;
-                    const uint16_t* upper = pixels + y0 * canvas.width();
-                    const uint16_t* lower = pixels + y1 * canvas.width();
-                    uint32_t sourceX = first;
-                    for (int16_t x = 0; x < translated.w; ++x, sourceX += stride) {
-                        const int x0 = std::min<int>(sourceX >> 16, logicalArea.w - 1);
-                        const int x1 = std::min(x0 + 1, int(logicalArea.w) - 1);
-                        const uint32_t fx = (sourceX >> 11) & 31;
-                        dest[x] = blendPixel(blendPixel(upper[x0], upper[x1], fx), blendPixel(lower[x0], lower[x1], fx), fy);
-                    }
-                    if (!frame)
-                        output.draw16bitRGBBitmap(translated.x, translated.y + y, dest, translated.w, 1);
+                for (int y = 0; y < translated.h; ++y) {
+                    const auto sourceY = sample.at(y);
+                    const int y0 = sample.low(sourceY, logicalArea.h);
+                    const int y1 = sample.high(y0, logicalArea.h);
+                    resamplePageRow(row.data(), translated.w, pixels + y0 * canvas.width(),
+                                    pixels + y1 * canvas.width(), logicalArea.w, sample.weight(sourceY), sample);
+                    output.draw16bitRGBBitmap(translated.x, translated.y + y, row.data(), translated.w, 1);
                 }
-                if (frame)
-                    output.draw16bitRGBBitmap(translated.x, translated.y, frame, translated.w, translated.h);
             });
         }
 
-        // At native and half scale, whole-pixel drags can reuse rows of the
-        // finished bitmap. Only newly exposed rows and changed accents redraw.
-        constexpr uint8_t kHalfScale = kNativeScale / 2;
+        // Whole display-pixel drags reuse finished rows if the sampling phase
+        // stays the same. Highlight-only changes keep that phase at any size.
         void paintCachedPage(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
                             const settings::TypographySettings& typography, const ReadingSession& session,
                             ui::Rect area) {
@@ -736,7 +752,8 @@ namespace screens::PageReader {
             auto* frame = browse.viewportCanvas->getFramebuffer();
             auto& cache = browse.rowCache;
             const auto highlighted = browse.highlighted;
-            const int ratio = browse.scale == kHalfScale ? 2 : 1;
+            const bool native = browse.scale == kNativeScale;
+            const PageSampling sample(browse.scale);
             const auto& logicalArea = state.layoutArea;
             const int origin = logicalArea.y + browse.offset;
             const auto highlightRows = [&]() -> Rows {
@@ -746,7 +763,12 @@ namespace screens::PageReader {
                 if (!word.inkKnown)
                     return {0, area.h};
                 const int y = word.ink.y - origin;
-                return {y / ratio, (y + word.ink.h + ratio - 1) / ratio};
+                if (native)
+                    return {y, y + word.ink.h};
+                // Bilinear sampling can affect the rows beside the glyph ink.
+                const int scale = browse.scale;
+                return {(y - 1) * scale / kNativeScale - 1,
+                        (y + word.ink.h + 1) * scale / kNativeScale + 2};
             }();
             std::array<Rows, 3> dirty;
             size_t count = 0;
@@ -756,9 +778,11 @@ namespace screens::PageReader {
                 if (range.begin < range.end)
                     dirty[count++] = range;
             };
-            const int distance = browse.offset - cache.offset;
-            const int rows = distance / ratio;
-            if (!cache.valid || distance % ratio != 0 || std::abs(rows) >= area.h) {
+            const int distance = (browse.offset - cache.offset) * browse.scale;
+            const int rows = distance / kNativeScale;
+            const bool exactShift = distance % kNativeScale == 0
+                && (distance == 0 || (PageSampling::unit * kNativeScale) % browse.scale == 0);
+            if (!cache.valid || !exactShift || std::abs(rows) >= area.h) {
                 addRows({0, area.h});
             } else {
                 if (rows != 0) {
@@ -779,24 +803,24 @@ namespace screens::PageReader {
                 auto [begin, end] = dirty[i];
                 while (i + 1 < count && dirty[i + 1].begin <= end)
                     end = std::max(end, dirty[++i].end);
-                const ui::Rect region{logicalArea.x, static_cast<int16_t>(origin + begin * ratio),
-                                      static_cast<int16_t>(area.w * ratio), static_cast<int16_t>((end - begin) * ratio)};
+                const int sourceTop = native ? begin : sample.low(sample.at(begin), logicalArea.h);
+                const int sourceBottom = native ? end : sample.high(sample.low(sample.at(end - 1), logicalArea.h),
+                                                                    logicalArea.h) + 1;
+                const ui::Rect region{logicalArea.x, static_cast<int16_t>(origin + sourceTop), logicalArea.w,
+                                      static_cast<int16_t>(sourceBottom - sourceTop)};
                 paintBrowseText(state, source, ui, text, typography, session, region, highlighted);
                 const int pitch = source.width();
                 const uint16_t* pixels = source.getFramebuffer();
-                if (ratio == 1) {
-                    for (int y = 0; y < end - begin; ++y)
-                        std::memcpy(frame + (begin + y) * area.w, pixels + y * pitch, area.w * sizeof(*frame));
-                    continue;
-                }
-                for (int y = 0; y < end - begin; ++y) {
-                    const uint16_t* upper = pixels + y * 2 * pitch;
-                    const uint16_t* lower = upper + pitch;
-                    uint16_t* dest = frame + (begin + y) * area.w;
-                    for (int x = 0; x < area.w; ++x) {
-                        const uint16_t a = upper[2 * x], b = upper[2 * x + 1];
-                        const uint16_t c = lower[2 * x], d = lower[2 * x + 1];
-                        dest[x] = blendPixel(blendPixel(a, b, 16), blendPixel(c, d, 16), 16);
+                for (int y = begin; y < end; ++y) {
+                    uint16_t* dest = frame + y * area.w;
+                    if (native) {
+                        std::memcpy(dest, pixels + (y - begin) * pitch, area.w * sizeof(*frame));
+                    } else {
+                        const auto sourceY = sample.at(y);
+                        const int y0 = sample.low(sourceY, logicalArea.h);
+                        const int y1 = sample.high(y0, logicalArea.h);
+                        resamplePageRow(dest, area.w, pixels + (y0 - sourceTop) * pitch,
+                                        pixels + (y1 - sourceTop) * pitch, logicalArea.w, sample.weight(sourceY), sample);
                     }
                 }
             }
@@ -1016,7 +1040,7 @@ namespace screens::PageReader {
 
     void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection, bool cacheNativeRows) {
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection) {
         auto& state=browse.layout;
         if (ReadingLoop::wordCount(session) == 0) {
             browse.highlighted = kInvalidIndex;
@@ -1025,7 +1049,7 @@ namespace screens::PageReader {
         }
         if constexpr (ui::Context::displayWriteAlignment() == 1)
             ensureCanvas(browse.viewportCanvas, area.w, ui.height());
-        if (scale != kNativeScale || cacheNativeRows) {
+        if (scale != kNativeScale || browse.viewportCanvas) {
             const auto width = static_cast<int16_t>((logicalExtent(area.w, scale) + 7) & ~7);
             ensureCanvas(browse.scaleCanvas, width, logicalExtent(ui.height(), scale));
             if (!browse.scaleCanvas)
@@ -1077,13 +1101,11 @@ namespace screens::PageReader {
             const auto row = lineForWord(state, browse.stepWord);
             if (row < state.lineCount) {
                 const auto visible = browseViewport(browse);
-                if (step == ScrollStep::nextPage) {
+                if (step == ScrollStep::nextPage)
                     browse.offset = lineOffset(row);
-                    selected = browse.stepWord;
-                } else if (state.lines[row].bottom + kMarginY < visible.y + visible.h) {
+                else if (state.lines[row].bottom + kMarginY < visible.y + visible.h)
                     browse.offset = state.lines[row].bottom - logicalArea.y - logicalArea.h + kMarginY;
-                    selected = browse.stepWord;
-                }
+                selected = kInvalidIndex;
             }
             browse.scrollRemainder = 0;
             browse.step = ScrollStep::none;
@@ -1091,6 +1113,17 @@ namespace screens::PageReader {
         } else if (followSelection && selected != kInvalidIndex) {
             const auto row = lineForWord(state, selected);
             if (row < state.lineCount) {
+                // Follow a forward line crossing near the reading position.
+                // Reversing or scrubbing within one line keeps the page steady
+                // until the selected line would actually leave the viewport.
+                const auto previous = lineForWord(state, browse.highlighted);
+                if (previous < row) {
+                    auto firstVisible = lineForOffset();
+                    const int guide = logicalArea.h * 2 / 5;
+                    const size_t last = std::min(row, firstVisible + row - previous);
+                    while (firstVisible < last && lineOffset(row) > browse.offset + guide)
+                        browse.offset = lineOffset(++firstVisible);
+                }
                 const auto visible = browseViewport(browse);
                 const auto& line = state.lines[row];
                 const int top = line.ink.h > 0 ? line.ink.y : line.top;
@@ -1172,11 +1205,11 @@ namespace screens::PageReader {
         if(!ui.redraw(area,signature,true)) return;
         auto region = logicalArea;
         region.y += browse.offset;
-        if ((scale == kHalfScale || cacheNativeRows) && browse.viewportCanvas && browse.scaleCanvas) {
+        if (browse.viewportCanvas && browse.scaleCanvas) {
             paintCachedPage(browse, ui, text, typography, session, area);
         } else if (scale != kNativeScale) {
             paintBrowseText(state, *browse.scaleCanvas, ui, text, typography, session, region, browse.highlighted);
-            paintScaledPage(*browse.scaleCanvas, browse.viewportCanvas.get(), ui, area, logicalArea, scale);
+            paintScaledPage(*browse.scaleCanvas, ui, area, logicalArea, scale);
         } else if (browse.viewportCanvas) {
             auto& canvas = *browse.viewportCanvas;
             paintBrowseText(state, canvas, ui, text, typography, session, region, browse.highlighted);

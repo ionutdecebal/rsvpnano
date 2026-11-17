@@ -54,18 +54,17 @@ void ReaderScreen::commitPlace(size_t index,Preferences& preferences,uint32_t no
     pageSelected_=session.state.wordIndex;
 }
 void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
-    // The endpoints use the original Compact and Small strikes.
+    // Installed fonts keep their own glyphs and existing scaled sizes.
     constexpr uint8_t scales[]{PageReader::kNativeScale, 50, 64, 80, PageReader::kNativeScale};
     const auto size = settings_.pageTextSizeIndex();
-    // Keep the installed font's own glyphs when a book can use an SD family.
-    const bool nativeSmall = size == 1 && fonts.families().size() == 1;
-    const auto scale = nativeSmall ? PageReader::kNativeScale : scales[size];
+    const bool builtInPageSize = size >= 1 && size <= 3 && fonts.families().size() == 1;
+    const auto scale = builtInPageSize ? PageReader::kNativeScale : scales[size];
     const auto revision = ui::Context::combine(typographyRevision_, size);
     const bool dragging = pageGesture_ == PageGesture::vertical;
     const size_t selected = dragging || pageScrollFinished_ ? SIZE_MAX : pageSelected_;
     const bool follow = pageGesture_ == PageGesture::horizontal || pageScrubFinished_;
-    PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index, nativeSmall); },
-                       typography_, revision, session, pageBody(), selected, scale, follow, nativeSmall);
+    PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index, builtInPageSize); },
+                       typography_, revision, session, pageBody(), selected, scale, follow);
     pageScrubFinished_ = false;
     if (!dragging && browse_.highlighted != SIZE_MAX)
         pageSelected_ = browse_.highlighted;

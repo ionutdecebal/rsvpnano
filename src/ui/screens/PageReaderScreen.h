@@ -109,7 +109,7 @@ namespace screens::PageReader {
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
                 const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale,
-                bool followSelection = false, bool cacheNativeRows = false);
+                bool followSelection = false);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
     size_t scrubWord(const BrowseState& state, size_t selected, bool right);
     size_t edgeWord(const BrowseState& state, bool bottom);

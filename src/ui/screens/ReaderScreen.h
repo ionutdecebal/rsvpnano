@@ -148,7 +148,7 @@ namespace screens {
         void refreshTypeface();
         void prefetchUpcomingFont(uint32_t nowMs);
         void prefetchNextWord(uint32_t nowMs);
-        FontCatalog::Face pageTypeface(size_t wordIndex, bool nativeSmall = false);
+        FontCatalog::Face pageTypeface(size_t wordIndex, bool builtInPageSize = false);
 
         int16_t width_;
         int16_t height_;

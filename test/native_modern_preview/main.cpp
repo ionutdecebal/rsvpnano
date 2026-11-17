@@ -18,7 +18,7 @@
 #include "drivers/touch/axs15231b_touch/axs15231b_touch.h"
 #include "ui/ClippedGfx.h"
 #include "fonts/LiterataFallbackAlpha4.h"
-#include "fonts/LiterataPageSmallAlpha4.h"
+#include "fonts/LiterataPageAlpha4.h"
 
 extern int previewSaveCalls, previewPrefetchDelay, previewPageMirrors;
 #include <freertos/task.h>
@@ -395,10 +395,10 @@ namespace {
             tap(608, 70);
             assert(reader.session.state.wordIndex == 0);
             tap(608, 120);
-            assert(reader.session.state.wordIndex == last && reader.pageHighlightedWord() == last);
+            assert(reader.session.state.wordIndex == overlap->start && reader.pageHighlightedWord() == overlap->start);
             save("page-arrow-down");
             tap(608, 70);
-            assert(reader.session.state.wordIndex == overlap->start && reader.pageHighlightedWord() == overlap->start);
+            assert(reader.session.state.wordIndex == 0 && reader.pageHighlightedWord() == 0);
             save("page-arrow-up");
             ReadingLoop::seekTo(reader.session, 0);
             reader.openPage();
@@ -464,28 +464,59 @@ namespace {
             drawClippedWord(screens::PageReader::kNativeScale);
             assert((inkPosition() == std::pair{beforeX, beforeY}));
 
-            // Both Small paths reuse rows. Compare incremental moves with a
-            // fresh render, including changed highlights and a reverse drag.
-            for (const bool native : {true, false}) {
+            // Assert that following begins before the selected row reaches
+            // the bottom, and only on a forward line crossing.
+            probe = {};
+            const auto renderFollow = [&](size_t highlight) {
+                ui.invalidate();
+                ui.beginFrame(static_cast<uint8_t>(screen), true);
+                screens::PageReader::browse(probe, ui, text, [&](size_t) {
+                    return reader.fonts.loadFace(0, RFont4::sizeIndexForId("compact"));
+                }, settings.settings().reading.typography, 0, reader.session, body,
+                   highlight, screens::PageReader::kNativeScale, true);
+                ui.endFrame();
+            };
+            renderFollow(0);
+            const auto lines = std::span(probe.layout.lines).first(probe.layout.lineCount);
+            const auto crossing = std::ranges::find_if(lines, [&](const auto& line) {
+                return line.flowTop > body.y + body.h * 2 / 5;
+            });
+            assert(crossing != lines.end() && crossing > lines.begin() + 1);
+            assert(crossing->bottom < body.y + body.h && crossing->start + 1 < crossing->end);
+            const auto forward = crossing->start;
+            const auto reverse = (crossing - 1)->start;
+            const int pitch = lines[1].flowTop - lines[0].flowTop;
+            renderFollow(reverse);
+            assert(probe.offset == 0);
+            renderFollow(forward);
+            assert(probe.offset == pitch && probe.highlighted == forward);
+            save("page-scrub-follow");
+            renderFollow(forward + 1);
+            assert(probe.offset == pitch);
+            renderFollow(reverse);
+            assert(probe.offset == pitch && probe.highlighted == reverse);
+
+            // Compare reused rows with a fresh render across the native and
+            // installed-font paths, on both sides of a sampling phase shift.
+            for (const uint8_t scale : {100, 50, 64, 80}) {
                 probe = {};
-                const auto renderSmall = [&](size_t highlight) {
+                const auto renderSize = [&](size_t highlight) {
                     ui.invalidate();
                     ui.beginFrame(static_cast<uint8_t>(screen), true);
                     screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
-                        return native ? FontCatalog::Face{std::cref(ui::fonts::LiterataPageSmallAlpha4_17)}
-                                      : reader.fonts.loadFace(0, smallSize);
-                    }, settings.settings().reading.typography, 0, reader.session, body,
-                       highlight, native ? 100 : 50, false, native);
+                        return scale == 100 ? FontCatalog::Face{std::cref(ui::fonts::LiterataPageAlpha4_17)}
+                                            : reader.fonts.loadFace(0, smallSize);
+                    }, settings.settings().reading.typography, 0, reader.session, body, highlight, scale);
                     ui.endFrame();
                 };
-                renderSmall(0);
-                for (const auto [movement, selection] : std::array<std::pair<int, size_t>, 5>{{
-                        {4, 1}, {20, SIZE_MAX}, {1, SIZE_MAX}, {-9, SIZE_MAX}, {-16, 2}}}) {
+                renderSize(0);
+                for (const auto [movement, selection] : std::array<std::pair<int, size_t>, 6>{{
+                        {0, 1}, {4, 2}, {16, SIZE_MAX}, {1, SIZE_MAX}, {-9, SIZE_MAX}, {-12, 2}}}) {
                     probe.scrollBy(movement);
-                    renderSmall(selection);
+                    renderSize(selection);
                     const std::vector<uint16_t> cached(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
                     probe.rowCache.valid = false;
-                    renderSmall(selection);
+                    renderSize(selection);
                     assert(std::equal(cached.begin(), cached.end(), panel.getFramebuffer()));
                 }
             }
@@ -569,8 +600,8 @@ namespace {
             frame(false,0,0);
             const auto name = "page-size-" + std::to_string(level + 1);
             save(name.c_str());
-            // The built-in Small path renders its own native face.
-            assert(previewRuntimeSize == (level == 1 ? RFont4::sizeIndexForId("compact") : smallSize));
+            // The three middle sizes render dedicated native faces.
+            assert(previewRuntimeSize == RFont4::sizeIndexForId("compact"));
         }
         reading.setPageTextSize(4);
         frame(false,0,0);
