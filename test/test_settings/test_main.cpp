@@ -83,6 +83,22 @@ void test_defaults_round_trip_through_toml_and_companion_json() {
     TEST_ASSERT_TRUE(defaults == *fromJson);
 }
 
+void test_page_settings_round_trip_and_default_for_existing_readers() {
+    auto old = settings::codec::decodeToml("[reading]\nwpm = 370\n", settings::SettingsSource::Sd);
+    TEST_ASSERT_TRUE(old.has_value());
+    TEST_ASSERT_FALSE(old->reading.compactPageText);
+    TEST_ASSERT_FALSE(old->reading.pageControlsAutoHide);
+    old->reading.compactPageText = true;
+    old->reading.pageControlsAutoHide = true;
+    auto saved = settings::codec::encodeToml(*old, settings::SettingsSource::Sd);
+    TEST_ASSERT_TRUE(saved.has_value());
+    auto restored = settings::codec::decodeToml(*saved, settings::SettingsSource::Sd);
+    TEST_ASSERT_TRUE(restored.has_value());
+    TEST_ASSERT_TRUE(restored->reading.compactPageText);
+    TEST_ASSERT_TRUE(restored->reading.pageControlsAutoHide);
+    TEST_ASSERT_EQUAL_UINT16(370, restored->reading.wpm);
+}
+
 void test_battery_curve_reaches_full() {
     TEST_ASSERT_EQUAL_UINT8(100, BoardDrivers::BatteryCurve::percentForVoltage(4.15f));
 }
@@ -395,6 +411,7 @@ int main() {
     RUN_TEST(test_pocket_lines_guides_migrate_old_settings_without_reinterpreting_horizontal_gap);
     RUN_TEST(test_onboarding_and_touch_preference_migrate_and_persist);
     RUN_TEST(test_defaults_round_trip_through_toml_and_companion_json);
+    RUN_TEST(test_page_settings_round_trip_and_default_for_existing_readers);
     RUN_TEST(test_battery_curve_reaches_full);
     RUN_TEST(test_visibility_toggles_only_selected_state_and_round_trips);
     RUN_TEST(test_enum_names_are_human_readable);

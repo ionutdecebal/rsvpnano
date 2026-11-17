@@ -6,7 +6,8 @@
 
 namespace screens {
 namespace {
-constexpr ui::Rect pageBody{0,44,580,128};
+constexpr int16_t pageHeaderHeight = 44;
+constexpr size_t pageHeaderButtonCount = 3;
 struct PageButton { ui::Rect rect; std::string_view label; };
 constexpr PageButton pageButtons[]{
     {{8,0,94,44},"‹ Menu"}, {{296,0,164,44},"Find place"}, {{480,0,152,44},"Back to book ↗"},
@@ -21,6 +22,20 @@ void ReaderScreen::openPage() {
     ReadingLoop::pause(session);
     pageBrowsing_=true;pageSelected_=session.state.wordIndex;
     browse_={};browse_.first=pageSelected_;pageTouchControl_=0;
+    pageBarHidden_ = false;
+    pageScrollFinished_ = false;
+    pageHasScrolled_ = false;
+    pageDragged_ = false;
+}
+ui::Rect ReaderScreen::pageBody() const {
+    const int16_t top = pageBarVisible() ? pageHeaderHeight : 0;
+    return {0, top, 580, static_cast<int16_t>(172 - top)};
+}
+bool ReaderScreen::revealPageControls() {
+    if (!pageBrowsing_ || pageBarVisible())
+        return false;
+    pageBarHidden_ = false;
+    return true;
 }
 void ReaderScreen::openLocator(Screen& screen) {
     ReadingLoop::pause(session);
@@ -33,23 +48,54 @@ void ReaderScreen::commitPlace(size_t index,Preferences& preferences,uint32_t no
     ReadingLoop::seekTo(session,index);finishPause(preferences,nowMs);
     pageSelected_=session.state.wordIndex;
 }
-void ReaderScreen::drawPage(ui::Context& ui) {
-    PageReader::browse(browse_,ui,text_,[&](size_t index){return pageTypeface(index);},typography_,typographyRevision_,session,pageBody,pageSelected_);
-    if(pageSelected_==SIZE_MAX) pageSelected_=browse_.first;
-    for(size_t i=0;i<std::size(pageButtons);++i) {
+void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
+    const auto revision = ui::Context::combine(typographyRevision_, settings_.compactPageText);
+    const size_t selected = pageScrollFinished_ ? SIZE_MAX : pageSelected_;
+    PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index); },
+                       typography_, revision, session, pageBody(), selected);
+    if (pageScrollFinished_) {
+        pageScrollFinished_ = false;
+        pageSelected_ = browse_.first;
+        if (pageSelected_ != session.state.wordIndex) {
+            if (!pageHasScrolled_) {
+                returnWord_ = session.state.wordIndex;
+                pageHasScrolled_ = true;
+            }
+            ReadingLoop::seekTo(session, pageSelected_);
+            pageProgressChangedAt_ = nowMs;
+        }
+    }
+    for (size_t i = pageBarVisible() ? 0 : pageHeaderButtonCount; i < std::size(pageButtons); ++i) {
         const auto& item=pageButtons[i];
         ui.label(item.rect,item.label,13,i==1||i==2?ui::themes::Accent:ui::themes::Muted,ui::TextAlign::Center);
     }
-    ui::modern::rule(ui,{0,43,640,1});
+    if (pageBarVisible())
+        ui::modern::rule(ui,{0,43,640,1});
     ui.label({584,148,52,24},std::to_string(ReadingProgress::percent(browse_.first,ReadingLoop::wordCount(session)))+"%",11,ui::themes::Muted,ui::TextAlign::Center);
 }
 bool ReaderScreen::handlePage(ui::Context& ui,uint32_t nowMs,Preferences& preferences,settings::SettingsStore& store,Screen& screen) {
     const auto* touch=ui.touch();if(!touch) return true;
+    const auto finishScroll = [&] {
+        pageScrollFinished_ = true;
+        if (settings_.pageControlsAutoHide && !pageBarHidden_) {
+            pageBarHidden_ = true;
+            ui.invalidate();
+        }
+    };
+    if (ui::hasTouch(*touch, ui::TouchCancel)) {
+        pageDragged_ = false;
+        pageTouchControl_ = 0;
+        return true;
+    }
     if(ui::hasTouch(*touch,ui::TouchStart)) {
         pageDragged_=false;pageTouchY_=touch->y;modernTouchY_=touch->y;pageTouchControl_=0;
         resetTouch();
-        for(size_t i=0;i<std::size(pageButtons);++i) if(ui::contains(pageButtons[i].rect,touch->x,touch->y)) pageTouchControl_=int(i)+1;
-        if(ui::contains(pageBody,touch->x,touch->y)) pageTouchControl_=6;
+        for (size_t i = pageBarVisible() ? 0 : pageHeaderButtonCount; i < std::size(pageButtons); ++i) {
+            if (ui::contains(pageButtons[i].rect, touch->x, touch->y))
+                pageTouchControl_ = int(i) + 1;
+        }
+        if (ui::contains(pageBody(), touch->x, touch->y))
+            pageTouchControl_ = 6;
     }
     if(pageTouchControl_==6 && ui::hasTouch(*touch,ui::TouchMove)) {
         if (!pageDragged_ && std::abs(int(modernTouchY_)-int(touch->y))<6) return true;
@@ -58,15 +104,27 @@ bool ReaderScreen::handlePage(ui::Context& ui,uint32_t nowMs,Preferences& prefer
     }
     if(!ui::hasTouch(*touch,ui::TouchRelease)) return true;
     const int control=pageTouchControl_;pageTouchControl_=0;
-    if(pageDragged_) { pageSelected_=browse_.first;return true; }
+    if (pageDragged_) {
+        pageDragged_ = false;
+        finishScroll();
+        return true;
+    }
     if(!ui::hasTouch(*touch,ui::TouchTap)) return true;
     if(control<=5 && control>0 && !ui::contains(pageButtons[control-1].rect,touch->x,touch->y)) return true;
     switch(control) {
     case 1: screen=Screen::Read;break;
     case 2: openLocator(screen);break;
-    case 3: commitPlace(pageSelected_,preferences,nowMs);pageBrowsing_=false;break;
-    case 4: browse_.offset-=88;pageSelected_=SIZE_MAX;break;
-    case 5: browse_.offset+=88;pageSelected_=SIZE_MAX;break;
+    case 3:
+        if (pageSelected_ != session.state.wordIndex)
+            pageProgressChangedAt_ = nowMs;
+        commitPlace(pageSelected_, preferences, nowMs);
+        pageBrowsing_ = false;
+        break;
+    case 4:
+    case 5:
+        browse_.lineStep = control == 4 ? PageReader::LineStep::previous : PageReader::LineStep::next;
+        finishScroll();
+        break;
     case 6: {
         const size_t word=PageReader::wordAtPoint(browse_,touch->x,touch->y);
         if(word!=SIZE_MAX) pageSelected_=word;

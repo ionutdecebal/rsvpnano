@@ -412,7 +412,8 @@ void App::renderScreen(uint32_t nowMs) {
         action = screens::settings(immediateUi_, screen_);
         break;
     case screens::Screen::ReadingHub:
-    case screens::Screen::ReadingSettings: {
+    case screens::Screen::ReadingSettings:
+    case screens::Screen::PageSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const settings::ReadingMode mode = settingsStore_.settings().reading.mode;
         const bool leftHanded = settingsStore_.settings().reading.leftHanded;
@@ -726,6 +727,11 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         return;
     }
     if (Input::hasAction(actions, Input::ActionOpenMenu)) {
+        if (screen_ == screens::Screen::Reader && readerScreen_.revealPageControls()) {
+            immediateUi_.invalidate();
+            renderScreen(nowMs);
+            return;
+        }
         if (screen_ == screens::Screen::Reader) {
             ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
             ReadingLoop::pause(readerScreen_.session);
@@ -784,6 +790,8 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
                 if (screen_ == screens::Screen::WifiScan)
                     networkScreen_.closeWifi();
                 screen_ = screens::Screen::NetworkSettings;
+            } else if (screen_ == screens::Screen::PageSettings) {
+                screen_ = screens::Screen::ReadingSettings;
             } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::InterfaceSettings
                        || screen_ == screens::Screen::PacingSettings || screen_ == screens::Screen::ReaderAppearance
                        || screen_ == screens::Screen::NetworkSettings) {

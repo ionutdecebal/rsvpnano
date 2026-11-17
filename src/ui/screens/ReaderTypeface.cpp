@@ -33,9 +33,9 @@ namespace screens {
 
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
         pageFontActive_ = true;
-        // Smooth Small for the modern browser. The legacy playing page mode
-        // keeps its compact strike; it is not exposed in this preview UI.
-        const size_t size = pageBrowsing_ ? RFont4::sizeIndexForId("small") : readerLayout::pageStrikeIndex();
+        const size_t size = pageBrowsing_
+            ? RFont4::sizeIndexForId(settings_.compactPageText ? "compact" : "small")
+            : readerLayout::pageStrikeIndex();
         return fonts.loadFace(fontChoice(wordIndex), size);
     }
 } // namespace screens

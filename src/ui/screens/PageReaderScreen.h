@@ -73,10 +73,13 @@ namespace screens::PageReader {
         bool vertical = false;
     };
 
+    enum class LineStep { none, previous, next };
+
     struct BrowseState {
         State layout;
         size_t first = 0;
         int offset = 0;
+        LineStep lineStep = LineStep::none;
         std::vector<std::pair<size_t, int16_t>> previousLines;
     };
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,

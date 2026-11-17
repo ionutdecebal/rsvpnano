@@ -12,6 +12,12 @@ namespace screens {
     }
 
     void ReaderScreen::update(Preferences& preferences, uint32_t nowMs) {
+        constexpr uint32_t pageSaveDelayMs = 1000;
+        if (pageProgressChangedAt_ && (!pageBrowsing_ || !pageDragged_)
+            && nowMs - *pageProgressChangedAt_ >= pageSaveDelayMs) {
+            ReadingProgress::mirror(session, store);
+            pageProgressChangedAt_.reset();
+        }
         // Browsing owns the page font. Preparing a chunk here would replace its
         // cached strike with the RSVP size on every paused browser frame.
         if (pageBrowsing_) return;

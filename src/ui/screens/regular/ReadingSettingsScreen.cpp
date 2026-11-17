@@ -12,6 +12,24 @@ namespace screens {
             using ui::modern::Style;
             using C=modern::Copy;
             const auto t=[&](C key){return modern::copy(ui,key);};
+            if (screen == Screen::PageSettings) {
+                if (modern::header(ui, t(C::PageSettings), screen, Screen::ReadingSettings) == Action::Resume)
+                    screen = Screen::Reader;
+                if (button(ui, {12, 51, 300, 53}, t(C::PageTextSize), Style::Secondary, true,
+                           t(config.compactPageText ? C::Compact : C::Small), 13)) {
+                    config.compactPageText = !config.compactPageText;
+                    changed = true;
+                }
+                if (button(ui, {328, 51, 300, 53}, t(C::PageControls), Style::Secondary, true,
+                           t(config.pageControlsAutoHide ? C::PageControlsAutoHide : C::PageControlsAlways), 13)) {
+                    config.pageControlsAutoHide = !config.pageControlsAutoHide;
+                    changed = true;
+                }
+                if (config.pageControlsAutoHide)
+                    ui.label({328, 111, 300, 41}, t(C::PageControlsHint), 13, ui::themes::Muted,
+                             ui::TextAlign::Start, 2);
+                return changed;
+            }
             if(modern::header(ui,t(C::Reading),screen,Screen::Settings)==Action::Resume)screen=Screen::Reader;
             if(button(ui,{12,51,146,53},t(C::Mode),Style::Secondary,true,t(config.mode==settings::ReadingMode::chunks?C::Chunks:C::Word),13)){
                 config.mode=config.mode==settings::ReadingMode::chunks?settings::ReadingMode::rsvp:settings::ReadingMode::chunks;changed=true;
@@ -19,9 +37,11 @@ namespace screens {
             if(button(ui,{166,51,146,53},t(C::PauseMode),Style::Secondary,true,ui.text(config.pauseMode==settings::PauseMode::sentenceEnd?UiText::SentenceEnd:UiText::Instant),13)){
                 config.pauseMode=settings::cycleEnum(config.pauseMode);changed=true;
             }
-            if(button(ui,{12,111,300,53},t(C::TextAction),Style::Secondary,true,t(config.holdToRead?C::Hold:C::Tap),13)){
+            if(button(ui,{12,111,146,53},t(C::TextAction),Style::Secondary,true,t(config.holdToRead?C::Hold:C::Tap),13)){
                 config.holdToRead=!config.holdToRead;changed=true;
             }
+            if (button(ui, {166, 111, 146, 53}, t(C::PageSettings), Style::Secondary, true, {}, 13))
+                screen = Screen::PageSettings;
             changed|=ui.slider({330,50,298,36},t(C::LongWords),config.pacing.longWordDelayMs," ms");
             changed|=ui.slider({330,90,298,36},t(C::ComplexWords),config.pacing.complexWordDelayMs," ms");
             changed|=ui.slider({330,130,298,36},t(C::Punctuation),config.pacing.punctuationDelayMs," ms");

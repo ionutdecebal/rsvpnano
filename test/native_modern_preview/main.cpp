@@ -19,7 +19,7 @@
 #include "ui/ClippedGfx.h"
 #include "fonts/LiterataFallbackAlpha4.h"
 
-extern int previewSaveCalls, previewPrefetchDelay;
+extern int previewSaveCalls, previewPrefetchDelay, previewPageMirrors;
 #include <freertos/task.h>
 extern size_t previewRuntimeSize;
 namespace dictionary { extern std::string previewCase; }
@@ -314,17 +314,38 @@ namespace {
         std::puts("Appearance and Focus: visibility, paused badge/timing, complete phase redraws, press cancellation at break, manual next round and presets verified.");
     }
 
+    void loadSamplePage(screens::ReaderScreen& reader, std::vector<std::string>& words) {
+        const std::vector<std::string> paragraph{
+            "She", "opened", "the", "blue", "door", "and", "stepped", "outside.",
+            "Beyond", "the", "garden,", "a", "quiet", "path", "led", "towards", "the", "river.",
+        };
+        for (int i = 0; i < 25; ++i) {
+            reader.session.metadata.paragraphStarts.push_back(words.size());
+            words.insert(words.end(), paragraph.begin(), paragraph.end());
+        }
+        ReadingLoop::setWords(reader.session, words, 0);
+        reader.session.metadata.chapters = {{"The garden", 0}, {"A quiet path", 180}};
+    }
+
+    void writePageFrame(Arduino_Canvas& panel, FILE* output) {
+        std::fputs("P6\n640 172\n255\n", output);
+        std::array<unsigned char, 640 * 172 * 3> pixels;
+        for (size_t i = 0; i < 640 * 172; ++i) {
+            const auto pixel = panel.getFramebuffer()[i];
+            pixels[i * 3] = ((pixel >> 11) & 31) * 255 / 31;
+            pixels[i * 3 + 1] = ((pixel >> 5) & 63) * 255 / 63;
+            pixels[i * 3 + 2] = (pixel & 31) * 255 / 31;
+        }
+        std::fwrite(pixels.data(), 1, pixels.size(), output);
+    }
+
     void verifyNavigation(Arduino_Canvas& panel,const std::filesystem::path& output) {
         ui::Context ui(panel);auto theme=ui::themes::defaultTheme();ui.setTheme(theme);
         ui.setTouchSource({.surface={640,172},.poll=&poll});
         settings::SettingsStore settings;Preferences preferences;
         screens::ReaderScreen reader(panel,settings.settings().reading);
         std::vector<std::string> words;
-        const std::vector<std::string> paragraph{"She","opened","the","blue","door","and","stepped","outside.","Beyond","the","garden,","a","quiet","path","led","towards","the","river."};
-        for(int i=0;i<25;++i) words.insert(words.end(),paragraph.begin(),paragraph.end());
-        ReadingLoop::setWords(reader.session,words,0);
-        for(size_t i=0;i<words.size();i+=paragraph.size())reader.session.metadata.paragraphStarts.push_back(i);
-        reader.session.metadata.chapters={{"The garden",0},{"A quiet path",180}};
+        loadSamplePage(reader, words);
         reader.openPage();auto screen=screens::Screen::Reader;uint32_t now=100000;
         const auto frame=[&](bool down,int x,int y) {
             contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=25);
@@ -332,7 +353,7 @@ namespace {
             if(screen==screens::Screen::Reader)reader.handleModernControls(ui,now,preferences,settings,screen);
             ui.beginFrame(static_cast<uint8_t>(screen),screen==screens::Screen::Reader && reader.pageBrowsing());
             if(screen==screens::Screen::Reader) {
-                if(reader.pageBrowsing()) reader.drawPage(ui);
+                if(reader.pageBrowsing()) reader.drawPage(ui, now);
                 else screens::modern::readerChrome(ui,{.chapter="The garden",.footer="42%",.batteryLabel="84%",.canRead=true},settings.settings().reading,{{true,3.9f,84},0,false});
             }
             else reader.drawLocator(ui,screen,preferences,now);
@@ -341,12 +362,60 @@ namespace {
         const auto tap=[&](int x,int y){frame(true,x,y);frame(false,x,y);frame(false,x,y);};
         const auto save=[&](const char* name) {
             auto* file=std::fopen((output/(std::string{name}+".ppm")).c_str(),"wb");assert(file);
-            std::fprintf(file,"P6\n640 172\n255\n");
-            for(int i=0;i<640*172;++i) {const auto pixel=panel.getFramebuffer()[i];const unsigned char rgb[]{static_cast<unsigned char>(((pixel>>11)&31)*255/31),static_cast<unsigned char>(((pixel>>5)&63)*255/63),static_cast<unsigned char>((pixel&31)*255/31)};std::fwrite(rgb,1,3,file);}std::fclose(file);
+            writePageFrame(panel, file);
+            std::fclose(file);
         };
         frame(false,0,0);save("page");
-        frame(true,200,145);frame(true,200,65);frame(false,200,65);frame(false,0,0);
-        assert(reader.session.state.wordIndex==0);save("page-scrolled");
+        const auto smallSize = previewRuntimeSize;
+        {
+            ui::fonts::AlphaTextRenderer<640> text(panel);
+            text.begin();
+            screens::PageReader::BrowseState probe;
+            ui.invalidate();
+            ui.beginFrame(static_cast<uint8_t>(screen), true);
+            screens::PageReader::browse(probe, ui, text,
+                [&](size_t) { return reader.fonts.loadFace(0, smallSize); },
+                settings.settings().reading.typography, 0, reader.session, {0, 44, 580, 128}, 0);
+            ui.endFrame();
+            ui.invalidate();
+            frame(false,0,0);
+            assert(probe.layout.lineCount >= 3);
+            const size_t next = probe.layout.lines[1].start;
+            const size_t afterNext = probe.layout.lines[2].start;
+            tap(608,70);assert(reader.session.state.wordIndex == 0);
+            tap(608,120);assert(reader.session.state.wordIndex == next);
+            tap(608,120);assert(reader.session.state.wordIndex == afterNext);
+            tap(608,70);assert(reader.session.state.wordIndex == next);
+            tap(608,70);assert(reader.session.state.wordIndex == 0);
+        }
+        frame(true,200,145);frame(true,200,65);
+        assert(reader.session.state.wordIndex == 0);
+        frame(false,200,65);
+        const auto scrolledAt = now;
+        assert(reader.session.state.wordIndex > 0);
+        const int mirrors = previewPageMirrors;
+        reader.update(preferences, scrolledAt + 999);
+        assert(previewPageMirrors == mirrors);
+        reader.update(preferences, scrolledAt + 1000);
+        reader.update(preferences, scrolledAt + 2000);
+        assert(previewPageMirrors == mirrors + 1);
+        save("page-scrolled");
+
+        auto& reading = settings.settings().reading;
+        reading.compactPageText = true;
+        reading.pageControlsAutoHide = true;
+        frame(false,0,0);save("page-compact");
+        assert(previewRuntimeSize == RFont4::sizeIndexForId("compact"));
+        tap(608,120);save("page-clear");
+        const auto hiddenPosition = reader.session.state.wordIndex;
+        assert(reader.revealPageControls());
+        ui.invalidate();
+        frame(false,0,0);
+        assert(reader.session.state.wordIndex == hiddenPosition && !reader.revealPageControls());
+        reading.compactPageText = false;
+        reading.pageControlsAutoHide = false;
+        frame(false,0,0);
+        assert(previewRuntimeSize == smallSize);
         settings.settings().reading.mode=settings::ReadingMode::chunks;
         tap(552,22);assert(!reader.pageBrowsing()&&!reader.session.playing);
         assert(settings.settings().reading.mode==settings::ReadingMode::chunks);
@@ -369,6 +438,102 @@ namespace {
         screen=screens::Screen::FindChapters;frame(false,0,0);save("find-chapters");
         screen=screens::Screen::Reader;reader.openPage();theme=ui::modern::paperTheme();ui.setTheme(theme);frame(false,0,0);save("page-paper");
         assert(committed>0);std::puts("Page, locator and search: simple header, mode preserved, chrome fully restored, direct drag, explicit jump, previous place, keyboard, results preview and cancel verified.");
+    }
+
+    int runPagePreview(Arduino_Canvas& panel) {
+        using screens::Action;
+        using screens::Screen;
+        ui::Context ui(panel);
+        const auto theme = ui::themes::defaultTheme();
+        ui.setTheme(theme);
+        ui.setTouchSource({.surface = {640, 172}, .poll = &poll});
+        settings::SettingsStore settings;
+        auto& reading = settings.settings().reading;
+        auto& interface = settings.settings().interface;
+        Preferences prefs;
+        screens::ReaderScreen reader(panel, reading);
+        std::vector<std::string> words;
+        loadSamplePage(reader, words);
+        reader.openPage();
+        Screen screen = Screen::Reader;
+        uint32_t now = 100;
+        unsigned command, x, y;
+        while (std::scanf("%u %u %u", &command, &x, &y) == 3) {
+            now += 25;
+            if (command == 4) {
+                if (screen != Screen::Reader)
+                    screen = Screen::Reader;
+                else if (reader.revealPageControls())
+                    ui.invalidate();
+                else
+                    screen = Screen::QuickControls;
+            } else if (command == 5) {
+                screen = Screen::PageSettings;
+            }
+            contact = {command == 1 || command == 2, uint16_t(x), uint16_t(y)};
+            ui.pollTouch(now);
+            ui.setModernReadingPalette(screen == Screen::Reader);
+            if (screen == Screen::Reader && command >= 1 && command <= 3)
+                reader.handleModernControls(ui, now, prefs, settings, screen);
+            reader.update(prefs, now);
+
+            // A menu tap may change screens during drawing. Paint the destination
+            // on the same input so a release never needs a second tap.
+            Screen previous;
+            do {
+                previous = screen;
+                ui.setModernPresentation(screen != Screen::Reader);
+                ui.setModernReadingPalette(screen == Screen::Reader);
+                ui.beginFrame(static_cast<uint8_t>(screen), screen == Screen::Reader && reader.pageBrowsing());
+                Action action = Action::None;
+                switch (screen) {
+                case Screen::Reader:
+                    if (reader.pageBrowsing())
+                        reader.drawPage(ui, now);
+                    else
+                        ui.label({0, 36, 640, 100}, ReadingLoop::wordAt(reader.session, reader.session.state.wordIndex),
+                                 28, ui::themes::Foreground, ui::TextAlign::Center);
+                    break;
+                case Screen::Read:
+                    action = screens::modern::menu(ui, "The garden", {}, 0, true, interface, screen);
+                    if (screen != Screen::Settings && screen != Screen::Read)
+                        screen = Screen::Read;
+                    break;
+                case Screen::QuickControls:
+                    action = screens::modern::quickControls(ui, reading, interface, screen);
+                    break;
+                case Screen::Settings:
+                    action = screens::settings(ui, screen);
+                    if (screen != Screen::ReadingHub && screen != Screen::Read && screen != Screen::Settings)
+                        screen = Screen::Settings;
+                    break;
+                case Screen::ReadingHub:
+                case Screen::ReadingSettings:
+                case Screen::PageSettings:
+                    screens::readingSettings(ui, reading, screen);
+                    if (screen == Screen::PacingSettings)
+                        screen = Screen::ReadingHub;
+                    break;
+                case Screen::FindPlace:
+                case Screen::BookSearch:
+                case Screen::BookSearchKeyboard:
+                case Screen::FindChapters:
+                    reader.drawLocator(ui, screen, prefs, now);
+                    break;
+                default:
+                    screen = Screen::Reader;
+                    break;
+                }
+                ui.endFrame();
+                if (action == Action::OpenPage)
+                    reader.openPage();
+                if (action == Action::OpenPage || action == Action::Resume)
+                    screen = Screen::Reader;
+            } while (previous != screen);
+            writePageFrame(panel, stdout);
+            std::fflush(stdout);
+        }
+        return 0;
     }
 
     void verifyBookSettings(Arduino_Canvas& panel,const std::filesystem::path& output) {
@@ -542,9 +707,11 @@ namespace locales {
 
 int main(int argc, char** argv) {
     if (argc != 2) return 1;
-    std::filesystem::create_directories(argv[1]);
     Arduino_Canvas panel(640, 172, nullptr);
     if (!panel.begin(GFX_SKIP_OUTPUT_BEGIN)) return 1;
+    if (std::string_view{argv[1]} == "--page-interactive")
+        return runPagePreview(panel);
+    std::filesystem::create_directories(argv[1]);
     if (!verifyNativeFontClipping(panel)) return 2;
     verifyPhysicalBottomControls();
     verifyPocketLinesMarks(panel);

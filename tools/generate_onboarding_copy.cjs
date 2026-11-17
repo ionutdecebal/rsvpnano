@@ -38,6 +38,12 @@ copy.deviceHint=['Language, storage & updates','Sprache, Speicher & Updates','Li
 copy.displayExplain=['Choose your theme, sleep delay and screensaver. Brightness is in quick controls.','Wähle Farben, Ruhezeit und Bildschirmschoner. Helligkeit ist in der Lesesteuerung.','Alege tema, repausul și economizorul. Luminozitatea e în comenzile rapide.'];
 copy.deviceExplain=['Change the interface language, check storage and update firmware.','Wähle die Menüsprache, prüfe den Speicher und aktualisiere die Firmware.','Schimbă limba interfeței, verifică stocarea și actualizează firmware-ul.'];
 copy.menuLibrary=['Open a book or change its font and language with Book settings. Each book keeps its reading place.','Öffne ein Buch oder ändere Schrift und Sprache in den Bucheinstellungen. Die Lesestelle bleibt gespeichert.','Deschide o carte sau schimbă fontul și limba din setările cărții. Locul lecturii rămâne salvat.'];
+copy.pageSettings=['Page settings','Seiteneinstellungen','Setări pagină'];
+copy.pageTextSize=['Page text size','Seitenschriftgröße','Mărime text pagină'];
+copy.pageControls=['Top bar','Obere Leiste','Bară de sus'];
+copy.pageControlsAlways=['Always shown','Immer sichtbar','Mereu vizibilă'];
+copy.pageControlsAutoHide=['Auto-hide','Automatisch ausblenden','Ascundere automată'];
+copy.pageControlsHint=['Press the middle button to show the bar.','Drücke die mittlere Taste, um die Leiste einzublenden.','Apasă butonul din mijloc pentru a afișa bara.'];
 // RSVP Nano branding; the Pocket Lines mark is retained only as the reading guide.
 const keys=Object.keys(copy),name=k=>k[0].toUpperCase()+k.slice(1);
 const target=path.join(root,'src/ui/screens');

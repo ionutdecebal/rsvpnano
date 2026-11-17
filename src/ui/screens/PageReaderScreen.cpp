@@ -789,22 +789,45 @@ namespace screens::PageReader {
             layout(state,text,typeface,typography,session,{area.x,area.y,area.w,640},browse.first);
             state.layoutRevision=revision; state.layoutArea=area;
         };
-        if (state.pageStart!=browse.first || state.layoutRevision!=revision || state.layoutArea!=area) rebuild();
-        while (browse.offset<0 && browse.first>0) {
-            const size_t old=browse.first;
-            if (!browse.previousLines.empty() && browse.previousLines.back().first<old) {
-                const auto previous=browse.previousLines.back();browse.previousLines.pop_back();
-                browse.first=previous.first;browse.offset+=previous.second;rebuild();
-            } else {
-                browse.first=anchorIndex(session,old-1);rebuild();
-                size_t line=0;
-                while(line+1<state.lineCount && state.lines[line+1].start<old) ++line;
-                const auto& previous=state.lines[line];
-                browse.first=previous.start;
-                const int height=line+1<state.lineCount ? state.lines[line+1].top-previous.top : previous.bottom-previous.top+6;
-                browse.offset+=std::max(1,height);rebuild();
-            }
+        if (state.layoutRevision != revision || state.layoutArea.w != area.w) {
+            browse.previousLines.clear();
+            browse.offset = 0;
         }
+        if (state.pageStart != browse.first || state.layoutRevision != revision || state.layoutArea != area)
+            rebuild();
+
+        const auto moveToPreviousLine = [&] {
+            const size_t old = browse.first;
+            if (!browse.previousLines.empty() && browse.previousLines.back().first < old) {
+                const auto [start, height] = browse.previousLines.back();
+                browse.previousLines.pop_back();
+                browse.first = start;
+                rebuild();
+                return int(height);
+            }
+
+            browse.first = anchorIndex(session, old - 1);
+            rebuild();
+            size_t line = 0;
+            while (line + 1 < state.lineCount && state.lines[line + 1].start < old)
+                ++line;
+            const auto& previous = state.lines[line];
+            browse.first = previous.start;
+            const int height = line + 1 < state.lineCount ? state.lines[line + 1].top - previous.top
+                                                          : previous.bottom - previous.top + 6;
+            rebuild();
+            return std::max(1, height);
+        };
+        if (browse.lineStep == LineStep::previous) {
+            if (browse.offset == 0 && browse.first > 0)
+                moveToPreviousLine();
+            browse.offset = 0;
+        } else if (browse.lineStep == LineStep::next && state.lineCount > 1) {
+            browse.offset = state.lines[1].top - state.lines[0].top;
+        }
+        browse.lineStep = LineStep::none;
+        while (browse.offset < 0 && browse.first > 0)
+            browse.offset += moveToPreviousLine();
         browse.offset=std::max(0,browse.offset);
         if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
             browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
@@ -816,6 +839,8 @@ namespace screens::PageReader {
         }
         if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
             browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
+        if (selected == SIZE_MAX)
+            selected = browse.first;
         uint32_t signature=ui::Context::combine(revision,browse.first);
         signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,selected);
         if(!ui.redraw(area,signature,true)) return;

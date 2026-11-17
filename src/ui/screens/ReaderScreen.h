@@ -55,7 +55,8 @@ namespace screens {
         void pauseImmediately(Preferences& preferences, uint32_t nowMs) { finishPause(preferences, nowMs); }
         void resumeNow(uint32_t nowMs) { pageBrowsing_ = false; start(nowMs, true); }
         void openPage();
-        void drawPage(ui::Context& ui);
+        void drawPage(ui::Context& ui, uint32_t nowMs);
+        bool revealPageControls();
         void openLocator(Screen& screen);
         void drawLocator(ui::Context& ui, Screen& screen, Preferences& preferences, uint32_t nowMs);
         bool pageBrowsing() const { return pageBrowsing_; }
@@ -67,6 +68,12 @@ namespace screens {
         void commitPlace(size_t index, Preferences& preferences, uint32_t nowMs);
         std::string placeExcerpt(size_t index, size_t maxWords = 32) const;
         bool pageBrowsing_ = false;
+        bool pageBarHidden_ = false;
+        bool pageScrollFinished_ = false;
+        bool pageHasScrolled_ = false;
+        std::optional<uint32_t> pageProgressChangedAt_;
+        ui::Rect pageBody() const;
+        bool pageBarVisible() const { return !settings_.pageControlsAutoHide || !pageBarHidden_; }
         PageReader::BrowseState browse_;
         size_t pageSelected_ = 0;
         size_t returnWord_ = SIZE_MAX;

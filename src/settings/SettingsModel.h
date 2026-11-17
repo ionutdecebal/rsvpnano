@@ -112,6 +112,8 @@ namespace settings {
         bool holdToRead = false;
         bool phantomWords = true;
         bool chapterScrollReversed = false;
+        bool compactPageText = false;
+        bool pageControlsAutoHide = false;
         FooterMetric footerMetric = FooterMetric::percentage;
         BatteryLabel batteryLabel = BatteryLabel::percentage;
         Visibility batteryIconVisibility = Visibility::always;
