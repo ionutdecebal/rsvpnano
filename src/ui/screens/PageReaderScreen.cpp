@@ -1200,7 +1200,10 @@ namespace screens::PageReader {
                     auto firstVisible = lineForOffset();
                     const int guide = oldViewportInset + selectionViewport().h * 2 / 5;
                     const size_t last = std::min(row, firstVisible + row - previous);
-                    const size_t guideRow = earlierFollow && row + 1 < state.lineCount ? row + 1 : row;
+                    // Leave an extra row below the highlighted line at the
+                    // smaller sizes, rounding up only when a line crosses.
+                    const size_t leadLines = earlierFollow ? 2 : 0;
+                    const size_t guideRow = std::min(row + leadLines, state.lineCount - 1);
                     while (firstVisible < last && lineOffset(guideRow) > browse.offset + guide)
                         browse.offset = lineOffset(++firstVisible);
                 }

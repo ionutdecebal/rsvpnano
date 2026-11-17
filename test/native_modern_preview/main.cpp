@@ -486,8 +486,9 @@ namespace {
             });
             assert(crossing != lines.end() && crossing > lines.begin() + 1);
             assert(crossing->bottom < body.y + body.h && crossing->start + 1 < crossing->end);
-            const auto forward = (crossing - 1)->start;
-            const auto reverse = (crossing - 2)->start;
+            const auto trigger = crossing > lines.begin() + 2 ? crossing - 2 : lines.begin() + 1;
+            const auto forward = trigger->start;
+            const auto reverse = (trigger - 1)->start;
             const int pitch = lines[1].flowTop - lines[0].flowTop;
             renderFollow(reverse);
             assert(probe.offset == 0);
@@ -734,6 +735,44 @@ namespace {
                SIZE_MAX, screens::PageReader::kNativeScale, false, mode);
             assert(probe.highlighted == 0);
             ui.endFrame();
+        }
+    }
+
+    void verifySmallerScrubPlacement(Arduino_Canvas& panel) {
+        ui::Context ui(panel);
+        const auto theme = ui::themes::defaultTheme();
+        ui.setTheme(theme);
+        ui::fonts::AlphaTextRenderer<640> text(panel);
+        assert(text.begin());
+        const ui::Rect body{0, 0, 580, 172};
+        ReadingSession session;
+        const std::vector<std::string> words(600, "word");
+        ReadingLoop::setWords(session, words, 0);
+        const auto* compact = ui::fonts::LiterataFallbackAlpha4_Sizes[3];
+        for (const auto* font : {compact, &ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_21}) {
+            screens::PageReader::BrowseState state;
+            const auto render = [&](size_t selected) {
+                ui.beginFrame(44, true);
+                screens::PageReader::browse(state, ui, text, [&](size_t) -> FontCatalog::Face {
+                    return {std::cref(*font)};
+                }, {}, 0, session, body, selected, 100, true, screens::PageReader::HighlightMode::selection, true);
+                ui.endFrame();
+            };
+            ui.invalidate();
+            render(0);
+            const int pitch = state.layout.lines[2].flowTop - state.layout.lines[1].flowTop;
+            const int lastAllowed = std::max(0, (body.h * 2 / 5) / pitch - 2);
+            for (const size_t row : {1u, 2u, 3u}) {
+                const auto selected = state.layout.lines[row].start;
+                render(selected);
+                const auto& line = state.layout.lines[row];
+                const int screenY = line.flowTop - state.offset;
+                assert(state.highlighted == selected);
+                assert(screenY <= state.layout.lines[0].flowTop + lastAllowed * pitch);
+                const int offset = state.offset;
+                render(selected + 1);
+                assert(state.offset == offset && state.highlighted == selected + 1);
+            }
         }
     }
 
@@ -1148,6 +1187,7 @@ int main(int argc, char** argv) {
     verifyAppearanceAndFocusRoutes(panel);
     verifyNavigation(panel,std::filesystem::path{argv[1]});
     verifyVerticalPageSelection(panel);
+    verifySmallerScrubPlacement(panel);
     verifyResumeWrap(panel);
     verifyContinuousPageScroll(panel);
     verifyBookSettings(panel,std::filesystem::path{argv[1]});
