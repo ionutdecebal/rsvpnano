@@ -83,7 +83,6 @@ namespace screens::PageReader {
     struct BrowseState {
         State layout;
         size_t first = 0;
-        size_t openingWord = SIZE_MAX;
         size_t topLine = SIZE_MAX;
         size_t highlighted = SIZE_MAX;
         int offset = 0;
@@ -100,7 +99,6 @@ namespace screens::PageReader {
             bool valid = false;
         } rowCache;
         std::vector<std::pair<size_t, int16_t>> previousLines;
-        std::vector<size_t> reverseWrapStarts;
 
         void scrollBy(int displayPixels) {
             const int distance = displayPixels * kNativeScale + scrollRemainder;
@@ -111,7 +109,8 @@ namespace screens::PageReader {
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
                 const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale,
-                bool followSelection = false, HighlightMode highlightMode = HighlightMode::selection);
+                bool followSelection = false, HighlightMode highlightMode = HighlightMode::selection,
+                bool earlierFollow = false);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
     size_t scrubWord(const BrowseState& state, size_t selected, bool right);
     size_t edgeWord(const BrowseState& state, bool bottom);

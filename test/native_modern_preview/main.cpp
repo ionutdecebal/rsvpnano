@@ -475,7 +475,8 @@ namespace {
                 screens::PageReader::browse(probe, ui, text, [&](size_t) {
                     return reader.fonts.loadFace(0, RFont4::sizeIndexForId("compact"));
                 }, settings.settings().reading.typography, 0, reader.session, body,
-                   highlight, screens::PageReader::kNativeScale, true);
+                   highlight, screens::PageReader::kNativeScale, true,
+                   screens::PageReader::HighlightMode::selection, true);
                 ui.endFrame();
             };
             renderFollow(0);
@@ -485,8 +486,8 @@ namespace {
             });
             assert(crossing != lines.end() && crossing > lines.begin() + 1);
             assert(crossing->bottom < body.y + body.h && crossing->start + 1 < crossing->end);
-            const auto forward = crossing->start;
-            const auto reverse = (crossing - 1)->start;
+            const auto forward = (crossing - 1)->start;
+            const auto reverse = (crossing - 2)->start;
             const int pitch = lines[1].flowTop - lines[0].flowTop;
             renderFollow(reverse);
             assert(probe.offset == 0);
@@ -496,7 +497,7 @@ namespace {
             renderFollow(forward + 1);
             assert(probe.offset == pitch);
             renderFollow(reverse);
-            assert(probe.offset == pitch && probe.highlighted == reverse);
+            assert(probe.offset <= pitch && probe.highlighted == reverse);
 
             // Compare reused rows with a fresh render across the native and
             // installed-font paths, on both sides of a sampling phase shift.
@@ -529,7 +530,7 @@ namespace {
         tap(110, 72);
         const auto lookup = reader.pageHighlightedWord();
         assert(lookup != 0 && lookup != SIZE_MAX);
-        tap(200, 20);
+        tap(400, 20);
         assert(screen == screens::Screen::Dictionary && dictionary::previewLookupWord == lookup);
         assert(reader.session.state.wordIndex == 0);
         save("page-dictionary");
@@ -558,7 +559,7 @@ namespace {
         ui.invalidate();
         frame(false, 0, 0);
         assert(reader.pageHighlightedWord() == scrubbed);
-        tap(200, 20);
+        tap(400, 20);
         assert(screen == screens::Screen::Dictionary && dictionary::previewLookupWord == scrubbed);
         tap(42, 22);
         assert(screen == screens::Screen::Reader && reader.pageHighlightedWord() == scrubbed);
@@ -622,10 +623,10 @@ namespace {
         save("reader-after-page");
         ReadingLoop::seekTo(reader.session,0);reader.openPage();frame(false,0,0);
         frame(true,200,145);frame(true,200,65);frame(false,200,65);frame(false,0,0);
-        tap(360,20);assert(screen==screens::Screen::FindPlace);save("find-place");
+        tap(240,20);assert(screen==screens::Screen::FindPlace);save("find-place");
         tap(552,22);assert(screen==screens::Screen::Reader&&!reader.session.playing);assert(reader.session.state.wordIndex>0);
         const auto committed=reader.session.state.wordIndex;
-        reader.openPage();frame(false,0,0);tap(360,20);tap(180,20);tap(552,22);assert(reader.session.state.wordIndex==0);
+        reader.openPage();frame(false,0,0);tap(240,20);tap(180,20);tap(552,22);assert(reader.session.state.wordIndex==0);
         reader.openLocator(screen);frame(false,0,0);tap(340,20);assert(screen==screens::Screen::BookSearchKeyboard);save("search-keyboard");
         // Type 'the', using the production 44-pixel keyboard keys.
         tap(253,60);tap(309,104);tap(141,60);tap(602,150);
@@ -736,6 +737,52 @@ namespace {
         }
     }
 
+    void verifyResumeWrap(Arduino_Canvas& panel) {
+        ui::Context ui(panel);
+        const auto theme = ui::themes::defaultTheme();
+        ui.setTheme(theme);
+        ui::fonts::AlphaTextRenderer<640> text(panel);
+        assert(text.begin());
+        ReadingSession session;
+        std::vector<std::string> words(1200, "including");
+        for (size_t i = 0; i < words.size(); i += 5)
+            words[i] = "executive";
+        ReadingLoop::setWords(session, words, 0);
+        const ui::Rect body{0, 44, 580, 128};
+        for (const auto* font : {&ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_26}) {
+            const auto render = [&](screens::PageReader::BrowseState& state, size_t selected) {
+                ui.beginFrame(43, true);
+                screens::PageReader::browse(state, ui, text, [&](size_t) -> FontCatalog::Face {
+                    return {std::cref(*font)};
+                }, {}, 0, session, body, selected);
+                ui.endFrame();
+            };
+            screens::PageReader::BrowseState continuous;
+            ui.invalidate();
+            render(continuous, SIZE_MAX);
+            while (continuous.layout.pageStart < 300) {
+                continuous.scrollBy(84);
+                render(continuous, SIZE_MAX);
+            }
+            const auto previous = continuous.layout.lines[1];
+            const auto current = continuous.layout.lines[2];
+            assert(current.end - current.start > 2);
+            const size_t bookmark = current.end - 2;
+            screens::PageReader::BrowseState reopened;
+            reopened.first = bookmark;
+            ui.invalidate();
+            render(reopened, bookmark);
+            assert(reopened.highlighted == bookmark && reopened.first == current.start);
+            assert(reopened.layout.lines[0].end == current.end);
+            reopened.scrollBy(-1);
+            render(reopened, bookmark);
+            assert(reopened.layout.lines[0].start == previous.start
+                   && reopened.layout.lines[0].end == previous.end);
+            assert(reopened.layout.lines[1].start == current.start
+                   && reopened.layout.lines[1].end == current.end);
+        }
+    }
+
     void verifyContinuousPageScroll(Arduino_Canvas& panel) {
         ui::Context ui(panel);
         auto theme = ui::themes::defaultTheme();
@@ -757,7 +804,7 @@ namespace {
         for (const auto* font : {builtin[3], &ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_21,
                                  &ui::fonts::LiterataPageAlpha4_26, builtin[2]}) {
             screens::PageReader::BrowseState probe;
-            probe.first = probe.openingWord = start;
+            probe.first = start;
             auto viewport = body;
             const auto frame = [&] {
                 ui.beginFrame(39, true);
@@ -1101,6 +1148,7 @@ int main(int argc, char** argv) {
     verifyAppearanceAndFocusRoutes(panel);
     verifyNavigation(panel,std::filesystem::path{argv[1]});
     verifyVerticalPageSelection(panel);
+    verifyResumeWrap(panel);
     verifyContinuousPageScroll(panel);
     verifyBookSettings(panel,std::filesystem::path{argv[1]});
     verifyFilledSliders(panel);

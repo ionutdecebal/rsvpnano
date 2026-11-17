@@ -8,11 +8,11 @@
 namespace screens {
 namespace {
 constexpr int16_t pageHeaderHeight = 44;
-enum PageControl : size_t { menu, dictionary, findPlace, backToBook, previousLine, nextLine, pageText, none };
+enum PageControl : size_t { menu, findPlace, dictionary, backToBook, previousLine, nextLine, pageText, none };
 struct PageButton { ui::Rect rect; std::string_view label; };
 constexpr PageButton pageButtons[]{
-    {{8, 0, 94, 44}, "‹ Menu"}, {{132, 0, 152, 44}, {}}, {{296, 0, 164, 44}, "Find place"},
-    {{480, 0, 152, 44}, "Back to book ↗"}, {{588, 46, 44, 48}, "↑"}, {{588, 98, 44, 48}, "↓"}
+    {{8, 0, 144, 44}, "‹ Menu"}, {{168, 0, 144, 44}, "Find place"}, {{328, 0, 144, 44}, {}},
+    {{488, 0, 144, 44}, "Back to book ↗"}, {{588, 46, 44, 48}, "↑"}, {{588, 98, 44, 48}, "↓"}
 };
 static_assert(std::size(pageButtons) == pageText);
 std::string folded(std::string text) {
@@ -24,7 +24,7 @@ void ReaderScreen::openPage() {
     ReadingLoop::pause(session);
     pageBrowsing_=true;pageSelected_=session.state.wordIndex;
     browse_ = {};
-    browse_.first = browse_.openingWord = pageSelected_;
+    browse_.first = pageSelected_;
     pageTouchControl_ = none;
     pageBarHidden_ = false;
     pageScrollFinished_ = false;
@@ -70,7 +70,7 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
                                          : PageReader::HighlightMode::firstScrollLine;
     const bool follow = pageGesture_ == PageGesture::horizontal || pageScrubFinished_;
     PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index, builtInPageSize); },
-                       typography_, revision, session, pageBody(), selected, scale, follow, highlightMode);
+                       typography_, revision, session, pageBody(), selected, scale, follow, highlightMode, size <= 2);
     pageScrubFinished_ = false;
     if (verticalScroll && browse_.highlighted != selected)
         pageSelectionPinned_ = false;
