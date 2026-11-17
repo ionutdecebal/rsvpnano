@@ -76,6 +76,7 @@ namespace screens::PageReader {
     };
 
     enum class ScrollStep { none, previousPage, nextPage };
+    enum class HighlightMode { selection, firstScrollLine, secondScrollLine };
 
     constexpr uint8_t kNativeScale = 100;
 
@@ -99,6 +100,7 @@ namespace screens::PageReader {
             bool valid = false;
         } rowCache;
         std::vector<std::pair<size_t, int16_t>> previousLines;
+        std::vector<size_t> reverseWrapStarts;
 
         void scrollBy(int displayPixels) {
             const int distance = displayPixels * kNativeScale + scrollRemainder;
@@ -109,7 +111,7 @@ namespace screens::PageReader {
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
                 const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale,
-                bool followSelection = false);
+                bool followSelection = false, HighlightMode highlightMode = HighlightMode::selection);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
     size_t scrubWord(const BrowseState& state, size_t selected, bool right);
     size_t edgeWord(const BrowseState& state, bool bottom);

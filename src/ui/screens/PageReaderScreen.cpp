@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <span>
 #include <cstring>
 
 #if defined(ESP32) && defined(BOARD_HAS_PSRAM)
@@ -218,7 +219,8 @@ namespace screens::PageReader {
 
         void layout(State& state, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                     const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
-                    size_t start, size_t breakBefore = kInvalidIndex) {
+                    size_t start, size_t breakBefore = kInvalidIndex,
+                    std::span<const size_t> reverseWrapStarts = {}) {
             const size_t wordCount = ReadingLoop::wordCount(session);
             size_t index = std::min(start, wordCount);
             clearPage(state);
@@ -237,7 +239,10 @@ namespace screens::PageReader {
             size_t bidiFirstLine = 0;
             state.characters.clear();
 
+            auto nextWrap = std::ranges::upper_bound(reverseWrapStarts, index);
             while (index < wordCount && state.lineCount < state.lines.size()) {
+                if (nextWrap != reverseWrapStarts.end() && index == *nextWrap)
+                    ++nextWrap;
                 if (index < shapingParagraph.firstWord || index >= shapingParagraph.lastWord) {
                     if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                         appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady,
@@ -263,7 +268,8 @@ namespace screens::PageReader {
                 uint8_t descent = 0;
                 uint8_t yAdvance = 0;
                 while (index < wordCount) {
-                    if (index > line.start && (index == breakBefore || paragraphStart(session, index)))
+                    const bool knownWrap = nextWrap != reverseWrapStarts.end() && index == *nextWrap;
+                    if (index > line.start && (index == breakBefore || knownWrap || paragraphStart(session, index)))
                         break;
                     const std::string_view word = ReadingLoop::wordAt(session, index);
                     const FontCatalog::Face face = typeface(index);
@@ -853,34 +859,43 @@ namespace screens::PageReader {
             return state.lineCount;
         }
 
-        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected) {
+        bool fullyVisibleLine(const State::Line& line, ui::Rect viewport) {
+            const bool measured = line.inkKnown && line.ink.h > 0;
+            const int top = measured ? line.ink.y : line.top;
+            const int bottom = measured ? line.ink.y + line.ink.h : line.bottom;
+            return top >= viewport.y && bottom <= viewport.y + viewport.h;
+        }
+
+        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected, HighlightMode mode) {
+            const auto selectedRow = lineForWord(state, selected);
+            if (selectedRow < state.lineCount) {
+                const auto& line = state.lines[selectedRow];
+                if (fullyVisible(wordAt(state, selected), line, viewport)
+                    && (mode == HighlightMode::selection || fullyVisibleLine(line, viewport)))
+                    return selected;
+            }
+
             size_t firstWord = kInvalidIndex;
             size_t firstCompleteLine = kInvalidIndex;
             const int bottom = viewport.y + viewport.h;
-            for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
-                const State::Line& line = state.lines[lineIndex];
+            for (size_t row = 0; row < state.lineCount; ++row) {
+                const auto& line = state.lines[row];
                 if (line.top >= bottom)
                     break;
                 if (line.bottom <= viewport.y)
                     continue;
-                const bool measured = line.inkKnown && line.ink.h > 0;
-                const int topInk = measured ? line.ink.y : line.top;
-                const int bottomInk = measured ? line.ink.y + line.ink.h : line.bottom;
-                const bool completeLine = topInk >= viewport.y && bottomInk <= bottom;
                 for (size_t index = line.start; index < line.end; ++index) {
                     if (!fullyVisible(wordAt(state, index), line, viewport))
                         continue;
-                    if (index == selected)
-                        return selected;
                     if (firstWord == kInvalidIndex)
                         firstWord = index;
-                    if (completeLine && firstCompleteLine == kInvalidIndex)
+                    if (fullyVisibleLine(line, viewport)) {
+                        if (mode != HighlightMode::secondScrollLine || firstCompleteLine != kInvalidIndex)
+                            return index;
                         firstCompleteLine = index;
-                }
-                // A clipped line can contain shorter, fully visible words.
-                // Prefer a new line to jumping sideways within the clipped one.
-                if (firstCompleteLine != kInvalidIndex && (selected == kInvalidIndex || selected < line.end))
+                    }
                     break;
+                }
             }
             return firstCompleteLine == kInvalidIndex ? firstWord : firstCompleteLine;
         }
@@ -1040,7 +1055,7 @@ namespace screens::PageReader {
 
     void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection) {
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection, HighlightMode highlightMode) {
         auto& state=browse.layout;
         if (ReadingLoop::wordCount(session) == 0) {
             browse.highlighted = kInvalidIndex;
@@ -1067,6 +1082,7 @@ namespace screens::PageReader {
             if (browse.topLine != kInvalidIndex)
                 browse.first = browse.openingWord = browse.topLine;
             browse.previousLines.clear();
+            browse.reverseWrapStarts.clear();
             browse.offset = 0;
             browse.scrollRemainder = 0;
         }
@@ -1078,7 +1094,8 @@ namespace screens::PageReader {
             // lookup can need extra context to locate an older wrap boundary.
             const int16_t height = lookBehind ? 640 : std::min(640, logicalArea.h + 224);
             layout(state, text, typeface, typography, session,
-                   {logicalArea.x, logicalArea.y, logicalArea.w, height}, browse.first, browse.openingWord);
+                   {logicalArea.x, logicalArea.y, logicalArea.w, height}, browse.first, browse.openingWord,
+                   browse.reverseWrapStarts);
             state.layoutRevision = revision;
             state.layoutArea = logicalArea;
         };
@@ -1149,17 +1166,37 @@ namespace screens::PageReader {
 
         while (browse.offset < 0 && browse.first > 0) {
             const size_t old = browse.first;
+            // A new look-behind can wrap differently before this point.
+            // Keep the first row already on screen at its established break.
+            if (old != browse.openingWord && !paragraphStart(session, old)) {
+                auto& starts = browse.reverseWrapStarts;
+                const auto pos = std::ranges::lower_bound(starts, old);
+                if (pos == starts.end() || *pos != old) {
+                    starts.insert(pos, old);
+                    if (starts.size() > 128) {
+                        if (old - starts.front() > starts.back() - old)
+                            starts.erase(starts.begin());
+                        else
+                            starts.pop_back();
+                    }
+                }
+            }
             browse.first = anchorIndex(session, old - 1);
             rebuild(true);
+            if (state.pageEnd < old) {
+                // The look-behind can contain unusually wide words and hit
+                // the row cap. Begin beside the boundary in that case.
+                browse.first = old - 1;
+                rebuild(true);
+            }
             size_t previous = 0;
             while (previous + 1 < state.lineCount && state.lines[previous + 1].start < old)
                 ++previous;
-            const auto& row = state.lines[previous];
-            const int height = previous + 1 < state.lineCount ? lineOffset(previous + 1) - lineOffset(previous)
-                                                               : row.bottom - row.flowTop + kLineGap;
-            browse.first = row.start;
-            browse.offset += std::max(1, height);
+            browse.first = state.lines[previous].start;
             rebuild();
+            const int height = state.lineCount > 1 && state.lines[1].start == old ? lineOffset(1)
+                : state.lines[0].bottom - state.lines[0].flowTop + kLineGap;
+            browse.offset += std::max(1, height);
         }
         if (followSelection && selected < priorFirst) {
             const auto row = lineForWord(state, selected);
@@ -1198,7 +1235,7 @@ namespace screens::PageReader {
             }
         }
         browse.topLine = state.lines[lineForOffset()].start;
-        browse.highlighted = visibleHighlight(state, browseViewport(browse), selected);
+        browse.highlighted = visibleHighlight(state, browseViewport(browse), selected, highlightMode);
         uint32_t signature=ui::Context::combine(revision,browse.first);
         signature = ui::Context::combine(signature, scale);
         signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,browse.highlighted);

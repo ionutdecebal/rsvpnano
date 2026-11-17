@@ -566,7 +566,7 @@ namespace {
         for (int y = 144; y >= 122; --y)
             frame(true, 201, y);
         const std::vector<uint16_t> settled(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
-        for (const int y : {123, 122, 124, 122}) {
+        for (const int y : {123, 122, 128, 122}) {
             frame(true, 201, y);
             assert(std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
         }
@@ -628,6 +628,150 @@ namespace {
         screen=screens::Screen::FindChapters;frame(false,0,0);save("find-chapters");
         screen=screens::Screen::Reader;reader.openPage();theme=ui::modern::paperTheme();ui.setTheme(theme);frame(false,0,0);save("page-paper");
         assert(committed>0);std::puts("Page, locator and search: simple header, mode preserved, chrome fully restored, direct drag, explicit jump, previous place, keyboard, results preview and cancel verified.");
+    }
+
+    void verifyVerticalPageSelection(Arduino_Canvas& panel) {
+        using screens::PageReader::HighlightMode;
+        ui::Context ui(panel);
+        const auto theme = ui::themes::defaultTheme();
+        ui.setTheme(theme);
+        ui::fonts::AlphaTextRenderer<640> text(panel);
+        assert(text.begin());
+        settings::SettingsStore store;
+        auto& reading = store.settings().reading;
+        screens::ReaderScreen reader(panel, reading);
+        std::vector<std::string> words;
+        loadSamplePage(reader, words);
+        const ui::Rect body{0, 44, 580, 128};
+        const auto& builtin = ui::fonts::LiterataFallbackAlpha4_Sizes;
+        const ui::fonts::AlphaFont* fonts[]{builtin[3], &ui::fonts::LiterataPageAlpha4_17,
+            &ui::fonts::LiterataPageAlpha4_21, &ui::fonts::LiterataPageAlpha4_26, builtin[2]};
+        for (size_t size = 0; size < std::size(fonts); ++size) {
+            screens::PageReader::BrowseState probe;
+            const auto mode = size <= 2 ? HighlightMode::secondScrollLine : HighlightMode::firstScrollLine;
+            const auto render = [&](size_t selected) {
+                ui.beginFrame(40, true);
+                screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
+                    return {std::cref(*fonts[size])};
+                }, reading.typography, 0, reader.session, body, selected,
+                   screens::PageReader::kNativeScale, false, mode);
+                ui.endFrame();
+            };
+            ui.invalidate();
+            render(SIZE_MAX);
+            const auto& lines = probe.layout.lines;
+            assert(lines[1].ink.y + lines[1].ink.h <= body.y + body.h);
+            const auto expected = lines[size <= 2 ? 1 : 0].start;
+            assert(probe.highlighted == expected);
+            assert(lines[1].start + 1 < lines[1].end);
+            const auto pinned = lines[1].start + 1;
+            const auto clipAt = lines[1].ink.y - body.y + 1;
+            if (size == 0) {
+                reading.setPageTextSize(0);
+                reader.openPage();
+                ui.setModernReadingPalette(true);
+                ui.setTouchSource({.surface={640,172},.poll=&poll});
+                auto screen = screens::Screen::Reader;
+                Preferences preferences;
+                uint32_t now = 0;
+                const auto frame = [&](bool down, int x, int y) {
+                    contact = {down, uint16_t(x), uint16_t(y)};
+                    ui.pollTouch(now += 25);
+                    reader.handleModernControls(ui, now, preferences, store, screen);
+                    ui.beginFrame(42, true);
+                    reader.drawPage(ui, now);
+                    ui.endFrame();
+                };
+                const auto& ink = probe.layout.words[pinned].ink;
+                const int x = ink.x + ink.w / 2;
+                const int y = ink.y + ink.h / 2;
+                frame(false, 0, 0);
+                frame(true, x, y);
+                frame(false, x, y);
+                assert(reader.pageHighlightedWord() == pinned);
+                frame(true, 200, 130);
+                frame(true, 215, 130);
+                frame(false, 215, 130);
+                assert(reader.pageHighlightedWord() == pinned + 1);
+                frame(true, 200, 145);
+                frame(true, 200, 134);
+                assert(reader.pageHighlightedWord() == pinned + 1);
+                frame(true, 200, 145 - clipAt - 6);
+                assert(reader.pageHighlightedWord() > pinned + 1);
+                frame(false, 200, 145 - clipAt - 6);
+                assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
+            }
+            render(pinned);
+            assert(probe.highlighted == pinned);
+            probe.scrollBy(3);
+            render(pinned);
+            assert(probe.highlighted == pinned);
+            probe.scrollBy(clipAt - 3);
+            render(pinned);
+            assert(probe.highlighted != pinned);
+            assert(probe.highlighted >= lines[2].start);
+
+            // A viewport with only one complete line still has a highlight.
+            ui.invalidate();
+            ui.beginFrame(41, true);
+            probe = {};
+            screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
+                return {std::cref(*fonts[size])};
+            }, reading.typography, 0, reader.session,
+               {body.x, body.y, body.w, static_cast<int16_t>(fonts[size]->ascent + fonts[size]->descent + 8)},
+               SIZE_MAX, screens::PageReader::kNativeScale, false, mode);
+            assert(probe.highlighted == 0);
+            ui.endFrame();
+        }
+    }
+
+    void verifyContinuousPageScroll(Arduino_Canvas& panel) {
+        ui::Context ui(panel);
+        auto theme = ui::themes::defaultTheme();
+        // Remove the highlight colour to compare the exact movement of ink.
+        theme.definition.colors.accent = theme.definition.colors.foreground;
+        ui.setTheme(theme);
+        ui::fonts::AlphaTextRenderer<640> text(panel);
+        assert(text.begin());
+        const ui::Rect body{0, 44, 580, 128};
+        ReadingSession session;
+        std::vector<std::string> words;
+        constexpr std::string_view varied[]{"through", "a", "very", "unusually", "long", "garden",
+                                           "with", "illuminated", "archways", "and", "silent", "birds", "at", "dusk"};
+        for (size_t i = 0; i < 1600; ++i)
+            words.emplace_back(varied[(i * 7 + i / 9) % std::size(varied)]);
+        ReadingLoop::setWords(session, words, 700);
+        const auto& builtin = ui::fonts::LiterataFallbackAlpha4_Sizes;
+        constexpr size_t start = 700;
+        for (const auto* font : {builtin[3], &ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_21,
+                                 &ui::fonts::LiterataPageAlpha4_26, builtin[2]}) {
+            screens::PageReader::BrowseState probe;
+            probe.first = probe.openingWord = start;
+            const auto frame = [&] {
+                ui.beginFrame(39, true);
+                screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
+                    return {std::cref(*font)};
+                }, {}, 0, session, body, SIZE_MAX);
+                ui.endFrame();
+            };
+            ui.invalidate();
+            frame();
+            std::vector<uint16_t> previous(640 * 172);
+            for (int motion = 0; motion < 335; ++motion) {
+                const int delta = motion < 90 ? 1 : -1;
+                std::copy_n(panel.getFramebuffer(), previous.size(), previous.begin());
+                probe.scrollBy(delta);
+                frame();
+                for (int y = body.y + 1; y < body.y + body.h - 1; ++y) {
+                    const auto* row = panel.getFramebuffer() + y * 640;
+                    if (!std::equal(row, row + body.w, previous.begin() + (y + delta) * 640)) {
+                        std::fprintf(stderr, "Unexpected ink movement at %u px, sample %d, row %d\n",
+                                     font->pixelsPerEm, motion, y);
+                        assert(false);
+                    }
+                }
+            }
+        }
     }
 
     int runPagePreview(Arduino_Canvas& panel) {
@@ -930,6 +1074,8 @@ int main(int argc, char** argv) {
     verifyReaderTouchComfort(panel);
     verifyAppearanceAndFocusRoutes(panel);
     verifyNavigation(panel,std::filesystem::path{argv[1]});
+    verifyVerticalPageSelection(panel);
+    verifyContinuousPageScroll(panel);
     verifyBookSettings(panel,std::filesystem::path{argv[1]});
     verifyFilledSliders(panel);
     verifyChunkFrames(panel);

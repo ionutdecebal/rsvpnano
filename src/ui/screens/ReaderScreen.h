@@ -77,6 +77,7 @@ namespace screens {
         bool pageBarVisible() const { return !settings_.pageControlsAutoHide || !pageBarHidden_; }
         PageReader::BrowseState browse_;
         size_t pageSelected_ = 0;
+        bool pageSelectionPinned_ = false;
         size_t returnWord_ = SIZE_MAX;
         size_t candidate_ = 0;
         size_t locatorOrigin_ = 0;
@@ -86,6 +87,8 @@ namespace screens {
         PageGesture pageGesture_ = PageGesture::pending;
         size_t pageTouchControl_ = 0;
         int16_t pageTouchX_ = 0, pageTouchY_ = 0, pageScrollY_ = 0;
+        int8_t pageScrollDirection_ = 0;
+        bool pageVerticalMoved_ = false;
         int pageScrubX_ = 0;
         bool pageScrubFinished_ = false;
         std::string searchQuery_, searchDraft_;
