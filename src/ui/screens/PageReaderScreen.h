@@ -75,7 +75,7 @@ namespace screens::PageReader {
         bool vertical = false;
     };
 
-    enum class ScrollStep { none, previousLine, nextLine, previousPage, nextPage };
+    enum class ScrollStep { none, previousLine, nextLine };
 
     constexpr uint8_t kNativeScale = 100;
 
@@ -91,6 +91,12 @@ namespace screens::PageReader {
         uint8_t scale = kNativeScale;
         ui::Rect displayArea{};
         std::unique_ptr<Arduino_Canvas> viewportCanvas, scaleCanvas;
+        struct SmallFrame {
+            size_t highlighted = SIZE_MAX;
+            int offset = 0;
+            int highlightTop = 0, highlightBottom = 0;
+            bool valid = false;
+        } smallFrame;
         std::vector<std::pair<size_t, int16_t>> previousLines;
 
         void scrollBy(int displayPixels) {
@@ -103,6 +109,7 @@ namespace screens::PageReader {
                 const settings::TypographySettings& typography, uint32_t revision,
                 const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
+    size_t scrubWord(const BrowseState& state, size_t anchor, size_t selected, int displayDistance);
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
               const ReadingSession& session, ui::Rect area, std::string_view overlay = {});

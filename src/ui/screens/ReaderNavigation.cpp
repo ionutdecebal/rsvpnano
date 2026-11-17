@@ -82,7 +82,7 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
     }
     if (pageBarVisible())
         ui::modern::rule(ui,{0,43,640,1});
-    ui.label({584,148,52,24},std::to_string(ReadingProgress::percent(browse_.highlighted == SIZE_MAX ? browse_.first : browse_.highlighted, ReadingLoop::wordCount(session)))+"%",11,ui::themes::Muted,ui::TextAlign::Center);
+    ui.label({584,148,52,24},std::to_string(ReadingProgress::percent(browse_.topLine == SIZE_MAX ? browse_.first : browse_.topLine, ReadingLoop::wordCount(session)))+"%",11,ui::themes::Muted,ui::TextAlign::Center);
 }
 bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, Screen& screen) {
     const auto* touch = ui.touch();
@@ -127,6 +127,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         if (pageGesture_ == PageGesture::pending) {
             if (std::abs(dx) >= horizontalSlop && std::abs(dx) > 2 * std::abs(dy)) {
                 pageGesture_ = PageGesture::horizontal;
+                pageScrubAnchor_ = browse_.highlighted;
             } else if (std::abs(dy) >= verticalSlop && std::abs(dy) >= std::abs(dx)) {
                 pageGesture_ = PageGesture::vertical;
                 pageScrollY_ += dy > 0 ? verticalSlop - jitter : jitter - verticalSlop;
@@ -139,6 +140,10 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
                 browse_.scrollBy(distance);
                 pageScrollY_ -= distance;
             }
+        } else if (pageGesture_ == PageGesture::horizontal) {
+            const size_t word = PageReader::scrubWord(browse_, pageScrubAnchor_, pageSelected_, dx);
+            if (word != SIZE_MAX)
+                pageSelected_ = word;
         }
     }
 
@@ -152,16 +157,8 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         finishScroll();
         return true;
     }
-    if (gesture == PageGesture::horizontal) {
-        if (std::abs(dx) >= 42 && std::abs(dx) > std::abs(dy)) {
-            const bool rtl = session.metadata.directionAt(browse_.highlighted == SIZE_MAX ? browse_.first
-                                                                                          : browse_.highlighted)
-                          == TextDirection::rtl;
-            browse_.step = (dx < 0) != rtl ? PageReader::ScrollStep::nextPage : PageReader::ScrollStep::previousPage;
-            finishScroll();
-        }
+    if (gesture == PageGesture::horizontal)
         return true;
-    }
     if (!ui::hasTouch(*touch, ui::TouchTap)
         || (control < pageText && !ui::contains(pageButtons[control].rect, touch->x, touch->y)))
         return true;

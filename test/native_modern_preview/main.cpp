@@ -412,6 +412,19 @@ namespace {
             assert(highlightInk.y - probe.offset >= body.y);
             save("page-clipped-highlight");
 
+            // A shorter word farther along the clipped line can still fit.
+            // A vertical scroll should highlight the next complete line instead.
+            const auto& clipped = probe.layout.lines[0];
+            assert(clipped.end - clipped.start >= 2);
+            auto& firstInk = probe.layout.words[0].ink;
+            auto& shorter = probe.layout.words[1].ink;
+            firstInk.y = clipped.ink.y;
+            shorter.y = clipped.ink.y + 1;
+            shorter.h = std::max<int16_t>(1, shorter.h - 1);
+            probe.offset = shorter.y - body.y;
+            drawClippedWord(screens::PageReader::kNativeScale);
+            assert(probe.highlighted == probe.layout.lines[1].start);
+
             drawClippedWord(73);
             assert(probe.scaleCanvas && probe.scale == 73 && probe.highlighted == 0);
             const auto scaledInk = probe.layout.words.front().ink;
@@ -441,6 +454,28 @@ namespace {
             probe.scrollBy(-1);
             drawClippedWord(screens::PageReader::kNativeScale);
             assert((inkPosition() == std::pair{beforeX, beforeY}));
+
+            // Reused Small rows must be pixel-identical to a fresh frame,
+            // including the previous and new accent when crossing a top line.
+            probe = {};
+            const auto renderSmall = [&](screens::PageReader::BrowseState& state, size_t highlight) {
+                ui.invalidate();
+                ui.beginFrame(static_cast<uint8_t>(screen), true);
+                screens::PageReader::browse(state, ui, text,
+                    [&](size_t) { return reader.fonts.loadFace(0, smallSize); },
+                    settings.settings().reading.typography, 0, reader.session, body, highlight, 50);
+                ui.endFrame();
+            };
+            renderSmall(probe, 0);
+            for (const auto [movement, selection] : std::array<std::pair<int, size_t>, 5>{{
+                    {4, 1}, {20, SIZE_MAX}, {1, SIZE_MAX}, {-9, SIZE_MAX}, {-16, 2}}}) {
+                probe.scrollBy(movement);
+                renderSmall(probe, selection);
+                const std::vector<uint16_t> cached(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
+                probe.smallFrame.valid = false;
+                renderSmall(probe, selection);
+                assert(std::equal(cached.begin(), cached.end(), panel.getFramebuffer()));
+            }
             ui.invalidate();
             frame(false,0,0);
         }
@@ -456,17 +491,28 @@ namespace {
         assert(screen == screens::Screen::Reader && reader.pageBrowsing() && reader.pageHighlightedWord() == lookup);
         assert(reader.session.state.wordIndex == 0);
 
-        frame(true, 480, 112);
-        frame(true, 464, 114);
-        frame(true, 392, 117);
-        assert(reader.session.state.wordIndex == 0);
-        frame(false, 392, 117);
-        assert(reader.session.state.wordIndex > 0);
-        save("page-side-swipe");
+        settings.settings().reading.pageControlsAutoHide = true;
+        const std::vector<uint16_t> beforeScrub(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
         frame(true, 200, 112);
-        frame(true, 290, 112);
-        frame(false, 290, 112);
-        assert(reader.session.state.wordIndex == 0);
+        frame(true, 240, 113);
+        frame(true, 365, 116);
+        const auto toRight = reader.pageHighlightedWord();
+        assert(toRight > lookup && reader.session.state.wordIndex == 0);
+        frame(true, 265, 116);
+        assert(reader.pageHighlightedWord() < toRight);
+        frame(false, 265, 116);
+        assert(reader.pageHighlightedWord() > lookup && reader.session.state.wordIndex == 0);
+        assert(!reader.revealPageControls()); // The scrub kept the header visible.
+        save("page-word-scrub");
+        const auto* afterScrub = panel.getFramebuffer();
+        assert(std::equal(beforeScrub.begin(), beforeScrub.begin() + 640 * 44, afterScrub));
+        assert(std::equal(beforeScrub.begin() + 640 * 98, beforeScrub.end(), afterScrub + 640 * 98));
+        const auto scrubbed = reader.pageHighlightedWord();
+        tap(200, 20);
+        assert(screen == screens::Screen::Dictionary && dictionary::previewLookupWord == scrubbed);
+        tap(42, 22);
+        assert(screen == screens::Screen::Reader && reader.pageHighlightedWord() == scrubbed);
+        settings.settings().reading.pageControlsAutoHide = false;
 
         frame(true, 200, 145);
         for (int y = 144; y >= 122; --y)

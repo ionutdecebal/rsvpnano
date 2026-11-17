@@ -86,6 +86,7 @@ namespace screens {
         PageGesture pageGesture_ = PageGesture::pending;
         size_t pageTouchControl_ = 0;
         int16_t pageTouchX_ = 0, pageTouchY_ = 0, pageScrollY_ = 0;
+        size_t pageScrubAnchor_ = SIZE_MAX;
         std::string searchQuery_, searchDraft_;
         ui::KeyboardState searchKeyboard_;
         std::vector<size_t> searchResults_;
