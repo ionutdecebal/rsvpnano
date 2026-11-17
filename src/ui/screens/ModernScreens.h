@@ -8,7 +8,8 @@ namespace screens::modern {
         if (width != 640 || height != 172) return false;
         switch (screen) {
         case Screen::Read: case Screen::Library: case Screen::Chapters: case Screen::Settings:
-        case Screen::ReadingSettings: case Screen::PacingSettings: case Screen::InterfaceSettings:
+        case Screen::ReadingSettings: case Screen::PageSettings:
+        case Screen::PacingSettings: case Screen::InterfaceSettings:
         case Screen::ReaderAppearance: case Screen::BookFonts: case Screen::NetworkSettings:
         case Screen::Device: case Screen::Ota: case Screen::FocusTimers:
         case Screen::FocusEditor: case Screen::FocusNameEdit: case Screen::FocusSession:

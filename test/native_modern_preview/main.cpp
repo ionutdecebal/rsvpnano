@@ -482,7 +482,7 @@ namespace {
             Screen previous;
             do {
                 previous = screen;
-                ui.setModernPresentation(screen != Screen::Reader);
+                ui.setModernPresentation(screens::modern::enabled(ui.width(), ui.height(), screen));
                 ui.setModernReadingPalette(screen == Screen::Reader);
                 ui.beginFrame(static_cast<uint8_t>(screen), screen == Screen::Reader && reader.pageBrowsing());
                 Action action = Action::None;
