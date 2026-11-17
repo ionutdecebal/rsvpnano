@@ -49,14 +49,19 @@ void ReaderScreen::commitPlace(size_t index,Preferences& preferences,uint32_t no
     pageSelected_=session.state.wordIndex;
 }
 void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
-    const auto revision = ui::Context::combine(typographyRevision_, settings_.compactPageText);
-    const size_t selected = pageScrollFinished_ ? SIZE_MAX : pageSelected_;
+    // Intermediate sizes downsample the antialiased Small strike. The two
+    // existing endpoints use their original Compact and Small strikes.
+    constexpr uint8_t scales[]{PageReader::kNativeScale, 58, 73, 85, PageReader::kNativeScale};
+    const auto size = settings_.pageTextSizeIndex();
+    const auto revision = ui::Context::combine(typographyRevision_, size);
+    const size_t selected = pageDragged_ || pageScrollFinished_ ? SIZE_MAX : pageSelected_;
     PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index); },
-                       typography_, revision, session, pageBody(), selected);
+                       typography_, revision, session, pageBody(), selected, scales[size]);
+    if (!pageDragged_ && browse_.highlighted != SIZE_MAX)
+        pageSelected_ = browse_.highlighted;
     if (pageScrollFinished_) {
         pageScrollFinished_ = false;
-        pageSelected_ = browse_.first;
-        if (pageSelected_ != session.state.wordIndex) {
+        if (browse_.highlighted != SIZE_MAX && pageSelected_ != session.state.wordIndex) {
             if (!pageHasScrolled_) {
                 returnWord_ = session.state.wordIndex;
                 pageHasScrolled_ = true;
@@ -100,7 +105,11 @@ bool ReaderScreen::handlePage(ui::Context& ui,uint32_t nowMs,Preferences& prefer
     if(pageTouchControl_==6 && ui::hasTouch(*touch,ui::TouchMove)) {
         if (!pageDragged_ && std::abs(int(modernTouchY_)-int(touch->y))<6) return true;
         const int delta=pageTouchY_-int(touch->y);
-        if(delta) { browse_.offset+=delta;pageDragged_=true;pageTouchY_=touch->y; }
+        if (delta) {
+            browse_.scrollBy(delta);
+            pageDragged_ = true;
+            pageTouchY_ = touch->y;
+        }
     }
     if(!ui::hasTouch(*touch,ui::TouchRelease)) return true;
     const int control=pageTouchControl_;pageTouchControl_=0;

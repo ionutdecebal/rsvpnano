@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -75,16 +76,29 @@ namespace screens::PageReader {
 
     enum class LineStep { none, previous, next };
 
+    constexpr uint8_t kNativeScale = 100;
+
     struct BrowseState {
         State layout;
         size_t first = 0;
+        size_t highlighted = SIZE_MAX;
         int offset = 0;
+        int scrollRemainder = 0;
         LineStep lineStep = LineStep::none;
+        uint8_t scale = kNativeScale;
+        ui::Rect displayArea{};
+        std::unique_ptr<Arduino_Canvas> scaleCanvas;
         std::vector<std::pair<size_t, int16_t>> previousLines;
+
+        void scrollBy(int displayPixels) {
+            const int distance = displayPixels * kNativeScale + scrollRemainder;
+            offset += distance / scale;
+            scrollRemainder = distance % scale;
+        }
     };
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected);
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,

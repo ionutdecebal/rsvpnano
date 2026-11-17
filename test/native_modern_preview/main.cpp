@@ -387,6 +387,34 @@ namespace {
             tap(608,120);assert(reader.session.state.wordIndex == afterNext);
             tap(608,70);assert(reader.session.state.wordIndex == next);
             tap(608,70);assert(reader.session.state.wordIndex == 0);
+
+            const ui::Rect body{0, 44, 580, 128};
+            const auto initialInk = probe.layout.words.front().ink;
+            const auto drawClippedWord = [&](uint8_t scale) {
+                ui.beginFrame(static_cast<uint8_t>(screen), true);
+                screens::PageReader::browse(probe, ui, text,
+                    [&](size_t) { return reader.fonts.loadFace(0, smallSize); },
+                    settings.settings().reading.typography, 0, reader.session, body, 0, scale);
+                ui.endFrame();
+            };
+            probe.offset = initialInk.y + initialInk.h - body.y - 2;
+            assert(probe.offset > 0);
+            drawClippedWord(screens::PageReader::kNativeScale);
+            assert(probe.first == 0 && probe.highlighted != 0 && probe.highlighted < probe.layout.pageEnd);
+            const auto highlightInk = probe.layout.words[probe.highlighted - probe.layout.pageStart].ink;
+            assert(highlightInk.y - probe.offset >= body.y);
+            save("page-clipped-highlight");
+
+            drawClippedWord(73);
+            assert(probe.scaleCanvas && probe.scale == 73 && probe.highlighted == 0);
+            const auto scaledInk = probe.layout.words.front().ink;
+            const int x = body.x + (scaledInk.x + scaledInk.w / 2) * probe.scale / screens::PageReader::kNativeScale;
+            const int y = body.y + (scaledInk.y + scaledInk.h / 2) * probe.scale / screens::PageReader::kNativeScale;
+            assert(screens::PageReader::wordAtPoint(probe, x, y) == 0);
+            for (int i = 0; i < 73; ++i) probe.scrollBy(1);
+            assert(probe.offset == 100 && probe.scrollRemainder == 0);
+            ui.invalidate();
+            frame(false,0,0);
         }
         frame(true,200,145);frame(true,200,65);
         assert(reader.session.state.wordIndex == 0);
@@ -412,8 +440,15 @@ namespace {
         ui.invalidate();
         frame(false,0,0);
         assert(reader.session.state.wordIndex == hiddenPosition && !reader.revealPageControls());
-        reading.compactPageText = false;
         reading.pageControlsAutoHide = false;
+        for (uint8_t level = 1; level <= 3; ++level) {
+            reading.setPageTextSize(level);
+            frame(false,0,0);
+            const auto name = "page-size-" + std::to_string(level + 1);
+            save(name.c_str());
+            assert(previewRuntimeSize == smallSize);
+        }
+        reading.setPageTextSize(4);
         frame(false,0,0);
         assert(previewRuntimeSize == smallSize);
         settings.settings().reading.mode=settings::ReadingMode::chunks;

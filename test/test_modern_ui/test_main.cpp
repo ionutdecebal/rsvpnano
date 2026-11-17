@@ -131,6 +131,11 @@ void test_page_settings_route_uses_device_presentation() {
     TEST_ASSERT_FALSE(reading.pageControlsAutoHide);
     TEST_ASSERT_EQUAL(screens::Action::Resume, f.tap(draw, 160, 75));
     TEST_ASSERT_TRUE(reading.compactPageText);
+    TEST_ASSERT_EQUAL_UINT8(0, reading.pageTextSizeIndex());
+    for (uint8_t index = 1; index <= 4; ++index) {
+        TEST_ASSERT_EQUAL(screens::Action::Resume, f.tap(draw, 160, 75));
+        TEST_ASSERT_EQUAL_UINT8(index, reading.pageTextSizeIndex());
+    }
     TEST_ASSERT_EQUAL(screens::Action::Resume, f.tap(draw, 470, 75));
     TEST_ASSERT_TRUE(reading.pageControlsAutoHide);
     f.tap(draw, 55, 20);

@@ -13,6 +13,7 @@ namespace screens {
             pageFontActive_ = false;
             pageState_ = {};
             browse_.layout = {};
+            browse_.scaleCanvas.reset();
             loadedWordIndex_ = SIZE_MAX;
             loadedFontSizeIndex_ = 0xFF;
         }
@@ -34,7 +35,7 @@ namespace screens {
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
         pageFontActive_ = true;
         const size_t size = pageBrowsing_
-            ? RFont4::sizeIndexForId(settings_.compactPageText ? "compact" : "small")
+            ? RFont4::sizeIndexForId(settings_.pageTextSizeIndex() == 0 ? "compact" : "small")
             : readerLayout::pageStrikeIndex();
         return fonts.loadFace(fontChoice(wordIndex), size);
     }

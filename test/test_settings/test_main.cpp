@@ -97,6 +97,19 @@ void test_page_settings_round_trip_and_default_for_existing_readers() {
     TEST_ASSERT_TRUE(restored->reading.compactPageText);
     TEST_ASSERT_TRUE(restored->reading.pageControlsAutoHide);
     TEST_ASSERT_EQUAL_UINT16(370, restored->reading.wpm);
+    TEST_ASSERT_EQUAL_UINT8(4, old->reading.pageTextStep);
+    TEST_ASSERT_EQUAL_UINT8(0, restored->reading.pageTextSizeIndex());
+
+    for (uint8_t index = 0; index < 5; ++index) {
+        restored->reading.setPageTextSize(index);
+        saved = settings::codec::encodeToml(*restored, settings::SettingsSource::Sd);
+        TEST_ASSERT_TRUE(saved.has_value());
+        restored = settings::codec::decodeToml(*saved, settings::SettingsSource::Sd);
+        TEST_ASSERT_TRUE(restored.has_value());
+        TEST_ASSERT_EQUAL_UINT8(index, restored->reading.pageTextSizeIndex());
+        TEST_ASSERT_EQUAL_UINT8(0, restored->reading.typography.fontSizeIndex);
+        TEST_ASSERT_TRUE(restored->reading.pageControlsAutoHide);
+    }
 }
 
 void test_battery_curve_reaches_full() {

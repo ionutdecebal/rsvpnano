@@ -4,6 +4,10 @@
 #include <algorithm>
 #include <iterator>
 
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM)
+#include <esp_heap_caps.h>
+#endif
+
 #include "reader/ReadingLoop.h"
 #include "text/BidiText.h"
 #include "text/UnicodeText.h"
@@ -562,6 +566,43 @@ namespace screens::PageReader {
             }
         }
 
+        void drawPageWords(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
+                           const settings::TypographySettings& typography, const ReadingSession& session,
+                           ui::Rect translatedArea, ui::Rect viewport, int16_t dx, int16_t dy, size_t highlighted) {
+            if (state.vertical) {
+                for (size_t index = state.pageStart; index < state.pageEnd; ++index) {
+                    const auto& word = wordAt(state, index);
+                    if (!visibleInk(word.ink, word.inkKnown, viewport))
+                        continue;
+                    drawVerticalWord(state, ui, text, session, index,
+                                     index == highlighted ? ui::themes::ColorRole::Accent
+                                                          : ui::themes::ColorRole::Foreground,
+                                     dx, dy);
+                }
+            } else {
+                for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
+                    State::Line line = state.lines[lineIndex];
+                    if (!visibleInk(line.ink, line.inkKnown, viewport))
+                        continue;
+                    line.y = static_cast<int16_t>(line.y + dy);
+                    if (line.bidi) {
+                        drawLine(state, line, ui, text, translatedArea, highlighted, viewport);
+                        continue;
+                    }
+                    for (size_t index = line.start; index < line.end; ++index) {
+                        const State::Word& word = wordAt(state, index);
+                        if (!visibleInk(word.ink, word.inkKnown, viewport))
+                            continue;
+                        const auto role = index == highlighted ? ui::themes::ColorRole::Accent
+                                                               : ui::themes::ColorRole::Foreground;
+                        activateFace(text, faceAt(state, index));
+                        drawWord(state, ui, text, typography, session, index, static_cast<int16_t>(word.x + dx),
+                                 static_cast<int16_t>(word.y + dy), role);
+                    }
+                }
+            }
+        }
+
         void paintPage(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
                        const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
                        ui::Rect dirty, size_t highlighted, std::string_view overlay, bool clip = false) {
@@ -582,38 +623,7 @@ namespace screens::PageReader {
                 Arduino_GFX& previousOutput = text.setOutput(clip ? static_cast<Arduino_GFX&>(clipped) : output);
                 const ui::Rect viewport{static_cast<int16_t>(-dx), static_cast<int16_t>(-dy), output.width(),
                                         output.height()};
-                if (state.vertical) {
-                    for (size_t index = state.pageStart; index < state.pageEnd; ++index) {
-                        const auto& word = wordAt(state, index);
-                        if (!visibleInk(word.ink, word.inkKnown, viewport))
-                            continue;
-                        drawVerticalWord(state, ui, text, session, index,
-                                         index == highlighted ? ui::themes::ColorRole::Accent
-                                                              : ui::themes::ColorRole::Foreground,
-                                         dx, dy);
-                    }
-                } else {
-                    for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
-                        State::Line line = state.lines[lineIndex];
-                        if (!visibleInk(line.ink, line.inkKnown, viewport))
-                            continue;
-                        line.y = static_cast<int16_t>(line.y + dy);
-                        if (line.bidi) {
-                            drawLine(state, line, ui, text, translatedArea, highlighted, viewport);
-                            continue;
-                        }
-                        for (size_t index = line.start; index < line.end; ++index) {
-                            const State::Word& word = wordAt(state, index);
-                            if (!visibleInk(word.ink, word.inkKnown, viewport))
-                                continue;
-                            const auto role = index == highlighted ? ui::themes::ColorRole::Accent
-                                                                   : ui::themes::ColorRole::Foreground;
-                            activateFace(text, faceAt(state, index));
-                            drawWord(state, ui, text, typography, session, index, static_cast<int16_t>(word.x + dx),
-                                     static_cast<int16_t>(word.y + dy), role);
-                        }
-                    }
-                }
+                drawPageWords(state, ui, text, typography, session, translatedArea, viewport, dx, dy, highlighted);
                 if (!overlay.empty()) {
                     output.fillRect(static_cast<int16_t>(overlayBounds.x + dx - 4),
                                     static_cast<int16_t>(overlayBounds.y + dy - 2),
@@ -624,6 +634,105 @@ namespace screens::PageReader {
                 }
                 text.setOutput(previousOutput);
             });
+        }
+
+        int16_t logicalExtent(int16_t pixels, uint8_t scale) {
+            return static_cast<int16_t>((int(pixels) * kNativeScale + scale - 1) / scale);
+        }
+
+        class PageScaleCanvas final : public Arduino_Canvas {
+        public:
+            PageScaleCanvas(int16_t width, int16_t height) : Arduino_Canvas(width, height, nullptr) {}
+
+            bool begin(int32_t speed) override {
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM)
+                if (_framebuffer == nullptr) {
+                    const size_t bytes = static_cast<size_t>(width()) * height() * sizeof(uint16_t);
+                    _framebuffer = static_cast<uint16_t*>(heap_caps_aligned_alloc(16, bytes,
+                                                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                }
+                return _framebuffer != nullptr;
+#else
+                return Arduino_Canvas::begin(speed);
+#endif
+            }
+        };
+
+        uint16_t blendPixel(uint16_t a, uint16_t b, uint32_t fraction) {
+            if (a == b || fraction == 0)
+                return a;
+            constexpr uint32_t redBlue = 0xf81f;
+            constexpr uint32_t green = 0x07e0;
+            const uint32_t inverse = 32 - fraction;
+            // Five bits of weight let red and blue share one multiply without carries between them.
+            return (((((a & redBlue) * inverse + (b & redBlue) * fraction) >> 5) & redBlue)
+                  | ((((a & green) * inverse + (b & green) * fraction) >> 5) & green));
+        }
+
+        void paintScaledPage(const State& state, Arduino_Canvas& canvas, ui::Context& ui,
+                             ui::fonts::AlphaTextRenderer<640>& text, const settings::TypographySettings& typography,
+                             const ReadingSession& session, ui::Rect area, ui::Rect logicalArea,
+                             size_t highlighted, uint8_t scale) {
+            canvas.fillRect(0, 0, logicalArea.w, logicalArea.h, ui.color(ui::themes::Background));
+            ui::ClippedGfx clipped(canvas, logicalArea);
+            Arduino_GFX& previous = text.setOutput(clipped);
+            drawPageWords(state, ui, text, typography, session, logicalArea, logicalArea, 0, 0, highlighted);
+            text.setOutput(previous);
+
+            const uint16_t* pixels = canvas.getFramebuffer();
+            // Sample the centers of the output pixels in the original antialiased bitmap.
+            const uint32_t stride = (uint32_t(kNativeScale) << 16) / scale;
+            const uint32_t first = (stride - (1U << 16)) / 2;
+            ui.paint(area, [&](Arduino_GFX& output, ui::Rect translated) {
+                std::array<uint16_t, 640> row;
+                if (translated.w > static_cast<int16_t>(row.size()))
+                    return;
+                uint32_t sourceY = first;
+                for (int16_t y = 0; y < translated.h; ++y, sourceY += stride) {
+                    const int y0 = std::min<int>(sourceY >> 16, logicalArea.h - 1);
+                    const int y1 = std::min(y0 + 1, int(logicalArea.h) - 1);
+                    const uint32_t fy = (sourceY >> 11) & 31;
+                    const uint16_t* upper = pixels + y0 * canvas.width();
+                    const uint16_t* lower = pixels + y1 * canvas.width();
+                    uint32_t sourceX = first;
+                    for (int16_t x = 0; x < translated.w; ++x, sourceX += stride) {
+                        const int x0 = std::min<int>(sourceX >> 16, logicalArea.w - 1);
+                        const int x1 = std::min(x0 + 1, int(logicalArea.w) - 1);
+                        const uint32_t fx = (sourceX >> 11) & 31;
+                        row[x] = blendPixel(blendPixel(upper[x0], upper[x1], fx), blendPixel(lower[x0], lower[x1], fx), fy);
+                    }
+                    output.draw16bitRGBBitmap(translated.x, translated.y + y, row.data(), translated.w, 1);
+                }
+            });
+        }
+
+        bool fullyVisible(const State::Word& word, const State::Line& line, ui::Rect viewport) {
+            const ui::Rect ink = word.inkKnown ? word.ink
+                : ui::Rect{word.x, line.top, word.width, static_cast<int16_t>(line.bottom - line.top)};
+            return ink.w > 0 && ink.h > 0 && ink.x >= viewport.x && ink.y >= viewport.y
+                && ink.x + ink.w <= viewport.x + viewport.w && ink.y + ink.h <= viewport.y + viewport.h;
+        }
+
+        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected) {
+            size_t first = kInvalidIndex;
+            for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
+                const State::Line& line = state.lines[lineIndex];
+                if (line.top >= viewport.y + viewport.h)
+                    break;
+                if (line.bottom <= viewport.y)
+                    continue;
+                for (size_t index = line.start; index < line.end; ++index) {
+                    if (!fullyVisible(wordAt(state, index), line, viewport))
+                        continue;
+                    if (index == selected)
+                        return selected;
+                    if (first == kInvalidIndex)
+                        first = index;
+                }
+                if (first != kInvalidIndex && (selected == kInvalidIndex || selected < line.end))
+                    return first;
+            }
+            return first;
         }
 
         void paintHighlights(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
@@ -781,19 +890,44 @@ namespace screens::PageReader {
 
     void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected) {
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale) {
         auto& state=browse.layout;
-        if (ReadingLoop::wordCount(session)==0) { ui.redraw(area,0); return; }
+        if (ReadingLoop::wordCount(session) == 0) {
+            browse.highlighted = kInvalidIndex;
+            ui.redraw(area, 0);
+            return;
+        }
+        if (scale != kNativeScale) {
+            const auto width = static_cast<int16_t>((logicalExtent(area.w, scale) + 7) & ~7);
+            const auto height = logicalExtent(ui.height(), scale);
+            if (!browse.scaleCanvas || browse.scaleCanvas->width() != width || browse.scaleCanvas->height() != height) {
+                browse.scaleCanvas.reset();
+                auto canvas = std::make_unique<PageScaleCanvas>(width, height);
+                if (canvas->begin(GFX_SKIP_OUTPUT_BEGIN))
+                    browse.scaleCanvas = std::move(canvas);
+            }
+            if (!browse.scaleCanvas)
+                scale = kNativeScale;
+        } else {
+            browse.scaleCanvas.reset();
+        }
+        const ui::Rect logicalArea = scale == kNativeScale ? area
+            : ui::Rect{0, 0, logicalExtent(area.w, scale), logicalExtent(area.h, scale)};
+        browse.displayArea = area;
         browse.first=std::min(browse.first,ReadingLoop::wordCount(session)-1);
         const auto rebuild=[&] {
-            layout(state,text,typeface,typography,session,{area.x,area.y,area.w,640},browse.first);
-            state.layoutRevision=revision; state.layoutArea=area;
+            layout(state, text, typeface, typography, session,
+                   {logicalArea.x, logicalArea.y, logicalArea.w, 640}, browse.first);
+            state.layoutRevision = revision;
+            state.layoutArea = logicalArea;
         };
-        if (state.layoutRevision != revision || state.layoutArea.w != area.w) {
+        if (browse.scale != scale || state.layoutRevision != revision || state.layoutArea.w != logicalArea.w) {
             browse.previousLines.clear();
             browse.offset = 0;
+            browse.scrollRemainder = 0;
         }
-        if (state.pageStart != browse.first || state.layoutRevision != revision || state.layoutArea != area)
+        browse.scale = scale;
+        if (state.pageStart != browse.first || state.layoutRevision != revision || state.layoutArea != logicalArea)
             rebuild();
 
         const auto moveToPreviousLine = [&] {
@@ -825,12 +959,14 @@ namespace screens::PageReader {
         } else if (browse.lineStep == LineStep::next && state.lineCount > 1) {
             browse.offset = state.lines[1].top - state.lines[0].top;
         }
+        if (browse.lineStep != LineStep::none)
+            browse.scrollRemainder = 0;
         browse.lineStep = LineStep::none;
         while (browse.offset < 0 && browse.first > 0)
             browse.offset += moveToPreviousLine();
         browse.offset=std::max(0,browse.offset);
         if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
-            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
+            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-logicalArea.y-logicalArea.h+4)));
         while(state.lineCount>1 && browse.offset>=state.lines[1].top-state.lines[0].top) {
             const int16_t height=state.lines[1].top-state.lines[0].top;
             if(browse.previousLines.size()>=128) browse.previousLines.erase(browse.previousLines.begin());
@@ -838,11 +974,15 @@ namespace screens::PageReader {
             browse.first=state.lines[1].start; browse.offset-=height; rebuild();
         }
         if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
-            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
-        if (selected == SIZE_MAX)
-            selected = browse.first;
+            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-logicalArea.y-logicalArea.h+4)));
+        auto visible = logicalArea;
+        visible.y += browse.offset;
+        visible.w = static_cast<int16_t>(int(area.w) * kNativeScale / scale);
+        visible.h = static_cast<int16_t>(int(area.h) * kNativeScale / scale);
+        browse.highlighted = visibleHighlight(state, visible, selected);
         uint32_t signature=ui::Context::combine(revision,browse.first);
-        signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,selected);
+        signature = ui::Context::combine(signature, scale);
+        signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,browse.highlighted);
         if(!ui.redraw(area,signature,true)) return;
         const auto shift=[&](int delta) {
             for(size_t i=0;i<state.lineCount;++i) {
@@ -851,10 +991,20 @@ namespace screens::PageReader {
             for(auto& word:state.words) { word.y+=delta;word.ink.y+=delta; }
         };
         shift(-browse.offset);
-        paintPage(state,ui,text,typography,session,area,area,selected,{},true);
+        if (scale == kNativeScale)
+            paintPage(state, ui, text, typography, session, area, area, browse.highlighted, {}, true);
+        else
+            paintScaledPage(state, *browse.scaleCanvas, ui, text, typography, session, area, logicalArea,
+                            browse.highlighted, scale);
         shift(browse.offset);
     }
     size_t wordAtPoint(const BrowseState& browse,int16_t x,int16_t y) {
+        if (!ui::contains(browse.displayArea, x, y))
+            return kInvalidIndex;
+        if (browse.scale != kNativeScale) {
+            x = (x - browse.displayArea.x) * kNativeScale / browse.scale;
+            y = (y - browse.displayArea.y) * kNativeScale / browse.scale;
+        }
         const auto& state=browse.layout;y+=browse.offset;
         for(size_t l=0;l<state.lineCount;++l) {
             const auto& line=state.lines[l];
