@@ -866,15 +866,7 @@ namespace screens::PageReader {
             return top >= viewport.y && bottom <= viewport.y + viewport.h;
         }
 
-        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected, HighlightMode mode) {
-            const auto selectedRow = lineForWord(state, selected);
-            if (selectedRow < state.lineCount) {
-                const auto& line = state.lines[selectedRow];
-                if (fullyVisible(wordAt(state, selected), line, viewport)
-                    && (mode == HighlightMode::selection || fullyVisibleLine(line, viewport)))
-                    return selected;
-            }
-
+        size_t automaticHighlight(const State& state, ui::Rect viewport, HighlightMode mode) {
             size_t firstWord = kInvalidIndex;
             size_t firstCompleteLine = kInvalidIndex;
             const int bottom = viewport.y + viewport.h;
@@ -898,6 +890,26 @@ namespace screens::PageReader {
                 }
             }
             return firstCompleteLine == kInvalidIndex ? firstWord : firstCompleteLine;
+        }
+
+        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected, HighlightMode mode) {
+            if (selected != kInvalidIndex) {
+                const auto row = lineForWord(state, selected);
+                if (row < state.lineCount) {
+                    const auto& line = state.lines[row];
+                    if (fullyVisible(wordAt(state, selected), line, viewport)) {
+                        if (mode == HighlightMode::selection)
+                            return selected;
+                        if (fullyVisibleLine(line, viewport)) {
+                            const auto automatic = automaticHighlight(state, viewport, mode);
+                            // Keep the actual word until the automatic
+                            // reading line passes its row.
+                            return automatic == kInvalidIndex || selected >= automatic ? selected : automatic;
+                        }
+                    }
+                }
+            }
+            return automaticHighlight(state, viewport, mode);
         }
 
         void paintHighlights(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
@@ -1113,6 +1125,9 @@ namespace screens::PageReader {
                 ++line;
             return line;
         };
+        const size_t firstBeforeStep = browse.first;
+        const int offsetBeforeStep = browse.offset;
+        bool arrowTarget = false;
         const auto step = browse.step;
         if (step != ScrollStep::none) {
             const auto row = lineForWord(state, browse.stepWord);
@@ -1122,7 +1137,7 @@ namespace screens::PageReader {
                     browse.offset = lineOffset(row);
                 else if (state.lines[row].bottom + kMarginY < visible.y + visible.h)
                     browse.offset = state.lines[row].bottom - logicalArea.y - logicalArea.h + kMarginY;
-                selected = kInvalidIndex;
+                arrowTarget = true;
             }
             browse.scrollRemainder = 0;
             browse.step = ScrollStep::none;
@@ -1233,6 +1248,10 @@ namespace screens::PageReader {
                 browse.offset = end;
                 browse.scrollRemainder = 0;
             }
+        }
+        if (arrowTarget && (browse.first != firstBeforeStep || browse.offset != offsetBeforeStep)) {
+            selected = kInvalidIndex;
+            highlightMode = HighlightMode::secondScrollLine;
         }
         browse.topLine = state.lines[lineForOffset()].start;
         browse.highlighted = visibleHighlight(state, browseViewport(browse), selected, highlightMode);

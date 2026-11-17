@@ -394,11 +394,13 @@ namespace {
             assert(overlap != probe.layout.lines.begin() + probe.layout.lineCount && overlap->start > 0);
             tap(608, 70);
             assert(reader.session.state.wordIndex == 0);
+            assert(overlap + 1 < probe.layout.lines.begin() + probe.layout.lineCount);
             tap(608, 120);
-            assert(reader.session.state.wordIndex == overlap->start && reader.pageHighlightedWord() == overlap->start);
+            const auto afterOverlap = (overlap + 1)->start;
+            assert(reader.session.state.wordIndex == afterOverlap && reader.pageHighlightedWord() == afterOverlap);
             save("page-arrow-down");
             tap(608, 70);
-            assert(reader.session.state.wordIndex == 0 && reader.pageHighlightedWord() == 0);
+            assert(reader.session.state.wordIndex == overlap->start && reader.pageHighlightedWord() == overlap->start);
             save("page-arrow-up");
             ReadingLoop::seekTo(reader.session, 0);
             reader.openPage();
@@ -665,7 +667,10 @@ namespace {
             assert(probe.highlighted == expected);
             assert(lines[1].start + 1 < lines[1].end);
             const auto pinned = lines[1].start + 1;
-            const auto clipAt = lines[1].ink.y - body.y + 1;
+            const auto handoffAt = lines[size <= 2 ? 0 : 1].ink.y - body.y + 1;
+            assert(handoffAt > 0);
+            if (size <= 2)
+                assert(lines[1].ink.y - handoffAt >= body.y);
             if (size == 0) {
                 reading.setPageTextSize(0);
                 reader.openPage();
@@ -694,22 +699,23 @@ namespace {
                 frame(false, 215, 130);
                 assert(reader.pageHighlightedWord() == pinned + 1);
                 frame(true, 200, 145);
-                frame(true, 200, 134);
+                frame(true, 200, 145 - handoffAt - 5);
                 assert(reader.pageHighlightedWord() == pinned + 1);
-                frame(true, 200, 145 - clipAt - 6);
-                assert(reader.pageHighlightedWord() > pinned + 1);
-                frame(false, 200, 145 - clipAt - 6);
+                frame(true, 200, 145 - handoffAt - 6);
+                assert(reader.pageHighlightedWord() == lines[2].start);
+                frame(false, 200, 145 - handoffAt - 6);
                 assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
             }
             render(pinned);
             assert(probe.highlighted == pinned);
-            probe.scrollBy(3);
+            probe.scrollBy(handoffAt - 1);
             render(pinned);
             assert(probe.highlighted == pinned);
-            probe.scrollBy(clipAt - 3);
+            probe.scrollBy(1);
             render(pinned);
-            assert(probe.highlighted != pinned);
-            assert(probe.highlighted >= lines[2].start);
+            assert(probe.highlighted == lines[2].start);
+            render(SIZE_MAX);
+            assert(probe.highlighted == lines[2].start);
 
             // A viewport with only one complete line still has a highlight.
             ui.invalidate();
