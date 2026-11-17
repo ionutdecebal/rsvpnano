@@ -230,6 +230,7 @@ namespace screens::PageReader {
             const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
             int16_t top = static_cast<int16_t>(area.y + kMarginY);
             int16_t previousLineHeight = 0;
+            std::pair<size_t, size_t> paragraphRange{};
             ReadingLoop::TextParagraph shapingParagraph;
             BidiText::Analysis shapingBidi;
             bool paragraphBidi = false;
@@ -243,19 +244,21 @@ namespace screens::PageReader {
             while (index < wordCount && state.lineCount < state.lines.size()) {
                 if (nextWrap != reverseWrapStarts.end() && index == *nextWrap)
                     ++nextWrap;
-                if (index < shapingParagraph.firstWord || index >= shapingParagraph.lastWord) {
+                if (index < paragraphRange.first || index >= paragraphRange.second) {
                     if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                         appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady,
                                             bidiFirstLine, state.lineCount, shapingBidiLine, visual);
-                    shapingParagraph = ReadingLoop::paragraphAt(session, index);
+                    paragraphRange = ReadingLoop::paragraphBoundsAt(session, index);
                     bidiFirstLine = state.lineCount;
-                    paragraphBidi =
-                        session.metadata.requiresBidi(shapingParagraph.firstWord, shapingParagraph.lastWord);
-                    if (paragraphBidi)
+                    paragraphBidi = session.metadata.requiresBidi(paragraphRange.first, paragraphRange.second);
+                    shapingParagraph = {};
+                    if (paragraphBidi) {
+                        shapingParagraph = ReadingLoop::paragraphAt(session, index);
                         shapingBidiReady =
                             shapingBidi
                                 .reset(shapingParagraph.text, session.metadata.directionAt(shapingParagraph.firstWord))
                                 .has_value();
+                    }
                 }
                 const bool startsParagraph = paragraphStart(session, index);
                 if (state.lineCount > 0 && startsParagraph)
@@ -271,8 +274,11 @@ namespace screens::PageReader {
                     const bool knownWrap = nextWrap != reverseWrapStarts.end() && index == *nextWrap;
                     if (index > line.start && (index == breakBefore || knownWrap || paragraphStart(session, index)))
                         break;
-                    const std::string_view word = ReadingLoop::wordAt(session, index);
                     const FontCatalog::Face face = typeface(index);
+                    // Ordinary text needs wrap metrics, not the paragraph's
+                    // full text. Avoid rereading it from SD on each rebase.
+                    if (face.shaper && shapingParagraph.wordOffsets.empty())
+                        shapingParagraph = ReadingLoop::paragraphAt(session, index);
                     const uint8_t faceIndex = rememberFace(state, face);
                     const ui::fonts::AlphaFont& font = face.raster.get();
                     activateFace(text, face);
@@ -1086,6 +1092,7 @@ namespace screens::PageReader {
         }
         const ui::Rect logicalArea = scale == kNativeScale ? area
             : ui::Rect{0, 0, logicalExtent(area.w, scale), logicalExtent(area.h, scale)};
+        const auto previousArea = browse.displayArea;
         browse.displayArea = area;
         const size_t wordCount = ReadingLoop::wordCount(session);
         const bool wrapChanged = browse.scale != scale || state.layoutRevision != revision
@@ -1100,6 +1107,22 @@ namespace screens::PageReader {
         }
         browse.first = std::min(browse.first, wordCount - 1);
         browse.scale = scale;
+        const bool headerMoved = !wrapChanged && previousArea.w == area.w && previousArea.y != area.y
+                              && browse.step == ScrollStep::none;
+        int oldViewportInset = 0;
+        if (headerMoved) {
+            const int oldOffset = browse.offset;
+            browse.scrollBy(area.y - previousArea.y);
+            oldViewportInset = std::max(0, oldOffset - browse.offset);
+        }
+        const auto selectionViewport = [&] {
+            auto visible = browseViewport(browse);
+            // On release, use the original reading area for the last touch
+            // sample even though hiding the bar exposes more text above it.
+            visible.y += oldViewportInset;
+            visible.h -= oldViewportInset;
+            return visible;
+        };
         const auto rebuild = [&](bool lookBehind = false) {
             browse.rowCache.valid = false;
             // Prepare the viewport and several lines beyond it. A reverse
@@ -1142,16 +1165,16 @@ namespace screens::PageReader {
             browse.scrollRemainder = 0;
             browse.step = ScrollStep::none;
             browse.stepWord = kInvalidIndex;
-        } else if (followSelection && selected != kInvalidIndex) {
+        } else if ((followSelection || (headerMoved && area.y > previousArea.y)) && selected != kInvalidIndex) {
             const auto row = lineForWord(state, selected);
             if (row < state.lineCount) {
                 // Follow a forward line crossing near the reading position.
                 // Reversing or scrubbing within one line keeps the page steady
                 // until the selected line would actually leave the viewport.
                 const auto previous = lineForWord(state, browse.highlighted);
-                if (previous < row) {
+                if (followSelection && previous < row) {
                     auto firstVisible = lineForOffset();
-                    const int guide = logicalArea.h * 2 / 5;
+                    const int guide = oldViewportInset + selectionViewport().h * 2 / 5;
                     const size_t last = std::min(row, firstVisible + row - previous);
                     while (firstVisible < last && lineOffset(row) > browse.offset + guide)
                         browse.offset = lineOffset(++firstVisible);
@@ -1221,6 +1244,7 @@ namespace screens::PageReader {
         if (browse.offset < 0) {
             browse.offset = 0;
             browse.scrollRemainder = 0;
+            oldViewportInset = 0;
         }
 
         // Keep the near lines in the current layout across small forward and
@@ -1247,6 +1271,7 @@ namespace screens::PageReader {
             if (browse.offset > end) {
                 browse.offset = end;
                 browse.scrollRemainder = 0;
+                oldViewportInset = 0;
             }
         }
         if (arrowTarget && (browse.first != firstBeforeStep || browse.offset != offsetBeforeStep)) {
@@ -1254,11 +1279,12 @@ namespace screens::PageReader {
             highlightMode = HighlightMode::secondScrollLine;
         }
         browse.topLine = state.lines[lineForOffset()].start;
-        browse.highlighted = visibleHighlight(state, browseViewport(browse), selected, highlightMode);
+        browse.highlighted = visibleHighlight(state, selectionViewport(), selected, highlightMode);
         uint32_t signature=ui::Context::combine(revision,browse.first);
         signature = ui::Context::combine(signature, scale);
         signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,browse.highlighted);
-        if(!ui.redraw(area,signature,true)) return;
+        if (!ui.redrawReplaced(area, signature))
+            return;
         auto region = logicalArea;
         region.y += browse.offset;
         if (browse.viewportCanvas && browse.scaleCanvas) {

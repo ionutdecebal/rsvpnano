@@ -210,19 +210,24 @@ void App::update(uint32_t nowMs) {
         return;
     }
 
-    // Finish/Skip saves setup explicitly. Do not let an automatic settings
-    // retry block the practice/error screens on the card they just rejected.
-    if (!usbTransfer_.active() && screen_ != screens::Screen::Onboarding)
-        settingsStore_.update(nowMs);
-
-    Board::Power::updateBattery(battery_, nowMs);
+    // SD writes and the battery ADC can block a Page drag. Run them once
+    // the gesture's last frame has been displayed.
+    const bool pageGesture = screen_ == screens::Screen::Reader && readerScreen_.pageGestureActive();
+    if (!pageGesture) {
+        // Finish/Skip saves setup explicitly. A retry must not block the
+        // practice/error screens on the card they just rejected.
+        if (!usbTransfer_.active() && screen_ != screens::Screen::Onboarding)
+            settingsStore_.update(nowMs);
+        Board::Power::updateBattery(battery_, nowMs);
+    }
     if (!preparingTypography)
         readerScreen_.update(prefs_, nowMs);
     if (screen_ == screens::Screen::FocusSession && !focusScreen_.manual()) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
     }
-    ReadingProgress::save(readerScreen_.session, prefs_, false, nowMs);
+    if (!pageGesture)
+        ReadingProgress::save(readerScreen_.session, prefs_, false, nowMs);
 
     renderScreen(nowMs);
     if (!preparingTypography && !readerScreen_.session.playing && !companionApi_.active() && !usbTransfer_.active()

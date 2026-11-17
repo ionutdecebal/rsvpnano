@@ -126,7 +126,9 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         resetTouch();
         pageGesture_ = PageGesture::pending;
         pageTouchX_ = touch->x;
-        pageScrollY_ = pageTouchY_ = touch->y;
+        pageScrollY_ = pageTouchY_ = pageLastTouchY_ = touch->y;
+        pageTouchDelta_ = 0;
+        pagePendingTouchY_.reset();
         pageScrollDirection_ = 0;
         pageVerticalMoved_ = false;
         pageTouchControl_ = ui::contains(pageBody(), touch->x, touch->y) ? pageText : none;
@@ -155,6 +157,19 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
             }
         }
         if (pageGesture_ == PageGesture::vertical) {
+            const int rawDelta = int(touch->y) - pageLastTouchY_;
+            const int jump = std::max(8, 2 * std::abs(pageTouchDelta_) + 4);
+            // At slow speed, require a second reading before acting on an
+            // isolated jump. Small changes still track the finger immediately.
+            if (pageVerticalMoved_ && std::abs(rawDelta) > jump) {
+                if (!pagePendingTouchY_ || ((rawDelta > 0) != (*pagePendingTouchY_ > pageLastTouchY_))) {
+                    pagePendingTouchY_ = touch->y;
+                    return true;
+                }
+            }
+            pagePendingTouchY_.reset();
+            pageTouchDelta_ = rawDelta;
+            pageLastTouchY_ = touch->y;
             const int delta = pageScrollY_ - int(touch->y);
             const int direction = delta < 0 ? -1 : 1;
             // Small reversals around a stationary finger need more travel

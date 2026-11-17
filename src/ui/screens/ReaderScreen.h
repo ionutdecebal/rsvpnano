@@ -61,6 +61,9 @@ namespace screens {
         void openLocator(Screen& screen);
         void drawLocator(ui::Context& ui, Screen& screen, Preferences& preferences, uint32_t nowMs);
         bool pageBrowsing() const { return pageBrowsing_; }
+        bool pageGestureActive() const {
+            return pageBrowsing_ && (pageGesture_ != PageGesture::pending || pageScrollFinished_ || pageScrubFinished_);
+        }
 
 
 
@@ -88,6 +91,8 @@ namespace screens {
         size_t pageTouchControl_ = 0;
         int16_t pageTouchX_ = 0, pageTouchY_ = 0, pageScrollY_ = 0;
         int8_t pageScrollDirection_ = 0;
+        int16_t pageLastTouchY_ = 0, pageTouchDelta_ = 0;
+        std::optional<int16_t> pagePendingTouchY_;
         bool pageVerticalMoved_ = false;
         int pageScrubX_ = 0;
         bool pageScrubFinished_ = false;

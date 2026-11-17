@@ -568,13 +568,18 @@ namespace {
         for (int y = 144; y >= 122; --y)
             frame(true, 201, y);
         const std::vector<uint16_t> settled(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
-        for (const int y : {123, 122, 128, 122}) {
+        assert(reader.pageGestureActive());
+        for (const int y : {123, 122, 128, 122, 103, 122}) {
             frame(true, 201, y);
             assert(std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
         }
         frame(true, 230, 65); // A diagonal continuation stays on the locked vertical axis.
+        assert(std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
+        frame(true, 230, 65); // The second sample confirms real fast movement.
+        assert(!std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
         assert(reader.session.state.wordIndex == 0);
         frame(false,200,65);
+        assert(!reader.pageGestureActive());
         const auto scrolledAt = now;
         assert(reader.session.state.wordIndex > 0);
         const int mirrors = previewPageMirrors;
@@ -753,17 +758,32 @@ namespace {
                                  &ui::fonts::LiterataPageAlpha4_26, builtin[2]}) {
             screens::PageReader::BrowseState probe;
             probe.first = probe.openingWord = start;
+            auto viewport = body;
             const auto frame = [&] {
                 ui.beginFrame(39, true);
                 screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
                     return {std::cref(*font)};
-                }, {}, 0, session, body, SIZE_MAX);
+                }, {}, 0, session, viewport, SIZE_MAX);
                 ui.endFrame();
             };
             ui.invalidate();
             frame();
             std::vector<uint16_t> previous(640 * 172);
             for (int motion = 0; motion < 335; ++motion) {
+                if (motion == 85) {
+                    const auto highlighted = probe.highlighted;
+                    std::copy_n(panel.getFramebuffer(), previous.size(), previous.begin());
+                    for (const auto next : {ui::Rect{0, 0, body.w, 172}, body}) {
+                        viewport = next;
+                        ui.invalidate();
+                        frame();
+                        assert(probe.highlighted == highlighted);
+                        for (int y = body.y; y < body.y + body.h; ++y) {
+                            const auto* row = panel.getFramebuffer() + y * 640;
+                            assert(std::equal(row, row + body.w, previous.begin() + y * 640));
+                        }
+                    }
+                }
                 const int delta = motion < 90 ? 1 : -1;
                 std::copy_n(panel.getFramebuffer(), previous.size(), previous.begin());
                 probe.scrollBy(delta);
