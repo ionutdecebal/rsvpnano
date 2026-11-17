@@ -724,25 +724,29 @@ namespace screens::PageReader {
             });
         }
 
-        // Small is exactly half scale. Whole display pixels then correspond to
-        // two source rows, so unchanged rows can move in the finished bitmap.
+        // At native and half scale, whole-pixel drags can reuse rows of the
+        // finished bitmap. Only newly exposed rows and changed accents redraw.
         constexpr uint8_t kHalfScale = kNativeScale / 2;
-        void paintSmallPage(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
+        void paintCachedPage(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
                             const settings::TypographySettings& typography, const ReadingSession& session,
                             ui::Rect area) {
             struct Rows { int begin = 0, end = 0; };
             const auto& state = browse.layout;
             auto& source = *browse.scaleCanvas;
             auto* frame = browse.viewportCanvas->getFramebuffer();
-            auto& cache = browse.smallFrame;
+            auto& cache = browse.rowCache;
             const auto highlighted = browse.highlighted;
+            const int ratio = browse.scale == kHalfScale ? 2 : 1;
+            const auto& logicalArea = state.layoutArea;
+            const int origin = logicalArea.y + browse.offset;
             const auto highlightRows = [&]() -> Rows {
                 if (highlighted == kInvalidIndex)
                     return {};
                 const auto& word = wordAt(state, highlighted);
                 if (!word.inkKnown)
                     return {0, area.h};
-                return {word.ink.y / 2, (word.ink.y + word.ink.h + 1) / 2};
+                const int y = word.ink.y - origin;
+                return {y / ratio, (y + word.ink.h + ratio - 1) / ratio};
             }();
             std::array<Rows, 3> dirty;
             size_t count = 0;
@@ -753,8 +757,8 @@ namespace screens::PageReader {
                     dirty[count++] = range;
             };
             const int distance = browse.offset - cache.offset;
-            const int rows = distance / 2;
-            if (!cache.valid || distance % 2 != 0 || std::abs(rows) >= area.h) {
+            const int rows = distance / ratio;
+            if (!cache.valid || distance % ratio != 0 || std::abs(rows) >= area.h) {
                 addRows({0, area.h});
             } else {
                 if (rows != 0) {
@@ -775,11 +779,16 @@ namespace screens::PageReader {
                 auto [begin, end] = dirty[i];
                 while (i + 1 < count && dirty[i + 1].begin <= end)
                     end = std::max(end, dirty[++i].end);
-                const ui::Rect region{0, static_cast<int16_t>(begin * 2), static_cast<int16_t>(area.w * 2),
-                                      static_cast<int16_t>((end - begin) * 2)};
+                const ui::Rect region{logicalArea.x, static_cast<int16_t>(origin + begin * ratio),
+                                      static_cast<int16_t>(area.w * ratio), static_cast<int16_t>((end - begin) * ratio)};
                 paintBrowseText(state, source, ui, text, typography, session, region, highlighted);
                 const int pitch = source.width();
                 const uint16_t* pixels = source.getFramebuffer();
+                if (ratio == 1) {
+                    for (int y = 0; y < end - begin; ++y)
+                        std::memcpy(frame + (begin + y) * area.w, pixels + y * pitch, area.w * sizeof(*frame));
+                    continue;
+                }
                 for (int y = 0; y < end - begin; ++y) {
                     const uint16_t* upper = pixels + y * 2 * pitch;
                     const uint16_t* lower = upper + pitch;
@@ -810,6 +819,14 @@ namespace screens::PageReader {
             viewport.w = static_cast<int16_t>(int(browse.displayArea.w) * kNativeScale / browse.scale);
             viewport.h = static_cast<int16_t>(int(browse.displayArea.h) * kNativeScale / browse.scale);
             return viewport;
+        }
+
+        size_t lineForWord(const State& state, size_t word) {
+            for (size_t row = 0; row < state.lineCount; ++row) {
+                if (word >= state.lines[row].start && word < state.lines[row].end)
+                    return row;
+            }
+            return state.lineCount;
         }
 
         size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected) {
@@ -999,7 +1016,7 @@ namespace screens::PageReader {
 
     void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale) {
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection, bool cacheNativeRows) {
         auto& state=browse.layout;
         if (ReadingLoop::wordCount(session) == 0) {
             browse.highlighted = kInvalidIndex;
@@ -1008,7 +1025,7 @@ namespace screens::PageReader {
         }
         if constexpr (ui::Context::displayWriteAlignment() == 1)
             ensureCanvas(browse.viewportCanvas, area.w, ui.height());
-        if (scale != kNativeScale) {
+        if (scale != kNativeScale || cacheNativeRows) {
             const auto width = static_cast<int16_t>((logicalExtent(area.w, scale) + 7) & ~7);
             ensureCanvas(browse.scaleCanvas, width, logicalExtent(ui.height(), scale));
             if (!browse.scaleCanvas)
@@ -1031,10 +1048,13 @@ namespace screens::PageReader {
         }
         browse.first = std::min(browse.first, wordCount - 1);
         browse.scale = scale;
-        const auto rebuild = [&] {
-            browse.smallFrame.valid = false;
+        const auto rebuild = [&](bool lookBehind = false) {
+            browse.rowCache.valid = false;
+            // Prepare the viewport and several lines beyond it. A reverse
+            // lookup can need extra context to locate an older wrap boundary.
+            const int16_t height = lookBehind ? 640 : std::min(640, logicalArea.h + 224);
             layout(state, text, typeface, typography, session,
-                   {logicalArea.x, logicalArea.y, logicalArea.w, 640}, browse.first, browse.openingWord);
+                   {logicalArea.x, logicalArea.y, logicalArea.w, height}, browse.first, browse.openingWord);
             state.layoutRevision = revision;
             state.layoutArea = logicalArea;
         };
@@ -1052,26 +1072,37 @@ namespace screens::PageReader {
                 ++line;
             return line;
         };
-        const auto line = lineForOffset();
-        switch (browse.step) {
-        case ScrollStep::previousLine:
-            if (browse.offset > lineOffset(line))
-                browse.offset = lineOffset(line);
-            else if (line > 0)
-                browse.offset = lineOffset(line - 1);
-            else if (browse.first > 0)
-                browse.offset = -1;
-            break;
-        case ScrollStep::nextLine:
-            if (line + 1 < state.lineCount)
-                browse.offset = lineOffset(line + 1);
-            break;
-        case ScrollStep::none: break;
-        }
-        const bool snapToPrevious = browse.step == ScrollStep::previousLine && browse.offset < 0;
-        if (browse.step != ScrollStep::none)
+        const auto step = browse.step;
+        if (step != ScrollStep::none) {
+            const auto row = lineForWord(state, browse.stepWord);
+            if (row < state.lineCount) {
+                const auto visible = browseViewport(browse);
+                if (step == ScrollStep::nextPage) {
+                    browse.offset = lineOffset(row);
+                    selected = browse.stepWord;
+                } else if (state.lines[row].bottom + kMarginY < visible.y + visible.h) {
+                    browse.offset = state.lines[row].bottom - logicalArea.y - logicalArea.h + kMarginY;
+                    selected = browse.stepWord;
+                }
+            }
             browse.scrollRemainder = 0;
-        browse.step = ScrollStep::none;
+            browse.step = ScrollStep::none;
+            browse.stepWord = kInvalidIndex;
+        } else if (followSelection && selected != kInvalidIndex) {
+            const auto row = lineForWord(state, selected);
+            if (row < state.lineCount) {
+                const auto visible = browseViewport(browse);
+                const auto& line = state.lines[row];
+                const int top = line.ink.h > 0 ? line.ink.y : line.top;
+                const int bottom = line.ink.h > 0 ? line.ink.y + line.ink.h : line.bottom;
+                if (top < visible.y)
+                    browse.offset -= visible.y - top;
+                else if (bottom > visible.y + visible.h)
+                    browse.offset += bottom - (visible.y + visible.h);
+            } else if (selected < state.pageStart) {
+                browse.offset = -1;
+            }
+        }
 
         const size_t priorFirst = browse.first;
         while (browse.offset < 0 && !browse.previousLines.empty()) {
@@ -1086,7 +1117,7 @@ namespace screens::PageReader {
         while (browse.offset < 0 && browse.first > 0) {
             const size_t old = browse.first;
             browse.first = anchorIndex(session, old - 1);
-            rebuild();
+            rebuild(true);
             size_t previous = 0;
             while (previous + 1 < state.lineCount && state.lines[previous + 1].start < old)
                 ++previous;
@@ -1097,12 +1128,15 @@ namespace screens::PageReader {
             browse.offset += std::max(1, height);
             rebuild();
         }
+        if (followSelection && selected < priorFirst) {
+            const auto row = lineForWord(state, selected);
+            if (row < state.lineCount)
+                browse.offset = std::min(browse.offset, lineOffset(row));
+        }
         if (browse.offset < 0) {
             browse.offset = 0;
             browse.scrollRemainder = 0;
         }
-        if (snapToPrevious)
-            browse.offset = 0;
 
         // Keep the near lines in the current layout across small forward and
         // backward drags. Rebase several lines at a time to avoid rewrapping
@@ -1136,60 +1170,82 @@ namespace screens::PageReader {
         signature = ui::Context::combine(signature, scale);
         signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,browse.highlighted);
         if(!ui.redraw(area,signature,true)) return;
-        const auto shift=[&](int delta) {
-            for(size_t i=0;i<state.lineCount;++i) {
-                auto& line=state.lines[i];line.y+=delta;line.top+=delta;line.bottom+=delta;line.ink.y+=delta;
-            }
-            for(auto& word:state.words) { word.y+=delta;word.ink.y+=delta; }
-        };
-        shift(-browse.offset);
-        if (scale == kHalfScale && browse.viewportCanvas) {
-            paintSmallPage(browse, ui, text, typography, session, area);
+        auto region = logicalArea;
+        region.y += browse.offset;
+        if ((scale == kHalfScale || cacheNativeRows) && browse.viewportCanvas && browse.scaleCanvas) {
+            paintCachedPage(browse, ui, text, typography, session, area);
         } else if (scale != kNativeScale) {
-            paintBrowseText(state, *browse.scaleCanvas, ui, text, typography, session, logicalArea, browse.highlighted);
+            paintBrowseText(state, *browse.scaleCanvas, ui, text, typography, session, region, browse.highlighted);
             paintScaledPage(*browse.scaleCanvas, browse.viewportCanvas.get(), ui, area, logicalArea, scale);
         } else if (browse.viewportCanvas) {
-            // Send the complete viewport together instead of clearing the LCD
-            // and drawing each word directly during a drag.
             auto& canvas = *browse.viewportCanvas;
-            paintBrowseText(state, canvas, ui, text, typography, session, area, browse.highlighted);
+            paintBrowseText(state, canvas, ui, text, typography, session, region, browse.highlighted);
             ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
                 output.draw16bitRGBBitmap(target.x, target.y, canvas.getFramebuffer(), target.w, target.h);
             });
         } else {
-            paintPage(state, ui, text, typography, session, area, area, browse.highlighted, {}, true);
+            ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
+                output.fillRect(target.x, target.y, target.w, target.h, ui.color(ui::themes::Background));
+                ui::ClippedGfx clipped(output, target);
+                Arduino_GFX& previous = text.setOutput(clipped);
+                drawPageWords(state, ui, text, typography, session, target, region,
+                              target.x - region.x, target.y - region.y, browse.highlighted);
+                text.setOutput(previous);
+            });
         }
-        shift(browse.offset);
     }
-    size_t scrubWord(const BrowseState& browse, size_t anchor, size_t selected, int displayDistance) {
+    size_t edgeWord(const BrowseState& browse, bool bottom) {
         const auto& state = browse.layout;
-        if (anchor < state.pageStart || anchor >= state.pageEnd)
-            return kInvalidIndex;
-        const auto center = [&](size_t index) {
-            const auto& word = wordAt(state, index);
-            return word.inkKnown && word.ink.w > 0 ? word.ink.x + word.ink.w / 2 : word.x + word.width / 2;
-        };
-        const int targetX = center(anchor) + displayDistance * kNativeScale / browse.scale;
-        const int hysteresis = 2 * kNativeScale / browse.scale;
         const auto viewport = browseViewport(browse);
+        size_t edge = kInvalidIndex;
         for (size_t row = 0; row < state.lineCount; ++row) {
             const auto& line = state.lines[row];
-            if (anchor < line.start || anchor >= line.end)
+            if (line.top >= viewport.y + viewport.h)
+                break;
+            if (line.bottom <= viewport.y)
                 continue;
-            int distance = INT16_MAX;
-            size_t nearest = kInvalidIndex;
-            for (size_t index = line.start; index < line.end; ++index) {
-                if (!fullyVisible(wordAt(state, index), line, viewport))
+            for (size_t word = line.start; word < line.end; ++word) {
+                if (!fullyVisible(wordAt(state, word), line, viewport))
                     continue;
-                const int candidate = std::abs(targetX - center(index)) + (index == selected ? 0 : hysteresis);
-                if (candidate < distance) {
+                if (!bottom)
+                    return word;
+                edge = word;
+            }
+        }
+        return edge;
+    }
+
+    size_t scrubWord(const BrowseState& browse, size_t selected, bool right) {
+        const auto& state = browse.layout;
+        const size_t row = lineForWord(state, selected);
+        if (row >= state.lineCount)
+            return kInvalidIndex;
+        const auto& line = state.lines[row];
+        const bool forward = right != line.rightToLeft;
+        if (line.bidi) {
+            const auto center = [&](size_t index) {
+                const auto& word = wordAt(state, index);
+                return word.inkKnown && word.ink.w > 0 ? word.ink.x + word.ink.w / 2 : word.x + word.width / 2;
+            };
+            size_t nearest = kInvalidIndex;
+            const int current = center(selected);
+            int distance = INT16_MAX;
+            for (size_t word = line.start; word < line.end; ++word) {
+                const int delta = center(word) - current;
+                const int candidate = right ? delta : -delta;
+                if (candidate > 0 && candidate < distance) {
                     distance = candidate;
-                    nearest = index;
+                    nearest = word;
                 }
             }
-            return nearest;
+            if (nearest != kInvalidIndex)
+                return nearest;
+            if (forward)
+                return line.end < state.pageEnd ? line.end : kInvalidIndex;
+            return line.start > 0 ? line.start - 1 : kInvalidIndex;
         }
-        return kInvalidIndex;
+        return forward ? (selected + 1 < state.pageEnd ? selected + 1 : kInvalidIndex)
+                       : (selected > 0 ? selected - 1 : kInvalidIndex);
     }
 
     size_t wordAtPoint(const BrowseState& browse,int16_t x,int16_t y) {

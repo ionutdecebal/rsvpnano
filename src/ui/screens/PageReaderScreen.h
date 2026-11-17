@@ -75,7 +75,7 @@ namespace screens::PageReader {
         bool vertical = false;
     };
 
-    enum class ScrollStep { none, previousLine, nextLine };
+    enum class ScrollStep { none, previousPage, nextPage };
 
     constexpr uint8_t kNativeScale = 100;
 
@@ -88,15 +88,16 @@ namespace screens::PageReader {
         int offset = 0;
         int scrollRemainder = 0;
         ScrollStep step = ScrollStep::none;
+        size_t stepWord = SIZE_MAX;
         uint8_t scale = kNativeScale;
         ui::Rect displayArea{};
         std::unique_ptr<Arduino_Canvas> viewportCanvas, scaleCanvas;
-        struct SmallFrame {
+        struct RowCache {
             size_t highlighted = SIZE_MAX;
             int offset = 0;
             int highlightTop = 0, highlightBottom = 0;
             bool valid = false;
-        } smallFrame;
+        } rowCache;
         std::vector<std::pair<size_t, int16_t>> previousLines;
 
         void scrollBy(int displayPixels) {
@@ -107,9 +108,11 @@ namespace screens::PageReader {
     };
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale);
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale,
+                bool followSelection = false, bool cacheNativeRows = false);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
-    size_t scrubWord(const BrowseState& state, size_t anchor, size_t selected, int displayDistance);
+    size_t scrubWord(const BrowseState& state, size_t selected, bool right);
+    size_t edgeWord(const BrowseState& state, bool bottom);
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
               const ReadingSession& session, ui::Rect area, std::string_view overlay = {});

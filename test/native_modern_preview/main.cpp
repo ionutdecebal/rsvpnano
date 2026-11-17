@@ -18,6 +18,7 @@
 #include "drivers/touch/axs15231b_touch/axs15231b_touch.h"
 #include "ui/ClippedGfx.h"
 #include "fonts/LiterataFallbackAlpha4.h"
+#include "fonts/LiterataPageSmallAlpha4.h"
 
 extern int previewSaveCalls, previewPrefetchDelay, previewPageMirrors;
 #include <freertos/task.h>
@@ -387,13 +388,21 @@ namespace {
             ui.invalidate();
             frame(false,0,0);
             assert(probe.layout.lineCount >= 3);
-            const size_t next = probe.layout.lines[1].start;
-            const size_t afterNext = probe.layout.lines[2].start;
-            tap(608,70);assert(reader.session.state.wordIndex == 0);
-            tap(608,120);assert(reader.session.state.wordIndex == next);
-            tap(608,120);assert(reader.session.state.wordIndex == afterNext);
-            tap(608,70);assert(reader.session.state.wordIndex == next);
-            tap(608,70);assert(reader.session.state.wordIndex == 0);
+            const size_t last = screens::PageReader::edgeWord(probe, true);
+            const auto overlap = std::find_if(probe.layout.lines.begin(), probe.layout.lines.begin() + probe.layout.lineCount,
+                [last](const auto& line) { return last >= line.start && last < line.end; });
+            assert(overlap != probe.layout.lines.begin() + probe.layout.lineCount && overlap->start > 0);
+            tap(608, 70);
+            assert(reader.session.state.wordIndex == 0);
+            tap(608, 120);
+            assert(reader.session.state.wordIndex == last && reader.pageHighlightedWord() == last);
+            save("page-arrow-down");
+            tap(608, 70);
+            assert(reader.session.state.wordIndex == overlap->start && reader.pageHighlightedWord() == overlap->start);
+            save("page-arrow-up");
+            ReadingLoop::seekTo(reader.session, 0);
+            reader.openPage();
+            frame(false, 0, 0);
 
             const ui::Rect body{0, 44, 580, 128};
             const auto initialInk = probe.layout.words.front().ink;
@@ -455,26 +464,30 @@ namespace {
             drawClippedWord(screens::PageReader::kNativeScale);
             assert((inkPosition() == std::pair{beforeX, beforeY}));
 
-            // Reused Small rows must be pixel-identical to a fresh frame,
-            // including the previous and new accent when crossing a top line.
-            probe = {};
-            const auto renderSmall = [&](screens::PageReader::BrowseState& state, size_t highlight) {
-                ui.invalidate();
-                ui.beginFrame(static_cast<uint8_t>(screen), true);
-                screens::PageReader::browse(state, ui, text,
-                    [&](size_t) { return reader.fonts.loadFace(0, smallSize); },
-                    settings.settings().reading.typography, 0, reader.session, body, highlight, 50);
-                ui.endFrame();
-            };
-            renderSmall(probe, 0);
-            for (const auto [movement, selection] : std::array<std::pair<int, size_t>, 5>{{
-                    {4, 1}, {20, SIZE_MAX}, {1, SIZE_MAX}, {-9, SIZE_MAX}, {-16, 2}}}) {
-                probe.scrollBy(movement);
-                renderSmall(probe, selection);
-                const std::vector<uint16_t> cached(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
-                probe.smallFrame.valid = false;
-                renderSmall(probe, selection);
-                assert(std::equal(cached.begin(), cached.end(), panel.getFramebuffer()));
+            // Both Small paths reuse rows. Compare incremental moves with a
+            // fresh render, including changed highlights and a reverse drag.
+            for (const bool native : {true, false}) {
+                probe = {};
+                const auto renderSmall = [&](size_t highlight) {
+                    ui.invalidate();
+                    ui.beginFrame(static_cast<uint8_t>(screen), true);
+                    screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
+                        return native ? FontCatalog::Face{std::cref(ui::fonts::LiterataPageSmallAlpha4_17)}
+                                      : reader.fonts.loadFace(0, smallSize);
+                    }, settings.settings().reading.typography, 0, reader.session, body,
+                       highlight, native ? 100 : 50, false, native);
+                    ui.endFrame();
+                };
+                renderSmall(0);
+                for (const auto [movement, selection] : std::array<std::pair<int, size_t>, 5>{{
+                        {4, 1}, {20, SIZE_MAX}, {1, SIZE_MAX}, {-9, SIZE_MAX}, {-16, 2}}}) {
+                    probe.scrollBy(movement);
+                    renderSmall(selection);
+                    const std::vector<uint16_t> cached(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
+                    probe.rowCache.valid = false;
+                    renderSmall(selection);
+                    assert(std::equal(cached.begin(), cached.end(), panel.getFramebuffer()));
+                }
             }
             ui.invalidate();
             frame(false,0,0);
@@ -494,20 +507,24 @@ namespace {
         settings.settings().reading.pageControlsAutoHide = true;
         const std::vector<uint16_t> beforeScrub(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
         frame(true, 200, 112);
-        frame(true, 240, 113);
+        frame(true, 211, 113);
+        assert(reader.pageHighlightedWord() == lookup + 1);
+        const auto* afterShortDrag = panel.getFramebuffer();
+        assert(std::equal(beforeScrub.begin(), beforeScrub.begin() + 640 * 44, afterShortDrag));
+        assert(std::equal(beforeScrub.begin() + 640 * 98, beforeScrub.end(), afterShortDrag + 640 * 98));
         frame(true, 365, 116);
         const auto toRight = reader.pageHighlightedWord();
-        assert(toRight > lookup && reader.session.state.wordIndex == 0);
-        frame(true, 265, 116);
-        assert(reader.pageHighlightedWord() < toRight);
-        frame(false, 265, 116);
-        assert(reader.pageHighlightedWord() > lookup && reader.session.state.wordIndex == 0);
-        assert(!reader.revealPageControls()); // The scrub kept the header visible.
+        assert(toRight == lookup + 10 && reader.session.state.wordIndex == 0);
         save("page-word-scrub");
-        const auto* afterScrub = panel.getFramebuffer();
-        assert(std::equal(beforeScrub.begin(), beforeScrub.begin() + 640 * 44, afterScrub));
-        assert(std::equal(beforeScrub.begin() + 640 * 98, beforeScrub.end(), afterScrub + 640 * 98));
+        frame(true, 265, 116);
+        assert(reader.pageHighlightedWord() == toRight - 5);
+        frame(false, 265, 116);
         const auto scrubbed = reader.pageHighlightedWord();
+        assert(scrubbed > lookup && reader.session.state.wordIndex == 0);
+        assert(reader.revealPageControls());
+        ui.invalidate();
+        frame(false, 0, 0);
+        assert(reader.pageHighlightedWord() == scrubbed);
         tap(200, 20);
         assert(screen == screens::Screen::Dictionary && dictionary::previewLookupWord == scrubbed);
         tap(42, 22);
@@ -552,7 +569,8 @@ namespace {
             frame(false,0,0);
             const auto name = "page-size-" + std::to_string(level + 1);
             save(name.c_str());
-            assert(previewRuntimeSize == smallSize);
+            // The built-in Small path renders its own native face.
+            assert(previewRuntimeSize == (level == 1 ? RFont4::sizeIndexForId("compact") : smallSize));
         }
         reading.setPageTextSize(4);
         frame(false,0,0);

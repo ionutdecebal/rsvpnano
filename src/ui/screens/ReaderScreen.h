@@ -86,7 +86,8 @@ namespace screens {
         PageGesture pageGesture_ = PageGesture::pending;
         size_t pageTouchControl_ = 0;
         int16_t pageTouchX_ = 0, pageTouchY_ = 0, pageScrollY_ = 0;
-        size_t pageScrubAnchor_ = SIZE_MAX;
+        int pageScrubX_ = 0;
+        bool pageScrubFinished_ = false;
         std::string searchQuery_, searchDraft_;
         ui::KeyboardState searchKeyboard_;
         std::vector<size_t> searchResults_;
@@ -147,7 +148,7 @@ namespace screens {
         void refreshTypeface();
         void prefetchUpcomingFont(uint32_t nowMs);
         void prefetchNextWord(uint32_t nowMs);
-        FontCatalog::Face pageTypeface(size_t wordIndex);
+        FontCatalog::Face pageTypeface(size_t wordIndex, bool nativeSmall = false);
 
         int16_t width_;
         int16_t height_;
