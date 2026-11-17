@@ -44,6 +44,8 @@ copy.pageControls=['Top bar','Obere Leiste','Bară de sus'];
 copy.pageControlsAlways=['Always shown','Immer sichtbar','Mereu vizibilă'];
 copy.pageControlsAutoHide=['Auto-hide','Automatisch ausblenden','Ascundere automată'];
 copy.pageControlsHint=['Press the middle button to show the bar.','Drücke die mittlere Taste, um die Leiste einzublenden.','Apasă butonul din mijloc pentru a afișa bara.'];
+copy.pageExtraSmall=["Very Small", "Sehr klein", "Foarte mic"];
+copy.pageExtraLarge=["Very Large", "Sehr groß", "Foarte mare"];
 // RSVP Nano branding; the Pocket Lines mark is retained only as the reading guide.
 const keys=Object.keys(copy),name=k=>k[0].toUpperCase()+k.slice(1);
 const target=path.join(root,'src/ui/screens');
