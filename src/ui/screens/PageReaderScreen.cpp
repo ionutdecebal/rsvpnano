@@ -1068,7 +1068,7 @@ namespace screens::PageReader {
 
     void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection, HighlightMode highlightMode, bool earlierFollow) {
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection, HighlightMode highlightMode, bool anchorSecondLine) {
         auto& state=browse.layout;
         if (ReadingLoop::wordCount(session) == 0) {
             browse.highlighted = kInvalidIndex;
@@ -1103,8 +1103,9 @@ namespace screens::PageReader {
         browse.scale = scale;
         const bool headerMoved = !wrapChanged && previousArea.w == area.w && previousArea.y != area.y
                               && browse.step == ScrollStep::none;
+        const bool anchorScrub = followSelection && anchorSecondLine && selected != kInvalidIndex;
         int oldViewportInset = 0;
-        if (headerMoved) {
+        if (headerMoved && !anchorScrub) {
             const int oldOffset = browse.offset;
             browse.scrollBy(area.y - previousArea.y);
             oldViewportInset = std::max(0, oldOffset - browse.offset);
@@ -1165,6 +1166,21 @@ namespace screens::PageReader {
         else if (state.pageStart != browse.first || state.layoutArea != logicalArea)
             rebuild();
 
+        const auto prependLine = [&] {
+            if (!browse.previousLines.empty()) {
+                const auto [start, height] = browse.previousLines.back();
+                browse.previousLines.pop_back();
+                browse.first = start;
+                return int(height);
+            }
+            const size_t old = browse.first;
+            wrapToWord(old - 1);
+            const auto joining = lineForWord(state, old);
+            const int height = joining < state.lineCount && joining > 0 ? lineOffset(joining)
+                : state.lines[0].bottom - state.lines[0].flowTop + kLineGap;
+            return std::max(1, height);
+        };
+
         // Use line origins so ink overhang does not affect how far we scroll.
         const auto lineForOffset = [&] {
             size_t line = 0;
@@ -1189,6 +1205,20 @@ namespace screens::PageReader {
             browse.scrollRemainder = 0;
             browse.step = ScrollStep::none;
             browse.stepWord = kInvalidIndex;
+        } else if (anchorScrub) {
+            // The preceding line stays at the top, leaving the selected
+            // word on the second row in either scrub direction.
+            auto row = lineForWord(state, selected);
+            while (browse.first > 0 && (row == 0 || selected < browse.first)) {
+                prependLine();
+                if (state.pageStart != browse.first)
+                    rebuild();
+                row = lineForWord(state, selected);
+            }
+            if (row < state.lineCount) {
+                browse.offset = lineOffset(row == 0 ? 0 : row - 1);
+                browse.scrollRemainder = 0;
+            }
         } else if ((followSelection || (headerMoved && area.y > previousArea.y)) && selected != kInvalidIndex) {
             const auto row = lineForWord(state, selected);
             if (row < state.lineCount) {
@@ -1200,11 +1230,7 @@ namespace screens::PageReader {
                     auto firstVisible = lineForOffset();
                     const int guide = oldViewportInset + selectionViewport().h * 2 / 5;
                     const size_t last = std::min(row, firstVisible + row - previous);
-                    // Leave an extra row below the highlighted line at the
-                    // smaller sizes, rounding up only when a line crosses.
-                    const size_t leadLines = earlierFollow ? 2 : 0;
-                    const size_t guideRow = std::min(row + leadLines, state.lineCount - 1);
-                    while (firstVisible < last && lineOffset(guideRow) > browse.offset + guide)
+                    while (firstVisible < last && lineOffset(row) > browse.offset + guide)
                         browse.offset = lineOffset(++firstVisible);
                 }
                 const auto visible = browseViewport(browse);
@@ -1221,26 +1247,11 @@ namespace screens::PageReader {
         }
 
         const size_t priorFirst = browse.first;
-        if (browse.offset < 0 && browse.first > 0) {
-            while (browse.offset < 0 && browse.first > 0) {
-                if (!browse.previousLines.empty()) {
-                    const auto [start, height] = browse.previousLines.back();
-                    browse.previousLines.pop_back();
-                    browse.first = start;
-                    browse.offset += height;
-                    continue;
-                }
-                const size_t old = browse.first;
-                wrapToWord(old - 1);
-                const auto joining = lineForWord(state, old);
-                const int height = joining < state.lineCount && joining > 0 ? lineOffset(joining)
-                    : state.lines[0].bottom - state.lines[0].flowTop + kLineGap;
-                browse.offset += std::max(1, height);
-            }
-            if (state.pageStart != browse.first)
-                rebuild();
-        }
-        if (followSelection && selected < priorFirst) {
+        while (browse.offset < 0 && browse.first > 0)
+            browse.offset += prependLine();
+        if (state.pageStart != browse.first)
+            rebuild();
+        if (!anchorScrub && followSelection && selected < priorFirst) {
             const auto row = lineForWord(state, selected);
             if (row < state.lineCount)
                 browse.offset = std::min(browse.offset, lineOffset(row));
@@ -1250,6 +1261,19 @@ namespace screens::PageReader {
             browse.scrollRemainder = 0;
             oldViewportInset = 0;
         }
+
+        const auto clampToBookEnd = [&] {
+            if (state.pageEnd >= wordCount && state.lineCount) {
+                const int bottom = state.lines[state.lineCount - 1].bottom - logicalArea.y - logicalArea.h + kMarginY;
+                const int end = std::max(0, bottom);
+                if (browse.offset > end) {
+                    browse.offset = end;
+                    browse.scrollRemainder = 0;
+                    oldViewportInset = 0;
+                }
+            }
+        };
+        clampToBookEnd();
 
         // Keep the near lines in the current layout across small forward and
         // backward drags. Rebase several lines at a time to avoid rewrapping
@@ -1266,15 +1290,7 @@ namespace screens::PageReader {
             browse.offset -= lineOffset(trim);
             rebuild();
         }
-        if (state.pageEnd >= wordCount && state.lineCount) {
-            const int bottom = state.lines[state.lineCount - 1].bottom - logicalArea.y - logicalArea.h + kMarginY;
-            const int end = std::max(0, bottom);
-            if (browse.offset > end) {
-                browse.offset = end;
-                browse.scrollRemainder = 0;
-                oldViewportInset = 0;
-            }
-        }
+        clampToBookEnd();
         if (arrowTarget && (browse.first != firstBeforeStep || browse.offset != offsetBeforeStep)) {
             selected = kInvalidIndex;
             highlightMode = HighlightMode::secondScrollLine;

@@ -110,7 +110,7 @@ namespace screens::PageReader {
                 const settings::TypographySettings& typography, uint32_t revision,
                 const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale,
                 bool followSelection = false, HighlightMode highlightMode = HighlightMode::selection,
-                bool earlierFollow = false);
+                bool anchorSecondLine = false);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
     size_t scrubWord(const BrowseState& state, size_t selected, bool right);
     size_t edgeWord(const BrowseState& state, bool bottom);

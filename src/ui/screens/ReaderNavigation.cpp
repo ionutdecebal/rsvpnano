@@ -30,6 +30,7 @@ void ReaderScreen::openPage() {
     pageScrollFinished_ = false;
     pageSelectionPinned_ = false;
     pageVerticalMoved_ = false;
+    pageScrubMoved_ = false;
     pageScrubFinished_ = false;
     pageHasScrolled_ = false;
     pageGesture_ = PageGesture::pending;
@@ -68,7 +69,7 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
     const auto highlightMode = !verticalScroll ? PageReader::HighlightMode::selection
                              : size <= 2 ? PageReader::HighlightMode::secondScrollLine
                                          : PageReader::HighlightMode::firstScrollLine;
-    const bool follow = pageGesture_ == PageGesture::horizontal || pageScrubFinished_;
+    const bool follow = (pageGesture_ == PageGesture::horizontal && pageScrubMoved_) || pageScrubFinished_;
     PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index, builtInPageSize); },
                        typography_, revision, session, pageBody(), selected, scale, follow, highlightMode, size <= 2);
     pageScrubFinished_ = false;
@@ -116,7 +117,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         if (pageGesture_ == PageGesture::vertical && pageVerticalMoved_)
             finishScroll();
         else if (pageGesture_ == PageGesture::horizontal)
-            pageScrubFinished_ = true;
+            pageScrubFinished_ = pageScrubMoved_;
         pageGesture_ = PageGesture::pending;
         pageTouchControl_ = none;
         return true;
@@ -131,6 +132,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         pagePendingTouchY_.reset();
         pageScrollDirection_ = 0;
         pageVerticalMoved_ = false;
+        pageScrubMoved_ = false;
         pageTouchControl_ = ui::contains(pageBody(), touch->x, touch->y) ? pageText : none;
         for (size_t i = pageBarVisible() ? menu : previousLine; i < std::size(pageButtons); ++i) {
             if (ui::contains(pageButtons[i].rect, touch->x, touch->y)) {
@@ -193,6 +195,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
                 }
                 pageSelected_ = word;
                 pageSelectionPinned_ = true;
+                pageScrubMoved_ = true;
                 pageScrubX_ += right ? scrubStep : -scrubStep;
             }
         }
@@ -210,7 +213,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         return true;
     }
     if (gesture == PageGesture::horizontal) {
-        pageScrubFinished_ = true;
+        pageScrubFinished_ = pageScrubMoved_;
         hideBar();
         return true;
     }

@@ -95,6 +95,7 @@ namespace screens {
         std::optional<int16_t> pagePendingTouchY_;
         bool pageVerticalMoved_ = false;
         int pageScrubX_ = 0;
+        bool pageScrubMoved_ = false;
         bool pageScrubFinished_ = false;
         std::string searchQuery_, searchDraft_;
         ui::KeyboardState searchKeyboard_;

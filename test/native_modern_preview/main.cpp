@@ -475,8 +475,7 @@ namespace {
                 screens::PageReader::browse(probe, ui, text, [&](size_t) {
                     return reader.fonts.loadFace(0, RFont4::sizeIndexForId("compact"));
                 }, settings.settings().reading.typography, 0, reader.session, body,
-                   highlight, screens::PageReader::kNativeScale, true,
-                   screens::PageReader::HighlightMode::selection, true);
+                   highlight, screens::PageReader::kNativeScale, true);
                 ui.endFrame();
             };
             renderFollow(0);
@@ -486,9 +485,8 @@ namespace {
             });
             assert(crossing != lines.end() && crossing > lines.begin() + 1);
             assert(crossing->bottom < body.y + body.h && crossing->start + 1 < crossing->end);
-            const auto trigger = crossing > lines.begin() + 2 ? crossing - 2 : lines.begin() + 1;
-            const auto forward = trigger->start;
-            const auto reverse = (trigger - 1)->start;
+            const auto forward = crossing->start;
+            const auto reverse = (crossing - 1)->start;
             const int pitch = lines[1].flowTop - lines[0].flowTop;
             renderFollow(reverse);
             assert(probe.offset == 0);
@@ -739,39 +737,99 @@ namespace {
     }
 
     void verifySmallerScrubPlacement(Arduino_Canvas& panel) {
+        using screens::PageReader::HighlightMode;
         ui::Context ui(panel);
         const auto theme = ui::themes::defaultTheme();
         ui.setTheme(theme);
         ui::fonts::AlphaTextRenderer<640> text(panel);
         assert(text.begin());
-        const ui::Rect body{0, 0, 580, 172};
         ReadingSession session;
-        const std::vector<std::string> words(600, "word");
+        const std::vector<std::string> words(900, "word");
         ReadingLoop::setWords(session, words, 0);
+        session.metadata.paragraphStarts = {0, 250, 500, 750};
         const auto* compact = ui::fonts::LiterataFallbackAlpha4_Sizes[3];
         for (const auto* font : {compact, &ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_21}) {
+            const ui::Rect withBar{0, 44, 580, 128};
+            const ui::Rect withoutBar{0, 0, 580, 172};
+            auto body = withBar;
             screens::PageReader::BrowseState state;
-            const auto render = [&](size_t selected) {
+            state.first = 400;
+            const auto render = [&](size_t selected, bool scrub = true) {
                 ui.beginFrame(44, true);
                 screens::PageReader::browse(state, ui, text, [&](size_t) -> FontCatalog::Face {
                     return {std::cref(*font)};
-                }, {}, 0, session, body, selected, 100, true, screens::PageReader::HighlightMode::selection, true);
+                }, {}, 0, session, body, selected, 100, scrub, HighlightMode::selection, true);
                 ui.endFrame();
             };
-            ui.invalidate();
-            render(0);
-            const int pitch = state.layout.lines[2].flowTop - state.layout.lines[1].flowTop;
-            const int lastAllowed = std::max(0, (body.h * 2 / 5) / pitch - 2);
-            for (const size_t row : {1u, 2u, 3u}) {
-                const auto selected = state.layout.lines[row].start;
-                render(selected);
-                const auto& line = state.layout.lines[row];
-                const int screenY = line.flowTop - state.offset;
+            const auto rowFor = [&](size_t selected) {
+                const auto lines = std::span(state.layout.lines).first(state.layout.lineCount);
+                const auto row = std::ranges::find_if(lines, [selected](const auto& line) {
+                    return selected >= line.start && selected < line.end;
+                });
+                assert(row != lines.end());
+                return row - lines.begin();
+            };
+            const auto checkAnchor = [&](size_t selected) {
                 assert(state.highlighted == selected);
-                assert(screenY <= state.layout.lines[0].flowTop + lastAllowed * pitch);
-                const int offset = state.offset;
-                render(selected + 1);
-                assert(state.offset == offset && state.highlighted == selected + 1);
+                const auto row = rowFor(selected);
+                assert(row > 0);
+                const auto& preceding = state.layout.lines[row - 1];
+                assert(preceding.start == state.topLine);
+                const int top = state.layout.lines[0].flowTop;
+                assert(preceding.flowTop - state.offset == top);
+                assert(preceding.ink.y - state.offset >= body.y);
+                const auto& line = state.layout.lines[row];
+                assert(line.ink.y + line.ink.h - state.offset <= body.y + body.h);
+            };
+
+            // Resume with the bookmark on the top row, then begin scrubbing
+            // within that same row. A readable predecessor must appear above it.
+            ui.invalidate();
+            render(400, false);
+            assert(state.highlighted == 400 && state.topLine == state.first);
+            render(401);
+            checkAnchor(401);
+            const auto offset = state.offset;
+            render(400);
+            checkAnchor(400);
+            assert(state.offset == offset);
+
+            // Advance and reverse complete rows across paragraph gaps and rebases.
+            size_t selected = 400;
+            for (int i = 0; i < 8; ++i) {
+                selected = state.layout.lines[rowFor(selected) + 1].start;
+                render(selected);
+                checkAnchor(selected);
+            }
+            for (int i = 0; i < 12; ++i) {
+                selected = state.layout.lines[rowFor(selected)].start - 1;
+                render(selected);
+                checkAnchor(selected);
+            }
+
+            // Auto-hide keeps the selected row second in the expanded body.
+            body = withoutBar;
+            ui.invalidate();
+            render(selected);
+            checkAnchor(selected);
+            const auto afterHide = state.offset;
+            render(selected, false);
+            checkAnchor(selected);
+            assert(state.offset == afterHide);
+
+            // At the book edges there may be no preceding line or not enough
+            // content below to align the second row without extra blank space.
+            for (const size_t edge : {size_t{0}, words.size() - 1}) {
+                state = {};
+                state.first = edge;
+                ui.invalidate();
+                render(edge);
+                assert(state.highlighted == edge && state.offset >= 0);
+                if (edge == 0)
+                    assert(state.topLine == 0);
+                const auto stopped = state.offset;
+                render(edge, false);
+                assert(state.highlighted == edge && state.offset == stopped);
             }
         }
     }
