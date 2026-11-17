@@ -22,7 +22,7 @@
 extern int previewSaveCalls, previewPrefetchDelay, previewPageMirrors;
 #include <freertos/task.h>
 extern size_t previewRuntimeSize;
-namespace dictionary { extern std::string previewCase; }
+namespace dictionary { extern std::string previewCase; extern size_t previewLookupWord; }
 
 namespace {
     ui::TouchContact contact;
@@ -347,15 +347,22 @@ namespace {
         std::vector<std::string> words;
         loadSamplePage(reader, words);
         reader.openPage();auto screen=screens::Screen::Reader;uint32_t now=100000;
+        dictionary::Dictionary dictionary;
         const auto frame=[&](bool down,int x,int y) {
             contact={down,uint16_t(x),uint16_t(y)};ui.pollTouch(now+=25);
             ui.setModernPresentation(screen!=screens::Screen::Reader);ui.setModernReadingPalette(screen==screens::Screen::Reader);
-            if(screen==screens::Screen::Reader)reader.handleModernControls(ui,now,preferences,settings,screen);
+            if (screen == screens::Screen::Reader) {
+                reader.handleModernControls(ui, now, preferences, settings, screen);
+                if (screen == screens::Screen::Dictionary)
+                    dictionary.open(reader.session, reader.pageHighlightedWord(), screens::Screen::Reader);
+            }
             ui.beginFrame(static_cast<uint8_t>(screen),screen==screens::Screen::Reader && reader.pageBrowsing());
             if(screen==screens::Screen::Reader) {
                 if(reader.pageBrowsing()) reader.drawPage(ui, now);
                 else screens::modern::readerChrome(ui,{.chapter="The garden",.footer="42%",.batteryLabel="84%",.canRead=true},settings.settings().reading,{{true,3.9f,84},0,false});
             }
+            else if (screen == screens::Screen::Dictionary)
+                dictionary.draw(ui, reader.session, screen, now);
             else reader.drawLocator(ui,screen,preferences,now);
             ui.endFrame();
         };
@@ -413,10 +420,63 @@ namespace {
             assert(screens::PageReader::wordAtPoint(probe, x, y) == 0);
             for (int i = 0; i < 73; ++i) probe.scrollBy(1);
             assert(probe.offset == 100 && probe.scrollRemainder == 0);
+
+            // Track a line across the point where the scroll buffer is rebased.
+            drawClippedWord(screens::PageReader::kNativeScale);
+            assert(probe.layout.lineCount > 5);
+            const int origin = probe.layout.lines[0].flowTop;
+            const int boundary = probe.layout.lines[4].flowTop - origin;
+            const size_t tracked = probe.layout.lines[4].start;
+            probe.offset = boundary - 1;
+            drawClippedWord(screens::PageReader::kNativeScale);
+            const auto inkPosition = [&] {
+                const auto& ink = probe.layout.words[tracked - probe.layout.pageStart].ink;
+                return std::pair<int, int>{ink.x, ink.y - probe.offset};
+            };
+            const auto [beforeX, beforeY] = inkPosition();
+            probe.scrollBy(1);
+            drawClippedWord(screens::PageReader::kNativeScale);
+            assert(probe.first > 0);
+            assert((inkPosition() == std::pair{beforeX, beforeY - 1}));
+            probe.scrollBy(-1);
+            drawClippedWord(screens::PageReader::kNativeScale);
+            assert((inkPosition() == std::pair{beforeX, beforeY}));
             ui.invalidate();
             frame(false,0,0);
         }
-        frame(true,200,145);frame(true,200,65);
+        // Select a word other than the saved position and open that exact definition.
+        tap(110, 72);
+        const auto lookup = reader.pageHighlightedWord();
+        assert(lookup != 0 && lookup != SIZE_MAX);
+        tap(200, 20);
+        assert(screen == screens::Screen::Dictionary && dictionary::previewLookupWord == lookup);
+        assert(reader.session.state.wordIndex == 0);
+        save("page-dictionary");
+        tap(42, 22);
+        assert(screen == screens::Screen::Reader && reader.pageBrowsing() && reader.pageHighlightedWord() == lookup);
+        assert(reader.session.state.wordIndex == 0);
+
+        frame(true, 480, 112);
+        frame(true, 464, 114);
+        frame(true, 392, 117);
+        assert(reader.session.state.wordIndex == 0);
+        frame(false, 392, 117);
+        assert(reader.session.state.wordIndex > 0);
+        save("page-side-swipe");
+        frame(true, 200, 112);
+        frame(true, 290, 112);
+        frame(false, 290, 112);
+        assert(reader.session.state.wordIndex == 0);
+
+        frame(true, 200, 145);
+        for (int y = 144; y >= 122; --y)
+            frame(true, 201, y);
+        const std::vector<uint16_t> settled(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
+        for (const int y : {123, 122, 124, 122}) {
+            frame(true, 201, y);
+            assert(std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
+        }
+        frame(true, 230, 65); // A diagonal continuation stays on the locked vertical axis.
         assert(reader.session.state.wordIndex == 0);
         frame(false,200,65);
         const auto scrolledAt = now;
@@ -491,6 +551,7 @@ namespace {
         loadSamplePage(reader, words);
         reader.openPage();
         Screen screen = Screen::Reader;
+        dictionary::Dictionary dictionary;
         uint32_t now = 100;
         unsigned command, x, y;
         while (std::scanf("%u %u %u", &command, &x, &y) == 3) {
@@ -508,8 +569,11 @@ namespace {
             contact = {command == 1 || command == 2, uint16_t(x), uint16_t(y)};
             ui.pollTouch(now);
             ui.setModernReadingPalette(screen == Screen::Reader);
-            if (screen == Screen::Reader && command >= 1 && command <= 3)
+            if (screen == Screen::Reader && command >= 1 && command <= 3) {
                 reader.handleModernControls(ui, now, prefs, settings, screen);
+                if (screen == Screen::Dictionary)
+                    dictionary.open(reader.session, reader.pageHighlightedWord(), Screen::Reader);
+            }
             reader.update(prefs, now);
 
             // A menu tap may change screens during drawing. Paint the destination
@@ -543,6 +607,15 @@ namespace {
                         screen = Screen::Settings;
                     break;
                 case Screen::ReadingHub:
+                    action = screens::modern::hub(ui, screen);
+                    break;
+                case Screen::Dictionary:
+                case Screen::DictionarySearch:
+                    action = dictionary.draw(ui, reader.session, screen, now);
+                    break;
+                case Screen::DictionaryHelp:
+                    action = screens::modern::hub(ui, screen);
+                    break;
                 case Screen::ReadingSettings:
                 case Screen::PageSettings:
                     screens::readingSettings(ui, reading, screen);
@@ -560,6 +633,10 @@ namespace {
                     break;
                 }
                 ui.endFrame();
+                if (action == Action::OpenDictionary) {
+                    dictionary.open(reader.session);
+                    screen = Screen::Dictionary;
+                }
                 if (action == Action::OpenPage)
                     reader.openPage();
                 if (action == Action::OpenPage || action == Action::Resume)

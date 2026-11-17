@@ -13,7 +13,7 @@ namespace screens {
 
     void ReaderScreen::update(Preferences& preferences, uint32_t nowMs) {
         constexpr uint32_t pageSaveDelayMs = 1000;
-        if (pageProgressChangedAt_ && (!pageBrowsing_ || !pageDragged_)
+        if (pageProgressChangedAt_ && pageGesture_ != PageGesture::vertical
             && nowMs - *pageProgressChangedAt_ >= pageSaveDelayMs) {
             ReadingProgress::mirror(session, store);
             pageProgressChangedAt_.reset();

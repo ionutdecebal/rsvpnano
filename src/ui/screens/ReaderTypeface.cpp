@@ -14,6 +14,7 @@ namespace screens {
             pageState_ = {};
             browse_.layout = {};
             browse_.scaleCanvas.reset();
+            browse_.viewportCanvas.reset();
             loadedWordIndex_ = SIZE_MAX;
             loadedFontSizeIndex_ = 0xFF;
         }

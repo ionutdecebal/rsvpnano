@@ -285,7 +285,9 @@ enum class Copy : uint16_t {
     PageControls,
     PageControlsAlways,
     PageControlsAutoHide,
-    PageControlsHint
+    PageControlsHint,
+    PageExtraSmall,
+    PageExtraLarge
 };
 std::string_view copy(const ui::Context& ui, Copy key);
 }

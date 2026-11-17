@@ -5,7 +5,7 @@ namespace screens {
     bool ReaderScreen::handleModernControls(ui::Context& ui,uint32_t nowMs,Preferences& preferences,
                                            settings::SettingsStore& store,Screen& screen) {
         using modern::ReaderControl;
-        if(pageBrowsing_ && ui.modernReadingPalette()) return handlePage(ui,nowMs,preferences,store,screen);
+        if(pageBrowsing_ && ui.modernReadingPalette()) return handlePage(ui, nowMs, preferences, screen);
         if(!ui.modernReadingPalette() || ui.width()!=640 || ui.height()!=172
            || session.metadata.writingMode==WritingMode::verticalRl){cancelModernControls();return false;}
         const auto* touch=ui.touch();if(!touch)return false;

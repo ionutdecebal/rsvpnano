@@ -76,6 +76,7 @@ namespace screens {
         pageState_ = {};
         browse_.layout = {};
         browse_.scaleCanvas.reset();
+        browse_.viewportCanvas.reset();
         pageFontActive_ = false;
         rsvpParagraph_ = {};
         rsvpBidi_.clear();

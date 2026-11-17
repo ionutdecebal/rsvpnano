@@ -56,6 +56,7 @@ namespace screens {
         void resumeNow(uint32_t nowMs) { pageBrowsing_ = false; start(nowMs, true); }
         void openPage();
         void drawPage(ui::Context& ui, uint32_t nowMs);
+        size_t pageHighlightedWord() const { return browse_.highlighted; }
         bool revealPageControls();
         void openLocator(Screen& screen);
         void drawLocator(ui::Context& ui, Screen& screen, Preferences& preferences, uint32_t nowMs);
@@ -64,7 +65,7 @@ namespace screens {
 
 
     private:
-        bool handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, settings::SettingsStore& store, Screen& screen);
+        bool handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, Screen& screen);
         void commitPlace(size_t index, Preferences& preferences, uint32_t nowMs);
         std::string placeExcerpt(size_t index, size_t maxWords = 32) const;
         bool pageBrowsing_ = false;
@@ -81,9 +82,10 @@ namespace screens {
         size_t locatorOrigin_ = 0;
         size_t findChapterPage_ = 0;
         ui::modern::ListSwipe locatorSwipe_;
-        int pageTouchControl_ = 0;
-        int16_t pageTouchY_ = 0;
-        bool pageDragged_ = false;
+        enum class PageGesture { pending, vertical, horizontal };
+        PageGesture pageGesture_ = PageGesture::pending;
+        size_t pageTouchControl_ = 0;
+        int16_t pageTouchX_ = 0, pageTouchY_ = 0, pageScrollY_ = 0;
         std::string searchQuery_, searchDraft_;
         ui::KeyboardState searchKeyboard_;
         std::vector<size_t> searchResults_;

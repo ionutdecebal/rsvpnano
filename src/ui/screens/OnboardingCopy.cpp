@@ -285,7 +285,9 @@ constexpr const char* words[][3] = {
     {"Top bar", "Obere Leiste", "Bară de sus"},
     {"Always shown", "Immer sichtbar", "Mereu vizibilă"},
     {"Auto-hide", "Automatisch ausblenden", "Ascundere automată"},
-    {"Press the middle button to show the bar.", "Drücke die mittlere Taste, um die Leiste einzublenden.", "Apasă butonul din mijloc pentru a afișa bara."}
+    {"Press the middle button to show the bar.", "Drücke die mittlere Taste, um die Leiste einzublenden.", "Apasă butonul din mijloc pentru a afișa bara."},
+    {"X Small", "Sehr klein", "Foarte mic"},
+    {"X Large", "Sehr groß", "Foarte mare"}
 };
 }
 std::string_view copy(const ui::Context& ui, Copy key) {

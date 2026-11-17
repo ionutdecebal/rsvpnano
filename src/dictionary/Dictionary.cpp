@@ -24,8 +24,9 @@ std::string normalized(std::string_view word){
     result.resize(limit);return result;
 }
 }
-void Dictionary::open(ReadingSession& session) {
-    lookupWord_=session.state.wordIndex;
+void Dictionary::open(ReadingSession& session, std::optional<size_t> word, screens::Screen returnScreen) {
+    returnScreen_ = returnScreen;
+    lookupWord_ = word.value_or(session.state.wordIndex);
     query_=normalized(ReadingLoop::wordAt(session,lookupWord_));
     lookup();
 }

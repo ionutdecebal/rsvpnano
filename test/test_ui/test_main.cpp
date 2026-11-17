@@ -1716,17 +1716,17 @@ void test_page_browse_scrolls_without_changing_saved_reader_position() {
     const auto typeface=[](size_t)->FontCatalog::Face{return {std::cref(kReaderFont),nullptr};};
     const ui::Rect area{0,30,136,48};
     const auto render=[&]{context.beginFrame(1);screens::PageReader::browse(browse,context,text,typeface,typography,1,session,area,0);context.endFrame();};
-    render();const auto first=browse.first;
+    render();const auto first=browse.topLine;
     browse.offset+=38;render();
-    TEST_ASSERT_GREATER_THAN(first,browse.first);
+    TEST_ASSERT_GREATER_THAN(first,browse.topLine);
     TEST_ASSERT_EQUAL(0,session.state.wordIndex);
     browse.offset-=38;render();
-    TEST_ASSERT_EQUAL(first,browse.first);
+    TEST_ASSERT_EQUAL(first,browse.topLine);
     const auto& word=browse.layout.words.front();
     const auto& line=browse.layout.lines.front();
     TEST_ASSERT_EQUAL(browse.first,screens::PageReader::wordAtPoint(browse,word.x+1,line.top+2));
     browse.offset=10000;render();
-    TEST_ASSERT_LESS_THAN(words.size(),browse.first);
+    TEST_ASSERT_LESS_THAN(words.size(),browse.topLine);
     TEST_ASSERT_EQUAL(0,session.state.wordIndex);
 }
 

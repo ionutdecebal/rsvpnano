@@ -46,6 +46,7 @@ namespace screens::PageReader {
             size_t characterStart = 0;
             size_t characterEnd = 0;
             int16_t y = 0;
+            int16_t flowTop = 0;
             int16_t top = 0;
             int16_t bottom = 0;
             int16_t width = 0;
@@ -74,20 +75,22 @@ namespace screens::PageReader {
         bool vertical = false;
     };
 
-    enum class LineStep { none, previous, next };
+    enum class ScrollStep { none, previousLine, nextLine, previousPage, nextPage };
 
     constexpr uint8_t kNativeScale = 100;
 
     struct BrowseState {
         State layout;
         size_t first = 0;
+        size_t openingWord = SIZE_MAX;
+        size_t topLine = SIZE_MAX;
         size_t highlighted = SIZE_MAX;
         int offset = 0;
         int scrollRemainder = 0;
-        LineStep lineStep = LineStep::none;
+        ScrollStep step = ScrollStep::none;
         uint8_t scale = kNativeScale;
         ui::Rect displayArea{};
-        std::unique_ptr<Arduino_Canvas> scaleCanvas;
+        std::unique_ptr<Arduino_Canvas> viewportCanvas, scaleCanvas;
         std::vector<std::pair<size_t, int16_t>> previousLines;
 
         void scrollBy(int displayPixels) {

@@ -15,9 +15,9 @@ namespace screens {
             if (screen == Screen::PageSettings) {
                 if (modern::header(ui, t(C::PageSettings), screen, Screen::ReadingSettings) == Action::Resume)
                     screen = Screen::Reader;
-                const std::string_view sizes[]{t(C::Compact), "2 / 5", "3 / 5", "4 / 5", t(C::Small)};
+                const C sizes[]{C::PageExtraSmall, C::Small, C::Medium, C::Large, C::PageExtraLarge};
                 const auto size = config.pageTextSizeIndex();
-                if (button(ui, {12, 51, 300, 53}, t(C::PageTextSize), Style::Secondary, true, sizes[size], 13)) {
+                if (button(ui, {12, 51, 300, 53}, t(C::PageTextSize), Style::Secondary, true, t(sizes[size]), 13)) {
                     config.setPageTextSize(static_cast<uint8_t>((size + 1) % std::size(sizes)));
                     changed = true;
                 }

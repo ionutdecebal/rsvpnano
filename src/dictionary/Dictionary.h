@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <vector>
 #include "reader/ReadingSession.h"
@@ -19,7 +20,9 @@ struct Definition {
 // polling. Network lookup runs on App's existing exclusive worker.
 class Dictionary {
 public:
-    void open(ReadingSession&);
+    void open(ReadingSession&, std::optional<size_t> word = {},
+              screens::Screen returnScreen = screens::Screen::QuickControls);
+    screens::Screen returnScreen() const { return returnScreen_; }
     screens::Action draw(ui::Context&, ReadingSession&, screens::Screen&, uint32_t);
     void lookupOnline(settings::SettingsStore&);
     std::string message;
@@ -29,7 +32,8 @@ private:
     Definition definition_;
     size_t sense_ = 0;
     std::vector<size_t> definitionOffsets_{0};
-    uint32_t lookupWord_ = 0;
+    size_t lookupWord_ = 0;
+    screens::Screen returnScreen_ = screens::Screen::QuickControls;
     ui::KeyboardState keyboard_;
 };
 }
