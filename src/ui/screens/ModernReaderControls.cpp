@@ -26,6 +26,15 @@ namespace screens {
         modernTouchMoved_|=std::abs(dx)>18 || std::abs(dy)>18;
         const bool released=ui::hasTouch(*touch,ui::TouchRelease);
         if(modernCanvasTouch_){
+            if (modernTouchMoved_ && !settings_.holdToRead && ReadingLoop::wordCount(session) > 0) {
+                finishPause(preferences, nowMs);
+                cancelModernControls();
+                openPage(true);
+                if (!released)
+                    beginPageTouch(touch->x, touch->y);
+                ui.invalidate();
+                return true;
+            }
             if(modernTouchMoved_ && modernHolding_){finishPause(preferences,nowMs);modernHolding_=false;}
             if(!released){
                 if(!modernTouchMoved_ && settings_.holdToRead && !modernPressedPlaying_ && !modernHolding_

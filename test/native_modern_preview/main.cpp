@@ -208,17 +208,19 @@ namespace {
         tap(260,86);assert(reader.session.playing);tap(260,86);assert(!reader.session.playing);
         tap(50,155);assert(screen==screens::Screen::Reader);assert(!reader.session.playing);
         const auto index=reader.session.state.wordIndex;const auto speed=config.wpm;
+        config.holdToRead = true;
         for(auto [x,y]:{std::pair{390,86},std::pair{130,86},std::pair{260,135}}){
             sample(true,260,86);sample(true,x,y);sample(false,x,y);
             assert(screen==screens::Screen::Reader && reader.session.state.wordIndex==index && config.wpm==speed && !reader.pageBrowsing());
         }
         sample(true,260,115);sample(true,260,45);sample(false,260,45);assert(screen==screens::Screen::Reader);assert(!reader.session.playing);
+        config.holdToRead = false;
         screen=screens::Screen::Reader;config.chapterVisibility=settings::Visibility::always;tap(100,18);assert(screen==screens::Screen::FindPlace);
         screen=screens::Screen::Reader;tap(370,18);assert(screen==screens::Screen::Reader);
         ui.setFocusBadge("Focus 12:00");tap(370,18);assert(screen==screens::Screen::FocusSession);
         screen=screens::Screen::Reader;ui.setFocusBadge("");const auto footer=config.footerMetric;tap(600,155);assert(config.footerMetric!=footer);
         reader.session.metadata.writingMode=WritingMode::verticalRl;assert(!sample(true,260,86));assert(!sample(false,260,86));
-        std::puts("Quiet reader: text playback, no reader Menu target and ignored reader swipes, clean inactive chrome, saved book/WPM during other drags, Focus and page routes verified.");
+        std::puts("Quiet reader: text playback, no reader Menu target and hold-mode swipe handling, clean inactive chrome, saved book/WPM during other drags, Focus and page routes verified.");
     }
     void verifyReaderTouchComfort(Arduino_GFX& panel) {
         ui::Context ui(panel);ui.setModernReadingPalette(true);ui.setTouchSource({.surface={640,172},.poll=&poll});
@@ -682,7 +684,7 @@ namespace {
             if (size <= 2)
                 assert(lines[1].ink.y - handoffAt >= body.y);
             if (size == 0) {
-                const int physicalHandoff = lines[1].ink.y + lines[1].ink.h - body.y - 3;
+                const int physicalHandoff = lines[0].ink.y + lines[0].ink.h - body.y - 3;
                 reading.setPageTextSize(0);
                 reader.openPage();
                 ui.setModernReadingPalette(true);
@@ -886,6 +888,64 @@ namespace {
         }
     }
 
+    void verifySwipeOpensPage(Arduino_Canvas& panel) {
+        for (const bool hold : {false, true})
+            for (const bool playing : {false, true})
+                for (const auto [dx, dy] : {std::pair{32, 0}, std::pair{-32, 0},
+                                          std::pair{0, 24}, std::pair{0, -24}}) {
+                    ui::Context ui(panel);
+                    auto theme = ui::themes::defaultTheme();
+                    ui.setTheme(theme);
+                    ui.setModernReadingPalette(true);
+                    ui.setTouchSource({.surface={640,172},.poll=&poll});
+                    settings::SettingsStore store;
+                    auto& reading = store.settings().reading;
+                    reading.holdToRead = hold;
+                    reading.pageControlsAutoHide = false;
+                    reading.setPageTextSize(1);
+                    screens::ReaderScreen reader(panel, reading);
+                    std::vector<std::string> words(300, "garden");
+                    ReadingLoop::setWords(reader.session, words, 0);
+                    ReadingLoop::seekTo(reader.session, 100);
+                    if (playing)
+                        reader.resumeNow(0);
+                    Preferences preferences;
+                    auto screen = screens::Screen::Reader;
+                    uint32_t now = 0;
+                    const auto frame = [&](bool down, int x, int y) {
+                        contact = {down, uint16_t(x), uint16_t(y)};
+                        ui.pollTouch(now += 25);
+                        reader.handleModernControls(ui, now, preferences, store, screen);
+                        if (reader.pageBrowsing()) {
+                            ui.beginFrame(42, true);
+                            reader.drawPage(ui, now);
+                            ui.endFrame();
+                        }
+                    };
+                    frame(false, 0, 0);
+                    frame(true, 200, 90);
+                    frame(true, 200 + dx, 90 + dy);
+                    assert(reader.pageBrowsing() == !hold);
+                    if (hold) {
+                        frame(false, 200 + dx, 90 + dy);
+                        assert(!reader.pageBrowsing() && reader.session.playing == playing);
+                        continue;
+                    }
+                    assert(!reader.session.playing && screen == screens::Screen::Reader);
+                    assert(!reading.pageControlsAutoHide);
+                    const auto initial = reader.pageHighlightedWord();
+                    const int mirrors = previewPageMirrors;
+                    frame(true, 200 + 2 * dx, 90 + 2 * dy);
+                    if (dx != 0 || dy < 0)
+                        assert(reader.pageHighlightedWord() != initial);
+                    frame(false, 200 + 2 * dx, 90 + 2 * dy);
+                    assert(previewPageMirrors == mirrors);
+                    assert(reader.revealPageControls());
+                    assert(!reader.revealPageControls());
+                    assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
+                }
+    }
+
     void verifyDepartingPageHighlight(Arduino_Canvas& panel) {
         ui::Context ui(panel);
         auto theme = ui::themes::defaultTheme();
@@ -913,19 +973,20 @@ namespace {
                 frame(SIZE_MAX);
                 const auto first = probe.layout.lines[0];
                 const auto next = probe.layout.lines[1].start;
+                const auto following = probe.layout.lines[2].start;
                 const int edge = first.ink.y + first.ink.h
                     - probe.layout.layoutArea.y - std::max(1, 300 / scale);
                 for (int offset = 0; offset <= edge + 1; ++offset) {
                     probe.offset = offset;
                     frame(SIZE_MAX);
-                    assert(probe.highlighted == (offset < edge ? first.start : next));
+                    assert(probe.highlighted == (offset < edge ? next : following));
                 }
                 probe.offset = edge - 1;
-                frame(first.start + 1);
-                assert(probe.highlighted == first.start + 1);
+                frame(next + 1);
+                assert(probe.highlighted == next + 1);
                 probe.offset = edge;
-                frame(first.start + 1);
-                assert(probe.highlighted == next);
+                frame(next + 1);
+                assert(probe.highlighted == following);
             }
         }
     }
@@ -1297,6 +1358,7 @@ int main(int argc, char** argv) {
     verifyVerticalPageSelection(panel);
     verifySmallerScrubPlacement(panel);
     verifyResumeWrap(panel);
+    verifySwipeOpensPage(panel);
     verifyDepartingPageHighlight(panel);
     verifyContinuousPageScroll(panel);
     verifyBookSettings(panel,std::filesystem::path{argv[1]});

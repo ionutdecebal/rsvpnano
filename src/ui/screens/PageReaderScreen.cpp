@@ -881,8 +881,12 @@ namespace screens::PageReader {
                     // Ignore three physical pixels of descenders at the top edge.
                     const int inkBottom = line.inkKnown && line.ink.h > 0
                         ? line.ink.y + line.ink.h : line.bottom;
-                    if (inkBottom - descenderPixels > viewport.y)
-                        return line.start;
+                    if (inkBottom - descenderPixels > viewport.y) {
+                        // Advance one row ahead, using the departing row's bottom edge.
+                        if (firstWord != kInvalidIndex)
+                            return line.start;
+                        firstWord = line.start;
+                    }
                     continue;
                 }
                 for (size_t index = line.start; index < line.end; ++index) {

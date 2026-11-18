@@ -20,13 +20,13 @@ std::string folded(std::string text) {
     return text;
 }
 }
-void ReaderScreen::openPage() {
+void ReaderScreen::openPage(bool hideControls) {
     ReadingLoop::pause(session);
     pageBrowsing_=true;pageSelected_=session.state.wordIndex;
     browse_ = {};
     browse_.first = pageSelected_;
     pageTouchControl_ = none;
-    pageBarHidden_ = false;
+    pageBarHidden_ = hideControls;
     pageScrollFinished_ = false;
     pageSelectionPinned_ = false;
     pageVerticalMoved_ = false;
@@ -102,6 +102,24 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
         ui::modern::rule(ui,{0,43,640,1});
     ui.label({584,148,52,24},std::to_string(ReadingProgress::percent(browse_.topLine == SIZE_MAX ? browse_.first : browse_.topLine, ReadingLoop::wordCount(session)))+"%",11,ui::themes::Muted,ui::TextAlign::Center);
 }
+void ReaderScreen::beginPageTouch(int x, int y) {
+    resetTouch();
+    pageGesture_ = PageGesture::pending;
+    pageTouchX_ = x;
+    pageScrollY_ = pageTouchY_ = pageLastTouchY_ = y;
+    pageTouchDelta_ = 0;
+    pagePendingTouchY_.reset();
+    pageScrollDirection_ = 0;
+    pageVerticalMoved_ = false;
+    pageScrubMoved_ = false;
+    pageTouchControl_ = ui::contains(pageBody(), x, y) ? pageText : none;
+    for (size_t i = pageBarVisible() ? menu : previousLine; i < std::size(pageButtons); ++i) {
+        if (ui::contains(pageButtons[i].rect, x, y)) {
+            pageTouchControl_ = i;
+            break;
+        }
+    }
+}
 bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, Screen& screen) {
     const auto* touch = ui.touch();
     if (!touch)
@@ -127,24 +145,8 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         return true;
     }
 
-    if (ui::hasTouch(*touch, ui::TouchStart)) {
-        resetTouch();
-        pageGesture_ = PageGesture::pending;
-        pageTouchX_ = touch->x;
-        pageScrollY_ = pageTouchY_ = pageLastTouchY_ = touch->y;
-        pageTouchDelta_ = 0;
-        pagePendingTouchY_.reset();
-        pageScrollDirection_ = 0;
-        pageVerticalMoved_ = false;
-        pageScrubMoved_ = false;
-        pageTouchControl_ = ui::contains(pageBody(), touch->x, touch->y) ? pageText : none;
-        for (size_t i = pageBarVisible() ? menu : previousLine; i < std::size(pageButtons); ++i) {
-            if (ui::contains(pageButtons[i].rect, touch->x, touch->y)) {
-                pageTouchControl_ = i;
-                break;
-            }
-        }
-    }
+    if (ui::hasTouch(*touch, ui::TouchStart))
+        beginPageTouch(touch->x, touch->y);
 
     const int dx = int(touch->x) - pageTouchX_;
     const int dy = int(touch->y) - pageTouchY_;
