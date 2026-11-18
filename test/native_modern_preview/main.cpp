@@ -553,7 +553,7 @@ namespace {
         assert(reader.pageHighlightedWord() == toRight - 5);
         frame(false, 265, 116);
         const auto scrubbed = reader.pageHighlightedWord();
-        assert(scrubbed > lookup && reader.session.state.wordIndex == 0);
+        assert(scrubbed > lookup && reader.session.state.wordIndex == scrubbed);
         assert(reader.revealPageControls());
         ui.invalidate();
         frame(false, 0, 0);
@@ -577,10 +577,15 @@ namespace {
         assert(std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
         frame(true, 230, 65); // The second sample confirms real fast movement.
         assert(!std::equal(settled.begin(), settled.end(), panel.getFramebuffer()));
-        assert(reader.session.state.wordIndex == 0);
+        assert(reader.session.state.wordIndex == scrubbed);
+        const int mirrorsBeforePowerOff = previewPageMirrors;
+        const auto forcedSaveAt = now;
+        reader.syncPagePosition(now);
+        assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
+        assert(previewPageMirrors == mirrorsBeforePowerOff);
         frame(false,200,65);
         assert(!reader.pageGestureActive());
-        const auto scrolledAt = now;
+        const auto scrolledAt = forcedSaveAt;
         assert(reader.session.state.wordIndex > 0);
         const int mirrors = previewPageMirrors;
         reader.update(preferences, scrolledAt + 999);
@@ -677,6 +682,7 @@ namespace {
             if (size <= 2)
                 assert(lines[1].ink.y - handoffAt >= body.y);
             if (size == 0) {
+                const int physicalHandoff = lines[1].ink.y + lines[1].ink.h - body.y - 3;
                 reading.setPageTextSize(0);
                 reader.openPage();
                 ui.setModernReadingPalette(true);
@@ -704,11 +710,11 @@ namespace {
                 frame(false, 215, 130);
                 assert(reader.pageHighlightedWord() == pinned + 1);
                 frame(true, 200, 145);
-                frame(true, 200, 145 - handoffAt - 5);
+                frame(true, 200, 145 - physicalHandoff - 5);
                 assert(reader.pageHighlightedWord() == pinned + 1);
-                frame(true, 200, 145 - handoffAt - 6);
+                frame(true, 200, 145 - physicalHandoff - 6);
                 assert(reader.pageHighlightedWord() == lines[2].start);
-                frame(false, 200, 145 - handoffAt - 6);
+                frame(false, 200, 145 - physicalHandoff - 6);
                 assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
             }
             render(pinned);
@@ -877,6 +883,50 @@ namespace {
                    && reopened.layout.lines[0].end == previous.end);
             assert(reopened.layout.lines[1].start == current.start
                    && reopened.layout.lines[1].end == current.end);
+        }
+    }
+
+    void verifyDepartingPageHighlight(Arduino_Canvas& panel) {
+        ui::Context ui(panel);
+        auto theme = ui::themes::defaultTheme();
+        ui.setTheme(theme);
+        ui::fonts::AlphaTextRenderer<640> text(panel);
+        assert(text.begin());
+        ReadingSession session;
+        std::vector<std::string> words(300, "garden");
+        ReadingLoop::setWords(session, words, 0);
+        const ui::Rect body{0, 44, 580, 128};
+        const auto& builtin = ui::fonts::LiterataFallbackAlpha4_Sizes;
+        for (const auto* font : {builtin[3], &ui::fonts::LiterataPageAlpha4_17,
+                                 &ui::fonts::LiterataPageAlpha4_21,
+                                 &ui::fonts::LiterataPageAlpha4_26, builtin[2]}) {
+            for (const uint8_t scale : {100, 64}) {
+                screens::PageReader::BrowseState probe;
+                const auto frame = [&](size_t selected) {
+                    ui.beginFrame(39, true);
+                    screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
+                        return {std::cref(*font)};
+                    }, {}, 0, session, body, selected, scale, false,
+                    screens::PageReader::HighlightMode::departingScrollLine);
+                    ui.endFrame();
+                };
+                frame(SIZE_MAX);
+                const auto first = probe.layout.lines[0];
+                const auto next = probe.layout.lines[1].start;
+                const int edge = first.ink.y + first.ink.h
+                    - probe.layout.layoutArea.y - std::max(1, 300 / scale);
+                for (int offset = 0; offset <= edge + 1; ++offset) {
+                    probe.offset = offset;
+                    frame(SIZE_MAX);
+                    assert(probe.highlighted == (offset < edge ? first.start : next));
+                }
+                probe.offset = edge - 1;
+                frame(first.start + 1);
+                assert(probe.highlighted == first.start + 1);
+                probe.offset = edge;
+                frame(first.start + 1);
+                assert(probe.highlighted == next);
+            }
         }
     }
 
@@ -1247,6 +1297,7 @@ int main(int argc, char** argv) {
     verifyVerticalPageSelection(panel);
     verifySmallerScrubPlacement(panel);
     verifyResumeWrap(panel);
+    verifyDepartingPageHighlight(panel);
     verifyContinuousPageScroll(panel);
     verifyBookSettings(panel,std::filesystem::path{argv[1]});
     verifyFilledSliders(panel);

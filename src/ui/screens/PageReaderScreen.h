@@ -76,7 +76,7 @@ namespace screens::PageReader {
     };
 
     enum class ScrollStep { none, previousPage, nextPage };
-    enum class HighlightMode { selection, firstScrollLine, secondScrollLine };
+    enum class HighlightMode { selection, firstScrollLine, secondScrollLine, departingScrollLine };
 
     constexpr uint8_t kNativeScale = 100;
 

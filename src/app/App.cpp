@@ -1241,6 +1241,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 #if RSVP_USB_TRANSFER_ENABLED
     if (serialCompanion_.active())
         return;
+    readerScreen_.syncPagePosition(nowMs);
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     if (auto result = settingsStore_.flush(); !result) {
@@ -1378,6 +1379,7 @@ void App::enterStandby(uint32_t nowMs) {
     } else {
         networkScreen_.closeWifi();
     }
+    readerScreen_.syncPagePosition(nowMs);
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingLoop::pause(readerScreen_.session);
     if (settingsStore_.settings().interface.screensaver == standby::Kind::screenOff) {
@@ -1465,6 +1467,7 @@ void App::powerOff(uint32_t nowMs) {
     if (companionApi_.active())
         companionApi_.end();
     focusScreen_.close();
+    readerScreen_.syncPagePosition(nowMs);
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     ReadingLoop::pause(readerScreen_.session);

@@ -30,6 +30,7 @@ void ReaderScreen::openPage() {
     pageScrollFinished_ = false;
     pageSelectionPinned_ = false;
     pageVerticalMoved_ = false;
+    pageVerticalHighlight_ = false;
     pageScrubMoved_ = false;
     pageScrubFinished_ = false;
     pageHasScrolled_ = false;
@@ -56,6 +57,17 @@ void ReaderScreen::commitPlace(size_t index,Preferences& preferences,uint32_t no
     ReadingLoop::seekTo(session,index);finishPause(preferences,nowMs);
     pageSelected_=session.state.wordIndex;
 }
+void ReaderScreen::syncPagePosition(uint32_t nowMs) {
+    if (!pageBrowsing_ || browse_.highlighted == SIZE_MAX
+        || pageSelected_ == session.state.wordIndex)
+        return;
+    if (!pageHasScrolled_) {
+        returnWord_ = session.state.wordIndex;
+        pageHasScrolled_ = true;
+    }
+    ReadingLoop::seekTo(session, pageSelected_);
+    pageProgressChangedAt_ = nowMs;
+}
 void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
     // Installed fonts keep their own glyphs and existing scaled sizes.
     constexpr uint8_t scales[]{PageReader::kNativeScale, 50, 64, 80, PageReader::kNativeScale};
@@ -66,28 +78,20 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
     const bool verticalScroll = (pageGesture_ == PageGesture::vertical && pageVerticalMoved_)
                              || (pageScrollFinished_ && browse_.step == PageReader::ScrollStep::none);
     const size_t selected = verticalScroll && !pageSelectionPinned_ ? SIZE_MAX : pageSelected_;
-    const auto highlightMode = !verticalScroll ? PageReader::HighlightMode::selection
-                             : size <= 2 ? PageReader::HighlightMode::secondScrollLine
-                                         : PageReader::HighlightMode::firstScrollLine;
+    const auto highlightMode = !verticalScroll && !pageVerticalHighlight_ ? PageReader::HighlightMode::selection
+                             : PageReader::HighlightMode::departingScrollLine;
     const bool follow = (pageGesture_ == PageGesture::horizontal && pageScrubMoved_) || pageScrubFinished_;
     PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index, builtInPageSize); },
                        typography_, revision, session, pageBody(), selected, scale, follow, highlightMode, size <= 2);
+    const bool gestureFinished = pageScrollFinished_ || pageScrubFinished_;
     pageScrubFinished_ = false;
     if (verticalScroll && browse_.highlighted != selected)
         pageSelectionPinned_ = false;
     if (browse_.highlighted != SIZE_MAX)
         pageSelected_ = browse_.highlighted;
-    if (pageScrollFinished_) {
-        pageScrollFinished_ = false;
-        if (browse_.highlighted != SIZE_MAX && pageSelected_ != session.state.wordIndex) {
-            if (!pageHasScrolled_) {
-                returnWord_ = session.state.wordIndex;
-                pageHasScrolled_ = true;
-            }
-            ReadingLoop::seekTo(session, pageSelected_);
-            pageProgressChangedAt_ = nowMs;
-        }
-    }
+    pageScrollFinished_ = false;
+    if (gestureFinished)
+        syncPagePosition(nowMs);
     for (size_t i = pageBarVisible() ? menu : previousLine; i < std::size(pageButtons); ++i) {
         const auto& item = pageButtons[i];
         const auto label = i == dictionary ? modern::copy(ui, modern::Copy::Dictionary) : item.label;
@@ -152,6 +156,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
         if (pageGesture_ == PageGesture::pending) {
             if (std::abs(dx) >= horizontalSlop && 2 * std::abs(dx) > 3 * std::abs(dy)) {
                 pageGesture_ = PageGesture::horizontal;
+                pageVerticalHighlight_ = false;
                 pageScrubX_ = pageTouchX_ - (dx > 0 ? 6 : -6);
             } else if (std::abs(dy) >= verticalSlop && std::abs(dy) >= std::abs(dx)) {
                 pageGesture_ = PageGesture::vertical;
@@ -184,6 +189,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
                 pageScrollY_ = int(touch->y) + direction * jitter;
                 pageScrollDirection_ = direction;
                 pageVerticalMoved_ = true;
+                pageVerticalHighlight_ = true;
             }
         } else if (pageGesture_ == PageGesture::horizontal) {
             while (std::abs(int(touch->x) - pageScrubX_) >= scrubStep) {
@@ -245,6 +251,7 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
     case pageText: {
         const size_t word = PageReader::wordAtPoint(browse_, touch->x, touch->y);
         if (word != SIZE_MAX) {
+            pageVerticalHighlight_ = false;
             pageSelected_ = word;
             pageSelectionPinned_ = true;
         }

@@ -55,6 +55,7 @@ namespace screens {
         void pauseImmediately(Preferences& preferences, uint32_t nowMs) { finishPause(preferences, nowMs); }
         void resumeNow(uint32_t nowMs) { pageBrowsing_ = false; start(nowMs, true); }
         void openPage();
+        void syncPagePosition(uint32_t nowMs);
         void drawPage(ui::Context& ui, uint32_t nowMs);
         size_t pageHighlightedWord() const { return browse_.highlighted; }
         bool revealPageControls();
@@ -94,6 +95,7 @@ namespace screens {
         int16_t pageLastTouchY_ = 0, pageTouchDelta_ = 0;
         std::optional<int16_t> pagePendingTouchY_;
         bool pageVerticalMoved_ = false;
+        bool pageVerticalHighlight_ = false;
         int pageScrubX_ = 0;
         bool pageScrubMoved_ = false;
         bool pageScrubFinished_ = false;

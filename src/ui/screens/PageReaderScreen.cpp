@@ -867,7 +867,7 @@ namespace screens::PageReader {
             return top >= viewport.y && bottom <= viewport.y + viewport.h;
         }
 
-        size_t automaticHighlight(const State& state, ui::Rect viewport, HighlightMode mode) {
+        size_t automaticHighlight(const State& state, ui::Rect viewport, HighlightMode mode, int descenderPixels) {
             size_t firstWord = kInvalidIndex;
             size_t firstCompleteLine = kInvalidIndex;
             const int bottom = viewport.y + viewport.h;
@@ -877,6 +877,14 @@ namespace screens::PageReader {
                     break;
                 if (line.bottom <= viewport.y)
                     continue;
+                if (mode == HighlightMode::departingScrollLine) {
+                    // Ignore three physical pixels of descenders at the top edge.
+                    const int inkBottom = line.inkKnown && line.ink.h > 0
+                        ? line.ink.y + line.ink.h : line.bottom;
+                    if (inkBottom - descenderPixels > viewport.y)
+                        return line.start;
+                    continue;
+                }
                 for (size_t index = line.start; index < line.end; ++index) {
                     if (!fullyVisible(wordAt(state, index), line, viewport))
                         continue;
@@ -893,16 +901,20 @@ namespace screens::PageReader {
             return firstCompleteLine == kInvalidIndex ? firstWord : firstCompleteLine;
         }
 
-        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected, HighlightMode mode) {
+        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected, HighlightMode mode, int descenderPixels) {
             if (selected != kInvalidIndex) {
                 const auto row = lineForWord(state, selected);
                 if (row < state.lineCount) {
                     const auto& line = state.lines[row];
+                    if (mode == HighlightMode::departingScrollLine) {
+                        const auto automatic = automaticHighlight(state, viewport, mode, descenderPixels);
+                        return automatic == kInvalidIndex || selected >= automatic ? selected : automatic;
+                    }
                     if (fullyVisible(wordAt(state, selected), line, viewport)) {
                         if (mode == HighlightMode::selection)
                             return selected;
                         if (fullyVisibleLine(line, viewport)) {
-                            const auto automatic = automaticHighlight(state, viewport, mode);
+                            const auto automatic = automaticHighlight(state, viewport, mode, descenderPixels);
                             // Keep the actual word until the automatic
                             // reading line passes its row.
                             return automatic == kInvalidIndex || selected >= automatic ? selected : automatic;
@@ -910,7 +922,7 @@ namespace screens::PageReader {
                     }
                 }
             }
-            return automaticHighlight(state, viewport, mode);
+            return automaticHighlight(state, viewport, mode, descenderPixels);
         }
 
         void paintHighlights(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
@@ -1296,7 +1308,7 @@ namespace screens::PageReader {
             highlightMode = HighlightMode::secondScrollLine;
         }
         browse.topLine = state.lines[lineForOffset()].start;
-        browse.highlighted = visibleHighlight(state, selectionViewport(), selected, highlightMode);
+        browse.highlighted = visibleHighlight(state, selectionViewport(), selected, highlightMode, std::max(1, 3 * kNativeScale / scale));
         uint32_t signature=ui::Context::combine(revision,browse.first);
         signature = ui::Context::combine(signature, scale);
         signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,browse.highlighted);

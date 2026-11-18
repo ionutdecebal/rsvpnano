@@ -356,6 +356,7 @@ namespace screens {
     }
 
     void ReaderScreen::closeBook() {
+        syncPagePosition(millis());
         ReadingProgress::mirror(session, store);
         pageProgressChangedAt_.reset();
         store.close();
@@ -366,6 +367,7 @@ namespace screens {
     }
 
     void ReaderScreen::prepareBookOpen(Preferences& preferences, uint32_t nowMs) {
+        syncPagePosition(nowMs);
         ReadingProgress::save(session, preferences, true, nowMs);
         ReadingProgress::mirror(session, store);
         pageProgressChangedAt_.reset();
