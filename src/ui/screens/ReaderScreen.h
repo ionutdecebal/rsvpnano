@@ -69,7 +69,7 @@ namespace screens {
 
 
     private:
-        void beginPageTouch(int x, int y);
+        void beginPageTouch(int x, int y, bool readingSwipe = false);
         bool handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, Screen& screen);
         void commitPlace(size_t index, Preferences& preferences, uint32_t nowMs);
         std::string placeExcerpt(size_t index, size_t maxWords = 32) const;

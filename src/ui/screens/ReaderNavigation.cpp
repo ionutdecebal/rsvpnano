@@ -28,7 +28,7 @@ void ReaderScreen::openPage(bool hideControls) {
     pageTouchControl_ = none;
     pageBarHidden_ = hideControls;
     pageScrollFinished_ = false;
-    pageSelectionPinned_ = false;
+    pageSelectionPinned_ = hideControls;
     pageVerticalMoved_ = false;
     pageVerticalHighlight_ = false;
     pageScrubMoved_ = false;
@@ -80,9 +80,12 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
     const size_t selected = verticalScroll && !pageSelectionPinned_ ? SIZE_MAX : pageSelected_;
     const auto highlightMode = !verticalScroll && !pageVerticalHighlight_ ? PageReader::HighlightMode::selection
                              : PageReader::HighlightMode::departingScrollLine;
-    const bool follow = (pageGesture_ == PageGesture::horizontal && pageScrubMoved_) || pageScrubFinished_;
+    // Choose the reading position before showing the first swipe-entry frame.
+    const bool enteringSwipe = pageBarHidden_ && browse_.layout.pageStart == SIZE_MAX;
+    const bool follow = enteringSwipe || (pageGesture_ == PageGesture::horizontal && pageScrubMoved_)
+                     || pageScrubFinished_;
     PageReader::browse(browse_, ui, text_, [&](size_t index) { return pageTypeface(index, builtInPageSize); },
-                       typography_, revision, session, pageBody(), selected, scale, follow, highlightMode, size <= 2);
+                       typography_, revision, session, pageBody(), selected, scale, follow, highlightMode, size <= 2 || enteringSwipe);
     const bool gestureFinished = pageScrollFinished_ || pageScrubFinished_;
     pageScrubFinished_ = false;
     if (verticalScroll && browse_.highlighted != selected)
@@ -102,7 +105,7 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
         ui::modern::rule(ui,{0,43,640,1});
     ui.label({584,148,52,24},std::to_string(ReadingProgress::percent(browse_.topLine == SIZE_MAX ? browse_.first : browse_.topLine, ReadingLoop::wordCount(session)))+"%",11,ui::themes::Muted,ui::TextAlign::Center);
 }
-void ReaderScreen::beginPageTouch(int x, int y) {
+void ReaderScreen::beginPageTouch(int x, int y, bool readingSwipe) {
     resetTouch();
     pageGesture_ = PageGesture::pending;
     pageTouchX_ = x;
@@ -112,7 +115,9 @@ void ReaderScreen::beginPageTouch(int x, int y) {
     pageScrollDirection_ = 0;
     pageVerticalMoved_ = false;
     pageScrubMoved_ = false;
-    pageTouchControl_ = ui::contains(pageBody(), x, y) ? pageText : none;
+    pageTouchControl_ = (readingSwipe || ui::contains(pageBody(), x, y)) ? pageText : none;
+    if (readingSwipe)
+        return;
     for (size_t i = pageBarVisible() ? menu : previousLine; i < std::size(pageButtons); ++i) {
         if (ui::contains(pageButtons[i].rect, x, y)) {
             pageTouchControl_ = i;

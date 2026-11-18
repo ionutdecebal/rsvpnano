@@ -30,8 +30,12 @@ namespace screens {
                 finishPause(preferences, nowMs);
                 cancelModernControls();
                 openPage(true);
-                if (!released)
-                    beginPageTouch(touch->x, touch->y);
+                if (!released) {
+                    beginPageTouch(touch->x, touch->y, true);
+                    // Keep the established axis and consume the entry distance once.
+                    pageGesture_ = std::abs(dx) > std::abs(dy) ? PageGesture::horizontal : PageGesture::vertical;
+                    pageScrubX_ = touch->x;
+                }
                 ui.invalidate();
                 return true;
             }
