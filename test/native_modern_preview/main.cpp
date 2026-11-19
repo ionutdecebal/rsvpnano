@@ -580,6 +580,10 @@ namespace {
         tap(42, 22);
         assert(screen == screens::Screen::Reader && reader.pageBrowsing() && reader.pageHighlightedWord() == lookup);
         assert(reader.session.state.wordIndex == 0);
+        assert(!settings.settings().reading.pageControlsAutoHide);
+        assert(reader.revealPageControls());
+        ui.invalidate();
+        frame(false, 0, 0);
 
         settings.settings().reading.pageControlsAutoHide = true;
         const std::vector<uint16_t> beforeScrub(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
@@ -606,6 +610,9 @@ namespace {
         assert(screen == screens::Screen::Dictionary && dictionary::previewLookupWord == scrubbed);
         tap(42, 22);
         assert(screen == screens::Screen::Reader && reader.pageHighlightedWord() == scrubbed);
+        assert(reader.revealPageControls());
+        ui.invalidate();
+        frame(false, 0, 0);
         settings.settings().reading.pageControlsAutoHide = false;
 
         frame(true, 200, 145);

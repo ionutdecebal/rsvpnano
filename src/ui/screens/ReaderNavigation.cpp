@@ -240,8 +240,10 @@ bool ReaderScreen::handlePage(ui::Context& ui, uint32_t nowMs, Preferences& pref
     switch (control) {
     case menu: screen = Screen::Read; break;
     case dictionary:
-        if (browse_.highlighted != SIZE_MAX)
+        if (browse_.highlighted != SIZE_MAX) {
+            pageBarHidden_ = true;
             screen = Screen::Dictionary;
+        }
         break;
     case findPlace: openLocator(screen); break;
     case backToBook:
