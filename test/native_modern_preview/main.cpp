@@ -1411,6 +1411,24 @@ namespace {
         constexpr ui::Rect clip{16, 52, 328, 76};
         constexpr uint16_t untouched = 0x1234;
         ui::ClippedGfx viewport(panel, clip);
+
+        std::array<uint16_t, 8 * 4> bitmap;
+        for (size_t i = 0; i < bitmap.size(); ++i)
+            bitmap[i] = i + 1;
+        for (const int left : {clip.x - 3, clip.x + 3, clip.x + clip.w - 3, clip.x + clip.w}) {
+            panel.fillScreen(untouched);
+            const int top = clip.y - 1;
+            viewport.draw16bitRGBBitmap(left, top, bitmap.data(), 8, 4);
+            for (int y = 0; y < 172; ++y) {
+                for (int x = 0; x < 640; ++x) {
+                    const bool inside = ui::contains(clip, x, y)
+                        && x >= left && x < left + 8 && y >= top && y < top + 4;
+                    assert(panel.getFramebuffer()[y * 640 + x]
+                           == (inside ? bitmap[(y - top) * 8 + x - left] : untouched));
+                }
+            }
+        }
+
         ui::fonts::AlphaTextRenderer<640> text(viewport);
         text.begin();
         for (const auto* font : ui::fonts::LiterataFallbackAlpha4_Sizes) {

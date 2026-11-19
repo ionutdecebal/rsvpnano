@@ -23,6 +23,22 @@ namespace ui {
         void writeFillRectPreclipped(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) override {
             fill(x, y, w, h, color);
         }
+        using Arduino_GFX::draw16bitRGBBitmap;
+        void draw16bitRGBBitmap(int16_t x, int16_t y, uint16_t* bitmap, int16_t w, int16_t h) override {
+            const auto rect = intersection({x, y, w, h}, clip_);
+            if (rect.w <= 0 || rect.h <= 0)
+                return;
+
+            auto* firstRow = bitmap + (rect.y - y) * w + (rect.x - x);
+            if (rect.w == w) {
+                output_.draw16bitRGBBitmap(rect.x, rect.y, firstRow, rect.w, rect.h);
+                return;
+            }
+
+            // A horizontal crop keeps the original bitmap's row stride.
+            for (int row = 0; row < rect.h; ++row)
+                output_.draw16bitRGBBitmap(rect.x, rect.y + row, firstRow + row * w, rect.w, 1);
+        }
     private:
         void fill(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
             const auto rect = intersection({x, y, w, h}, clip_);
