@@ -112,6 +112,37 @@ void test_modern_palette_is_opt_in_and_preserves_custom_themes() {
     TEST_ASSERT_EQUAL(f.theme.definition.colors.accent, f.ui.readingFocusColor());
 }
 
+void test_page_settings_route_uses_device_presentation() {
+    using screens::Screen;
+    Fixture f;
+    settings::ReadingSettings reading;
+    const auto draw = [&] {
+        f.ui.setModernPresentation(screens::modern::enabled(f.ui.width(), f.ui.height(), f.screen));
+        return screens::readingSettings(f.ui, reading, f.screen) ? screens::Action::Resume : screens::Action::None;
+    };
+
+    f.screen = Screen::ReadingHub;
+    f.frame(draw);
+    f.tap(draw, 240, 135);
+    TEST_ASSERT_EQUAL(Screen::PageSettings, f.screen);
+    f.frame(draw);
+    TEST_ASSERT_TRUE(f.ui.modernPresentation());
+    TEST_ASSERT_FALSE(reading.compactPageText);
+    TEST_ASSERT_FALSE(reading.pageControlsAutoHide);
+    TEST_ASSERT_EQUAL(screens::Action::Resume, f.tap(draw, 160, 75));
+    TEST_ASSERT_TRUE(reading.compactPageText);
+    TEST_ASSERT_EQUAL_UINT8(0, reading.pageTextSizeIndex());
+    for (uint8_t index = 1; index <= 4; ++index) {
+        TEST_ASSERT_EQUAL(screens::Action::Resume, f.tap(draw, 160, 75));
+        TEST_ASSERT_EQUAL_UINT8(index, reading.pageTextSizeIndex());
+    }
+    TEST_ASSERT_EQUAL(screens::Action::Resume, f.tap(draw, 470, 75));
+    TEST_ASSERT_TRUE(reading.pageControlsAutoHide);
+    f.tap(draw, 55, 20);
+    TEST_ASSERT_EQUAL(Screen::ReadingSettings, f.screen);
+    TEST_ASSERT_FALSE(screens::modern::enabled(320, 172, Screen::PageSettings));
+}
+
 void test_explicit_line_breaks_do_not_rewrap_the_previous_word() {
     Fixture f;
     auto layout = f.ui.prepareText({16, 52, 608, 66}, "One complete line\nAnd another line", 2, ui::TextAlign::Start, 2);
@@ -588,6 +619,7 @@ int main() {
     RUN_TEST(test_book_language_override_and_automatic_fallback);
     RUN_TEST(test_proportional_utf8_layout_is_measured_and_clipped);
     RUN_TEST(test_modern_palette_is_opt_in_and_preserves_custom_themes);
+    RUN_TEST(test_page_settings_route_uses_device_presentation);
     RUN_TEST(test_explicit_line_breaks_do_not_rewrap_the_previous_word);
     RUN_TEST(test_menu_routes_brightness_bounds_and_unchanged_frame);
     RUN_TEST(test_filled_slider_uses_whole_tile_and_commits_after_drag);

@@ -36,6 +36,7 @@ namespace screens::modern {
         auto parentText = parent == Screen::NetworkSettings ? std::string_view{"Wi-Fi"} : parent == Screen::Help ? copy(ui,Copy::Help) : parent == Screen::Read ? caption(ui, UiText::Read, "Menu")
                                : parent == Screen::ReadingHub ? caption(ui, UiText::Reading, "Pace")
                                : parent == Screen::DisplayHub ? ui.text(UiText::Display)
+                               : parent == Screen::ReadingSettings ? ui.text(UiText::Reading)
                                : parent == Screen::Connections ? caption(ui, UiText::Network, "Connect")
                                : parent == Screen::FocusTimers ? ui.text(UiText::Focus)
                                : ui.text(parent == Screen::Read ? UiText::Read

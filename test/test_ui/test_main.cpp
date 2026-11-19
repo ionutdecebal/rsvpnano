@@ -231,6 +231,29 @@ void test_unchanged_widget_does_not_draw_or_flush() {
     TEST_ASSERT_EQUAL(0, gfx.flushes);
 }
 
+void test_complete_paint_skips_redundant_clear() {
+    Arduino_GFX gfx;
+    ui::Context context(gfx);
+    auto colors = theme();
+    context.setTheme(colors);
+    const ui::Rect area{0, 44, 160, 80};
+    const auto render = [&](uint32_t signature) {
+        context.beginFrame(1);
+        TEST_ASSERT_TRUE(context.redrawReplaced(area, signature));
+        context.paint(area, [](Arduino_GFX& display, ui::Rect target) {
+            display.fillRect(target.x, target.y, target.w, target.h, 0x3210);
+        });
+        context.endFrame();
+    };
+    render(1);
+    gfx.writes = 0;
+    gfx.flushes = 0;
+    render(2);
+    TEST_ASSERT_EQUAL(1, gfx.writes);
+    TEST_ASSERT_EQUAL(1, gfx.flushes);
+    TEST_ASSERT_EQUAL(0x3210, gfx.lastFillColor);
+}
+
 void test_changed_and_removed_widgets_redraw() {
     Arduino_GFX gfx;
     ui::Context context(gfx);
@@ -1716,17 +1739,17 @@ void test_page_browse_scrolls_without_changing_saved_reader_position() {
     const auto typeface=[](size_t)->FontCatalog::Face{return {std::cref(kReaderFont),nullptr};};
     const ui::Rect area{0,30,136,48};
     const auto render=[&]{context.beginFrame(1);screens::PageReader::browse(browse,context,text,typeface,typography,1,session,area,0);context.endFrame();};
-    render();const auto first=browse.first;
+    render();const auto first=browse.topLine;
     browse.offset+=38;render();
-    TEST_ASSERT_GREATER_THAN(first,browse.first);
+    TEST_ASSERT_GREATER_THAN(first,browse.topLine);
     TEST_ASSERT_EQUAL(0,session.state.wordIndex);
     browse.offset-=38;render();
-    TEST_ASSERT_EQUAL(first,browse.first);
+    TEST_ASSERT_EQUAL(first,browse.topLine);
     const auto& word=browse.layout.words.front();
     const auto& line=browse.layout.lines.front();
     TEST_ASSERT_EQUAL(browse.first,screens::PageReader::wordAtPoint(browse,word.x+1,line.top+2));
     browse.offset=10000;render();
-    TEST_ASSERT_LESS_THAN(words.size(),browse.first);
+    TEST_ASSERT_LESS_THAN(words.size(),browse.topLine);
     TEST_ASSERT_EQUAL(0,session.state.wordIndex);
 }
 
@@ -1734,6 +1757,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_page_browse_scrolls_without_changing_saved_reader_position);
     RUN_TEST(test_unchanged_widget_does_not_draw_or_flush);
+    RUN_TEST(test_complete_paint_skips_redundant_clear);
     RUN_TEST(test_reader_font_resolves_opentype_glyph_ids);
     RUN_TEST(test_reader_batches_adjacent_shaped_glyphs);
     RUN_TEST(test_reader_streams_rfont4_glyphs_from_file);

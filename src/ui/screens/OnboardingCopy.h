@@ -279,7 +279,15 @@ enum class Copy : uint16_t {
     DictionaryOfflineBody,
     DictionaryOnline,
     DictionaryOnlineBody,
-    GuidesUnavailableChunks
+    GuidesUnavailableChunks,
+    PageSettings,
+    PageTextSize,
+    PageControls,
+    PageControlsAlways,
+    PageControlsAutoHide,
+    PageControlsHint,
+    PageExtraSmall,
+    PageExtraLarge
 };
 std::string_view copy(const ui::Context& ui, Copy key);
 }

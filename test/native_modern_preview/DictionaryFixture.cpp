@@ -2,8 +2,11 @@
 #include "dictionary/Dictionary.h"
 namespace dictionary {
 std::string previewCase;
-void Dictionary::open(ReadingSession&) {
-query_="curious";lookupWord_=15;sense_=0;definitionOffsets_={0};lookup();
+size_t previewLookupWord = SIZE_MAX;
+void Dictionary::open(ReadingSession& session, std::optional<size_t> word, screens::Screen returnScreen) {
+returnScreen_ = returnScreen;
+previewLookupWord = word.value_or(SIZE_MAX);
+query_=word ? std::string(ReadingLoop::wordAt(session, *word)) : "curious";lookupWord_=word.value_or(15);sense_=0;definitionOffsets_={0};lookup();
 if(previewCase=="missing-pack"){definition_={};message="Copy english.oewn to /dictionaries on the SD card.";}
 if(previewCase=="missing-word"){query_="unlistedword";definition_={};message="No offline entry. Try online lookup.";}
 if(previewCase=="online-error"){definition_={};message="Could not connect to Wi-Fi. Offline lookup still works.";}

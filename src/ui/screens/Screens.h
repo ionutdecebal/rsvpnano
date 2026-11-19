@@ -73,6 +73,7 @@ namespace screens {
         DictionarySearch,
         DictionaryHelp,
         DictionaryInstall,
+        PageSettings,
     };
 
     enum class Action : uint8_t {

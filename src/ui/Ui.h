@@ -371,6 +371,8 @@ namespace ui {
                        std::string_view time = {});
         // Opaque regions replace their background during paint; partial custom drawing still needs a clear.
         bool redraw(Rect rect, uint32_t signature, bool opaque = false);
+        // The caller paints every pixel of the rectangle when this returns true.
+        bool redrawReplaced(Rect rect, uint32_t state);
         void markDrawn();
         void drawText(Rect rect, std::string_view text, uint8_t textSize, uint16_t color,
                       TextAlign align = TextAlign::Start, uint8_t maxLines = 1, std::string_view textLocale = {});
@@ -444,7 +446,7 @@ namespace ui {
             bool changed = true;
         };
 
-        Claim claim(Kind kind, Rect rect, uint32_t signature);
+        Claim claim(Kind kind, Rect rect, uint32_t signature, bool clearBackground = true);
         Arduino_Canvas* paintBuffer();
         void clear(Rect rect);
         void drawIcon(Arduino_GFX& output, Rect rect, Icon icon, uint16_t color, uint16_t surface);

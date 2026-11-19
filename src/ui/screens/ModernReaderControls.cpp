@@ -5,7 +5,7 @@ namespace screens {
     bool ReaderScreen::handleModernControls(ui::Context& ui,uint32_t nowMs,Preferences& preferences,
                                            settings::SettingsStore& store,Screen& screen) {
         using modern::ReaderControl;
-        if(pageBrowsing_ && ui.modernReadingPalette()) return handlePage(ui,nowMs,preferences,store,screen);
+        if(pageBrowsing_ && ui.modernReadingPalette()) return handlePage(ui, nowMs, preferences, screen);
         if(!ui.modernReadingPalette() || ui.width()!=640 || ui.height()!=172
            || session.metadata.writingMode==WritingMode::verticalRl){cancelModernControls();return false;}
         const auto* touch=ui.touch();if(!touch)return false;
@@ -26,6 +26,19 @@ namespace screens {
         modernTouchMoved_|=std::abs(dx)>18 || std::abs(dy)>18;
         const bool released=ui::hasTouch(*touch,ui::TouchRelease);
         if(modernCanvasTouch_){
+            if (modernTouchMoved_ && !settings_.holdToRead && ReadingLoop::wordCount(session) > 0) {
+                finishPause(preferences, nowMs);
+                cancelModernControls();
+                openPage(true);
+                if (!released) {
+                    beginPageTouch(touch->x, touch->y, true);
+                    // Keep the established axis and consume the entry distance once.
+                    pageGesture_ = std::abs(dx) > std::abs(dy) ? PageGesture::horizontal : PageGesture::vertical;
+                    pageScrubX_ = touch->x;
+                }
+                ui.invalidate();
+                return true;
+            }
             if(modernTouchMoved_ && modernHolding_){finishPause(preferences,nowMs);modernHolding_=false;}
             if(!released){
                 if(!modernTouchMoved_ && settings_.holdToRead && !modernPressedPlaying_ && !modernHolding_

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import hashlib
 import shlex
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -16,9 +17,12 @@ PROJECT = Path(__file__).resolve().parents[2]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output", type=Path)
+    parser.add_argument("output", type=Path, nargs="?")
+    parser.add_argument("--interactive", action="store_true", help="Open the interactive Page preview")
     parser.add_argument("--native-build", type=Path, default=PROJECT / ".pio/build/native_test")
     args = parser.parse_args()
+    if not args.interactive and args.output is None:
+        parser.error("provide an output directory or --interactive")
     library = PROJECT / ".pio/libdeps/waveshare_esp32s3_touch_lcd_349_rev1/GFX Library for Arduino/src"
     sources = [
         "ui/screens/NetworkSettingsScreen.cpp", "ui/screens/regular/NetworkSettingsScreen.cpp",
@@ -69,7 +73,12 @@ def main():
         objects = list(pool.map(compile_unit, units))
     binary = cache / "preview"
     if not binary.exists() or any(p.stat().st_mtime_ns > binary.stat().st_mtime_ns for p in [*objects, *archives]):
-        subprocess.run([flags[0], *map(str, objects), *map(str, archives), "-Wl,--gc-sections", "-o", str(binary)], check=True)
+        strip = "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections"
+        subprocess.run([flags[0], *map(str, objects), *map(str, archives), strip, "-o", str(binary)], check=True)
+    if args.interactive:
+        from page_preview import show
+        show(binary)
+        return
     subprocess.run([str(binary), str(args.output.resolve())], check=True)
     # Lossless screenshots for review; no resampling or synthetic browser text.
     from PIL import Image

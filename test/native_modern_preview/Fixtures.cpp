@@ -32,7 +32,7 @@ FontCatalog::Face FontCatalog::loadFace(size_t, size_t size) {
     return {previewRuntimeFont};
 }
 bool focus::OrientationReader::begin() { available_ = true; return true; }
-int previewSaveCalls = 0, previewPrefetchDelay = 0;
+int previewSaveCalls = 0, previewPrefetchDelay = 0, previewPageMirrors = 0;
 settings::SettingsStore::~SettingsStore() = default;
 void settings::SettingsStore::acceptChanges() { ++previewSaveCalls; }
 void settings::SettingsStore::acceptSecretChanges() {}
@@ -80,6 +80,7 @@ bool FocusScreen::update(uint32_t now) {session_.update(now,focus::Orientation::
 
 namespace ReadingProgress {
 void save(ReadingSession&, Preferences&, bool, uint32_t) { ++previewSaveCalls; }
+void mirror(const ReadingSession&, const IndexedBookStore&) { ++previewPageMirrors; }
 bool saveChapterTransition(ReadingSession&, Preferences&, const IndexedBookStore&,size_t,size_t,uint32_t) { return false; }
 uint8_t percent(uint32_t index,uint32_t count) { return count<=1?0:static_cast<uint8_t>(std::min<uint64_t>(uint64_t(index)*100/(count-1),100)); }
 }
@@ -90,8 +91,8 @@ void ReaderScreen::prefetchNextWord(uint32_t) { FakeTask::now += previewPrefetch
 uint32_t ReaderScreen::frameSignature(std::string_view word,bool,bool,const settings::ReadingSettings& config) const {
     return ui::Context::signature(word,ui::Context::combine(ui::Context::combine(config.typography.fontSizeIndex,config.typography.tracking),config.typography.anchor));
 }
-void ReaderScreen::draw(ui::Context& ui,const StorageManager&,const Board::Power::BatteryState&,uint32_t) {
-    if(pageBrowsing_){drawPage(ui);return;}
+void ReaderScreen::draw(ui::Context& ui,const StorageManager&,const Board::Power::BatteryState&,uint32_t nowMs) {
+    if(pageBrowsing_){drawPage(ui, nowMs);return;}
     typography_=settings_.typography;refreshTypeface();
     prepareChunk();if(chunkLayoutReady_)drawChunk(ui,{0,36,640,100});
 }

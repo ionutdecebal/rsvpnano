@@ -75,6 +75,8 @@ namespace screens {
 
         pageState_ = {};
         browse_.layout = {};
+        browse_.scaleCanvas.reset();
+        browse_.viewportCanvas.reset();
         pageFontActive_ = false;
         rsvpParagraph_ = {};
         rsvpBidi_.clear();
@@ -354,7 +356,9 @@ namespace screens {
     }
 
     void ReaderScreen::closeBook() {
+        syncPagePosition(millis());
         ReadingProgress::mirror(session, store);
+        pageProgressChangedAt_.reset();
         store.close();
         session = {};
         pagePreview_ = false;
@@ -363,8 +367,10 @@ namespace screens {
     }
 
     void ReaderScreen::prepareBookOpen(Preferences& preferences, uint32_t nowMs) {
+        syncPagePosition(nowMs);
         ReadingProgress::save(session, preferences, true, nowMs);
         ReadingProgress::mirror(session, store);
+        pageProgressChangedAt_.reset();
         store.close();
         session.metadata.clear();
     }
@@ -413,7 +419,7 @@ namespace screens {
         if (ui.modernReadingPalette() && settings_.mode == settings::ReadingMode::page) {
             settings_.mode = settings::ReadingMode::rsvp; openPage();
         }
-        if (pageBrowsing_ && ui.modernReadingPalette()) { drawPage(ui); return; }
+        if (pageBrowsing_ && ui.modernReadingPalette()) { drawPage(ui, nowMs); return; }
         if (touchIntent_ == TouchIntent::Scrub || touchIntent_ == TouchIntent::Paragraph) {
             const auto typeface = [this](size_t index) {
                 return pageTypeface(index);

@@ -1257,6 +1257,10 @@ namespace ui {
         return claim(opaque ? Kind::Opaque : Kind::Custom, rect, state).changed;
     }
 
+    bool Context::redrawReplaced(Rect rect, uint32_t state) {
+        return claim(Kind::Opaque, rect, state, false).changed;
+    }
+
     uint16_t Context::color(ui::themes::ColorRole role) const {
         if (theme_ == nullptr) {
             return role == ui::themes::ColorRole::Background ? kFallbackBlack : kFallbackWhite;
@@ -1301,10 +1305,11 @@ namespace ui {
         return (seed ^ value) * Fnv1a::kPrime;
     }
 
-    Context::Claim Context::claim(Kind kind, Rect rect, uint32_t state) {
+    Context::Claim Context::claim(Kind kind, Rect rect, uint32_t state, bool clearBackground) {
         rect = paintBounds(rect);
         const size_t index = nextSlot_++;
-        const bool clearNew = kind != Kind::Touch && (displayWriteAlignment() == 1 || kind == Kind::Custom);
+        const bool clearNew = clearBackground && kind != Kind::Touch
+                           && (displayWriteAlignment() == 1 || kind == Kind::Custom);
         if (index >= kSlotCapacity) {
             if (clearNew)
                 clear(rect);

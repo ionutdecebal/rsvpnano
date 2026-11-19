@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#include <optional>
 #include <string>
 #include <atomic>
 #include <string_view>
@@ -66,6 +67,7 @@ private:
 
     void renderScreen(uint32_t nowMs);
     void handleScreenAction(screens::Action action, uint32_t nowMs);
+    void openDictionary(uint32_t nowMs, std::optional<size_t> pageWord = {});
     void handleInput(Input::ActionMask actions, uint32_t nowMs);
     void handleTouch(uint32_t nowMs);
     void runRss();

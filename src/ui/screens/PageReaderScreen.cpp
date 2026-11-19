@@ -3,6 +3,11 @@
 
 #include <algorithm>
 #include <iterator>
+#include <cstring>
+
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM)
+#include <esp_heap_caps.h>
+#endif
 
 #include "reader/ReadingLoop.h"
 #include "text/BidiText.h"
@@ -19,6 +24,7 @@ namespace screens::PageReader {
         constexpr uint8_t kOverlayTextSize = 2;
         const int16_t kOverlayTextHeight = ui::Context::textHeight(kOverlayTextSize);
         constexpr int16_t kLineGap = 2;
+        constexpr int kBrowseLookahead = 224;
 
         void clearPage(State& state) {
             state.lineCount = 0;
@@ -213,7 +219,7 @@ namespace screens::PageReader {
 
         void layout(State& state, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                     const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
-                    size_t start) {
+                    size_t start, bool measureInk = true) {
             const size_t wordCount = ReadingLoop::wordCount(session);
             size_t index = std::min(start, wordCount);
             clearPage(state);
@@ -223,6 +229,7 @@ namespace screens::PageReader {
             const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
             int16_t top = static_cast<int16_t>(area.y + kMarginY);
             int16_t previousLineHeight = 0;
+            std::pair<size_t, size_t> paragraphRange{};
             ReadingLoop::TextParagraph shapingParagraph;
             BidiText::Analysis shapingBidi;
             bool paragraphBidi = false;
@@ -233,35 +240,38 @@ namespace screens::PageReader {
             state.characters.clear();
 
             while (index < wordCount && state.lineCount < state.lines.size()) {
-                if (index < shapingParagraph.firstWord || index >= shapingParagraph.lastWord) {
+                if (index < paragraphRange.first || index >= paragraphRange.second) {
                     if (paragraphBidi && shapingParagraph.lastWord > shapingParagraph.firstWord)
                         appendBidiParagraph(state, session, shapingParagraph, shapingBidi, shapingBidiReady,
                                             bidiFirstLine, state.lineCount, shapingBidiLine, visual);
-                    shapingParagraph = ReadingLoop::paragraphAt(session, index);
+                    paragraphRange = ReadingLoop::paragraphBoundsAt(session, index);
                     bidiFirstLine = state.lineCount;
-                    paragraphBidi =
-                        session.metadata.requiresBidi(shapingParagraph.firstWord, shapingParagraph.lastWord);
-                    if (paragraphBidi)
+                    paragraphBidi = session.metadata.requiresBidi(paragraphRange.first, paragraphRange.second);
+                    shapingParagraph = {};
+                    if (paragraphBidi) {
+                        shapingParagraph = ReadingLoop::paragraphAt(session, index);
                         shapingBidiReady =
                             shapingBidi
                                 .reset(shapingParagraph.text, session.metadata.directionAt(shapingParagraph.firstWord))
                                 .has_value();
+                    }
                 }
-                const bool startsParagraph = paragraphStart(session, index);
+                const bool startsParagraph = index == paragraphRange.first;
                 if (state.lineCount > 0 && startsParagraph)
                     top = static_cast<int16_t>(top + std::max<int16_t>(4, previousLineHeight / 3));
 
                 State::Line& line = state.lines[state.lineCount];
-                line = {.start = index, .top = top, .paragraphStart = startsParagraph};
+                line = {.start = index, .flowTop = top, .top = top, .paragraphStart = startsParagraph};
                 int16_t width = 0;
                 uint8_t ascent = 0;
                 uint8_t descent = 0;
                 uint8_t yAdvance = 0;
-                while (index < wordCount) {
-                    if (index > line.start && paragraphStart(session, index))
-                        break;
-                    const std::string_view word = ReadingLoop::wordAt(session, index);
+                while (index < paragraphRange.second) {
                     const FontCatalog::Face face = typeface(index);
+                    // Ordinary text needs wrap metrics, not the paragraph's
+                    // full text. Avoid rereading it from SD on each rebase.
+                    if (face.shaper && shapingParagraph.wordOffsets.empty())
+                        shapingParagraph = ReadingLoop::paragraphAt(session, index);
                     const uint8_t faceIndex = rememberFace(state, face);
                     const ui::fonts::AlphaFont& font = face.raster.get();
                     activateFace(text, face);
@@ -316,7 +326,8 @@ namespace screens::PageReader {
                     state.lines[lineIndex].width = lineAdvance(state, state.lines[lineIndex], text, typography);
                 }
             }
-            measurePageInk(state, text, typography, session, area);
+            if (measureInk)
+                measurePageInk(state, text, typography, session, area);
         }
 
         bool logicalWordPosition(const State& state, size_t index, int16_t& x, int16_t& y) {
@@ -562,6 +573,43 @@ namespace screens::PageReader {
             }
         }
 
+        void drawPageWords(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
+                           const settings::TypographySettings& typography, const ReadingSession& session,
+                           ui::Rect translatedArea, ui::Rect viewport, int16_t dx, int16_t dy, size_t highlighted) {
+            if (state.vertical) {
+                for (size_t index = state.pageStart; index < state.pageEnd; ++index) {
+                    const auto& word = wordAt(state, index);
+                    if (!visibleInk(word.ink, word.inkKnown, viewport))
+                        continue;
+                    drawVerticalWord(state, ui, text, session, index,
+                                     index == highlighted ? ui::themes::ColorRole::Accent
+                                                          : ui::themes::ColorRole::Foreground,
+                                     dx, dy);
+                }
+            } else {
+                for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
+                    State::Line line = state.lines[lineIndex];
+                    if (!visibleInk(line.ink, line.inkKnown, viewport))
+                        continue;
+                    line.y = static_cast<int16_t>(line.y + dy);
+                    if (line.bidi) {
+                        drawLine(state, line, ui, text, translatedArea, highlighted, viewport);
+                        continue;
+                    }
+                    for (size_t index = line.start; index < line.end; ++index) {
+                        const State::Word& word = wordAt(state, index);
+                        if (!visibleInk(word.ink, word.inkKnown, viewport))
+                            continue;
+                        const auto role = index == highlighted ? ui::themes::ColorRole::Accent
+                                                               : ui::themes::ColorRole::Foreground;
+                        activateFace(text, faceAt(state, index));
+                        drawWord(state, ui, text, typography, session, index, static_cast<int16_t>(word.x + dx),
+                                 static_cast<int16_t>(word.y + dy), role);
+                    }
+                }
+            }
+        }
+
         void paintPage(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
                        const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
                        ui::Rect dirty, size_t highlighted, std::string_view overlay, bool clip = false) {
@@ -582,38 +630,7 @@ namespace screens::PageReader {
                 Arduino_GFX& previousOutput = text.setOutput(clip ? static_cast<Arduino_GFX&>(clipped) : output);
                 const ui::Rect viewport{static_cast<int16_t>(-dx), static_cast<int16_t>(-dy), output.width(),
                                         output.height()};
-                if (state.vertical) {
-                    for (size_t index = state.pageStart; index < state.pageEnd; ++index) {
-                        const auto& word = wordAt(state, index);
-                        if (!visibleInk(word.ink, word.inkKnown, viewport))
-                            continue;
-                        drawVerticalWord(state, ui, text, session, index,
-                                         index == highlighted ? ui::themes::ColorRole::Accent
-                                                              : ui::themes::ColorRole::Foreground,
-                                         dx, dy);
-                    }
-                } else {
-                    for (size_t lineIndex = 0; lineIndex < state.lineCount; ++lineIndex) {
-                        State::Line line = state.lines[lineIndex];
-                        if (!visibleInk(line.ink, line.inkKnown, viewport))
-                            continue;
-                        line.y = static_cast<int16_t>(line.y + dy);
-                        if (line.bidi) {
-                            drawLine(state, line, ui, text, translatedArea, highlighted, viewport);
-                            continue;
-                        }
-                        for (size_t index = line.start; index < line.end; ++index) {
-                            const State::Word& word = wordAt(state, index);
-                            if (!visibleInk(word.ink, word.inkKnown, viewport))
-                                continue;
-                            const auto role = index == highlighted ? ui::themes::ColorRole::Accent
-                                                                   : ui::themes::ColorRole::Foreground;
-                            activateFace(text, faceAt(state, index));
-                            drawWord(state, ui, text, typography, session, index, static_cast<int16_t>(word.x + dx),
-                                     static_cast<int16_t>(word.y + dy), role);
-                        }
-                    }
-                }
+                drawPageWords(state, ui, text, typography, session, translatedArea, viewport, dx, dy, highlighted);
                 if (!overlay.empty()) {
                     output.fillRect(static_cast<int16_t>(overlayBounds.x + dx - 4),
                                     static_cast<int16_t>(overlayBounds.y + dy - 2),
@@ -624,6 +641,308 @@ namespace screens::PageReader {
                 }
                 text.setOutput(previousOutput);
             });
+        }
+
+        int16_t logicalExtent(int16_t pixels, uint8_t scale) {
+            return static_cast<int16_t>((int(pixels) * kNativeScale + scale - 1) / scale);
+        }
+
+        class PageCanvas final : public Arduino_Canvas {
+        public:
+            PageCanvas(int16_t width, int16_t height) : Arduino_Canvas(width, height, nullptr) {}
+
+            bool begin(int32_t speed) override {
+#if defined(ESP32) && defined(BOARD_HAS_PSRAM)
+                if (_framebuffer == nullptr) {
+                    const size_t bytes = static_cast<size_t>(width()) * height() * sizeof(uint16_t);
+                    _framebuffer = static_cast<uint16_t*>(heap_caps_aligned_alloc(16, bytes,
+                                                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                }
+                return _framebuffer != nullptr;
+#else
+                return Arduino_Canvas::begin(speed);
+#endif
+            }
+        };
+
+        void ensureCanvas(std::unique_ptr<Arduino_Canvas>& canvas, int16_t width, int16_t height) {
+            if (canvas && canvas->width() == width && canvas->height() == height)
+                return;
+            canvas.reset();
+            auto buffer = std::make_unique<PageCanvas>(width, height);
+            if (buffer->begin(GFX_SKIP_OUTPUT_BEGIN))
+                canvas = std::move(buffer);
+        }
+
+        void paintBrowseText(const State& state, Arduino_Canvas& canvas, ui::Context& ui,
+                             ui::fonts::AlphaTextRenderer<640>& text, const settings::TypographySettings& typography,
+                             const ReadingSession& session, ui::Rect area, size_t highlighted) {
+            const ui::Rect target{0, 0, area.w, area.h};
+            canvas.fillRect(0, 0, target.w, target.h, ui.color(ui::themes::Background));
+            ui::ClippedGfx clipped(canvas, target.w, target.h);
+            Arduino_GFX& previous = text.setOutput(clipped);
+            drawPageWords(state, ui, text, typography, session, target, area, -area.x, -area.y, highlighted);
+            text.setOutput(previous);
+        }
+
+        uint16_t blendPixel(uint16_t a, uint16_t b, uint32_t fraction) {
+            if (a == b || fraction == 0)
+                return a;
+            constexpr uint32_t redBlue = 0xf81f;
+            constexpr uint32_t green = 0x07e0;
+            const uint32_t inverse = 32 - fraction;
+            // Five bits of weight let red and blue share one multiply without carries between them.
+            return (((((a & redBlue) * inverse + (b & redBlue) * fraction) >> 5) & redBlue)
+                  | ((((a & green) * inverse + (b & green) * fraction) >> 5) & green));
+        }
+
+        struct PageSampling {
+            static constexpr uint32_t unit = 1U << 16;
+            uint32_t stride;
+            uint32_t first;
+
+            explicit PageSampling(uint8_t scale) : stride(unit * kNativeScale / scale), first((stride - unit) / 2) {}
+
+            uint32_t at(int pixel) const { return first + stride * pixel; }
+            int low(uint32_t position, int length) const { return std::min<int>(position >> 16, length - 1); }
+            int high(int low, int length) const { return std::min(low + 1, length - 1); }
+            uint32_t weight(uint32_t position) const { return (position >> 11) & 31; }
+        };
+
+        void resamplePageRow(uint16_t* dest, int width, const uint16_t* upper, const uint16_t* lower,
+                             int sourceWidth, uint32_t fy, const PageSampling& sample) {
+            if (sample.stride == PageSampling::unit * 2 && sourceWidth == width * 2) {
+                for (int x = 0; x < width; ++x) {
+                    const uint16_t a = upper[2 * x], b = upper[2 * x + 1];
+                    const uint16_t c = lower[2 * x], d = lower[2 * x + 1];
+                    dest[x] = blendPixel(blendPixel(a, b, 16), blendPixel(c, d, 16), fy);
+                }
+                return;
+            }
+            uint32_t sourceX = sample.first;
+            for (int x = 0; x < width; ++x, sourceX += sample.stride) {
+                const int x0 = sample.low(sourceX, sourceWidth);
+                const int x1 = sample.high(x0, sourceWidth);
+                const uint32_t fx = sample.weight(sourceX);
+                dest[x] = blendPixel(blendPixel(upper[x0], upper[x1], fx), blendPixel(lower[x0], lower[x1], fx), fy);
+            }
+        }
+
+        void paintScaledPage(Arduino_Canvas& canvas, ui::Context& ui, ui::Rect area, ui::Rect logicalArea,
+                             uint8_t scale) {
+            const uint16_t* pixels = canvas.getFramebuffer();
+            const PageSampling sample(scale);
+            ui.paint(area, [&](Arduino_GFX& output, ui::Rect translated) {
+                std::array<uint16_t, 640> row;
+                if (translated.w > static_cast<int16_t>(row.size()))
+                    return;
+                for (int y = 0; y < translated.h; ++y) {
+                    const auto sourceY = sample.at(y);
+                    const int y0 = sample.low(sourceY, logicalArea.h);
+                    const int y1 = sample.high(y0, logicalArea.h);
+                    resamplePageRow(row.data(), translated.w, pixels + y0 * canvas.width(),
+                                    pixels + y1 * canvas.width(), logicalArea.w, sample.weight(sourceY), sample);
+                    output.draw16bitRGBBitmap(translated.x, translated.y + y, row.data(), translated.w, 1);
+                }
+            });
+        }
+
+        // Whole display-pixel drags reuse finished rows if the sampling phase
+        // stays the same. Highlight-only changes keep that phase at any size.
+        void paintCachedPage(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
+                            const settings::TypographySettings& typography, const ReadingSession& session,
+                            ui::Rect area) {
+            struct Rows { int begin = 0, end = 0; };
+            const auto& state = browse.layout;
+            auto& source = *browse.scaleCanvas;
+            auto* frame = browse.viewportCanvas->getFramebuffer();
+            auto& cache = browse.rowCache;
+            const auto highlighted = browse.highlighted;
+            const bool native = browse.scale == kNativeScale;
+            const PageSampling sample(browse.scale);
+            const auto& logicalArea = state.layoutArea;
+            const int origin = logicalArea.y + browse.offset;
+            const auto highlightRows = [&]() -> Rows {
+                if (highlighted == kInvalidIndex)
+                    return {};
+                const auto& word = wordAt(state, highlighted);
+                if (!word.inkKnown)
+                    return {0, area.h};
+                const int y = word.ink.y - origin;
+                if (native)
+                    return {y, y + word.ink.h};
+                // Bilinear sampling can affect the rows beside the glyph ink.
+                const int scale = browse.scale;
+                return {(y - 1) * scale / kNativeScale - 1,
+                        (y + word.ink.h + 1) * scale / kNativeScale + 2};
+            }();
+            std::array<Rows, 3> dirty;
+            size_t count = 0;
+            const auto addRows = [&](Rows range) {
+                range.begin = std::max(0, range.begin);
+                range.end = std::min(int(area.h), range.end);
+                if (range.begin < range.end)
+                    dirty[count++] = range;
+            };
+            const int distance = (browse.offset - cache.offset) * browse.scale;
+            const int rows = distance / kNativeScale;
+            const bool exactShift = distance % kNativeScale == 0
+                && (distance == 0 || (PageSampling::unit * kNativeScale) % browse.scale == 0);
+            int firstRow = 0;
+            if (!cache.valid || !exactShift || std::abs(rows) >= area.h) {
+                addRows({0, area.h});
+            } else {
+                // Rotate the cached row order. Only exposed or recolored rows
+                // need new pixels, even when the scroll direction reverses.
+                firstRow = cache.firstRow + rows;
+                if (firstRow < 0)
+                    firstRow += area.h;
+                else if (firstRow >= area.h)
+                    firstRow -= area.h;
+                if (rows != 0)
+                    addRows(rows > 0 ? Rows{area.h - rows, area.h} : Rows{0, -rows});
+                if (highlighted != cache.highlighted) {
+                    if (cache.highlighted != kInvalidIndex)
+                        addRows({cache.highlightTop - rows, cache.highlightBottom - rows});
+                    addRows(highlightRows);
+                }
+            }
+            std::sort(dirty.begin(), dirty.begin() + count, [](Rows a, Rows b) { return a.begin < b.begin; });
+            for (size_t i = 0; i < count; ++i) {
+                auto [begin, end] = dirty[i];
+                while (i + 1 < count && dirty[i + 1].begin <= end)
+                    end = std::max(end, dirty[++i].end);
+                const int sourceTop = native ? begin : sample.low(sample.at(begin), logicalArea.h);
+                const int sourceBottom = native ? end : sample.high(sample.low(sample.at(end - 1), logicalArea.h),
+                                                                    logicalArea.h) + 1;
+                const ui::Rect region{logicalArea.x, static_cast<int16_t>(origin + sourceTop), logicalArea.w,
+                                      static_cast<int16_t>(sourceBottom - sourceTop)};
+                paintBrowseText(state, source, ui, text, typography, session, region, highlighted);
+                const int pitch = source.width();
+                const uint16_t* pixels = source.getFramebuffer();
+                for (int y = begin; y < end; ++y) {
+                    const int row = firstRow + y;
+                    uint16_t* dest = frame + (row < area.h ? row : row - area.h) * area.w;
+                    if (native) {
+                        std::memcpy(dest, pixels + (y - begin) * pitch, area.w * sizeof(*frame));
+                    } else {
+                        const auto sourceY = sample.at(y);
+                        const int y0 = sample.low(sourceY, logicalArea.h);
+                        const int y1 = sample.high(y0, logicalArea.h);
+                        resamplePageRow(dest, area.w, pixels + (y0 - sourceTop) * pitch,
+                                        pixels + (y1 - sourceTop) * pitch, logicalArea.w, sample.weight(sourceY), sample);
+                    }
+                }
+            }
+            cache = {highlighted, browse.offset, highlightRows.begin, highlightRows.end, firstRow, true};
+            ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
+                const int16_t tailRows = target.h - firstRow;
+                output.draw16bitRGBBitmap(target.x, target.y, frame + firstRow * target.w, target.w, tailRows);
+                if (firstRow != 0)
+                    output.draw16bitRGBBitmap(target.x, target.y + tailRows, frame, target.w, firstRow);
+            });
+        }
+
+        bool fullyVisible(const State::Word& word, const State::Line& line, ui::Rect viewport) {
+            const ui::Rect ink = word.inkKnown ? word.ink
+                : ui::Rect{word.x, line.top, word.width, static_cast<int16_t>(line.bottom - line.top)};
+            return ink.w > 0 && ink.h > 0 && ink.x >= viewport.x && ink.y >= viewport.y
+                && ink.x + ink.w <= viewport.x + viewport.w && ink.y + ink.h <= viewport.y + viewport.h;
+        }
+
+        ui::Rect browseViewport(const BrowseState& browse) {
+            auto viewport = browse.layout.layoutArea;
+            viewport.y += browse.offset;
+            viewport.w = static_cast<int16_t>(int(browse.displayArea.w) * kNativeScale / browse.scale);
+            viewport.h = static_cast<int16_t>(int(browse.displayArea.h) * kNativeScale / browse.scale);
+            return viewport;
+        }
+
+        size_t lineForWord(const State& state, size_t word) {
+            for (size_t row = 0; row < state.lineCount; ++row) {
+                if (word >= state.lines[row].start && word < state.lines[row].end)
+                    return row;
+            }
+            return state.lineCount;
+        }
+
+        bool fullyVisibleLine(const State::Line& line, ui::Rect viewport) {
+            const bool measured = line.inkKnown && line.ink.h > 0;
+            const int top = measured ? line.ink.y : line.top;
+            const int bottom = measured ? line.ink.y + line.ink.h : line.bottom;
+            return top >= viewport.y && bottom <= viewport.y + viewport.h;
+        }
+
+        bool usesMidpoint(HighlightMode mode) {
+            return mode == HighlightMode::departingScrollLine || mode == HighlightMode::departingScrollLineForward;
+        }
+
+        size_t automaticHighlight(const State& state, ui::Rect viewport, HighlightMode mode) {
+            size_t firstWord = kInvalidIndex;
+            size_t firstCompleteLine = kInvalidIndex;
+            const int bottom = viewport.y + viewport.h;
+            for (size_t row = 0; row < state.lineCount; ++row) {
+                const auto& line = state.lines[row];
+                if (line.top >= bottom)
+                    break;
+                if (line.bottom <= viewport.y)
+                    continue;
+                if (usesMidpoint(mode)) {
+                    const bool measured = line.inkKnown && line.ink.h > 0;
+                    const int top = measured ? line.ink.y : line.top;
+                    const int height = measured ? line.ink.h : line.bottom - line.top;
+                    if (top + (height + 1) / 2 > viewport.y) {
+                        // The next reading row advances at the preceding text's midpoint.
+                        if (firstWord != kInvalidIndex)
+                            return line.start;
+                        firstWord = line.start;
+                    }
+                    continue;
+                }
+                for (size_t index = line.start; index < line.end; ++index) {
+                    if (!fullyVisible(wordAt(state, index), line, viewport))
+                        continue;
+                    if (firstWord == kInvalidIndex)
+                        firstWord = index;
+                    if (fullyVisibleLine(line, viewport)) {
+                        if (mode != HighlightMode::secondScrollLine || firstCompleteLine != kInvalidIndex)
+                            return index;
+                        firstCompleteLine = index;
+                    }
+                    break;
+                }
+            }
+            return firstCompleteLine == kInvalidIndex ? firstWord : firstCompleteLine;
+        }
+
+        size_t visibleHighlight(const State& state, ui::Rect viewport, size_t selected, HighlightMode mode) {
+            if (selected != kInvalidIndex) {
+                const auto row = lineForWord(state, selected);
+                if (row < state.lineCount) {
+                    const auto& line = state.lines[row];
+                    if (usesMidpoint(mode)) {
+                        const auto automatic = automaticHighlight(state, viewport, mode);
+                        if (automatic >= line.start && automatic < line.end)
+                            return selected;
+                        // While advancing, let the reading row catch up to a visible selection.
+                        if (mode == HighlightMode::departingScrollLineForward
+                            && automatic < line.start && fullyVisible(wordAt(state, selected), line, viewport))
+                            return selected;
+                        return automatic;
+                    }
+                    if (fullyVisible(wordAt(state, selected), line, viewport)) {
+                        if (mode == HighlightMode::selection)
+                            return selected;
+                        if (fullyVisibleLine(line, viewport)) {
+                            const auto automatic = automaticHighlight(state, viewport, mode);
+                            // Keep the actual word until the automatic
+                            // reading line passes its row.
+                            return automatic == kInvalidIndex || selected >= automatic ? selected : automatic;
+                        }
+                    }
+                }
+            }
+            return automaticHighlight(state, viewport, mode);
         }
 
         void paintHighlights(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
@@ -781,55 +1100,398 @@ namespace screens::PageReader {
 
     void browse(BrowseState& browse, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected) {
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale, bool followSelection, HighlightMode highlightMode, bool anchorSecondLine) {
         auto& state=browse.layout;
-        if (ReadingLoop::wordCount(session)==0) { ui.redraw(area,0); return; }
-        browse.first=std::min(browse.first,ReadingLoop::wordCount(session)-1);
-        const auto rebuild=[&] {
-            layout(state,text,typeface,typography,session,{area.x,area.y,area.w,640},browse.first);
-            state.layoutRevision=revision; state.layoutArea=area;
+        if (ReadingLoop::wordCount(session) == 0) {
+            browse.highlighted = kInvalidIndex;
+            ui.redraw(area, 0);
+            return;
+        }
+        if constexpr (ui::Context::displayWriteAlignment() == 1)
+            ensureCanvas(browse.viewportCanvas, area.w, ui.height());
+        if (scale != kNativeScale || browse.viewportCanvas) {
+            const auto width = static_cast<int16_t>((logicalExtent(area.w, scale) + 7) & ~7);
+            ensureCanvas(browse.scaleCanvas, width, logicalExtent(ui.height(), scale));
+            if (!browse.scaleCanvas)
+                scale = kNativeScale;
+        } else {
+            browse.scaleCanvas.reset();
+        }
+        const ui::Rect logicalArea = scale == kNativeScale ? area
+            : ui::Rect{0, 0, logicalExtent(area.w, scale), logicalExtent(area.h, scale)};
+        const auto previousArea = browse.displayArea;
+        browse.displayArea = area;
+        const size_t wordCount = ReadingLoop::wordCount(session);
+        const bool wrapChanged = browse.scale != scale || state.layoutRevision != revision
+                              || state.layoutArea.w != logicalArea.w;
+        if (wrapChanged) {
+            if (browse.topLine != kInvalidIndex)
+                browse.first = browse.topLine;
+            browse.previousLines.clear();
+            browse.offset = 0;
+            browse.scrollRemainder = 0;
+        }
+        browse.first = std::min(browse.first, wordCount - 1);
+        browse.scale = scale;
+        const bool headerMoved = !wrapChanged && previousArea.w == area.w && previousArea.y != area.y
+                              && browse.step == ScrollStep::none;
+        const bool anchorScrub = followSelection && anchorSecondLine && selected != kInvalidIndex;
+        int oldViewportInset = 0;
+        if (headerMoved && !anchorScrub) {
+            const int oldOffset = browse.offset;
+            browse.scrollBy(area.y - previousArea.y);
+            oldViewportInset = std::max(0, oldOffset - browse.offset);
+        }
+        const auto selectionViewport = [&] {
+            auto visible = browseViewport(browse);
+            // On release, use the original reading area for the last touch
+            // sample even though hiding the bar exposes more text above it.
+            visible.y += oldViewportInset;
+            visible.h -= oldViewportInset;
+            return visible;
         };
-        if (state.pageStart!=browse.first || state.layoutRevision!=revision || state.layoutArea!=area) rebuild();
-        while (browse.offset<0 && browse.first>0) {
-            const size_t old=browse.first;
-            if (!browse.previousLines.empty() && browse.previousLines.back().first<old) {
-                const auto previous=browse.previousLines.back();browse.previousLines.pop_back();
-                browse.first=previous.first;browse.offset+=previous.second;rebuild();
-            } else {
-                browse.first=anchorIndex(session,old-1);rebuild();
-                size_t line=0;
-                while(line+1<state.lineCount && state.lines[line+1].start<old) ++line;
-                const auto& previous=state.lines[line];
-                browse.first=previous.start;
-                const int height=line+1<state.lineCount ? state.lines[line+1].top-previous.top : previous.bottom-previous.top+6;
-                browse.offset+=std::max(1,height);rebuild();
+        const auto rebuild = [&](bool findingLine = false) {
+            browse.rowCache.valid = false;
+            const int16_t height = findingLine ? 640 : std::min(640, logicalArea.h + kBrowseLookahead);
+            layout(state, text, typeface, typography, session,
+                   {logicalArea.x, logicalArea.y, logicalArea.w, height}, browse.first, !findingLine);
+            state.layoutRevision = revision;
+            state.layoutArea = logicalArea;
+        };
+        const auto lineOffset = [&](size_t line) {
+            return int(state.lines[line].flowTop) - state.lines[0].flowTop;
+        };
+        const auto rememberLines = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i)
+                browse.previousLines.emplace_back(state.lines[i].start, lineOffset(i + 1) - lineOffset(i));
+            if (browse.previousLines.size() > 128)
+                browse.previousLines.erase(browse.previousLines.begin(), browse.previousLines.end() - 128);
+        };
+        const auto wrapToWord = [&](size_t target) {
+            // Recover the real line breaks from the paragraph start. Cache
+            // earlier rows as we go so a reverse drag can reuse their layout.
+            browse.first = ReadingLoop::paragraphBoundsAt(session, target).first;
+            if (browse.first == target) {
+                rebuild();
+                return;
+            }
+            while (true) {
+                rebuild(true);
+                const auto row = lineForWord(state, target);
+                if (row < state.lineCount) {
+                    rememberLines(row);
+                    browse.first = state.lines[row].start;
+                    break;
+                }
+                if (state.lineCount > 1) {
+                    const auto last = state.lineCount - 1;
+                    rememberLines(last);
+                    browse.first = state.lines[last].start;
+                } else {
+                    browse.first = std::min(state.pageEnd, target);
+                }
+            }
+            rebuild();
+        };
+        if (wrapChanged || state.pageStart == kInvalidIndex)
+            wrapToWord(browse.first);
+        else if (state.pageStart != browse.first || state.layoutArea != logicalArea)
+            rebuild();
+
+        const auto prependLine = [&] {
+            if (!browse.previousLines.empty()) {
+                const auto [start, height] = browse.previousLines.back();
+                browse.previousLines.pop_back();
+                browse.first = start;
+                return int(height);
+            }
+            const size_t old = browse.first;
+            wrapToWord(old - 1);
+            const auto joining = lineForWord(state, old);
+            const int height = joining < state.lineCount && joining > 0 ? lineOffset(joining)
+                : state.lines[0].bottom - state.lines[0].flowTop + kLineGap;
+            return std::max(1, height);
+        };
+
+        // Use line origins so ink overhang does not affect how far we scroll.
+        const auto lineForOffset = [&] {
+            size_t line = 0;
+            while (line + 1 < state.lineCount && lineOffset(line + 1) <= browse.offset)
+                ++line;
+            return line;
+        };
+        const size_t firstBeforeStep = browse.first;
+        const int offsetBeforeStep = browse.offset;
+        bool arrowTarget = false;
+        const auto step = browse.step;
+        if (step != ScrollStep::none) {
+            const auto row = lineForWord(state, browse.stepWord);
+            if (row < state.lineCount) {
+                const auto visible = browseViewport(browse);
+                if (step == ScrollStep::nextPage)
+                    browse.offset = lineOffset(row);
+                else if (state.lines[row].bottom + kMarginY < visible.y + visible.h)
+                    browse.offset = state.lines[row].bottom - logicalArea.y - logicalArea.h + kMarginY;
+                arrowTarget = true;
+            }
+            browse.scrollRemainder = 0;
+            browse.step = ScrollStep::none;
+            browse.stepWord = kInvalidIndex;
+        } else if (anchorScrub) {
+            // The preceding line stays at the top, leaving the selected
+            // word on the second row in either scrub direction.
+            auto row = lineForWord(state, selected);
+            while (browse.first > 0 && (row == 0 || selected < browse.first)) {
+                prependLine();
+                if (state.pageStart != browse.first)
+                    rebuild();
+                row = lineForWord(state, selected);
+            }
+            if (row < state.lineCount) {
+                browse.offset = lineOffset(row == 0 ? 0 : row - 1);
+                browse.scrollRemainder = 0;
+            }
+        } else if ((followSelection || (headerMoved && area.y > previousArea.y)) && selected != kInvalidIndex) {
+            const auto row = lineForWord(state, selected);
+            if (row < state.lineCount) {
+                // Follow a forward line crossing near the reading position.
+                // Reversing or scrubbing within one line keeps the page steady
+                // until the selected line would actually leave the viewport.
+                const auto previous = lineForWord(state, browse.highlighted);
+                if (followSelection && previous < row) {
+                    auto firstVisible = lineForOffset();
+                    const int guide = oldViewportInset + selectionViewport().h * 2 / 5;
+                    const size_t last = std::min(row, firstVisible + row - previous);
+                    while (firstVisible < last && lineOffset(row) > browse.offset + guide)
+                        browse.offset = lineOffset(++firstVisible);
+                }
+                const auto visible = browseViewport(browse);
+                const auto& line = state.lines[row];
+                const int top = line.ink.h > 0 ? line.ink.y : line.top;
+                const int bottom = line.ink.h > 0 ? line.ink.y + line.ink.h : line.bottom;
+                if (top < visible.y)
+                    browse.offset -= visible.y - top;
+                else if (bottom > visible.y + visible.h)
+                    browse.offset += bottom - (visible.y + visible.h);
+            } else if (selected < state.pageStart) {
+                browse.offset = -1;
             }
         }
-        browse.offset=std::max(0,browse.offset);
-        if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
-            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
-        while(state.lineCount>1 && browse.offset>=state.lines[1].top-state.lines[0].top) {
-            const int16_t height=state.lines[1].top-state.lines[0].top;
-            if(browse.previousLines.size()>=128) browse.previousLines.erase(browse.previousLines.begin());
-            browse.previousLines.emplace_back(browse.first,height);
-            browse.first=state.lines[1].start; browse.offset-=height; rebuild();
+
+        const bool verticalDrag = usesMidpoint(highlightMode) && !followSelection
+                               && step == ScrollStep::none && !headerMoved;
+        const auto rebuildAfterScroll = [&](int oldOffset) {
+            auto& cache = browse.rowCache;
+            const auto plainFace = [&]() -> const ui::fonts::AlphaFont* {
+                if (state.bidi || state.vertical || state.faces.size() != 1)
+                    return nullptr;
+                const auto& face = state.faces.front();
+                return !face.shaper && !face.raster.get().file ? &face.raster.get() : nullptr;
+            };
+            const auto* face = plainFace();
+            if (!verticalDrag || !cache.valid || scale != kNativeScale || !face) {
+                rebuild();
+                return;
+            }
+
+            // With a single resident face, the same words on the same line
+            // draw identically at a given baseline. Compare all ink in the
+            // old viewport, including overhang from just outside its edges.
+            struct InkLine {
+                size_t start, end;
+                int baseline;
+                bool operator==(const InkLine&) const = default;
+            };
+            const auto visitInk = [&](int offset, auto&& visit) {
+                const int origin = logicalArea.y + offset;
+                for (size_t i = 0; i < state.lineCount; ++i) {
+                    const auto& line = state.lines[i];
+                    if (!line.inkKnown)
+                        return false;
+                    if (line.ink.h > 0 && line.ink.y < origin + logicalArea.h && line.ink.y + line.ink.h > origin
+                        && !visit(InkLine{line.start, line.end, line.y - origin}))
+                        return false;
+                }
+                return true;
+            };
+            std::array<InkLine, State::kMaximumLines> saved;
+            size_t count = 0;
+            const bool known = visitInk(cache.offset, [&](InkLine line) {
+                saved[count++] = line;
+                return true;
+            });
+            const int rebasedOffset = cache.offset + (browse.offset - oldOffset);
+            rebuild();
+            size_t matched = 0;
+            if (known && plainFace() == face && visitInk(rebasedOffset, [&](InkLine line) {
+                    return matched < count && saved[matched++] == line;
+                }) && matched == count) {
+                cache.offset = rebasedOffset;
+                cache.valid = true;
+            }
+        };
+        const size_t priorFirst = browse.first;
+        const int offsetBeforePrepend = browse.offset;
+        if (verticalDrag && browse.offset < 0 && !browse.previousLines.empty()) {
+            // Include a few already wrapped lines above the viewport so a
+            // continuous reverse drag doesn't have to rebuild at every line.
+            constexpr int lookbehind = kBrowseLookahead / 2;
+            const int viewportBottom = logicalArea.y + browse.offset + logicalArea.h;
+            size_t nextLine = 0;
+            while (nextLine < state.lineCount && state.lines[nextLine].flowTop <= viewportBottom)
+                ++nextLine;
+            int addedHeight = 0;
+            while (nextLine + 1 < state.lines.size() && !browse.previousLines.empty()
+                   && addedHeight + browse.previousLines.back().second <= lookbehind) {
+                const int height = prependLine();
+                browse.offset += height;
+                addedHeight += height;
+                ++nextLine;
+            }
         }
-        if(state.pageEnd>=ReadingLoop::wordCount(session) && state.lineCount)
-            browse.offset=std::min(browse.offset,std::max(0,int(state.lines[state.lineCount-1].bottom-area.y-area.h+4)));
+        while (browse.offset < 0 && browse.first > 0)
+            browse.offset += prependLine();
+        if (state.pageStart != browse.first)
+            rebuildAfterScroll(offsetBeforePrepend);
+        if (!anchorScrub && followSelection && selected < priorFirst) {
+            const auto row = lineForWord(state, selected);
+            if (row < state.lineCount)
+                browse.offset = std::min(browse.offset, lineOffset(row));
+        }
+        if (browse.offset < 0) {
+            browse.offset = 0;
+            browse.scrollRemainder = 0;
+            oldViewportInset = 0;
+        }
+
+        const auto clampToBookEnd = [&] {
+            if (state.pageEnd >= wordCount && state.lineCount) {
+                const int bottom = state.lines[state.lineCount - 1].bottom - logicalArea.y - logicalArea.h + kMarginY;
+                const int end = std::max(0, bottom);
+                if (browse.offset > end) {
+                    browse.offset = end;
+                    browse.scrollRemainder = 0;
+                    oldViewportInset = 0;
+                }
+            }
+        };
+        clampToBookEnd();
+
+        // Keep more of the prepared text while dragging, including text just
+        // above the viewport for a reversal. Rebuild with one line in reserve.
+        while (state.lineCount > 2) {
+            const size_t top = lineForOffset();
+            const auto& last = state.lines[state.lineCount - 1];
+            const int viewportBottom = logicalArea.y + browse.offset + logicalArea.h;
+            const bool needsMore = state.pageEnd < wordCount && viewportBottom > last.bottom;
+            if (top < (needsMore ? 2u : 4u))
+                break;
+            if (verticalDrag && !needsMore && (state.pageEnd >= wordCount || viewportBottom <= last.flowTop))
+                break;
+            const size_t trim = top - 1;
+            rememberLines(trim);
+            browse.first = state.lines[trim].start;
+            const int offsetBeforeTrim = browse.offset;
+            browse.offset -= lineOffset(trim);
+            rebuildAfterScroll(offsetBeforeTrim);
+        }
+        clampToBookEnd();
+        if (arrowTarget && (browse.first != firstBeforeStep || browse.offset != offsetBeforeStep)) {
+            selected = kInvalidIndex;
+            highlightMode = HighlightMode::secondScrollLine;
+        }
+        browse.topLine = state.lines[lineForOffset()].start;
+        browse.highlighted = visibleHighlight(state, selectionViewport(), selected, highlightMode);
         uint32_t signature=ui::Context::combine(revision,browse.first);
-        signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,selected);
-        if(!ui.redraw(area,signature,true)) return;
-        const auto shift=[&](int delta) {
-            for(size_t i=0;i<state.lineCount;++i) {
-                auto& line=state.lines[i];line.y+=delta;line.top+=delta;line.bottom+=delta;line.ink.y+=delta;
-            }
-            for(auto& word:state.words) { word.y+=delta;word.ink.y+=delta; }
-        };
-        shift(-browse.offset);
-        paintPage(state,ui,text,typography,session,area,area,selected,{},true);
-        shift(browse.offset);
+        signature = ui::Context::combine(signature, scale);
+        signature=ui::Context::combine(signature,browse.offset);signature=ui::Context::combine(signature,browse.highlighted);
+        if (!ui.redrawReplaced(area, signature))
+            return;
+        auto region = logicalArea;
+        region.y += browse.offset;
+        if (browse.viewportCanvas && browse.scaleCanvas) {
+            paintCachedPage(browse, ui, text, typography, session, area);
+        } else if (scale != kNativeScale) {
+            paintBrowseText(state, *browse.scaleCanvas, ui, text, typography, session, region, browse.highlighted);
+            paintScaledPage(*browse.scaleCanvas, ui, area, logicalArea, scale);
+        } else if (browse.viewportCanvas) {
+            auto& canvas = *browse.viewportCanvas;
+            paintBrowseText(state, canvas, ui, text, typography, session, region, browse.highlighted);
+            ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
+                output.draw16bitRGBBitmap(target.x, target.y, canvas.getFramebuffer(), target.w, target.h);
+            });
+        } else {
+            ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
+                output.fillRect(target.x, target.y, target.w, target.h, ui.color(ui::themes::Background));
+                ui::ClippedGfx clipped(output, target);
+                Arduino_GFX& previous = text.setOutput(clipped);
+                drawPageWords(state, ui, text, typography, session, target, region,
+                              target.x - region.x, target.y - region.y, browse.highlighted);
+                text.setOutput(previous);
+            });
+        }
     }
+    size_t edgeWord(const BrowseState& browse, bool bottom) {
+        const auto& state = browse.layout;
+        const auto viewport = browseViewport(browse);
+        size_t edge = kInvalidIndex;
+        for (size_t row = 0; row < state.lineCount; ++row) {
+            const auto& line = state.lines[row];
+            if (line.top >= viewport.y + viewport.h)
+                break;
+            if (line.bottom <= viewport.y)
+                continue;
+            for (size_t word = line.start; word < line.end; ++word) {
+                if (!fullyVisible(wordAt(state, word), line, viewport))
+                    continue;
+                if (!bottom)
+                    return word;
+                edge = word;
+            }
+        }
+        return edge;
+    }
+
+    size_t scrubWord(const BrowseState& browse, size_t selected, bool right) {
+        const auto& state = browse.layout;
+        const size_t row = lineForWord(state, selected);
+        if (row >= state.lineCount)
+            return kInvalidIndex;
+        const auto& line = state.lines[row];
+        const bool forward = right != line.rightToLeft;
+        if (line.bidi) {
+            const auto center = [&](size_t index) {
+                const auto& word = wordAt(state, index);
+                return word.inkKnown && word.ink.w > 0 ? word.ink.x + word.ink.w / 2 : word.x + word.width / 2;
+            };
+            size_t nearest = kInvalidIndex;
+            const int current = center(selected);
+            int distance = INT16_MAX;
+            for (size_t word = line.start; word < line.end; ++word) {
+                const int delta = center(word) - current;
+                const int candidate = right ? delta : -delta;
+                if (candidate > 0 && candidate < distance) {
+                    distance = candidate;
+                    nearest = word;
+                }
+            }
+            if (nearest != kInvalidIndex)
+                return nearest;
+            if (forward)
+                return line.end < state.pageEnd ? line.end : kInvalidIndex;
+            return line.start > 0 ? line.start - 1 : kInvalidIndex;
+        }
+        return forward ? (selected + 1 < state.pageEnd ? selected + 1 : kInvalidIndex)
+                       : (selected > 0 ? selected - 1 : kInvalidIndex);
+    }
+
     size_t wordAtPoint(const BrowseState& browse,int16_t x,int16_t y) {
+        if (!ui::contains(browse.displayArea, x, y))
+            return kInvalidIndex;
+        if (browse.scale != kNativeScale) {
+            x = (x - browse.displayArea.x) * kNativeScale / browse.scale;
+            y = (y - browse.displayArea.y) * kNativeScale / browse.scale;
+        }
         const auto& state=browse.layout;y+=browse.offset;
         for(size_t l=0;l<state.lineCount;++l) {
             const auto& line=state.lines[l];

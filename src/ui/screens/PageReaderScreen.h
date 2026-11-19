@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -45,6 +46,7 @@ namespace screens::PageReader {
             size_t characterStart = 0;
             size_t characterEnd = 0;
             int16_t y = 0;
+            int16_t flowTop = 0;
             int16_t top = 0;
             int16_t bottom = 0;
             int16_t width = 0;
@@ -73,16 +75,46 @@ namespace screens::PageReader {
         bool vertical = false;
     };
 
+    enum class ScrollStep { none, previousPage, nextPage };
+    enum class HighlightMode { selection, firstScrollLine, secondScrollLine, departingScrollLine, departingScrollLineForward };
+
+    constexpr uint8_t kNativeScale = 100;
+
     struct BrowseState {
         State layout;
         size_t first = 0;
+        size_t topLine = SIZE_MAX;
+        size_t highlighted = SIZE_MAX;
         int offset = 0;
+        int scrollRemainder = 0;
+        ScrollStep step = ScrollStep::none;
+        size_t stepWord = SIZE_MAX;
+        uint8_t scale = kNativeScale;
+        ui::Rect displayArea{};
+        std::unique_ptr<Arduino_Canvas> viewportCanvas, scaleCanvas;
+        struct RowCache {
+            size_t highlighted = SIZE_MAX;
+            int offset = 0;
+            int highlightTop = 0, highlightBottom = 0;
+            int firstRow = 0;
+            bool valid = false;
+        } rowCache;
         std::vector<std::pair<size_t, int16_t>> previousLines;
+
+        void scrollBy(int displayPixels) {
+            const int distance = displayPixels * kNativeScale + scrollRemainder;
+            offset += distance / scale;
+            scrollRemainder = distance % scale;
+        }
     };
     void browse(BrowseState& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
                 const settings::TypographySettings& typography, uint32_t revision,
-                const ReadingSession& session, ui::Rect area, size_t selected);
+                const ReadingSession& session, ui::Rect area, size_t selected, uint8_t scale = kNativeScale,
+                bool followSelection = false, HighlightMode highlightMode = HighlightMode::selection,
+                bool anchorSecondLine = false);
     size_t wordAtPoint(const BrowseState& state, int16_t x, int16_t y);
+    size_t scrubWord(const BrowseState& state, size_t selected, bool right);
+    size_t edgeWord(const BrowseState& state, bool bottom);
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
               const ReadingSession& session, ui::Rect area, std::string_view overlay = {});

@@ -1,5 +1,6 @@
 #include "ui/screens/ReaderScreen.h"
 #include "ui/screens/ReaderLayout.h"
+#include "fonts/LiterataPageAlpha4.h"
 
 namespace screens {
     void ReaderScreen::activateFace(const FontCatalog::Face& face) {
@@ -13,6 +14,8 @@ namespace screens {
             pageFontActive_ = false;
             pageState_ = {};
             browse_.layout = {};
+            browse_.scaleCanvas.reset();
+            browse_.viewportCanvas.reset();
             loadedWordIndex_ = SIZE_MAX;
             loadedFontSizeIndex_ = 0xFF;
         }
@@ -31,11 +34,18 @@ namespace screens {
         activateFace(face_);
     }
 
-    FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
+    FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex, bool builtInPageSize) {
         pageFontActive_ = true;
-        // Smooth Small for the modern browser. The legacy playing page mode
-        // keeps its compact strike; it is not exposed in this preview UI.
-        const size_t size = pageBrowsing_ ? RFont4::sizeIndexForId("small") : readerLayout::pageStrikeIndex();
+        const auto pageSize = settings_.pageTextSizeIndex();
+        if (builtInPageSize) {
+            constexpr const ui::fonts::AlphaFont* fonts[]{
+                &ui::fonts::LiterataPageAlpha4_17, &ui::fonts::LiterataPageAlpha4_21, &ui::fonts::LiterataPageAlpha4_26
+            };
+            return {std::cref(*fonts[pageSize - 1])};
+        }
+        const size_t size = pageBrowsing_
+            ? RFont4::sizeIndexForId(pageSize == 0 ? "compact" : "small")
+            : readerLayout::pageStrikeIndex();
         return fonts.loadFace(fontChoice(wordIndex), size);
     }
 } // namespace screens

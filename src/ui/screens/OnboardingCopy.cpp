@@ -279,7 +279,15 @@ constexpr const char* words[][3] = {
     {"Install over Wi-Fi or copy the pack to SD. More languages are planned.", "Per WLAN installieren oder Paket auf SD kopieren. Weitere Sprachen sind geplant.", "Instalează prin Wi-Fi sau copiază pachetul pe SD. Plănuim să adăugăm și alte limbi."},
     {"Look online", "Online suchen", "Caută online"},
     {"Tap Look online for Wiktionary over Wi-Fi. Only the word is sent when you ask.", "Online suchen nutzt Wiktionary per WLAN. Das Wort wird nur auf Anfrage gesendet.", "Caută online folosește Wiktionary prin Wi-Fi. Cuvântul e trimis doar la cerere."},
-    {"Guides are unavailable in chunk mode. Switch to Word to use them.", "Hilfslinien sind im Gruppenmodus nicht verfügbar. Nutze dafür den Wortmodus.", "Ghidajele nu sunt disponibile în modul grup. Treci la Cuvânt pentru a le folosi."}
+    {"Guides are unavailable in chunk mode. Switch to Word to use them.", "Hilfslinien sind im Gruppenmodus nicht verfügbar. Nutze dafür den Wortmodus.", "Ghidajele nu sunt disponibile în modul grup. Treci la Cuvânt pentru a le folosi."},
+    {"Page settings", "Seiteneinstellungen", "Setări pagină"},
+    {"Page text size", "Seitenschriftgröße", "Mărime text pagină"},
+    {"Top bar", "Obere Leiste", "Bară de sus"},
+    {"Always shown", "Immer sichtbar", "Mereu vizibilă"},
+    {"Auto-hide", "Automatisch ausblenden", "Ascundere automată"},
+    {"Press the middle button to show the bar.", "Drücke die mittlere Taste, um die Leiste einzublenden.", "Apasă butonul din mijloc pentru a afișa bara."},
+    {"Very Small", "Sehr klein", "Foarte mic"},
+    {"Very Large", "Sehr groß", "Foarte mare"}
 };
 }
 std::string_view copy(const ui::Context& ui, Copy key) {

@@ -107,6 +107,17 @@ uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha
   --header
 ```
 
+The New UI Page browser also uses native 17, 21, and 26 px Literata strikes for
+**Small**, **Medium**, and **Large**. Regenerate that header from the same source:
+
+```bash
+uv run --with freetype-py --with fonttools --with lz4 python fonts/convert_alpha4_font.py \
+  --font third_party/literata/Literata-Regular.ttf \
+  --name LiterataPageAlpha4 --header --header-strike small --header-strike medium --header-strike large \
+  --sizes large=26,medium=21,small=17,compact=14
+```
+
+
 Runtime behavior:
 
 - The SD card catalog is built from `/fonts/<folder name>/` directories.

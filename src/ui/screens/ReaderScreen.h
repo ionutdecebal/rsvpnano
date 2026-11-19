@@ -54,29 +54,52 @@ namespace screens {
         void update(Preferences& preferences, uint32_t nowMs);
         void pauseImmediately(Preferences& preferences, uint32_t nowMs) { finishPause(preferences, nowMs); }
         void resumeNow(uint32_t nowMs) { pageBrowsing_ = false; start(nowMs, true); }
-        void openPage();
-        void drawPage(ui::Context& ui);
+        void openPage(bool hideControls = false);
+        void syncPagePosition(uint32_t nowMs);
+        void drawPage(ui::Context& ui, uint32_t nowMs);
+        size_t pageHighlightedWord() const { return browse_.highlighted; }
+        bool revealPageControls();
         void openLocator(Screen& screen);
         void drawLocator(ui::Context& ui, Screen& screen, Preferences& preferences, uint32_t nowMs);
         bool pageBrowsing() const { return pageBrowsing_; }
+        bool pageGestureActive() const {
+            return pageBrowsing_ && (pageGesture_ != PageGesture::pending || pageScrollFinished_ || pageScrubFinished_);
+        }
 
 
 
     private:
-        bool handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, settings::SettingsStore& store, Screen& screen);
+        void beginPageTouch(int x, int y, bool readingSwipe = false);
+        bool handlePage(ui::Context& ui, uint32_t nowMs, Preferences& preferences, Screen& screen);
         void commitPlace(size_t index, Preferences& preferences, uint32_t nowMs);
         std::string placeExcerpt(size_t index, size_t maxWords = 32) const;
         bool pageBrowsing_ = false;
+        bool pageBarHidden_ = false;
+        bool pageScrollFinished_ = false;
+        bool pageHasScrolled_ = false;
+        std::optional<uint32_t> pageProgressChangedAt_;
+        ui::Rect pageBody() const;
+        bool pageBarVisible() const { return !pageBarHidden_; }
         PageReader::BrowseState browse_;
         size_t pageSelected_ = 0;
+        bool pageSelectionPinned_ = false;
         size_t returnWord_ = SIZE_MAX;
         size_t candidate_ = 0;
         size_t locatorOrigin_ = 0;
         size_t findChapterPage_ = 0;
         ui::modern::ListSwipe locatorSwipe_;
-        int pageTouchControl_ = 0;
-        int16_t pageTouchY_ = 0;
-        bool pageDragged_ = false;
+        enum class PageGesture { pending, vertical, horizontal };
+        PageGesture pageGesture_ = PageGesture::pending;
+        size_t pageTouchControl_ = 0;
+        int16_t pageTouchX_ = 0, pageTouchY_ = 0, pageScrollY_ = 0;
+        int8_t pageScrollDirection_ = 0;
+        int16_t pageLastTouchY_ = 0, pageTouchDelta_ = 0;
+        std::optional<int16_t> pagePendingTouchY_;
+        bool pageVerticalMoved_ = false;
+        bool pageVerticalHighlight_ = false;
+        int pageScrubX_ = 0;
+        bool pageScrubMoved_ = false;
+        bool pageScrubFinished_ = false;
         std::string searchQuery_, searchDraft_;
         ui::KeyboardState searchKeyboard_;
         std::vector<size_t> searchResults_;
@@ -137,7 +160,7 @@ namespace screens {
         void refreshTypeface();
         void prefetchUpcomingFont(uint32_t nowMs);
         void prefetchNextWord(uint32_t nowMs);
-        FontCatalog::Face pageTypeface(size_t wordIndex);
+        FontCatalog::Face pageTypeface(size_t wordIndex, bool builtInPageSize = false);
 
         int16_t width_;
         int16_t height_;

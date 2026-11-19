@@ -1,4 +1,4 @@
-"""Keep native u8g2 decoding signed when glyphs cross a canvas edge."""
+"""Apply board-specific fixes to generated copies of the pinned graphics library."""
 
 from pathlib import Path
 
@@ -25,14 +25,34 @@ def signed_u8g2_source(env, node):
     corrected = patch_u8g2_coordinates(source)
     if corrected == source:
         return node
-    generated = Path(env.subst("$BUILD_DIR")) / "generated" / "Arduino_GFX.cpp"
+    return generated_source(env, source_path, corrected)
+
+
+def generated_source(env, source_path, corrected):
+    generated = Path(env.subst("$BUILD_DIR")) / "generated" / source_path.name
     generated.parent.mkdir(parents=True, exist_ok=True)
     if not generated.exists() or generated.read_text(encoding="utf-8") != corrected:
         generated.write_text(corrected, encoding="utf-8")
-    # PlatformIO compiles the replacement with the original library environment.
     return env.File(str(generated))
+
+
+def lcd349_qspi_source(env, node):
+    path = Path(node.srcnode().get_abspath())
+    source = path.read_text(encoding="utf-8")
+    signature = "void Arduino_ESP32QSPI::writePixels(uint16_t *data, uint32_t len)"
+    if source.count(signature) != 1:
+        raise RuntimeError("Review the LCD pixel transfer against the pinned Arduino_GFX driver")
+    start = source.index(signature)
+    end = source.index("\n}", start) + 2
+    replacement = Path(env.subst("$PROJECT_DIR")) / "tools/gfx/lcd349_write_pixels.inc"
+    source = source[:start] + f'#include "{replacement.as_posix()}"' + source[end:]
+    # The generated unit lives outside the original databus directory.
+    source = source.replace('#include "Arduino_ESP32QSPI.h"', '#include "databus/Arduino_ESP32QSPI.h"')
+    return generated_source(env, path, source)
 
 
 if "Import" in globals():
     Import("env")
     env.AddBuildMiddleware(signed_u8g2_source, "*/Arduino_GFX.cpp")
+    if any("RSVP_LCD_349_REVISION_HEADER" in flag for flag in env.GetProjectOption("build_flags")):
+        env.AddBuildMiddleware(lcd349_qspi_source, "*/databus/Arduino_ESP32QSPI.cpp")

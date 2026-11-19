@@ -35,7 +35,10 @@ screens::Action Dictionary::draw(ui::Context& ui,ReadingSession& session,screens
         if(result==ui::KeyboardAction::Submit){query_=draft_;lookup();screen=Screen::Dictionary;}
         return Action::None;
     }
-    if(button(ui,{8,0,102,44},"‹ Controls",Style::Plain)) {screen=Screen::QuickControls;return Action::None;}
+    if (button(ui, {8, 0, 102, 44}, returnScreen_ == Screen::Reader ? "‹ Page" : "‹ Controls", Style::Plain)) {
+        screen = returnScreen_;
+        return Action::None;
+    }
     ui.label({120,0,180,44},"Dictionary",17);
     if(screen==Screen::Dictionary){
         if(button(ui,{314,0,44,44},"?",Style::Plain)){screen=Screen::DictionaryHelp;return Action::None;}

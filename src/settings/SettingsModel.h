@@ -112,6 +112,10 @@ namespace settings {
         bool holdToRead = false;
         bool phantomWords = true;
         bool chapterScrollReversed = false;
+        // Previews 1 and 2 stored Compact as a boolean. Keep that choice on upgrade.
+        bool compactPageText = false;
+        BoundedValue<uint8_t, 1, 4> pageTextStep{4};
+        bool pageControlsAutoHide = false;
         FooterMetric footerMetric = FooterMetric::percentage;
         BatteryLabel batteryLabel = BatteryLabel::percentage;
         Visibility batteryIconVisibility = Visibility::always;
@@ -122,6 +126,15 @@ namespace settings {
         bool leftHanded = false;
         TypographySettings typography;
         PacingSettings pacing;
+
+        uint8_t pageTextSizeIndex() const {
+            return compactPageText ? uint8_t{0} : static_cast<uint8_t>(pageTextStep);
+        }
+
+        void setPageTextSize(uint8_t index) {
+            compactPageText = index == 0;
+            pageTextStep = compactPageText ? pageTextStep.max() : index;
+        }
 
         bool operator==(const ReadingSettings&) const = default;
     };

@@ -210,19 +210,24 @@ void App::update(uint32_t nowMs) {
         return;
     }
 
-    // Finish/Skip saves setup explicitly. Do not let an automatic settings
-    // retry block the practice/error screens on the card they just rejected.
-    if (!usbTransfer_.active() && screen_ != screens::Screen::Onboarding)
-        settingsStore_.update(nowMs);
-
-    Board::Power::updateBattery(battery_, nowMs);
+    // SD writes and the battery ADC can block a Page drag. Run them once
+    // the gesture's last frame has been displayed.
+    const bool pageGesture = screen_ == screens::Screen::Reader && readerScreen_.pageGestureActive();
+    if (!pageGesture) {
+        // Finish/Skip saves setup explicitly. A retry must not block the
+        // practice/error screens on the card they just rejected.
+        if (!usbTransfer_.active() && screen_ != screens::Screen::Onboarding)
+            settingsStore_.update(nowMs);
+        Board::Power::updateBattery(battery_, nowMs);
+    }
     if (!preparingTypography)
         readerScreen_.update(prefs_, nowMs);
     if (screen_ == screens::Screen::FocusSession && !focusScreen_.manual()) {
         if (focusScreen_.update(nowMs))
             Board::Audio::beep();
     }
-    ReadingProgress::save(readerScreen_.session, prefs_, false, nowMs);
+    if (!pageGesture)
+        ReadingProgress::save(readerScreen_.session, prefs_, false, nowMs);
 
     renderScreen(nowMs);
     if (!preparingTypography && !readerScreen_.session.playing && !companionApi_.active() && !usbTransfer_.active()
@@ -412,7 +417,8 @@ void App::renderScreen(uint32_t nowMs) {
         action = screens::settings(immediateUi_, screen_);
         break;
     case screens::Screen::ReadingHub:
-    case screens::Screen::ReadingSettings: {
+    case screens::Screen::ReadingSettings:
+    case screens::Screen::PageSettings: {
         immediateUi_.beginFrame(static_cast<uint8_t>(screen_));
         const settings::ReadingMode mode = settingsStore_.settings().reading.mode;
         const bool leftHanded = settingsStore_.settings().reading.leftHanded;
@@ -567,10 +573,8 @@ void App::handleScreenAction(screens::Action action, uint32_t nowMs) {
         renderScreen(nowMs);
         return;
     case screens::Action::OpenDictionary:
-        readerScreen_.pauseImmediately(prefs_,nowMs);
-        dictionary_.open(readerScreen_.session);
-        screen_=screens::Screen::Dictionary;
-        renderScreen(nowMs);return;
+        openDictionary(nowMs);
+        return;
     case screens::Action::OnlineDictionary:
         readerScreen_.pauseImmediately(prefs_,nowMs);
         screen_=screens::Screen::Status;statusUntilMs_=0;
@@ -726,6 +730,11 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
         return;
     }
     if (Input::hasAction(actions, Input::ActionOpenMenu)) {
+        if (screen_ == screens::Screen::Reader && readerScreen_.revealPageControls()) {
+            immediateUi_.invalidate();
+            renderScreen(nowMs);
+            return;
+        }
         if (screen_ == screens::Screen::Reader) {
             ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
             ReadingLoop::pause(readerScreen_.session);
@@ -784,6 +793,8 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
                 if (screen_ == screens::Screen::WifiScan)
                     networkScreen_.closeWifi();
                 screen_ = screens::Screen::NetworkSettings;
+            } else if (screen_ == screens::Screen::PageSettings) {
+                screen_ = screens::Screen::ReadingSettings;
             } else if (screen_ == screens::Screen::ReadingSettings || screen_ == screens::Screen::InterfaceSettings
                        || screen_ == screens::Screen::PacingSettings || screen_ == screens::Screen::ReaderAppearance
                        || screen_ == screens::Screen::NetworkSettings) {
@@ -804,7 +815,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
             } else if (screen_ == screens::Screen::Help) {
                 screen_ = screens::Screen::Settings;
             } else if (screen_ == screens::Screen::Dictionary || screen_ == screens::Screen::DictionarySearch) {
-                screen_ = screens::Screen::QuickControls;
+                screen_ = dictionary_.returnScreen();
             } else if (screen_ == screens::Screen::QuickControls) {
                 screen_ = screens::Screen::Reader;
             } else if (screen_ == screens::Screen::StorageHub || screen_ == screens::Screen::PowerHub) {
@@ -832,6 +843,14 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
     }
 }
 
+void App::openDictionary(uint32_t nowMs, std::optional<size_t> pageWord) {
+    readerScreen_.pauseImmediately(prefs_, nowMs);
+    dictionary_.open(readerScreen_.session, pageWord,
+                     pageWord ? screens::Screen::Reader : screens::Screen::QuickControls);
+    screen_ = screens::Screen::Dictionary;
+    renderScreen(nowMs);
+}
+
 void App::handleTouch(uint32_t nowMs) {
     if (serialCompanion_.active())
         return;
@@ -848,6 +867,8 @@ void App::handleTouch(uint32_t nowMs) {
     if (screen_ == screens::Screen::Reader) {
         if (!readerScreen_.handleModernControls(immediateUi_, nowMs, prefs_, settingsStore_, screen_))
             readerScreen_.handleTouch(immediateUi_, nowMs, prefs_, settingsStore_);
+        else if (screen_ == screens::Screen::Dictionary)
+            openDictionary(nowMs, readerScreen_.pageHighlightedWord());
     } else {
         renderScreen(nowMs);
     }
@@ -1220,6 +1241,7 @@ void App::enterUsbTransfer(uint32_t nowMs) {
 #if RSVP_USB_TRANSFER_ENABLED
     if (serialCompanion_.active())
         return;
+    readerScreen_.syncPagePosition(nowMs);
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     if (auto result = settingsStore_.flush(); !result) {
@@ -1357,6 +1379,7 @@ void App::enterStandby(uint32_t nowMs) {
     } else {
         networkScreen_.closeWifi();
     }
+    readerScreen_.syncPagePosition(nowMs);
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingLoop::pause(readerScreen_.session);
     if (settingsStore_.settings().interface.screensaver == standby::Kind::screenOff) {
@@ -1444,6 +1467,7 @@ void App::powerOff(uint32_t nowMs) {
     if (companionApi_.active())
         companionApi_.end();
     focusScreen_.close();
+    readerScreen_.syncPagePosition(nowMs);
     ReadingProgress::save(readerScreen_.session, prefs_, true, nowMs);
     ReadingProgress::mirror(readerScreen_.session, readerScreen_.store);
     ReadingLoop::pause(readerScreen_.session);
