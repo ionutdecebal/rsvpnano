@@ -24,6 +24,7 @@ namespace screens::PageReader {
         constexpr uint8_t kOverlayTextSize = 2;
         const int16_t kOverlayTextHeight = ui::Context::textHeight(kOverlayTextSize);
         constexpr int16_t kLineGap = 2;
+        constexpr int kBrowseLookahead = 224;
 
         void clearPage(State& state) {
             state.lineCount = 0;
@@ -255,7 +256,7 @@ namespace screens::PageReader {
                                 .has_value();
                     }
                 }
-                const bool startsParagraph = paragraphStart(session, index);
+                const bool startsParagraph = index == paragraphRange.first;
                 if (state.lineCount > 0 && startsParagraph)
                     top = static_cast<int16_t>(top + std::max<int16_t>(4, previousLineHeight / 3));
 
@@ -265,9 +266,7 @@ namespace screens::PageReader {
                 uint8_t ascent = 0;
                 uint8_t descent = 0;
                 uint8_t yAdvance = 0;
-                while (index < wordCount) {
-                    if (index > line.start && paragraphStart(session, index))
-                        break;
+                while (index < paragraphRange.second) {
                     const FontCatalog::Face face = typeface(index);
                     // Ordinary text needs wrap metrics, not the paragraph's
                     // full text. Avoid rereading it from SD on each rebase.
@@ -1153,7 +1152,7 @@ namespace screens::PageReader {
         };
         const auto rebuild = [&](bool findingLine = false) {
             browse.rowCache.valid = false;
-            const int16_t height = findingLine ? 640 : std::min(640, logicalArea.h + 224);
+            const int16_t height = findingLine ? 640 : std::min(640, logicalArea.h + kBrowseLookahead);
             layout(state, text, typeface, typography, session,
                    {logicalArea.x, logicalArea.y, logicalArea.w, height}, browse.first, !findingLine);
             state.layoutRevision = revision;
@@ -1279,7 +1278,26 @@ namespace screens::PageReader {
             }
         }
 
+        const bool verticalDrag = usesMidpoint(highlightMode) && !followSelection
+                               && step == ScrollStep::none && !headerMoved;
         const size_t priorFirst = browse.first;
+        if (verticalDrag && browse.offset < 0 && !browse.previousLines.empty()) {
+            // Include a few already wrapped lines above the viewport so a
+            // continuous reverse drag doesn't have to rebuild at every line.
+            constexpr int lookbehind = kBrowseLookahead / 2;
+            const int viewportBottom = logicalArea.y + browse.offset + logicalArea.h;
+            size_t nextLine = 0;
+            while (nextLine < state.lineCount && state.lines[nextLine].flowTop <= viewportBottom)
+                ++nextLine;
+            int addedHeight = 0;
+            while (nextLine + 1 < state.lines.size() && !browse.previousLines.empty()
+                   && addedHeight + browse.previousLines.back().second <= lookbehind) {
+                const int height = prependLine();
+                browse.offset += height;
+                addedHeight += height;
+                ++nextLine;
+            }
+        }
         while (browse.offset < 0 && browse.first > 0)
             browse.offset += prependLine();
         if (state.pageStart != browse.first)
@@ -1308,14 +1326,16 @@ namespace screens::PageReader {
         };
         clampToBookEnd();
 
-        // Keep the near lines in the current layout across small forward and
-        // backward drags. Rebase several lines at a time to avoid rewrapping
-        // and reshaping the buffered text on every line crossing.
+        // Keep more of the prepared text while dragging, including text just
+        // above the viewport for a reversal. Rebuild with one line in reserve.
         while (state.lineCount > 2) {
             const size_t top = lineForOffset();
-            const bool needsMore = state.pageEnd < wordCount
-                                && logicalArea.y + browse.offset + logicalArea.h > state.lines[state.lineCount - 1].bottom;
+            const auto& last = state.lines[state.lineCount - 1];
+            const int viewportBottom = logicalArea.y + browse.offset + logicalArea.h;
+            const bool needsMore = state.pageEnd < wordCount && viewportBottom > last.bottom;
             if (top < (needsMore ? 2u : 4u))
+                break;
+            if (verticalDrag && !needsMore && (state.pageEnd >= wordCount || viewportBottom <= last.flowTop))
                 break;
             const size_t trim = top - 1;
             rememberLines(trim);

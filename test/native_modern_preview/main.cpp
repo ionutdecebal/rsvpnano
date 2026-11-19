@@ -1114,6 +1114,7 @@ namespace {
     }
 
     void verifyContinuousPageScroll(Arduino_Canvas& panel) {
+        using screens::PageReader::HighlightMode;
         ui::Context ui(panel);
         auto theme = ui::themes::defaultTheme();
         // Remove the highlight colour to compare the exact movement of ink.
@@ -1136,24 +1137,25 @@ namespace {
             screens::PageReader::BrowseState probe;
             probe.first = start;
             auto viewport = body;
-            const auto frame = [&] {
+            const auto frame = [&](HighlightMode mode) {
                 ui.beginFrame(39, true);
                 screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
                     return {std::cref(*font)};
-                }, {}, 0, session, viewport, SIZE_MAX);
+                }, {}, 0, session, viewport, SIZE_MAX, screens::PageReader::kNativeScale, false, mode);
                 ui.endFrame();
             };
             ui.invalidate();
-            frame();
+            frame(HighlightMode::departingScrollLineForward);
             std::vector<uint16_t> previous(640 * 172);
-            for (int motion = 0; motion < 335; ++motion) {
-                if (motion == 85) {
+            constexpr int forwardSteps = 300;
+            for (int motion = 0; motion < 2 * forwardSteps + 90; ++motion) {
+                if (motion == forwardSteps - 5) {
                     const auto highlighted = probe.highlighted;
                     std::copy_n(panel.getFramebuffer(), previous.size(), previous.begin());
                     for (const auto next : {ui::Rect{0, 0, body.w, 172}, body}) {
                         viewport = next;
                         ui.invalidate();
-                        frame();
+                        frame(HighlightMode::departingScrollLineForward);
                         assert(probe.highlighted == highlighted);
                         for (int y = body.y; y < body.y + body.h; ++y) {
                             const auto* row = panel.getFramebuffer() + y * 640;
@@ -1161,10 +1163,10 @@ namespace {
                         }
                     }
                 }
-                const int delta = motion < 90 ? 1 : -1;
+                const int delta = motion < forwardSteps ? 1 : -1;
                 std::copy_n(panel.getFramebuffer(), previous.size(), previous.begin());
                 probe.scrollBy(delta);
-                frame();
+                frame(delta > 0 ? HighlightMode::departingScrollLineForward : HighlightMode::departingScrollLine);
                 for (int y = body.y + 1; y < body.y + body.h - 1; ++y) {
                     const auto* row = panel.getFramebuffer() + y * 640;
                     if (!std::equal(row, row + body.w, previous.begin() + (y + delta) * 640)) {
