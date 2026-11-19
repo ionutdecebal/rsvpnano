@@ -504,13 +504,14 @@ namespace {
             // installed-font paths, on both sides of a sampling phase shift.
             for (const uint8_t scale : {100, 50, 64, 80}) {
                 probe = {};
-                const auto renderSize = [&](size_t highlight) {
+                using screens::PageReader::HighlightMode;
+                const auto renderSize = [&](size_t highlight, HighlightMode mode = HighlightMode::selection) {
                     ui.invalidate();
                     ui.beginFrame(static_cast<uint8_t>(screen), true);
                     screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
                         return scale == 100 ? FontCatalog::Face{std::cref(ui::fonts::LiterataPageAlpha4_17)}
                                             : reader.fonts.loadFace(0, smallSize);
-                    }, settings.settings().reading.typography, 0, reader.session, body, highlight, scale);
+                    }, settings.settings().reading.typography, 0, reader.session, body, highlight, scale, false, mode);
                     ui.endFrame();
                 };
                 renderSize(0);
@@ -538,6 +539,31 @@ namespace {
                     probe.rowCache.valid = false;
                     renderSize(selection);
                     assert(std::equal(cached.begin(), cached.end(), panel.getFramebuffer()));
+                }
+
+                // Keep the accent visible when the layout window moves. Compare every
+                // crossing with a full paint, including the clipped lines at both edges.
+                probe = {};
+                renderSize(0);
+                for (const int direction : {1, -1}) {
+                    const auto mode = direction > 0 ? HighlightMode::departingScrollLineForward
+                                                    : HighlightMode::departingScrollLine;
+                    int crossings = 0;
+                    for (int sample = 0; sample < 160; ++sample) {
+                        const auto oldFirst = probe.first;
+                        probe.scrollBy(direction * (1 + sample % 7));
+                        renderSize(SIZE_MAX, mode);
+                        if (probe.first == oldFirst)
+                            continue;
+                        ++crossings;
+                        const auto highlighted = probe.highlighted;
+                        const std::vector<uint16_t> cached(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
+                        probe.rowCache.valid = false;
+                        renderSize(SIZE_MAX, mode);
+                        assert(probe.highlighted == highlighted);
+                        assert(std::equal(cached.begin(), cached.end(), panel.getFramebuffer()));
+                    }
+                    assert(crossings > 0);
                 }
             }
             ui.invalidate();

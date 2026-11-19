@@ -679,7 +679,7 @@ namespace screens::PageReader {
                              const ReadingSession& session, ui::Rect area, size_t highlighted) {
             const ui::Rect target{0, 0, area.w, area.h};
             canvas.fillRect(0, 0, target.w, target.h, ui.color(ui::themes::Background));
-            ui::ClippedGfx clipped(canvas, target);
+            ui::ClippedGfx clipped(canvas, target.w, target.h);
             Arduino_GFX& previous = text.setOutput(clipped);
             drawPageWords(state, ui, text, typography, session, target, area, -area.x, -area.y, highlighted);
             text.setOutput(previous);
@@ -1280,7 +1280,58 @@ namespace screens::PageReader {
 
         const bool verticalDrag = usesMidpoint(highlightMode) && !followSelection
                                && step == ScrollStep::none && !headerMoved;
+        const auto rebuildAfterScroll = [&](int oldOffset) {
+            auto& cache = browse.rowCache;
+            const auto plainFace = [&]() -> const ui::fonts::AlphaFont* {
+                if (state.bidi || state.vertical || state.faces.size() != 1)
+                    return nullptr;
+                const auto& face = state.faces.front();
+                return !face.shaper && !face.raster.get().file ? &face.raster.get() : nullptr;
+            };
+            const auto* face = plainFace();
+            if (!verticalDrag || !cache.valid || scale != kNativeScale || !face) {
+                rebuild();
+                return;
+            }
+
+            // With a single resident face, the same words on the same line
+            // draw identically at a given baseline. Compare all ink in the
+            // old viewport, including overhang from just outside its edges.
+            struct InkLine {
+                size_t start, end;
+                int baseline;
+                bool operator==(const InkLine&) const = default;
+            };
+            const auto visitInk = [&](int offset, auto&& visit) {
+                const int origin = logicalArea.y + offset;
+                for (size_t i = 0; i < state.lineCount; ++i) {
+                    const auto& line = state.lines[i];
+                    if (!line.inkKnown)
+                        return false;
+                    if (line.ink.h > 0 && line.ink.y < origin + logicalArea.h && line.ink.y + line.ink.h > origin
+                        && !visit(InkLine{line.start, line.end, line.y - origin}))
+                        return false;
+                }
+                return true;
+            };
+            std::array<InkLine, State::kMaximumLines> saved;
+            size_t count = 0;
+            const bool known = visitInk(cache.offset, [&](InkLine line) {
+                saved[count++] = line;
+                return true;
+            });
+            const int rebasedOffset = cache.offset + (browse.offset - oldOffset);
+            rebuild();
+            size_t matched = 0;
+            if (known && plainFace() == face && visitInk(rebasedOffset, [&](InkLine line) {
+                    return matched < count && saved[matched++] == line;
+                }) && matched == count) {
+                cache.offset = rebasedOffset;
+                cache.valid = true;
+            }
+        };
         const size_t priorFirst = browse.first;
+        const int offsetBeforePrepend = browse.offset;
         if (verticalDrag && browse.offset < 0 && !browse.previousLines.empty()) {
             // Include a few already wrapped lines above the viewport so a
             // continuous reverse drag doesn't have to rebuild at every line.
@@ -1301,7 +1352,7 @@ namespace screens::PageReader {
         while (browse.offset < 0 && browse.first > 0)
             browse.offset += prependLine();
         if (state.pageStart != browse.first)
-            rebuild();
+            rebuildAfterScroll(offsetBeforePrepend);
         if (!anchorScrub && followSelection && selected < priorFirst) {
             const auto row = lineForWord(state, selected);
             if (row < state.lineCount)
@@ -1340,8 +1391,9 @@ namespace screens::PageReader {
             const size_t trim = top - 1;
             rememberLines(trim);
             browse.first = state.lines[trim].start;
+            const int offsetBeforeTrim = browse.offset;
             browse.offset -= lineOffset(trim);
-            rebuild();
+            rebuildAfterScroll(offsetBeforeTrim);
         }
         clampToBookEnd();
         if (arrowTarget && (browse.first != firstBeforeStep || browse.offset != offsetBeforeStep)) {

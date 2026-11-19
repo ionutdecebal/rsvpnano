@@ -9,6 +9,10 @@ namespace ui {
     public:
         ClippedGfx(Arduino_GFX& output, Rect clip)
             : Arduino_GFX(output.width(), output.height()), output_(output), clip_(clip) {}
+        // A strip at the canvas origin is itself the entire drawing surface.
+        // Reporting its size lets the font renderer skip invisible glyph rows.
+        ClippedGfx(Arduino_GFX& output, int16_t width, int16_t height)
+            : Arduino_GFX(width, height), output_(output), clip_{0, 0, width, height} {}
         bool begin(int32_t = -1) override { return true; }
         void writePixelPreclipped(int16_t x, int16_t y, uint16_t color) override {
             if (x >= clip_.x && y >= clip_.y && x < clip_.x + clip_.w && y < clip_.y + clip_.h)

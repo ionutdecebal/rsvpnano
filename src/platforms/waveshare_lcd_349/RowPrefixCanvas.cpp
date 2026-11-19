@@ -6,6 +6,33 @@
 #include <cstdlib>
 #include <esp_heap_caps.h>
 
+namespace {
+    constexpr int tileRows = 8;
+
+    // The landscape page and portrait panel have perpendicular scanlines.
+    // Keep a tile's source rows in cache and write each native span in order.
+    void copyLandscapeBitmap(const uint16_t* bitmap, int width, int height, uint16_t* framebuffer,
+                             int x, int y, int screenWidth, int screenHeight, bool clockwise) {
+        constexpr int tileColumns = 16;
+        const int sourceStride = clockwise ? -width : width;
+        for (int left = 0; left < width; left += tileColumns) {
+            const int right = std::min(left + tileColumns, width);
+            for (int top = 0; top < height; top += tileRows) {
+                const int sourceRow = clockwise ? top + tileRows - 1 : top;
+                const int nativeX = clockwise ? screenHeight - y - top - tileRows : y + top;
+                for (int col = left; col < right; ++col) {
+                    const int nativeY = clockwise ? x + col : screenWidth - 1 - x - col;
+                    auto* dest = framebuffer + nativeY * screenHeight + nativeX;
+                    const auto* source = bitmap + sourceRow * width + col;
+#pragma GCC unroll 8
+                    for (int row = 0; row < tileRows; ++row)
+                        dest[row] = source[row * sourceStride];
+                }
+            }
+        }
+    }
+}
+
 RowPrefixCanvas::RowPrefixCanvas(int16_t w, int16_t h, Arduino_G& output, int16_t output_x, int16_t output_y,
                                  uint8_t r) :
         Arduino_GFX(w, h),
@@ -344,6 +371,17 @@ void RowPrefixCanvas::drawIndexedBitmap(int16_t x, int16_t y, uint8_t* bitmap, u
 
 void RowPrefixCanvas::draw16bitRGBBitmap(int16_t x, int16_t y, uint16_t* bitmap, int16_t w, int16_t h) {
     markDirtyRect(x, y, w, h);
+
+    if ((_rotation == 1 || _rotation == 3) && w >= 32 && h >= tileRows
+        && x >= 0 && y >= 0 && x + w <= _width && y + h <= _height) {
+        const int tiledRows = h - h % tileRows;
+        copyLandscapeBitmap(bitmap, w, tiledRows, _framebuffer, x, y, _width, _height, _rotation == 1);
+        if (tiledRows == h)
+            return;
+        bitmap += tiledRows * w;
+        y += tiledRows;
+        h -= tiledRows;
+    }
 
     switch (_rotation) {
     case 1:
