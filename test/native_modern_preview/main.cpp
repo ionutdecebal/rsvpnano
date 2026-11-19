@@ -718,6 +718,22 @@ namespace {
                 assert(reader.pageHighlightedWord() == lines[2].start);
                 frame(false, 200, 145 - physicalHandoff - 6);
                 assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
+
+                // Reverse in tiny steps and keep rendering a highlight near the
+                // top, including after selecting a particular word again.
+                frame(true, 200, 90);
+                frame(true, 215, 90);
+                frame(false, 215, 90);
+                const auto later = reader.pageHighlightedWord();
+                assert(later != SIZE_MAX);
+                frame(true, 200, 60);
+                for (int y = 61; y <= 130; ++y) {
+                    frame(true, 200, y);
+                    assert(reader.pageHighlightedWord() != SIZE_MAX);
+                }
+                frame(false, 200, 130);
+                assert(reader.pageHighlightedWord() < later);
+                assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
             }
             render(pinned);
             assert(probe.highlighted == pinned);
@@ -1017,6 +1033,16 @@ namespace {
                 probe.offset = edge;
                 frame(next + 1);
                 assert(probe.highlighted == following);
+
+                // On reversal the previous reading row takes over at the same pixel.
+                frame(following + 1);
+                assert(probe.highlighted == following + 1);
+                probe.offset = edge - 1;
+                frame(following + 1);
+                assert(probe.highlighted == next);
+                probe.offset = 0;
+                frame(next);
+                assert(probe.highlighted == next);
             }
         }
     }

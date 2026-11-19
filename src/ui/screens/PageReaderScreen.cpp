@@ -912,7 +912,10 @@ namespace screens::PageReader {
                     const auto& line = state.lines[row];
                     if (mode == HighlightMode::departingScrollLine) {
                         const auto automatic = automaticHighlight(state, viewport, mode);
-                        return automatic == kInvalidIndex || selected >= automatic ? selected : automatic;
+                        // Retain the picked word only while its row is still the reading row.
+                        // The midpoint can move that row in either direction.
+                        const bool sameRow = automatic >= line.start && automatic < line.end;
+                        return sameRow ? selected : automatic;
                     }
                     if (fullyVisible(wordAt(state, selected), line, viewport)) {
                         if (mode == HighlightMode::selection)
