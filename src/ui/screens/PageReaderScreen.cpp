@@ -867,6 +867,10 @@ namespace screens::PageReader {
             return top >= viewport.y && bottom <= viewport.y + viewport.h;
         }
 
+        bool usesMidpoint(HighlightMode mode) {
+            return mode == HighlightMode::departingScrollLine || mode == HighlightMode::departingScrollLineForward;
+        }
+
         size_t automaticHighlight(const State& state, ui::Rect viewport, HighlightMode mode) {
             size_t firstWord = kInvalidIndex;
             size_t firstCompleteLine = kInvalidIndex;
@@ -877,7 +881,7 @@ namespace screens::PageReader {
                     break;
                 if (line.bottom <= viewport.y)
                     continue;
-                if (mode == HighlightMode::departingScrollLine) {
+                if (usesMidpoint(mode)) {
                     const bool measured = line.inkKnown && line.ink.h > 0;
                     const int top = measured ? line.ink.y : line.top;
                     const int height = measured ? line.ink.h : line.bottom - line.top;
@@ -910,12 +914,15 @@ namespace screens::PageReader {
                 const auto row = lineForWord(state, selected);
                 if (row < state.lineCount) {
                     const auto& line = state.lines[row];
-                    if (mode == HighlightMode::departingScrollLine) {
+                    if (usesMidpoint(mode)) {
                         const auto automatic = automaticHighlight(state, viewport, mode);
-                        // Retain the picked word only while its row is still the reading row.
-                        // The midpoint can move that row in either direction.
-                        const bool sameRow = automatic >= line.start && automatic < line.end;
-                        return sameRow ? selected : automatic;
+                        if (automatic >= line.start && automatic < line.end)
+                            return selected;
+                        // While advancing, let the reading row catch up to a visible selection.
+                        if (mode == HighlightMode::departingScrollLineForward
+                            && automatic < line.start && fullyVisible(wordAt(state, selected), line, viewport))
+                            return selected;
+                        return automatic;
                     }
                     if (fullyVisible(wordAt(state, selected), line, viewport)) {
                         if (mode == HighlightMode::selection)

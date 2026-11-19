@@ -734,6 +734,38 @@ namespace {
                 frame(false, 200, 130);
                 assert(reader.pageHighlightedWord() < later);
                 assert(reader.session.state.wordIndex == reader.pageHighlightedWord());
+
+                ReadingLoop::seekTo(reader.session, 0);
+                reader.openPage();
+                frame(false, 0, 0);
+                const auto target = lines[3].start + 1;
+                const auto& targetInk = probe.layout.words[target].ink;
+                const int targetX = targetInk.x + targetInk.w / 2;
+                const int targetY = targetInk.y + targetInk.h / 2;
+                const auto& preceding = lines[2].ink;
+                const int targetHandoff = preceding.y + (preceding.h + 1) / 2 - body.y;
+                assert(targetY < body.y + body.h && targetHandoff + 6 < 145 - body.y);
+                frame(true, targetX, targetY);
+                frame(false, targetX, targetY);
+                assert(reader.pageHighlightedWord() == target);
+
+                frame(true, 200, 145);
+                for (int y = 144; y >= 145 - targetHandoff - 4; --y) {
+                    frame(true, 200, y);
+                    assert(reader.pageHighlightedWord() == target);
+                }
+                frame(false, 200, 145 - targetHandoff - 4);
+                frame(false, 0, 0);
+                assert(reader.pageHighlightedWord() == target);
+
+                // Resume two pixels before the preceding line's midpoint.
+                frame(true, 200, 140);
+                frame(true, 200, 133);
+                assert(reader.pageHighlightedWord() == target);
+                frame(true, 200, 132);
+                assert(reader.pageHighlightedWord() == lines[4].start);
+                frame(false, 200, 132);
+                assert(reader.session.state.wordIndex == lines[4].start);
             }
             render(pinned);
             assert(probe.highlighted == pinned);
@@ -1009,12 +1041,14 @@ namespace {
                                  &ui::fonts::LiterataPageAlpha4_26, builtin[2]}) {
             for (const uint8_t scale : {100, 64}) {
                 screens::PageReader::BrowseState probe;
-                const auto frame = [&](size_t selected) {
+                auto viewport = body;
+                using screens::PageReader::HighlightMode;
+                const auto frame = [&](size_t selected, HighlightMode mode = HighlightMode::departingScrollLine) {
                     ui.beginFrame(39, true);
                     screens::PageReader::browse(probe, ui, text, [&](size_t) -> FontCatalog::Face {
                         return {std::cref(*font)};
-                    }, {}, 0, session, body, selected, scale, false,
-                    screens::PageReader::HighlightMode::departingScrollLine);
+                    }, {}, 0, session, viewport, selected, scale, false,
+                    mode);
                     ui.endFrame();
                 };
                 frame(SIZE_MAX);
@@ -1043,6 +1077,22 @@ namespace {
                 probe.offset = 0;
                 frame(next);
                 assert(probe.highlighted == next);
+
+                viewport = {0, 0, body.w, 172};
+                probe = {};
+                frame(SIZE_MAX);
+                const auto second = probe.layout.lines[1];
+                const auto fourth = probe.layout.lines[3].start;
+                const int nextEdge = second.ink.y + (second.ink.h + 1) / 2 - probe.layout.layoutArea.y;
+                const auto ahead = probe.layout.lines[2].start + 1;
+                for (int offset = 1; offset < nextEdge; ++offset) {
+                    probe.offset = offset;
+                    frame(ahead, HighlightMode::departingScrollLineForward);
+                    assert(probe.highlighted == ahead);
+                }
+                probe.offset = nextEdge;
+                frame(ahead, HighlightMode::departingScrollLineForward);
+                assert(probe.highlighted == fourth);
             }
         }
     }

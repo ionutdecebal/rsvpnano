@@ -78,8 +78,12 @@ void ReaderScreen::drawPage(ui::Context& ui, uint32_t nowMs) {
     const bool verticalScroll = (pageGesture_ == PageGesture::vertical && pageVerticalMoved_)
                              || (pageScrollFinished_ && browse_.step == PageReader::ScrollStep::none);
     const size_t selected = verticalScroll && !pageSelectionPinned_ ? SIZE_MAX : pageSelected_;
-    const auto highlightMode = !verticalScroll && !pageVerticalHighlight_ ? PageReader::HighlightMode::selection
-                             : PageReader::HighlightMode::departingScrollLine;
+    auto highlightMode = PageReader::HighlightMode::selection;
+    if (verticalScroll || pageVerticalHighlight_) {
+        const bool keepSelectionAhead = pageScrollDirection_ > 0 || (!verticalScroll && pageSelectionPinned_);
+        highlightMode = keepSelectionAhead ? PageReader::HighlightMode::departingScrollLineForward
+                                           : PageReader::HighlightMode::departingScrollLine;
+    }
     // Choose the reading position before showing the first swipe-entry frame.
     const bool enteringSwipe = pageBarHidden_ && browse_.layout.pageStart == SIZE_MAX;
     const bool follow = enteringSwipe || (pageGesture_ == PageGesture::horizontal && pageScrubMoved_)
