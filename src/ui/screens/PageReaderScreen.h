@@ -96,6 +96,7 @@ namespace screens::PageReader {
             size_t highlighted = SIZE_MAX;
             int offset = 0;
             int highlightTop = 0, highlightBottom = 0;
+            int firstRow = 0;
             bool valid = false;
         } rowCache;
         std::vector<std::pair<size_t, int16_t>> previousLines;

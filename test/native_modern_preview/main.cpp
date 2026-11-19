@@ -514,6 +514,22 @@ namespace {
                     ui.endFrame();
                 };
                 renderSize(0);
+                // Reverse while the viewport still spans both ends of the row buffer.
+                probe.scrollBy(12);
+                renderSize(SIZE_MAX);
+                probe.scrollBy(-4);
+                renderSize(SIZE_MAX);
+                if (scale == 100 || scale == 50)
+                    assert(probe.rowCache.firstRow != 0);
+                const auto selection = probe.highlighted + 1;
+                renderSize(selection);
+                const std::vector<uint16_t> recolored(panel.getFramebuffer(), panel.getFramebuffer() + 640 * 172);
+                probe.rowCache.valid = false;
+                renderSize(selection);
+                assert(std::equal(recolored.begin(), recolored.end(), panel.getFramebuffer()));
+                probe = {};
+                renderSize(0);
+
                 for (const auto [movement, selection] : std::array<std::pair<int, size_t>, 6>{{
                         {0, 1}, {4, 2}, {16, SIZE_MAX}, {1, SIZE_MAX}, {-9, SIZE_MAX}, {-12, 2}}}) {
                     probe.scrollBy(movement);

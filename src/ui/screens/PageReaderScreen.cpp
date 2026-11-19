@@ -789,16 +789,19 @@ namespace screens::PageReader {
             const int rows = distance / kNativeScale;
             const bool exactShift = distance % kNativeScale == 0
                 && (distance == 0 || (PageSampling::unit * kNativeScale) % browse.scale == 0);
+            int firstRow = 0;
             if (!cache.valid || !exactShift || std::abs(rows) >= area.h) {
                 addRows({0, area.h});
             } else {
-                if (rows != 0) {
-                    const int from = std::max(0, rows);
-                    const int to = std::max(0, -rows);
-                    const size_t copied = static_cast<size_t>(area.h - std::abs(rows)) * area.w;
-                    std::memmove(frame + to * area.w, frame + from * area.w, copied * sizeof(*frame));
+                // Rotate the cached row order. Only exposed or recolored rows
+                // need new pixels, even when the scroll direction reverses.
+                firstRow = cache.firstRow + rows;
+                if (firstRow < 0)
+                    firstRow += area.h;
+                else if (firstRow >= area.h)
+                    firstRow -= area.h;
+                if (rows != 0)
                     addRows(rows > 0 ? Rows{area.h - rows, area.h} : Rows{0, -rows});
-                }
                 if (highlighted != cache.highlighted) {
                     if (cache.highlighted != kInvalidIndex)
                         addRows({cache.highlightTop - rows, cache.highlightBottom - rows});
@@ -819,7 +822,8 @@ namespace screens::PageReader {
                 const int pitch = source.width();
                 const uint16_t* pixels = source.getFramebuffer();
                 for (int y = begin; y < end; ++y) {
-                    uint16_t* dest = frame + y * area.w;
+                    const int row = firstRow + y;
+                    uint16_t* dest = frame + (row < area.h ? row : row - area.h) * area.w;
                     if (native) {
                         std::memcpy(dest, pixels + (y - begin) * pitch, area.w * sizeof(*frame));
                     } else {
@@ -831,9 +835,12 @@ namespace screens::PageReader {
                     }
                 }
             }
-            cache = {highlighted, browse.offset, highlightRows.begin, highlightRows.end, true};
+            cache = {highlighted, browse.offset, highlightRows.begin, highlightRows.end, firstRow, true};
             ui.paint(area, [&](Arduino_GFX& output, ui::Rect target) {
-                output.draw16bitRGBBitmap(target.x, target.y, frame, target.w, target.h);
+                const int16_t tailRows = target.h - firstRow;
+                output.draw16bitRGBBitmap(target.x, target.y, frame + firstRow * target.w, target.w, tailRows);
+                if (firstRow != 0)
+                    output.draw16bitRGBBitmap(target.x, target.y + tailRows, frame, target.w, firstRow);
             });
         }
 
