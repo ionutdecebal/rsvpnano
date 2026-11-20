@@ -5,9 +5,20 @@
 #include "ui/Ui.h"
 
 namespace screens::readerLayout {
+    inline constexpr uint8_t kLcd349PagePixelsPerEm = 20;
+#if defined(RSVP_LCD_349_REVISION_HEADER)
+    inline constexpr uint8_t kPagePixelsPerEm = kLcd349PagePixelsPerEm;
+    inline constexpr bool kSmoothPageScroll = true;
+    inline constexpr bool kCompactPageChrome = true;
+#else
+    inline constexpr uint8_t kPagePixelsPerEm = 0;
+    inline constexpr bool kSmoothPageScroll = false;
+    inline constexpr bool kCompactPageChrome = false;
+#endif
+
     size_t pageStrikeIndex();
-    ui::Rect readingArea(int16_t width, int16_t height, bool verticalPage);
-    ui::Rect batteryRect(int16_t width, int16_t height);
+    ui::Rect readingArea(int16_t width, int16_t height, bool verticalPage, bool compactPage = false);
+    ui::Rect batteryRect(int16_t width, int16_t height, bool compactPage = false);
     ui::Rect portraitTopStrip(int16_t width);
     ui::Rect portraitBatteryRect();
     ui::Rect portraitFooterRect(int16_t width);
@@ -23,7 +34,8 @@ namespace screens::readerLayout {
         uint8_t textSize;
         ui::Context::BatteryLayout batteryParts{};
     };
-    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t footerWidth = 36);
+    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t footerWidth = 36,
+                                      bool compactPage = false);
     std::string batteryText(settings::BatteryLabel format, const Board::Power::BatteryState& battery);
     std::string progressText(ui::Context& ui, settings::FooterMetric format, uint8_t percent, uint32_t minutes);
 
@@ -38,6 +50,7 @@ namespace screens::readerLayout {
         uint32_t topState;
         uint32_t bottomState;
         bool ghostHidden = false;
+        bool compactPage = false;
     };
     void drawArrows(ui::Context& ui, const settings::ReadingSettings& settings, bool reading, int16_t wordHeight,
                     bool ghostHidden = false);

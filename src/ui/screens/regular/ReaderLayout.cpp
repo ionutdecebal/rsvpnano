@@ -2,10 +2,16 @@
 #include "fonts/RFont4Format.h"
 
 namespace screens::readerLayout {
-    size_t pageStrikeIndex() {
-        return RFont4::kCompactStrikeIndex;
+    namespace {
+        constexpr int16_t kPageFooterHeight = 22;
     }
-    ui::Rect readingArea(int16_t width, int16_t height, bool verticalPage) {
+
+    size_t pageStrikeIndex() {
+        return kPagePixelsPerEm == 0 ? RFont4::kCompactStrikeIndex : RFont4::kCompactStrikeIndex - 1;
+    }
+    ui::Rect readingArea(int16_t width, int16_t height, bool verticalPage, bool compactPage) {
+        if (compactPage && !verticalPage)
+            return {0, 0, width, std::max<int16_t>(0, height - kPageFooterHeight)};
         const int16_t left = verticalPage ? portraitTopStrip(height).h : 0;
         const int16_t right = verticalPage ? portraitBottomStrip(height, width).h : 0;
         return {left, 36, static_cast<int16_t>(std::max<int>(0, width - left - right)),
@@ -50,13 +56,19 @@ namespace screens::readerLayout {
         rect.y = (height - rect.h) / 2;
         return rect;
     }
-    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t footerWidth) {
-        const int16_t y = height - 26;
+    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t footerWidth,
+                                      bool compactPage) {
+        const int16_t footerHeight = compactPage ? kPageFooterHeight : 26;
+        const int16_t y = height - footerHeight;
+        const int16_t footerRight = compactPage ? width - 126 : width;
         return {
             .chapter = {static_cast<int16_t>(leftHanded && footerWidth ? footerWidth + 42 : 18), y,
-                        static_cast<int16_t>(footerWidth ? width - footerWidth - 60 : width - 36), 26},
-            .progress = {static_cast<int16_t>(leftHanded ? 18 : width - footerWidth - 18), y, footerWidth, 26},
-            .battery = {static_cast<int16_t>(width - 126), 0, 116, 36},
+                        static_cast<int16_t>(footerWidth ? footerRight - footerWidth - 60 : footerRight - 36),
+                        footerHeight},
+            .progress = {static_cast<int16_t>(leftHanded ? 18 : footerRight - footerWidth - 18), y, footerWidth,
+                         footerHeight},
+            .battery = {static_cast<int16_t>(width - 126), compactPage ? y : int16_t{0}, 116,
+                        compactPage ? footerHeight : int16_t{36}},
             .arrows = {static_cast<int16_t>(leftHanded ? 8 : width - 52), static_cast<int16_t>(height / 2 - 22), 44,
                        44},
             .textSize = 2,

@@ -3,8 +3,8 @@
 #include <cstdio>
 
 namespace screens::readerLayout {
-    ui::Rect batteryRect(int16_t width, int16_t height) {
-        return horizontalChrome(width, height, false).battery;
+    ui::Rect batteryRect(int16_t width, int16_t height, bool compactPage) {
+        return horizontalChrome(width, height, false, 0, compactPage).battery;
     }
 
     std::string batteryText(settings::BatteryLabel format, const Board::Power::BatteryState& battery) {
@@ -72,7 +72,8 @@ namespace screens::readerLayout {
                           const Board::Power::BatteryState& battery) {
         const bool showProgress = settings::visible(settings.progressVisibility, view.reading);
         const auto layout = horizontalChrome(ui.width(), ui.height(), settings.leftHanded,
-                                             showProgress || view.ghostHidden ? ui.textWidth(view.footer, 2) : 0);
+                                             showProgress || view.ghostHidden ? ui.textWidth(view.footer, 2) : 0,
+                                             view.compactPage);
         horizontalChrome(ui, view, settings, battery, layout);
     }
 
@@ -86,7 +87,8 @@ namespace screens::readerLayout {
         footerState = ui::Context::combine(footerState, static_cast<uint8_t>(settings.progressVisibility));
         footerState = ui::Context::combine(footerState, settings.leftHanded);
         footerState = ui::Context::combine(footerState, view.reading | (view.ghostHidden << 1));
-        if (editing || ui.redraw({0, layout.chapter.y, ui.width(), layout.chapter.h}, footerState)) {
+        const int16_t footerRight = layout.chapter.y == layout.battery.y ? layout.battery.x : ui.width();
+        if (editing || ui.redraw({0, layout.chapter.y, footerRight, layout.chapter.h}, footerState)) {
             const auto label = [&](ui::Rect rect, std::string_view text, settings::Visibility visibility,
                                    ui::TextAlign align) {
                 const bool visible = settings::visible(visibility, view.reading);

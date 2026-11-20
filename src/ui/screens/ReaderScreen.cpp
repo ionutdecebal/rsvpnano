@@ -121,9 +121,7 @@ namespace screens {
             return;
         std::vector<uint8_t> prepared(families.size());
         std::vector<size_t> firstWords(families.size(), SIZE_MAX);
-        const size_t sizeIndex = settings.mode == settings::ReadingMode::page
-                                   ? readerLayout::pageStrikeIndex()
-                                   : static_cast<size_t>(typography_.fontSizeIndex);
+        const size_t sizeIndex = typography_.fontSizeIndex;
         const auto prepare = [&](size_t wordIndex, std::string_view locale, uint32_t scripts) {
             for (const UnicodeText::ScriptTag& script: UnicodeText::SupportedScripts) {
                 if ((scripts & script.mask) == 0)
@@ -132,7 +130,10 @@ namespace screens {
                     settings::fontForText(overrides, locale, script.mask, typography_.fontId);
                 const size_t family = FontCatalog::selectFamily(families, requested, locale, script.mask);
                 if (family != 0 && !prepared[family]) {
-                    fonts.loadFace(family, sizeIndex);
+                    if (settings.mode == settings::ReadingMode::page)
+                        fonts.loadPageFace(family, readerLayout::pageStrikeIndex(), readerLayout::kPagePixelsPerEm);
+                    else
+                        fonts.loadFace(family, sizeIndex);
                     prepared[family] = true;
                     firstWords[family] = wordIndex;
                 }
@@ -366,7 +367,8 @@ namespace screens {
     }
 
     FontCatalog::Face ReaderScreen::pageTypeface(size_t wordIndex) {
-        return fonts.loadFace(fontChoice(wordIndex), readerLayout::pageStrikeIndex());
+        return fonts.loadPageFace(fontChoice(wordIndex), readerLayout::pageStrikeIndex(),
+                                  readerLayout::kPagePixelsPerEm);
     }
 
     bool ReaderScreen::openBook(ui::Context& ui, StorageManager& storage, Preferences& preferences, size_t index,
@@ -438,20 +440,23 @@ namespace screens {
                             uint32_t nowMs) {
         width_ = ui.width();
         height_ = ui.height();
+        const bool pageMode = settings_.mode == settings::ReadingMode::page;
+        const bool pageView = pageMode || pagePreview_;
+        const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
+        const bool scrollPage = readerLayout::kSmoothPageScroll && pageMode && !vertical;
+        const bool compactPage = compactPageChrome();
         if (touchIntent_ == TouchIntent::Scrub || touchIntent_ == TouchIntent::Paragraph) {
             const auto typeface = [this](size_t index) {
                 return pageTypeface(index);
             };
-            const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
             PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session,
-                             readerLayout::readingArea(ui.width(), ui.height(), vertical), {});
+                             readerLayout::readingArea(ui.width(), ui.height(), vertical, compactPage), {},
+                             scrollPage ? std::optional<uint16_t>{0} : std::nullopt);
             return;
         }
         const std::string_view bookTitle = ReadingProgress::title(session, storage);
         const bool reading = session.playing;
         const settings::ReadingSettings& settings = settings_;
-        const bool pageView = settings.mode == settings::ReadingMode::page || pagePreview_;
-        const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
         if (!pageView)
             refreshTypeface();
         const auto nextChapter =
@@ -484,15 +489,28 @@ namespace screens {
         const bool cjkPacing = ReadingLoop::pacingMode(session) == settings::ReadingPacing::cjkPhrase;
         const bool overlayVisible = wpmFeedbackUntilMs_ > nowMs;
 
-        const ui::Rect readingArea = ui.paintBounds(readerLayout::readingArea(ui.width(), ui.height(), vertical));
+        const ui::Rect readingArea =
+            ui.paintBounds(readerLayout::readingArea(ui.width(), ui.height(), vertical, compactPage));
         if (pageView) {
             const std::string overlay =
                 vertical || !overlayVisible ? "" : std::to_string(settings.wpm) + (cjkPacing ? " CPM" : " WPM");
             const auto typeface = [this](size_t wordIndex) -> FontCatalog::Face {
                 return pageTypeface(wordIndex);
             };
+            std::optional<uint16_t> scrollProgress;
+            if (scrollPage) {
+                std::optional<uint16_t> playing;
+                if (reading) {
+                    const auto duration = ReadingLoop::currentWordDurationMs(session, settings);
+                    if (duration > 0) {
+                        const auto elapsed = ReadingLoop::elapsedInCurrentWordMs(session, nowMs);
+                        playing = std::min(elapsed, duration) * 1000 / duration;
+                    }
+                }
+                scrollProgress = PageReader::holdScrollProgress(pageScrollHold_, session.state.wordIndex, playing);
+            }
             PageReader::draw(pageState_, ui, text_, typeface, typography_, typographyRevision_, session, readingArea,
-                             overlay);
+                             overlay, scrollProgress);
         } else if (ui.redraw(readingArea, frameSignature(session.currentWord, overlayVisible, cjkPacing, settings),
                              true)) {
             const std::string overlay =
@@ -734,14 +752,19 @@ namespace screens {
                                  .bottomState = pageView ? ui::Context::combine(0, settings.leftHanded)
                                                          : frameSignature(session.currentWord, overlayVisible,
                                                                           cjkPacing, settings),
+                                 .compactPage = compactPage,
                              },
                              settings, battery);
+    }
+
+    bool ReaderScreen::compactPageChrome() const {
+        return readerLayout::kCompactPageChrome && (settings_.mode == settings::ReadingMode::page || pagePreview_);
     }
 
     bool ReaderScreen::batteryTouched(const ui::Touch& touch) const {
         const ui::Rect rect = session.metadata.writingMode == WritingMode::verticalRl
                                 ? ui::rotateClockwise(portraitBatteryRect(), height_)
-                                : batteryRect(width_, height_);
+                                : batteryRect(width_, height_, compactPageChrome());
         return ui::contains(rect, touch.x, touch.y);
     }
 
@@ -759,11 +782,10 @@ namespace screens {
                 ui::rotateClockwise(portraitPreviousRect(height_, width_, settings_.leftHanded), height_);
             return ui::contains(previous, x, y);
         }
-        if (ui::contains(batteryRect(width_, height_), x, y))
+        const bool pageView = settings_.mode == settings::ReadingMode::page || pagePreview_;
+        if (ui::contains(batteryRect(width_, height_, compactPageChrome()), x, y))
             return false;
-        return ui::contains(readerLayout::previousSentenceRect(width_, height_, settings_.leftHanded,
-                                                               settings_.mode == settings::ReadingMode::page
-                                                                   || pagePreview_),
+        return ui::contains(readerLayout::previousSentenceRect(width_, height_, settings_.leftHanded, pageView),
                             x, y);
     }
 
@@ -915,6 +937,7 @@ namespace screens {
         if (pagePreview_) {
             lastTapValid_ = false;
             pagePreview_ = false;
+            ui.invalidate();
             return;
         }
         const bool footerTapped =
@@ -922,9 +945,16 @@ namespace screens {
                 ? ui::contains(ui::rotateClockwise(portraitFooterRect(height_), height_), touch.x, touch.y)
                 : [&] {
                       const uint16_t width = std::min<uint16_t>(220, static_cast<uint16_t>(width_ / 2));
-                      return touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, height_ - 40))
+                      int16_t top = height_ - 40;
+                      int16_t right = width_;
+                      if (compactPageChrome()) {
+                          const auto textArea = readerLayout::readingArea(width_, height_, false, true);
+                          top = std::max<int16_t>(top, textArea.y + textArea.h);
+                          right = batteryRect(width_, height_, true).x;
+                      }
+                      return touch.y >= static_cast<uint16_t>(std::max<int16_t>(0, top))
                           && (settings_.leftHanded ? touch.x <= width
-                                                   : touch.x >= static_cast<uint16_t>(width_ - width));
+                                                   : touch.x >= std::max(0, right - width) && touch.x < right);
                   }();
         if (footerTapped) {
             settings_.footerMetric = settings::cycleEnum(settings_.footerMetric);
@@ -944,11 +974,16 @@ namespace screens {
             start(nowMs, true);
     }
 
-    void ReaderScreen::toggle(Preferences& preferences, uint32_t nowMs) {
-        if (session.playing)
+    void ReaderScreen::toggle(ui::Context& ui, Preferences& preferences, uint32_t nowMs) {
+        if (session.playing) {
             requestPause(preferences, nowMs);
-        else
+        } else {
+            if (pagePreview_) {
+                resetTouch();
+                ui.invalidate();
+            }
             start(nowMs, true);
+        }
     }
 
     void ReaderScreen::update(Preferences& preferences, uint32_t nowMs) {

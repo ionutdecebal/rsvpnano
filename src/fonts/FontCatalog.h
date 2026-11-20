@@ -27,6 +27,7 @@ public:
     struct Face {
         std::reference_wrapper<const ui::fonts::AlphaFont> raster;
         TextShaping::Shaper* shaper = nullptr;
+        uint8_t pixelsPerEm = 0;
     };
 
     struct Family {
@@ -77,6 +78,7 @@ public:
     }
     const Family* find(std::string_view id) const;
     Face loadFace(size_t familyIndex, size_t sizeIndex);
+    Face loadPageFace(size_t familyIndex, size_t sizeIndex, uint8_t pixelsPerEm);
     void clearLoaded();
 #if defined(RSVP_BENCHMARK_MODE)
     void resetFileCacheStats() {
@@ -137,15 +139,16 @@ private:
         std::array<uint8_t, RFont4::kPageMapBytes> pageMap{};
         std::unique_ptr<uint8_t, FreeResidentData> residentMetadata;
         std::optional<LoadedStrike> loadedStrike;
+        std::optional<LoadedStrike> pageStrike;
         TextShaping::Shaper shaper;
         bool shapingFailed = false;
     };
 
     void reset();
+    Face loadFace(size_t familyIndex, size_t sizeIndex, bool page, uint8_t pixelsPerEm = 0);
     std::expected<std::reference_wrapper<LoadedFamily>, std::string> loadRuntimeFamily(size_t familyIndex);
-    std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> loadRuntimeStrike(LoadedFamily&
-                                                                                                         family,
-                                                                                                     size_t sizeIndex);
+    std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string>
+    loadRuntimeStrike(LoadedFamily& family, std::optional<LoadedStrike>& slot, size_t sizeIndex);
     static std::string normalizeId(std::string_view value);
 
     std::vector<Family> families_;

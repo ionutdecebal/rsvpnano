@@ -45,9 +45,10 @@ namespace screens {
         bool batteryLongPressed(const ui::Touch& touch) const;
         bool batteryTouched(const ui::Touch& touch) const;
         bool previousSentenceTapped(uint16_t x, uint16_t y) const;
+        bool compactPageChrome() const;
         void handleTouch(ui::Context& ui, uint32_t nowMs, Preferences& preferences,
                          settings::SettingsStore& settingsStore);
-        void toggle(Preferences& preferences, uint32_t nowMs);
+        void toggle(ui::Context& ui, Preferences& preferences, uint32_t nowMs);
         void update(Preferences& preferences, uint32_t nowMs);
 
     private:
@@ -139,6 +140,7 @@ namespace screens {
         BidiText::Line phantomLine_;
         std::array<Phantom, 2> phantoms_;
         bool pagePreview_ = false;
+        PageReader::ScrollHold pageScrollHold_;
         uint32_t paragraphTickMs_ = 0;
         int32_t paragraphRemainder_ = 0;
     };

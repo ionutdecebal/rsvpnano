@@ -255,6 +255,14 @@ const FontCatalog::Family* FontCatalog::find(std::string_view id) const {
 }
 
 FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
+    return loadFace(familyIndex, sizeIndex, false);
+}
+
+FontCatalog::Face FontCatalog::loadPageFace(size_t familyIndex, size_t sizeIndex, uint8_t pixelsPerEm) {
+    return loadFace(familyIndex, sizeIndex, true, pixelsPerEm);
+}
+
+FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex, bool page, uint8_t pixelsPerEm) {
     const size_t safeFamily = std::min(familyIndex, families_.size() - 1);
     const size_t safeSize = std::min(sizeIndex, RFont4::kSizeCount - 1);
     if (!families_[safeFamily].builtIn) {
@@ -262,7 +270,7 @@ FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
         auto family = loadRuntimeFamily(safeFamily);
         if (family) {
             LoadedFamily& loaded = family->get();
-            auto strike = loadRuntimeStrike(loaded, safeSize);
+            auto strike = loadRuntimeStrike(loaded, page ? loaded.pageStrike : loaded.loadedStrike, safeSize);
             if (strike) {
                 TextShaping::Shaper* shaper = nullptr;
                 if (families_[safeFamily].shaping && !loaded.shapingFailed) {
@@ -277,14 +285,14 @@ FontCatalog::Face FontCatalog::loadFace(size_t familyIndex, size_t sizeIndex) {
                     if (loaded.shaper.ready())
                         shaper = &loaded.shaper;
                 }
-                return {.raster = *strike, .shaper = shaper};
+                return {.raster = *strike, .shaper = shaper, .pixelsPerEm = pixelsPerEm};
             }
             ESP_LOGE("font", "load failed %s: %s", path.c_str(), strike.error().c_str());
         } else {
             ESP_LOGE("font", "load failed %s: %s", path.c_str(), family.error().c_str());
         }
     }
-    return {.raster = std::cref(*kFallbackFonts[safeSize])};
+    return {.raster = std::cref(*kFallbackFonts[safeSize]), .pixelsPerEm = pixelsPerEm};
 }
 
 void FontCatalog::clearLoaded() {
@@ -351,11 +359,11 @@ std::expected<std::reference_wrapper<FontCatalog::LoadedFamily>, std::string> Fo
 }
 
 std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> FontCatalog::
-    loadRuntimeStrike(LoadedFamily& family, size_t sizeIndex) {
-    if (family.loadedStrike && family.loadedStrike->sizeIndex == sizeIndex)
-        return std::cref(family.loadedStrike->font);
+    loadRuntimeStrike(LoadedFamily& family, std::optional<LoadedStrike>& slot, size_t sizeIndex) {
+    if (slot && slot->sizeIndex == sizeIndex)
+        return std::cref(slot->font);
 
-    LoadedStrike& loaded = family.loadedStrike.emplace();
+    LoadedStrike& loaded = slot.emplace();
     loaded.sizeIndex = sizeIndex;
     const RFont4::StrikeRecord& strike = family.directory.strikes[sizeIndex];
     const RFont4::Header& header = family.directory.header;
@@ -419,7 +427,7 @@ std::expected<std::reference_wrapper<const ui::fonts::AlphaFont>, std::string> F
             if (auto read =
                     readPsramSection(family.file, strike.glyphsOffset, {loaded.residentData.get(), residentSize});
                 !read) {
-                family.loadedStrike.reset();
+                slot.reset();
                 return std::unexpected(read.error());
             }
 

@@ -111,7 +111,8 @@ Runtime behavior:
 
 - The SD card catalog is built from `/fonts/<folder name>/` directories.
 - Each folder contains one `font.rfont4` family file with Large, Medium, and Small Alpha4 strikes plus one Compact
-  1-bit strike. Compact is selectable in RSVP mode and is always used for page reading and scrub previews.
+  1-bit strike. Compact is selectable in RSVP mode and is used for page reading and scrub previews on regular layouts.
+  LCD 3.49 scales the Small strike to 20 px for those views instead; watch layouts use Small.
 - Optional GDEF/GSUB/GPOS shaping tables are stored once in that same file, never in a locale pack.
 - BMP page tables map codepoints directly to shared render glyphs; only supplementary codepoints have separate lookup
   records. Identical bitmap payloads and kerning slices are interned within each strike.

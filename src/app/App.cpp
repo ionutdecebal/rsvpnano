@@ -503,7 +503,7 @@ void App::handleInput(Input::ActionMask actions, uint32_t nowMs) {
     }
     if (Input::hasAction(actions, Input::ActionSelect) || Input::hasAction(actions, Input::ActionPlayPause)) {
         if (screen_ == screens::Screen::Reader && !typographyJobActive()) {
-            readerScreen_.toggle(prefs_, nowMs);
+            readerScreen_.toggle(immediateUi_, prefs_, nowMs);
         }
     }
 }

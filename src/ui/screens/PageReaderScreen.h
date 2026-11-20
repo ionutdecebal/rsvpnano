@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -69,12 +70,23 @@ namespace screens::PageReader {
         size_t highlighted = std::numeric_limits<size_t>::max();
         ui::Rect layoutArea;
         uint32_t layoutRevision = 0;
+        int16_t scrollOffset = 0;
         bool bidi = false;
         bool vertical = false;
+        bool scrolling = false;
     };
+
+    struct ScrollHold {
+        size_t word = std::numeric_limits<size_t>::max();
+        uint16_t progress = 0;
+    };
+
+    // Keeps a line transition from moving backwards while playback pauses or resumes on the same word.
+    uint16_t holdScrollProgress(ScrollHold& hold, size_t word, std::optional<uint16_t> playing);
 
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
-              const ReadingSession& session, ui::Rect area, std::string_view overlay = {});
+              const ReadingSession& session, ui::Rect area, std::string_view overlay = {},
+              std::optional<uint16_t> scrollProgress = std::nullopt);
 
 } // namespace screens::PageReader
