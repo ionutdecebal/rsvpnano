@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 
 #include "reader/ReadingLoop.h"
 #include "text/BidiText.h"
@@ -13,6 +14,7 @@ namespace screens::PageReader {
         constexpr size_t kInvalidIndex = std::numeric_limits<size_t>::max();
         constexpr size_t kAnchorLeadWords = 12;
         constexpr size_t kParagraphSnapWords = 12;
+        constexpr size_t kScrollAnchorLeadWords = 48;
         constexpr int16_t kMarginX = 14;
         constexpr int16_t kMarginY = 4;
         constexpr uint8_t kOverlayTextSize = 2;
@@ -39,8 +41,8 @@ namespace screens::PageReader {
             return index == 0 || std::ranges::binary_search(session.metadata.paragraphStarts, index);
         }
 
-        size_t anchorIndex(const ReadingSession& session, size_t currentIndex) {
-            const size_t anchor = currentIndex > kAnchorLeadWords ? currentIndex - kAnchorLeadWords : 0;
+        size_t anchorIndex(const ReadingSession& session, size_t currentIndex, size_t leadWords = kAnchorLeadWords) {
+            const size_t anchor = currentIndex > leadWords ? currentIndex - leadWords : 0;
             const auto& starts = session.metadata.paragraphStarts;
             const auto next = std::ranges::upper_bound(starts, anchor);
             if (next == starts.begin())
@@ -50,11 +52,12 @@ namespace screens::PageReader {
         }
 
         void activateFace(ui::fonts::AlphaTextRenderer<640>& text, const FontCatalog::Face& face) {
-            text.setFont(face.raster.get());
+            text.setFont(face.raster.get(), face.pixelsPerEm);
         }
 
         bool sameFace(const FontCatalog::Face& left, const FontCatalog::Face& right) {
-            return &left.raster.get() == &right.raster.get() && left.shaper == right.shaper;
+            return &left.raster.get() == &right.raster.get() && left.shaper == right.shaper
+                && left.pixelsPerEm == right.pixelsPerEm;
         }
 
         uint8_t rememberFace(State& state, const FontCatalog::Face& face) {
@@ -219,7 +222,7 @@ namespace screens::PageReader {
             state.vertical = false;
             state.pageStart = index;
             const int16_t maximumWidth = std::max<int16_t>(1, static_cast<int16_t>(area.w - kMarginX * 2));
-            const int16_t bottom = static_cast<int16_t>(area.y + area.h - kMarginY);
+            const int16_t bottom = static_cast<int16_t>(area.y + area.h * (state.scrolling ? 3 : 1) - kMarginY);
             int16_t top = static_cast<int16_t>(area.y + kMarginY);
             int16_t previousLineHeight = 0;
             ReadingLoop::TextParagraph shapingParagraph;
@@ -262,7 +265,6 @@ namespace screens::PageReader {
                     const std::string_view word = ReadingLoop::wordAt(session, index);
                     const FontCatalog::Face face = typeface(index);
                     const uint8_t faceIndex = rememberFace(state, face);
-                    const ui::fonts::AlphaFont& font = face.raster.get();
                     activateFace(text, face);
                     State::Word& prepared =
                         prepareWord(state, index, faceIndex, text, face, typography, session, shapingParagraph,
@@ -277,9 +279,9 @@ namespace screens::PageReader {
                     if (index > line.start && widthWithWord > maximumWidth)
                         break;
                     width = widthWithWord;
-                    ascent = std::max(ascent, font.ascent);
-                    descent = std::max(descent, font.descent);
-                    yAdvance = std::max(yAdvance, font.yAdvance);
+                    ascent = std::max(ascent, text.ascent());
+                    descent = std::max(descent, text.descent());
+                    yAdvance = std::max(yAdvance, text.lineAdvance());
                     ++index;
                 }
                 if (index == line.start)
@@ -316,15 +318,6 @@ namespace screens::PageReader {
                 }
             }
             measurePageInk(state, text, typography, session, area);
-        }
-
-        bool logicalWordPosition(const State& state, size_t index, int16_t& x, int16_t& y) {
-            if (index < state.pageStart || index >= state.pageEnd)
-                return false;
-            const State::Word& word = wordAt(state, index);
-            x = word.x;
-            y = word.y;
-            return true;
         }
 
         void layoutVertical(State& state, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
@@ -563,21 +556,24 @@ namespace screens::PageReader {
 
         void paintPage(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
                        const settings::TypographySettings& typography, const ReadingSession& session, ui::Rect area,
-                       ui::Rect dirty, size_t highlighted, std::string_view overlay) {
+                       ui::Rect dirty, size_t highlighted, std::string_view overlay,
+                       Arduino_Canvas* canvas = nullptr) {
             dirty = ui.paintBounds(dirty);
             const int16_t overlayWidth = ui::Context::textWidth(overlay, kOverlayTextSize);
             const ui::Rect overlayBounds{static_cast<int16_t>(area.x + (area.w - overlayWidth) / 2),
                                          static_cast<int16_t>(area.y + area.h - kMarginY - kOverlayTextHeight),
                                          overlayWidth, kOverlayTextHeight};
             const auto overlayText = ui.prepareText(overlayBounds, overlay, kOverlayTextSize);
-            ui.paint(dirty, [&](Arduino_GFX& output, ui::Rect translated) {
+            const auto compose = [&](Arduino_GFX& output, ui::Rect translated) {
                 Arduino_GFX& previousOutput = text.setOutput(output);
                 const int16_t dx = static_cast<int16_t>(translated.x - dirty.x);
                 const int16_t dy = static_cast<int16_t>(translated.y - dirty.y);
+                const int16_t textY = dy + state.scrollOffset;
                 const ui::Rect translatedArea{static_cast<int16_t>(area.x + dx), static_cast<int16_t>(area.y + dy),
                                               area.w, area.h};
-                const ui::Rect viewport{static_cast<int16_t>(-dx), static_cast<int16_t>(-dy), output.width(),
-                                        output.height()};
+                auto viewport = ui::intersection(
+                    dirty, {static_cast<int16_t>(-dx), static_cast<int16_t>(-dy), output.width(), output.height()});
+                viewport.y -= state.scrollOffset;
                 if (state.vertical) {
                     for (size_t index = state.pageStart; index < state.pageEnd; ++index) {
                         const auto& word = wordAt(state, index);
@@ -593,7 +589,7 @@ namespace screens::PageReader {
                         State::Line line = state.lines[lineIndex];
                         if (!visibleInk(line.ink, line.inkKnown, viewport))
                             continue;
-                        line.y = static_cast<int16_t>(line.y + dy);
+                        line.y = static_cast<int16_t>(line.y + textY);
                         if (line.bidi) {
                             drawLine(state, line, ui, text, translatedArea, highlighted, viewport);
                             continue;
@@ -606,7 +602,7 @@ namespace screens::PageReader {
                                                                    : ui::themes::ColorRole::Foreground;
                             activateFace(text, faceAt(state, index));
                             drawWord(state, ui, text, typography, session, index, static_cast<int16_t>(word.x + dx),
-                                     static_cast<int16_t>(word.y + dy), role);
+                                     static_cast<int16_t>(word.y + textY), role);
                         }
                     }
                 }
@@ -619,7 +615,69 @@ namespace screens::PageReader {
                     ui.drawText(output, overlayText, ui.color(ui::themes::ColorRole::Accent), dx, dy);
                 }
                 text.setOutput(previousOutput);
-            });
+            };
+            if (canvas) {
+                canvas->fillScreen(ui.color(ui::themes::Background));
+                compose(*canvas, {0, 0, dirty.w, dirty.h});
+                ui.paint(dirty, [&](Arduino_GFX& output, ui::Rect translated) {
+                    output.draw16bitRGBBitmap(translated.x, translated.y, canvas->getFramebuffer(), dirty.w, dirty.h);
+                });
+            } else {
+                ui.paint(dirty, compose);
+            }
+        }
+
+        Arduino_Canvas* scrollCanvas(ui::Rect area) {
+            static std::unique_ptr<Arduino_Canvas> canvas;
+            static ui::Rect attempted;
+            if (area.w != attempted.w || area.h != attempted.h) {
+                attempted = area;
+                canvas.reset();
+                auto buffer = std::make_unique<Arduino_Canvas>(area.w, area.h, nullptr);
+                if (buffer->begin(GFX_SKIP_OUTPUT_BEGIN))
+                    canvas = std::move(buffer);
+            }
+            return canvas.get();
+        }
+
+        int16_t lineCenter(const State::Line& line) {
+            return (line.top + line.bottom) / 2;
+        }
+
+        void drawScroll(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
+                        const Typeface& typeface, const settings::TypographySettings& typography,
+                        const ReadingSession& session, ui::Rect area, std::string_view overlay, size_t current,
+                        size_t wordCount, uint16_t progress, Arduino_Canvas* canvas) {
+            if (current < state.pageStart || current >= state.pageEnd) {
+                size_t start = anchorIndex(session, current, kScrollAnchorLeadWords);
+                for (;;) {
+                    layout(state, text, typeface, typography, session, area, start);
+                    if (current < state.pageEnd || start == current)
+                        break;
+                    start += (current - start + 1) / 2;
+                }
+            }
+            auto end = state.lines.begin() + state.lineCount;
+            auto focus = std::ranges::upper_bound(state.lines.begin(), end, current, {}, &State::Line::end);
+            if (state.pageEnd < wordCount && lineCenter(*(end - 1)) - lineCenter(*focus) < area.h) {
+                const auto start = std::ranges::lower_bound(state.lines.begin(), focus, focus->y - area.h, {},
+                                                            &State::Line::y);
+                if (start != state.lines.begin()) {
+                    layout(state, text, typeface, typography, session, area, start->start);
+                    end = state.lines.begin() + state.lineCount;
+                    focus = std::ranges::upper_bound(state.lines.begin(), end, current, {}, &State::Line::end);
+                }
+            }
+            const auto next = current + 1 == focus->end && focus + 1 != end ? focus + 1 : focus;
+            const int center = lineCenter(*focus) + (lineCenter(*next) - lineCenter(*focus)) * progress / 1000;
+            const int minimum = std::min(0, area.y + area.h - kMarginY - (end - 1)->bottom);
+            const int16_t offset = std::clamp(area.y + area.h / 2 - center, minimum, 0);
+            const bool moved = offset != state.scrollOffset;
+            state.scrollOffset = offset;
+            const auto signature = ui::Context::signature(overlay, state.layoutRevision);
+            if (ui.redraw(area, signature, true) || moved || state.highlighted != current)
+                paintPage(state, ui, text, typography, session, area, area, current, overlay, canvas);
+            state.highlighted = current;
         }
 
         void paintHighlights(const State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text,
@@ -635,18 +693,38 @@ namespace screens::PageReader {
                     paintPage(state, ui, text, typography, session, area, area, highlighted, overlay);
                     return;
                 }
-                const int16_t top = std::max<int16_t>(area.y, line.top & ~1);
-                const int16_t bottom = std::min<int16_t>(area.y + area.h, (line.bottom + 1) & ~1);
-                paintPage(state, ui, text, typography, session, area,
-                          {area.x, top, area.w, static_cast<int16_t>(bottom - top)}, highlighted, overlay);
+                ui::Rect dirty = line.ink;
+                if constexpr (ui::Context::displayWriteAlignment() > 1) {
+                    const int16_t top = line.top & ~1;
+                    const int16_t bottom = (line.bottom + 1) & ~1;
+                    dirty = {area.x, top, area.w, static_cast<int16_t>(bottom - top)};
+                } else if (!line.bidi) {
+                    dirty = {};
+                    for (const size_t word: {state.highlighted, highlighted}) {
+                        if (word >= line.start && word < line.end)
+                            dirty = unionInk(dirty, wordAt(state, word).ink);
+                    }
+                }
+                dirty = ui::intersection(area, dirty);
+                if (dirty.w > 0 && dirty.h > 0)
+                    paintPage(state, ui, text, typography, session, area, dirty, highlighted, overlay);
             }
         }
 
     } // namespace
 
+    uint16_t holdScrollProgress(ScrollHold& hold, size_t word, std::optional<uint16_t> playing) {
+        if (hold.word != word)
+            hold = {.word = word, .progress = playing.value_or(0)};
+        else if (playing)
+            hold.progress = std::max(hold.progress, *playing);
+        return hold.progress;
+    }
+
     void draw(State& state, ui::Context& ui, ui::fonts::AlphaTextRenderer<640>& text, const Typeface& typeface,
               const settings::TypographySettings& typography, uint32_t typographyRevision,
-              const ReadingSession& session, ui::Rect area, std::string_view overlay) {
+              const ReadingSession& session, ui::Rect area, std::string_view overlay,
+              std::optional<uint16_t> scrollProgress) {
         area = ui.paintBounds(area);
         const size_t wordCount = ReadingLoop::wordCount(session);
         if (wordCount == 0 || area.w <= kMarginX * 2 || area.h <= kMarginY * 2) {
@@ -655,13 +733,29 @@ namespace screens::PageReader {
         }
 
         const bool vertical = session.metadata.writingMode == WritingMode::verticalRl;
-        if (state.layoutArea != area || state.layoutRevision != typographyRevision || state.vertical != vertical) {
+        bool scrolling = scrollProgress.has_value() && !vertical;
+        Arduino_Canvas* canvas = nullptr;
+        if constexpr (ui::Context::displayWriteAlignment() == 1) {
+            if (scrolling) {
+                canvas = scrollCanvas(area);
+                scrolling = canvas != nullptr;
+            }
+        }
+        if (state.layoutArea != area || state.layoutRevision != typographyRevision || state.vertical != vertical
+            || state.scrolling != scrolling) {
             state.layoutArea = area;
             state.layoutRevision = typographyRevision;
             invalidate(state);
             state.vertical = vertical;
+            state.scrolling = scrolling;
+            state.scrollOffset = 0;
         }
         const size_t current = std::min<size_t>(session.state.wordIndex, wordCount - 1);
+        if (scrolling) {
+            drawScroll(state, ui, text, typeface, typography, session, area, overlay, current, wordCount,
+                       std::min<uint16_t>(*scrollProgress, 1000), canvas);
+            return;
+        }
         if (vertical) {
             if (state.pageStart == kInvalidIndex)
                 layoutVertical(state, text, typeface, session, area, anchorIndex(session, current));
@@ -715,62 +809,10 @@ namespace screens::PageReader {
         pageSignature = ui::Context::combine(pageSignature, typographyRevision);
         const uint32_t signature = ui::Context::signature(overlay, pageSignature);
         const bool redraw = ui.redraw(area, signature, true);
-        if constexpr (ui::Context::displayWriteAlignment() > 1) {
-            if (!redraw) {
-                if (state.highlighted != current)
-                    paintHighlights(state, ui, text, typography, session, area, current, overlay);
-                state.highlighted = current;
-                return;
-            }
-        }
-        if (!redraw) {
-            if (state.highlighted == current)
-                return;
-            const auto end = state.lines.begin() + state.lineCount;
-            const auto previousLine = std::ranges::find_if(state.lines.begin(), end, [&](const State::Line& line) {
-                return state.highlighted >= line.start && state.highlighted < line.end;
-            });
-            const auto currentLine = std::ranges::find_if(state.lines.begin(), end, [&](const State::Line& line) {
-                return current >= line.start && current < line.end;
-            });
-            if (previousLine != end) {
-                if (previousLine->bidi) {
-                    drawLine(state, *previousLine, ui, text, area, current, {0, 0, ui.width(), ui.height()});
-                } else {
-                    int16_t x = 0;
-                    int16_t y = 0;
-                    if (logicalWordPosition(state, state.highlighted, x, y)) {
-                        activateFace(text, faceAt(state, state.highlighted));
-                        drawWord(state, ui, text, typography, session, state.highlighted, x, y,
-                                 ui::themes::ColorRole::Foreground);
-                    }
-                }
-            }
-            if (currentLine != end && currentLine != previousLine) {
-                if (currentLine->bidi) {
-                    drawLine(state, *currentLine, ui, text, area, current, {0, 0, ui.width(), ui.height()});
-                } else {
-                    int16_t x = 0;
-                    int16_t y = 0;
-                    if (logicalWordPosition(state, current, x, y)) {
-                        activateFace(text, faceAt(state, current));
-                        drawWord(state, ui, text, typography, session, current, x, y, ui::themes::ColorRole::Accent);
-                    }
-                }
-            } else if (currentLine != end && !currentLine->bidi) {
-                int16_t x = 0;
-                int16_t y = 0;
-                if (logicalWordPosition(state, current, x, y)) {
-                    activateFace(text, faceAt(state, current));
-                    drawWord(state, ui, text, typography, session, current, x, y, ui::themes::ColorRole::Accent);
-                }
-            }
-            state.highlighted = current;
-            ui.markDrawn();
-            return;
-        }
-
-        paintPage(state, ui, text, typography, session, area, area, current, overlay);
+        if (redraw)
+            paintPage(state, ui, text, typography, session, area, area, current, overlay);
+        else if (state.highlighted != current)
+            paintHighlights(state, ui, text, typography, session, area, current, overlay);
         state.highlighted = current;
     }
 

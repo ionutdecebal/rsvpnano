@@ -349,7 +349,8 @@ namespace ui::fonts {
             return ready_;
         }
 
-        void setFont(const AlphaFont& font) {
+        void setFont(const AlphaFont& font, uint8_t pixelsPerEm = 0) {
+            pixelsPerEm_ = font.pixelsPerEm != 0 && font.pixelsPerEm != pixelsPerEm ? pixelsPerEm : 0;
             if (font_ == &font && fontGeneration_ == font.generation)
                 return;
             font_ = &font;
@@ -462,7 +463,7 @@ namespace ui::fonts {
             const AlphaGlyph* glyph = glyphAt(glyphIndex);
             if (glyph == nullptr)
                 return 0;
-            const AlphaGlyph metrics = readGlyph(*glyph);
+            const RasterGlyph metrics = readGlyph(*glyph);
             const int16_t drawX = static_cast<int16_t>(x + (advance - (sideways ? metrics.width : metrics.height)) / 2);
             const int16_t drawY = static_cast<int16_t>(centerY - (sideways ? metrics.height : metrics.width) / 2);
             const int16_t drawW = sideways ? metrics.width : metrics.height;
@@ -506,7 +507,7 @@ namespace ui::fonts {
             const AlphaGlyph* glyph = glyphAt(glyphIndex);
             if (glyph == nullptr)
                 return 0;
-            const AlphaGlyph metrics = readGlyph(*glyph);
+            const RasterGlyph metrics = readGlyph(*glyph);
             if (metrics.width > 0 && metrics.height > 0)
                 drawGlyph(metrics, static_cast<int16_t>(x + metrics.xOffset),
                           static_cast<int16_t>(baseline + metrics.yOffset));
@@ -557,7 +558,19 @@ namespace ui::fonts {
         }
 
         uint8_t pixelsPerEm() const {
-            return font_ == nullptr ? 0 : font_->pixelsPerEm;
+            return pixelsPerEm_ != 0 ? pixelsPerEm_ : font_ == nullptr ? 0 : font_->pixelsPerEm;
+        }
+
+        uint8_t lineAdvance() const {
+            return scaleLength(font_->yAdvance);
+        }
+
+        uint8_t ascent() const {
+            return scaleLength(font_->ascent);
+        }
+
+        uint8_t descent() const {
+            return scaleLength(font_->descent);
         }
 
         uint8_t verticalInkHeight(std::string_view text) const {
@@ -570,7 +583,7 @@ namespace ui::fonts {
                 bool sideways = false;
                 const AlphaGlyph* glyph = glyphAt(verticalGlyphIndex(glyphIndex, codepoint, sideways));
                 if (glyph != nullptr) {
-                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    const RasterGlyph metrics = readGlyph(*glyph);
                     height = std::max(height, static_cast<uint8_t>(sideways ? metrics.height : metrics.width));
                 }
             }
@@ -614,13 +627,13 @@ namespace ui::fonts {
                 return 0;
             }
 
-            const AlphaGlyph left = readGlyph(*leftGlyph);
+            const AlphaGlyph left = readPacked(*leftGlyph);
             if (left.kernCount == 0) {
                 return 0;
             }
 
             if (font_->kerningPairs == nullptr)
-                return fileKerningAdjust(left, leftCodepoint, rightCodepoint);
+                return scaleMetric(fileKerningAdjust(left, leftCodepoint, rightCodepoint));
 
             const std::span pairs{font_->kerningPairs + left.kernOffset, static_cast<size_t>(left.kernCount)};
             const auto pair =
@@ -630,7 +643,7 @@ namespace ui::fonts {
             if (pair == pairs.end())
                 return 0;
             const AlphaKerningPair resolved = readPacked(*pair);
-            return resolved.rightCodepoint == rightCodepoint ? resolved.xAdjust : 0;
+            return resolved.rightCodepoint == rightCodepoint ? scaleMetric(resolved.xAdjust) : 0;
         }
 
         int16_t textAdvance(std::string_view text, int8_t tracking = 0) const {
@@ -640,6 +653,12 @@ namespace ui::fonts {
         }
 
     private:
+        struct RasterGlyph {
+            AlphaGlyph source;
+            uint8_t width, height, xAdvance;
+            int8_t xOffset, yOffset;
+        };
+
         struct FileGlyphCacheEntry {
             uint32_t index = UINT32_MAX;
             AlphaGlyph glyph;
@@ -662,7 +681,7 @@ namespace ui::fonts {
         U8g2Style u8g2Style() const {
             constexpr uint8_t builtInCellWidth = 6;
             constexpr uint8_t builtInHeight = 9;
-            const uint8_t targetHeight = font_ != nullptr ? font_->yAdvance : builtInHeight;
+            const uint8_t targetHeight = font_ != nullptr ? lineAdvance() : builtInHeight;
             return {u8g2_font_rsvpnano_ui_6x9_tf, static_cast<uint8_t>(std::max<int>(1, targetHeight / builtInHeight)),
                     builtInCellWidth};
         }
@@ -687,7 +706,7 @@ namespace ui::fonts {
         }
 
         int16_t drawAlpha(const AlphaGlyph& glyph, int16_t x, int16_t baseline) {
-            const AlphaGlyph metrics = readGlyph(glyph);
+            const RasterGlyph metrics = readGlyph(glyph);
             if (metrics.width > 0 && metrics.height > 0)
                 drawGlyph(metrics, static_cast<int16_t>(x + metrics.xOffset),
                           static_cast<int16_t>(baseline + metrics.yOffset));
@@ -791,7 +810,7 @@ namespace ui::fonts {
                 if (glyph == nullptr)
                     return false;
 
-                const AlphaGlyph metrics = readGlyph(*glyph);
+                const RasterGlyph metrics = readGlyph(*glyph);
                 if (metrics.width > 0 && metrics.height > 0) {
                     const int16_t x1 = static_cast<int16_t>(cursorX + metrics.xOffset);
                     const int16_t y1 = static_cast<int16_t>(baseline + metrics.yOffset);
@@ -839,7 +858,7 @@ namespace ui::fonts {
             for (const PositionedGlyph& positioned: glyphs) {
                 const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
                 if (glyph != nullptr) {
-                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    const RasterGlyph metrics = readGlyph(*glyph);
                     if (metrics.width > 0 && metrics.height > 0) {
                         const int16_t x1 = static_cast<int16_t>(cursorX + positioned.xOffset + metrics.xOffset);
                         const int16_t y1 = static_cast<int16_t>(baseline - positioned.yOffset + metrics.yOffset);
@@ -884,7 +903,7 @@ namespace ui::fonts {
                     complete = false;
                     continue;
                 }
-                const AlphaGlyph metrics = readGlyph(*glyph);
+                const RasterGlyph metrics = readGlyph(*glyph);
                 const int16_t w = sideways ? metrics.width : metrics.height;
                 const int16_t h = sideways ? metrics.height : metrics.width;
                 if (w > 0 && h > 0) {
@@ -930,7 +949,7 @@ namespace ui::fonts {
                     continue;
                 }
 
-                const AlphaGlyph metrics = readGlyph(*glyph);
+                const RasterGlyph metrics = readGlyph(*glyph);
                 if (metrics.width > 0 && metrics.height > 0) {
                     drawGlyph(metrics, static_cast<int16_t>(cursorX + metrics.xOffset),
                               static_cast<int16_t>(baseline + metrics.yOffset));
@@ -1017,7 +1036,7 @@ namespace ui::fonts {
 
                 const AlphaGlyph* glyph = findGlyph(codepoint);
                 if (glyph != nullptr) {
-                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    const RasterGlyph metrics = readGlyph(*glyph);
                     if (metrics.width > 0 && metrics.height > 0) {
                         compositeGlyphIntoStrip(metrics, static_cast<int16_t>(cursorX + metrics.xOffset),
                                                 static_cast<int16_t>(baseline + metrics.yOffset), stripX, stripY,
@@ -1039,7 +1058,7 @@ namespace ui::fonts {
             for (const PositionedGlyph& positioned: glyphs) {
                 const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
                 if (glyph != nullptr) {
-                    const AlphaGlyph metrics = readGlyph(*glyph);
+                    const RasterGlyph metrics = readGlyph(*glyph);
                     compositeGlyphIntoStrip(metrics,
                                             static_cast<int16_t>(cursorX + positioned.xOffset + metrics.xOffset),
                                             static_cast<int16_t>(baseline - positioned.yOffset + metrics.yOffset),
@@ -1049,7 +1068,7 @@ namespace ui::fonts {
             }
         }
 
-        void compositeGlyphIntoStrip(const AlphaGlyph& glyph, int16_t glyphX, int16_t glyphY, int16_t stripX,
+        void compositeGlyphIntoStrip(const RasterGlyph& glyph, int16_t glyphX, int16_t glyphY, int16_t stripX,
                                      int16_t stripY, uint16_t stripWidth, uint8_t stripRows) {
             if (glyph.width == 0 || glyph.height == 0 || (!font_->file && font_->bitmap == nullptr)) {
                 return;
@@ -1076,11 +1095,11 @@ namespace ui::fonts {
                 const uint8_t srcY = static_cast<uint8_t>(dstY - glyphY);
                 const uint8_t stripRow = static_cast<uint8_t>(dstY - stripY);
                 const uint8_t* packedRow = nullptr;
-                if (!prepareRow(glyph, srcY, packedRow)) {
+                if (!prepareRasterRow(glyph, srcY, packedRow)) {
                     continue;
                 }
 
-                if (font_->bitsPerPixel == 1) {
+                if (rasterBitsPerPixel() == 1) {
                     forEachVisibleSpan(packedRow, overlapSrcX0, overlapSrcX1, [&](int16_t srcX0, int16_t srcX1) {
                         const uint16_t dstCol = static_cast<uint16_t>(glyphX + srcX0 - stripX);
                         const uint16_t count = static_cast<uint16_t>(srcX1 - srcX0);
@@ -1096,7 +1115,7 @@ namespace ui::fonts {
 
         void compositePackedRowSpanIntoStrip(const uint8_t* packedRow, int16_t srcX, uint8_t stripRow, uint16_t dstCol,
                                              uint16_t count) {
-            if (font_->bitsPerPixel == 1) {
+            if (rasterBitsPerPixel() == 1) {
                 std::ranges::fill_n(strip_[stripRow] + dstCol, count, fg_);
                 includeInk(stripRow, dstCol, count);
                 return;
@@ -1179,7 +1198,7 @@ namespace ui::fonts {
             }
         }
 
-        void drawGlyph(const AlphaGlyph& glyph, int16_t x, int16_t y) {
+        void drawGlyph(const RasterGlyph& glyph, int16_t x, int16_t y) {
             if (glyph.width == 0 || glyph.height == 0 || glyph.width > MaxRowWidth
                 || (!font_->file && font_->bitmap == nullptr)) {
                 return;
@@ -1192,7 +1211,7 @@ namespace ui::fonts {
             }
         }
 
-        void drawCounterRotatedGlyph(const AlphaGlyph& glyph, int16_t x, int16_t y) {
+        void drawCounterRotatedGlyph(const RasterGlyph& glyph, int16_t x, int16_t y) {
             if (glyph.width == 0 || glyph.height == 0 || glyph.height > MaxRowWidth)
                 return;
             const int16_t sourceY0 = std::max<int16_t>(0, -x);
@@ -1208,7 +1227,7 @@ namespace ui::fonts {
                 const uint8_t rows = static_cast<uint8_t>(sourceEnd - sourceStart);
                 for (uint8_t sourceY = static_cast<uint8_t>(sourceY0); sourceY < sourceY1; ++sourceY) {
                     const uint8_t* packedRow = nullptr;
-                    if (!prepareRow(glyph, sourceY, packedRow))
+                    if (!prepareRasterRow(glyph, sourceY, packedRow))
                         return;
                     for (uint8_t sourceX = sourceStart; sourceX < sourceEnd; ++sourceX)
                         rotated[static_cast<size_t>(sourceEnd - sourceX - 1) * width + sourceY - sourceY0] =
@@ -1220,7 +1239,7 @@ namespace ui::fonts {
             }
         }
 
-        void drawPackedRow(const AlphaGlyph& glyph, uint8_t row, int16_t dstX, int16_t dstY, int16_t displayW,
+        void drawPackedRow(const RasterGlyph& glyph, uint8_t row, int16_t dstX, int16_t dstY, int16_t displayW,
                            int16_t displayH) {
             if (dstY < 0 || dstY >= displayH) {
                 return;
@@ -1243,7 +1262,7 @@ namespace ui::fonts {
 
             const int16_t srcEnd = static_cast<int16_t>(srcStart + drawW);
             const uint8_t* packedRow = nullptr;
-            if (!prepareRow(glyph, row, packedRow)) {
+            if (!prepareRasterRow(glyph, row, packedRow)) {
                 return;
             }
 
@@ -1258,7 +1277,7 @@ namespace ui::fonts {
         }
 
         void renderSpan(const uint8_t* packedRow, int16_t srcStart, int16_t spanWidth, uint16_t* output) {
-            if (font_->bitsPerPixel == 1) {
+            if (rasterBitsPerPixel() == 1) {
                 std::ranges::fill_n(output, spanWidth, fg_);
                 return;
             }
@@ -1291,15 +1310,86 @@ namespace ui::fonts {
             }
         }
 
-        uint8_t coverageAt(const uint8_t* packedRow, uint8_t x) const {
-            if (font_->bitsPerPixel == 1)
+        uint8_t rasterBitsPerPixel() const {
+            return pixelsPerEm_ != 0 ? 4 : font_->bitsPerPixel;
+        }
+
+        static uint8_t coverageAt(const uint8_t* packedRow, uint8_t x, uint8_t bitsPerPixel) {
+            if (bitsPerPixel == 1)
                 return (pgm_read_byte(packedRow + (x >> 3U)) & (0x80U >> (x & 7U))) != 0 ? 15 : 0;
             const uint8_t packed = pgm_read_byte(packedRow + (x >> 1U));
             return (x & 1U) == 0 ? static_cast<uint8_t>(packed >> 4U) : static_cast<uint8_t>(packed & 0x0FU);
         }
 
-        AlphaGlyph readGlyph(const AlphaGlyph& glyph) const {
-            return readPacked(glyph);
+        uint8_t coverageAt(const uint8_t* packedRow, uint8_t x) const {
+            return coverageAt(packedRow, x, rasterBitsPerPixel());
+        }
+
+        int16_t scaleMetric(int16_t value) const {
+            if (pixelsPerEm_ == 0)
+                return value;
+            const int16_t sourceSize = font_->pixelsPerEm;
+            const int32_t numerator = static_cast<int32_t>(value) * pixelsPerEm_;
+            return static_cast<int16_t>((numerator + (value < 0 ? -sourceSize / 2 : sourceSize / 2)) / sourceSize);
+        }
+
+        uint8_t scaleLength(uint8_t value) const {
+            return value == 0 ? 0 : static_cast<uint8_t>(std::clamp<int16_t>(scaleMetric(value), 1, UINT8_MAX));
+        }
+
+        RasterGlyph readGlyph(const AlphaGlyph& glyph) const {
+            const AlphaGlyph source = readPacked(glyph);
+            const auto offset = [&](int8_t value) {
+                return static_cast<int8_t>(std::clamp<int16_t>(scaleMetric(value), INT8_MIN, INT8_MAX));
+            };
+            const auto extent = [&](int8_t start, uint8_t length) {
+                if (length == 0)
+                    return uint8_t{0};
+                return static_cast<uint8_t>(std::clamp<int16_t>(scaleMetric(start + length) - scaleMetric(start),
+                                                                1, UINT8_MAX));
+            };
+            return {source, extent(source.xOffset, source.width), extent(source.yOffset, source.height),
+                    scaleLength(source.xAdvance), offset(source.xOffset), offset(source.yOffset)};
+        }
+
+        bool prepareRasterRow(const RasterGlyph& glyph, uint8_t row, const uint8_t*& packedRow) {
+            if (pixelsPerEm_ == 0)
+                return prepareRow(glyph.source, row, packedRow);
+
+            // Sample each glyph on the same pixel grid relative to its cursor and baseline.
+            const auto sample = [&](int index, int offset, int sourceOffset, int sourceLength) {
+                const int center = (2 * (index + offset) + 1) * font_->pixelsPerEm * 128 / pixelsPerEm_;
+                return std::clamp(center - sourceOffset * 256 - 128, 0, (sourceLength - 1) * 256);
+            };
+            const int y = sample(row, glyph.yOffset, glyph.source.yOffset, glyph.source.height);
+            const int top = y >> 8;
+            const int yFraction = y & 255;
+            const uint8_t* sourceRow = nullptr;
+            if (!prepareRow(glyph.source, top, sourceRow))
+                return false;
+            const auto horizontalCoverage = [&](int column) {
+                const int x = sample(column, glyph.xOffset, glyph.source.xOffset, glyph.source.width);
+                const int left = x >> 8;
+                const int right = std::min<int>(left + 1, glyph.source.width - 1);
+                const int fraction = x & 255;
+                return coverageAt(sourceRow, left, font_->bitsPerPixel) * (256 - fraction)
+                    + coverageAt(sourceRow, right, font_->bitsPerPixel) * fraction;
+            };
+            std::array<uint16_t, UINT8_MAX> topCoverage;
+            for (int x = 0; x < glyph.width; ++x)
+                topCoverage[x] = horizontalCoverage(x);
+            if (yFraction != 0 && !prepareRow(glyph.source, top + 1, sourceRow))
+                return false;
+            for (int x = 0; x < glyph.width; ++x) {
+                const int bottom = yFraction != 0 ? horizontalCoverage(x) : 0;
+                const uint8_t alpha = (topCoverage[x] * (256 - yFraction) + bottom * yFraction + 32768) >> 16;
+                if ((x & 1) != 0)
+                    rasterRow_[x >> 1] |= alpha;
+                else
+                    rasterRow_[x >> 1] = alpha << 4;
+            }
+            packedRow = rasterRow_.data();
+            return true;
         }
 
         template<typename T>
@@ -1473,7 +1563,7 @@ namespace ui::fonts {
                 uint32_t codepoint = 0;
                 while (Utf8Text::next(cursor, codepoint)) {
                     const AlphaGlyph* glyph = findGlyph(codepoint);
-                    if (glyph != nullptr && !appendPreparedBitmap(readGlyph(*glyph), used))
+                    if (glyph != nullptr && !appendPreparedBitmap(readPacked(*glyph), used))
                         return false;
                 }
                 return true;
@@ -1484,7 +1574,7 @@ namespace ui::fonts {
             return prepareBitmaps([&](size_t& used) {
                 for (const PositionedGlyph& positioned: glyphs) {
                     const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
-                    if (glyph != nullptr && !appendPreparedBitmap(readGlyph(*glyph), used))
+                    if (glyph != nullptr && !appendPreparedBitmap(readPacked(*glyph), used))
                         return false;
                 }
                 return true;
@@ -1500,7 +1590,7 @@ namespace ui::fonts {
                         continue;
                     bool sideways = false;
                     const AlphaGlyph* glyph = glyphAt(verticalGlyphIndex(glyphIndex, codepoint, sideways));
-                    if (glyph != nullptr && !appendPreparedBitmap(readGlyph(*glyph), used))
+                    if (glyph != nullptr && !appendPreparedBitmap(readPacked(*glyph), used))
                         return false;
                 }
                 return true;
@@ -1520,11 +1610,11 @@ namespace ui::fonts {
 
                     const AlphaGlyph* glyph = findGlyph(codepoint);
                     if (glyph != nullptr) {
-                        const AlphaGlyph metrics = readGlyph(*glyph);
+                        const RasterGlyph metrics = readGlyph(*glyph);
                         const int16_t glyphX = static_cast<int16_t>(cursorX + metrics.xOffset);
                         const int16_t glyphY = static_cast<int16_t>(baseline + metrics.yOffset);
                         if (glyphX < output_->width() && glyphX + metrics.width > 0 && glyphY < output_->height()
-                            && glyphY + metrics.height > 0 && !appendPreparedBitmap(metrics, used))
+                            && glyphY + metrics.height > 0 && !appendPreparedBitmap(metrics.source, used))
                             return false;
                         cursorX = static_cast<int16_t>(cursorX + metrics.xAdvance);
                     }
@@ -1543,11 +1633,11 @@ namespace ui::fonts {
                 for (const PositionedGlyph& positioned: glyphs) {
                     const AlphaGlyph* glyph = glyphAt(positioned.glyphIndex);
                     if (glyph != nullptr) {
-                        const AlphaGlyph metrics = readGlyph(*glyph);
+                        const RasterGlyph metrics = readGlyph(*glyph);
                         const int16_t glyphX = static_cast<int16_t>(cursorX + positioned.xOffset + metrics.xOffset);
                         const int16_t glyphY = static_cast<int16_t>(baseline - positioned.yOffset + metrics.yOffset);
                         if (glyphX < output_->width() && glyphX + metrics.width > 0 && glyphY < output_->height()
-                            && glyphY + metrics.height > 0 && !appendPreparedBitmap(metrics, used))
+                            && glyphY + metrics.height > 0 && !appendPreparedBitmap(metrics.source, used))
                             return false;
                     }
                     cursorX = static_cast<int16_t>(cursorX + positioned.xAdvance);
@@ -1756,6 +1846,7 @@ namespace ui::fonts {
         Arduino_GFX* output_;
         const AlphaFont* font_ = nullptr;
         uint32_t fontGeneration_ = 0;
+        uint8_t pixelsPerEm_ = 0;
         mutable std::array<FileGlyphCacheEntry, 32> fileGlyphCache_{};
         mutable std::array<uint64_t, 16> fileKerningKeys_{};
         mutable std::array<int8_t, 16> fileKerningValues_{};
@@ -1765,6 +1856,7 @@ namespace ui::fonts {
         size_t preparedBitmapCount_ = 0;
         size_t preparedBitmapBytes_ = 0;
         std::array<uint8_t, (MaxRowWidth + 1) / 2> packedRow_{};
+        std::array<uint8_t, (UINT8_MAX + 1) / 2> rasterRow_{};
         uint16_t strip_[MaxStripRows][MaxRowWidth]{};
         std::array<uint16_t, MaxStripRows> stripFirstInk_{};
         std::array<uint16_t, MaxStripRows> stripLastInk_{};

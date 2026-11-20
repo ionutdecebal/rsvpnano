@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "fonts/AlphaFont.h"
+#include "fonts/LiterataFallbackAlpha4.h"
 #include "fonts/UiFont6x9.h"
 #include "localization/LocalePack.h"
 #include "reader/ReadingLoop.h"
@@ -20,6 +21,7 @@
 #include "ui/Ui.h"
 #include "ui/screens/ChaptersScreen.h"
 #include "ui/screens/PageReaderScreen.h"
+#include "ui/screens/ReaderLayout.h"
 #include "ui/screens/Screens.h"
 
 namespace {
@@ -653,6 +655,224 @@ void test_page_reader_reselects_typeface_after_seek_or_invalidation() {
     TEST_ASSERT_EQUAL(wordCapacity, state.words.capacity());
 }
 
+void test_page_reader_fits_more_lines_with_a_scaled_face_and_keeps_navigation() {
+    Arduino_GFX gfx(640, 172);
+    ui::Context context(gfx);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    std::array<std::string, 128> words;
+    words.fill("Lectura");
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    screens::PageReader::State state;
+    const auto& font = ui::fonts::LiterataFallbackAlpha4_33;
+    uint8_t pixelsPerEm = 0;
+    const auto typeface = [&](size_t) -> FontCatalog::Face {
+        return {.raster = std::cref(font), .pixelsPerEm = pixelsPerEm};
+    };
+    ui::Rect area = screens::readerLayout::readingArea(gfx.width(), gfx.height(), false);
+    const auto draw = [&](uint32_t revision) {
+        context.beginFrame(1);
+        screens::PageReader::draw(state, context, text, typeface, typography, revision, session, area);
+        context.endFrame();
+    };
+
+    draw(1);
+    const size_t unscaledEnd = state.pageEnd;
+    const size_t unscaledLineCount = state.lineCount;
+    gfx.bitmapWrites = 0;
+    pixelsPerEm = screens::readerLayout::kLcd349PagePixelsPerEm;
+    draw(2);
+    TEST_ASSERT_EQUAL_UINT8(20, text.pixelsPerEm());
+    TEST_ASSERT_GREATER_THAN(unscaledEnd, state.pageEnd);
+    TEST_ASSERT_GREATER_THAN(unscaledLineCount, state.lineCount);
+    TEST_ASSERT_GREATER_THAN(1, state.lineCount);
+    TEST_ASSERT_GREATER_THAN(0, gfx.bitmapWrites);
+    const size_t oldLineCount = state.lineCount;
+    area = screens::readerLayout::readingArea(gfx.width(), gfx.height(), false, true);
+    draw(2);
+    TEST_ASSERT_EQUAL(4, state.lineCount);
+    TEST_ASSERT_GREATER_THAN(oldLineCount, state.lineCount);
+    for (bool leftHanded: {false, true}) {
+        const auto chrome = screens::readerLayout::horizontalChrome(gfx.width(), gfx.height(), leftHanded, 48, true);
+        TEST_ASSERT_EQUAL(area.y + area.h, chrome.battery.y);
+        TEST_ASSERT_EQUAL(chrome.chapter.y, chrome.battery.y);
+        TEST_ASSERT_EQUAL(chrome.progress.y, chrome.battery.y);
+        TEST_ASSERT_LESS_OR_EQUAL(chrome.battery.x, chrome.chapter.x + chrome.chapter.w);
+        TEST_ASSERT_LESS_OR_EQUAL(chrome.battery.x, chrome.progress.x + chrome.progress.w);
+    }
+    for (size_t i = 0; i < state.lineCount; ++i) {
+        TEST_ASSERT_GREATER_OR_EQUAL(area.y, state.lines[i].top);
+        TEST_ASSERT_LESS_OR_EQUAL(area.y + area.h, state.lines[i].bottom);
+        for (size_t word = state.lines[i].start; word < state.lines[i].end; ++word) {
+            const auto& placed = state.words[word - state.pageStart];
+            TEST_ASSERT_GREATER_OR_EQUAL(area.x, placed.x);
+            TEST_ASSERT_LESS_OR_EQUAL(area.x + area.w, placed.x + placed.width);
+        }
+    }
+
+    const size_t nextPage = state.pageEnd;
+    ReadingLoop::seekTo(session, nextPage);
+    draw(2);
+    TEST_ASSERT_EQUAL(nextPage, state.pageStart);
+    TEST_ASSERT_GREATER_THAN(nextPage, state.pageEnd);
+    ReadingLoop::seekTo(session, 0);
+    draw(2);
+    TEST_ASSERT_EQUAL(0, state.pageStart);
+    TEST_ASSERT_EQUAL(nextPage, state.pageEnd);
+
+    const int16_t scrollAdvance = text.textAdvance(words.front());
+    text.setFont(font);
+    TEST_ASSERT_EQUAL_UINT8(33, text.pixelsPerEm());
+    TEST_ASSERT_GREATER_THAN(scrollAdvance, text.textAdvance(words.front()));
+}
+
+void test_scaled_glyphs_keep_a_common_baseline() {
+    constexpr uint8_t bitmap[]{0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0};
+    constexpr ui::fonts::AlphaGlyph glyphs[]{
+        {.width = 1, .height = 8, .rowStride = 1, .xAdvance = 2, .yOffset = -9},
+        {.width = 1, .height = 7, .rowStride = 1, .xAdvance = 2, .yOffset = -8},
+    };
+    constexpr ui::fonts::AlphaGlyphIdentity identities[]{{'a', 1}, {'b', 2}};
+    const ui::fonts::AlphaFont font{.bitmap = bitmap, .glyphs = glyphs, .identities = identities,
+                                   .glyphCount = 2, .pixelsPerEm = 33};
+    Arduino_GFX gfx(80, 80);
+    ui::fonts::AlphaTextRenderer<640> text(gfx);
+    TEST_ASSERT_TRUE(text.begin());
+    text.setFont(font, 20);
+    ui::fonts::AlphaTextRenderer<640>::Bounds a, b;
+    TEST_ASSERT_TRUE(text.measure("a", 0, 40, a));
+    TEST_ASSERT_TRUE(text.measure("b", 0, 40, b));
+    TEST_ASSERT_EQUAL(a.y1 + a.h, b.y1 + b.h);
+}
+
+static void checkPageHighlightMatchesAFullRepaint(uint8_t pixelsPerEm) {
+    Arduino_Canvas canvas(640, 172, nullptr);
+    ui::Context context(canvas);
+    ui::fonts::AlphaTextRenderer<640> text(canvas);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    settings::TypographySettings typography;
+    std::array<std::string, 64> words;
+    for (size_t i = 0; i < words.size(); ++i)
+        words[i] = i % 2 == 0 ? "beautifully" : "written.";
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    screens::PageReader::State state;
+    const auto typeface = [&](size_t) -> FontCatalog::Face {
+        return {.raster = std::cref(ui::fonts::LiterataFallbackAlpha4_33), .pixelsPerEm = pixelsPerEm};
+    };
+    const auto area = screens::readerLayout::readingArea(canvas.width(), canvas.height(), false, true);
+    const auto draw = [&] {
+        context.beginFrame(1);
+        screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area);
+        context.endFrame();
+    };
+
+    draw();
+    const auto pageStart = state.pageStart;
+    const auto pageEnd = state.pageEnd;
+    TEST_ASSERT_GREATER_THAN(1, state.lineCount);
+    for (const auto index: {size_t{1}, state.lines[1].start}) {
+        ReadingLoop::seekTo(session, index);
+        draw();
+        TEST_ASSERT_EQUAL(pageStart, state.pageStart);
+        TEST_ASSERT_EQUAL(pageEnd, state.pageEnd);
+        const auto* pixels = canvas.getFramebuffer();
+        const std::vector<uint16_t> incremental(pixels, pixels + canvas.width() * canvas.height());
+        context.invalidate();
+        draw();
+        TEST_ASSERT_EQUAL_UINT16_ARRAY(incremental.data(), canvas.getFramebuffer(), incremental.size());
+    }
+}
+
+void test_page_highlight_matches_a_full_repaint_on_lcd() {
+    checkPageHighlightMatchesAFullRepaint(0);
+    checkPageHighlightMatchesAFullRepaint(screens::readerLayout::kLcd349PagePixelsPerEm);
+}
+
+void test_page_playback_scrolls_between_lines_without_a_jump() {
+    Arduino_Canvas canvas(640, 172, nullptr);
+    ui::Context context(canvas);
+    ui::fonts::AlphaTextRenderer<640> text(canvas);
+    TEST_ASSERT_TRUE(text.begin());
+    context.setTheme(theme());
+    const settings::TypographySettings typography;
+    std::array<std::string, 256> words;
+    words.fill("Lectura");
+    ReadingSession session;
+    ReadingLoop::setWords(session, words, 0);
+    screens::PageReader::State state;
+    const auto typeface = [](size_t) -> FontCatalog::Face {
+        return {.raster = std::cref(ui::fonts::LiterataFallbackAlpha4_33),
+                .pixelsPerEm = screens::readerLayout::kLcd349PagePixelsPerEm};
+    };
+    const auto area = screens::readerLayout::readingArea(canvas.width(), canvas.height(), false, true);
+    const auto draw = [&](uint16_t progress) {
+        context.beginFrame(1);
+        screens::PageReader::draw(state, context, text, typeface, typography, 1, session, area, {}, progress);
+        context.endFrame();
+    };
+
+    draw(0);
+    TEST_ASSERT_EQUAL(0, state.scrollOffset);
+    TEST_ASSERT_GREATER_THAN(4, state.lineCount);
+    TEST_ASSERT_LESS_OR_EQUAL(area.y + area.h, state.lines[3].bottom);
+    TEST_ASSERT_GREATER_THAN(area.y + area.h, state.lines[4].bottom);
+    const size_t nextLine = state.lines[3].start;
+    ReadingLoop::seekTo(session, nextLine - 2);
+    draw(0);
+    const int16_t sameLine = state.scrollOffset;
+    draw(500);
+    TEST_ASSERT_EQUAL(sameLine, state.scrollOffset);
+
+    ReadingLoop::seekTo(session, nextLine - 1);
+    draw(0);
+    const int16_t startOffset = state.scrollOffset;
+    const auto* pixels = canvas.getFramebuffer();
+    const std::vector<uint16_t> initial(pixels, pixels + canvas.width() * canvas.height());
+    const uint16_t sentinel = 0x1234;
+    canvas.fillRect(0, area.y + area.h, canvas.width(), canvas.height() - area.h, sentinel);
+    draw(500);
+    const int16_t midOffset = state.scrollOffset;
+    TEST_ASSERT_LESS_THAN(startOffset, midOffset);
+    TEST_ASSERT_TRUE(!std::equal(initial.begin(), initial.begin() + area.w * area.h, canvas.getFramebuffer()));
+    for (int i = area.w * area.h; i < canvas.width() * canvas.height(); ++i)
+        TEST_ASSERT_EQUAL_UINT16(sentinel, canvas.getFramebuffer()[i]);
+    draw(1000);
+    const int16_t finalOffset = state.scrollOffset;
+    TEST_ASSERT_LESS_THAN(midOffset, finalOffset);
+    ReadingLoop::seekTo(session, nextLine);
+    draw(0);
+    TEST_ASSERT_EQUAL(finalOffset, state.scrollOffset);
+    TEST_ASSERT_EQUAL(nextLine, state.highlighted);
+
+    const size_t lastContextWord = state.pageEnd - 1;
+    ReadingLoop::seekTo(session, lastContextWord);
+    draw(0);
+    TEST_ASSERT_GREATER_THAN(0, state.pageStart);
+    TEST_ASSERT_GREATER_THAN(lastContextWord, state.pageEnd);
+    TEST_ASSERT_EQUAL(lastContextWord, state.highlighted);
+
+    ReadingLoop::seekTo(session, words.size() - 1);
+    draw(0);
+    TEST_ASSERT_EQUAL(words.size(), state.pageEnd);
+    TEST_ASSERT_EQUAL(area.y + area.h - 4, state.lines[state.lineCount - 1].bottom + state.scrollOffset);
+    TEST_ASSERT_EQUAL(words.size() - 1, state.highlighted);
+}
+
+void test_page_scroll_holds_progress_across_pause_and_resume() {
+    screens::PageReader::ScrollHold hold;
+    TEST_ASSERT_EQUAL_UINT16(600, screens::PageReader::holdScrollProgress(hold, 4, 600));
+    TEST_ASSERT_EQUAL_UINT16(600, screens::PageReader::holdScrollProgress(hold, 4, std::nullopt));
+    TEST_ASSERT_EQUAL_UINT16(600, screens::PageReader::holdScrollProgress(hold, 4, 0));
+    TEST_ASSERT_EQUAL_UINT16(750, screens::PageReader::holdScrollProgress(hold, 4, 750));
+    TEST_ASSERT_EQUAL_UINT16(0, screens::PageReader::holdScrollProgress(hold, 5, 0));
+    TEST_ASSERT_EQUAL_UINT16(0, screens::PageReader::holdScrollProgress(hold, 2, std::nullopt));
+}
+
 void test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages() {
     Arduino_GFX gfx(136, 17);
     ui::Context context(gfx);
@@ -880,30 +1100,33 @@ void test_reader_streams_rfont4_glyphs_from_file() {
                 static_cast<size_t>(header.layoutTableCount) * sizeof(tables.front()));
     TEST_ASSERT_TRUE(RFont4::layoutValid(header, strikes, std::span{tables}.first(header.layoutTableCount),
                                          bytes.size()));
-    const RFont4::StrikeRecord& strike = strikes.back();
-
     std::array<uint8_t, RFont4::kPageMapBytes> pageMap;
     std::memcpy(pageMap.data(), bytes.data() + header.pageMapOffset, pageMap.size());
     File file{std::move(bytes)};
-    const ui::fonts::AlphaFont font{
-        .name = "file-reader",
-        .glyphCount = header.glyphCount,
-        .yAdvance = strike.yAdvance,
-        .ascent = strike.ascent,
-        .descent = strike.descent,
-        .pageMap = pageMap.data(),
-        .pageTableCount = header.pageTableCount,
-        .kerningPairCount = strike.kerningPairCount,
-        .wordInkTop = strike.wordInkTop,
-        .wordInkBottom = strike.wordInkBottom,
-        .glyphMapCount = header.sourceGlyphCount,
-        .scriptMask = header.scriptMask,
-        .file = &file,
-        .fileSize = header.totalSize,
-        .fileHeader = header,
-        .fileStrike = strike,
-        .bitsPerPixel = strike.bitsPerPixel,
+    const auto makeFont = [&](const RFont4::StrikeRecord& strike) -> ui::fonts::AlphaFont {
+        return {
+            .name = "file-reader",
+            .glyphCount = header.glyphCount,
+            .yAdvance = strike.yAdvance,
+            .ascent = strike.ascent,
+            .descent = strike.descent,
+            .pageMap = pageMap.data(),
+            .pageTableCount = header.pageTableCount,
+            .kerningPairCount = strike.kerningPairCount,
+            .wordInkTop = strike.wordInkTop,
+            .wordInkBottom = strike.wordInkBottom,
+            .glyphMapCount = header.sourceGlyphCount,
+            .scriptMask = header.scriptMask,
+            .pixelsPerEm = strike.pixelsPerEm,
+            .file = &file,
+            .fileSize = header.totalSize,
+            .fileHeader = header,
+            .fileStrike = strike,
+            .bitsPerPixel = strike.bitsPerPixel,
+            .bitmapEncoding = strike.bitmapEncoding,
+        };
     };
+    const auto font = makeFont(strikes.back());
     Arduino_GFX gfx(640, 172);
     ui::fonts::AlphaTextRenderer<640> renderer(gfx);
     TEST_ASSERT_TRUE(renderer.begin());
@@ -926,6 +1149,17 @@ void test_reader_streams_rfont4_glyphs_from_file() {
     TEST_ASSERT_GREATER_THAN(readsBeforeKerning, readsAfterKerning);
     TEST_ASSERT_EQUAL(adjustment, renderer.kerningAdjust('A', 'V'));
     TEST_ASSERT_EQUAL_UINT32(readsAfterKerning + 1, file.readCount());
+
+    const auto small = makeFont(strikes[RFont4::kCompactStrikeIndex - 1]);
+    renderer.setFont(small);
+    const int16_t unscaledAdvance = renderer.textAdvance("AVa");
+    renderer.setFont(small, screens::readerLayout::kLcd349PagePixelsPerEm);
+    gfx.bitmapWrites = 0;
+    const int16_t scaledAdvance = renderer.drawString("AVa", 10, 50);
+    TEST_ASSERT_GREATER_THAN(0, scaledAdvance);
+    TEST_ASSERT_LESS_THAN(unscaledAdvance, scaledAdvance);
+    TEST_ASSERT_EQUAL_INT16(renderer.textAdvance("AVa"), scaledAdvance);
+    TEST_ASSERT_GREATER_THAN(0, gfx.bitmapWrites);
 }
 
 void test_reader_uses_u8g2_only_for_glyphs_missing_from_rfont4() {
@@ -1684,6 +1918,11 @@ int main(int, char**) {
     RUN_TEST(test_rect_intersection_clips_each_edge);
     RUN_TEST(test_portrait_rects_map_to_the_landscape_framebuffer);
     RUN_TEST(test_page_reader_reselects_typeface_after_seek_or_invalidation);
+    RUN_TEST(test_page_reader_fits_more_lines_with_a_scaled_face_and_keeps_navigation);
+    RUN_TEST(test_scaled_glyphs_keep_a_common_baseline);
+    RUN_TEST(test_page_highlight_matches_a_full_repaint_on_lcd);
+    RUN_TEST(test_page_playback_scrolls_between_lines_without_a_jump);
+    RUN_TEST(test_page_scroll_holds_progress_across_pause_and_resume);
     RUN_TEST(test_page_reader_reanchors_distant_forward_seek_without_laying_out_intermediate_pages);
     RUN_TEST(test_page_reader_uses_each_words_selected_typeface_for_layout);
     RUN_TEST(test_page_reader_maps_vertical_columns_to_the_landscape_framebuffer);

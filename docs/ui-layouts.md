@@ -65,6 +65,15 @@ The existing handedness option uses a 180-degree flip with matching touch mappin
 Panel offsets belong in the display driver, not in layout selection. No new
 framebuffer or display-driver replacement is needed to select a presentation.
 
+## Page reading
+
+On both LCD 3.49 revisions, Page Scroll and the RSVP browse preview draw the Small
+strike scaled to 20 px, with chapter, progress and battery in one compact footer
+row. Horizontal Page Scroll playback scrolls continuously so the active line stays
+centred. Every other board keeps the Classic page reader: regular layouts use the
+Compact strike (14 px in Literata), watch layouts use Small (33 px in Literata),
+and playback stays paginated with the existing chrome.
+
 ## Validation
 
 ```sh
@@ -100,6 +109,7 @@ Before release, check on the physical devices:
   and reading-progress taps retain their behavior.
 - Timer orientation/pause/complete behavior, USB/Companion operations, theme
   changes, and repeated navigation leave no stale pixels.
-- The 3.49 presentation retains its existing appearance and navigation.
+- The 3.49 presentation retains its existing navigation. Page Scroll reads at
+  20 px, scrolls without stutter at high WPM, and its footer and battery taps respond.
 
 No hardware flashing is part of these host/build checks.

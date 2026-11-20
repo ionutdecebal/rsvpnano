@@ -6,7 +6,7 @@ namespace screens::readerLayout {
     size_t pageStrikeIndex() {
         return RFont4::kCompactStrikeIndex - 1;
     }
-    ui::Rect readingArea(int16_t width, int16_t height, bool verticalPage) {
+    ui::Rect readingArea(int16_t width, int16_t height, bool verticalPage, bool) {
         if (!verticalPage) {
             auto area = watch::contentBounds(width, height);
             area.y += 42;
@@ -49,7 +49,7 @@ namespace screens::readerLayout {
         return horizontalChrome(width, height, leftHanded).arrows;
     }
 
-    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t) {
+    HorizontalChrome horizontalChrome(int16_t width, int16_t height, bool leftHanded, int16_t, bool) {
         const auto area = watch::contentBounds(width, height);
         const int16_t footerWidth = area.w / 3;
         const int16_t batteryWidth = std::min<int16_t>(104, area.w - 48);
